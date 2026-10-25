@@ -11,10 +11,11 @@ import os
 import re
 import tempfile
 import time
+from contextlib import nullcontext
 from datetime import datetime
 from inspect import isawaitable
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 from urllib.parse import quote
 
 # File is only available via astrbot.core (internal API — may change).
@@ -34,9 +35,41 @@ from ..services.analysis_application_service import (
     AnalysisApplicationService,
     DuplicateGroupTaskError,
 )
+from ..services.stop_request import StopRequest
+
+STOP_GRACE_SECONDS = 5.0
+"""取消子任务后等待其退出的上限；超时仍继续收尾，避免 handler 无限挂住。"""
+
+T = TypeVar("T")
+
+
+def _consume_orphan_task_exception(task: asyncio.Task[object]) -> None:
+    """取回孤儿任务的异常。
+
+    宽限期结束后仍未退出的子任务会被放弃等待，若它随后以异常结束，
+    没有回调取回就会由事件循环打印 Task exception was never retrieved。
+
+    Args:
+        task: 被放弃等待的后台任务。
+    """
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is not None:
+        logger.warning(f"孤儿前台任务结束后抛出异常（已取回）: {error!r}")
+
+
+class AnalysisStoppedError(BaseException):
+    """用户通过宿主 /stop 中止了前台分析。
+
+    继承 BaseException 是刻意的：这是控制流信号而非错误，必须穿过各处
+    ``except Exception``（渲染失败回退、发送兜底）继续上抛，否则停止会被
+    当成渲染失败吞掉，用户按了停止仍会收到报告。
+    """
+
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Callable
+    from collections.abc import AsyncGenerator, Callable, Coroutine
 
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
@@ -48,6 +81,7 @@ if TYPE_CHECKING:
     from ...infrastructure.platform.bot_manager import BotManager
     from ...infrastructure.reporting.generators import ReportGenerator
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
+    from ..services.stop_request import StopWatcher
     from .comic_command_handler import ComicCommandHandler
 
 
@@ -80,6 +114,7 @@ class AnalysisCommandHandler:
         comic_handler: ComicCommandHandler | None = None,
         plugin_data_dir: Path | None = None,
         plugin_instance: PluginHostProtocol | None = None,
+        stop_watcher_factory: Callable[[AstrMessageEvent], StopWatcher] | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -94,6 +129,7 @@ class AnalysisCommandHandler:
             plugin_data_dir or Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME
         )
         self.plugin_instance = plugin_instance
+        self.stop_watcher_factory = stop_watcher_factory
         self.terminating: bool = False
 
     def set_terminating(self, terminating: bool) -> None:
@@ -136,6 +172,10 @@ class AnalysisCommandHandler:
         current_task = asyncio.current_task()
         trace = None
         trace_id = ""
+        group_id: str | None = None
+        task_finalized = False
+        stop_watcher: StopWatcher | None = None
+        stop_request = StopRequest()
 
         try:
             event.should_call_llm(True)
@@ -160,11 +200,19 @@ class AnalysisCommandHandler:
                 yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
                 return
 
+            # 在第一个准备阶段等待前开始监听；只取消工作子任务，保留宿主发送与收尾。
+            if self.stop_watcher_factory is not None:
+                stop_watcher = self.stop_watcher_factory(event)
+                stop_request = stop_watcher.stop_request
+                await stop_watcher.start()
+
             group_name = ""
             try:
                 adapter = self.bot_manager.get_adapter(platform_id)
                 if adapter:
-                    info = await adapter.get_group_info(group_id)
+                    info = await self._await_with_stop(
+                        adapter.get_group_info(group_id), stop_request
+                    )
                     if info and info.group_name:
                         group_name = info.group_name
             except Exception:
@@ -181,14 +229,17 @@ class AnalysisCommandHandler:
                 trigger_type="manual",
             )
             if self.active_task_manager:
-                await self.active_task_manager.register_task(
-                    task_id=trace_id,
-                    group_id=group_id,
-                    group_name=group_name,
-                    platform=platform_id or "",
-                    trigger_type="manual",
-                    current_stage=AnalysisStage.FETCH_MESSAGES,
-                    asyncio_task=current_task,
+                await self._await_with_stop(
+                    self.active_task_manager.register_task(
+                        task_id=trace_id,
+                        group_id=group_id,
+                        group_name=group_name,
+                        platform=platform_id or "",
+                        trigger_type="manual",
+                        current_stage=AnalysisStage.FETCH_MESSAGES,
+                        asyncio_task=current_task,
+                    ),
+                    stop_request,
                 )
 
             adapter = self.bot_manager.get_adapter(platform_id)
@@ -204,12 +255,18 @@ class AnalysisCommandHandler:
             if use_text_reply:
                 yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
             elif adapter and orig_msg_id:
-                await adapter.set_reaction(
-                    event.get_group_id(), orig_msg_id, "analysis_started"
+                await self._await_with_stop(
+                    adapter.set_reaction(
+                        event.get_group_id(), orig_msg_id, "analysis_started"
+                    ),
+                    stop_request,
                 )
 
-            result = await self.analysis_service.execute_daily_analysis(
-                group_id=group_id, platform_id=platform_id, manual=True, days=days
+            result = await self._await_with_stop(
+                self.analysis_service.execute_daily_analysis(
+                    group_id=group_id, platform_id=platform_id, manual=True, days=days
+                ),
+                stop_request,
             )
 
             if not result.get("success"):
@@ -241,19 +298,34 @@ class AnalysisCommandHandler:
                 return
 
             if not use_text_reply and adapter and orig_msg_id:
-                await adapter.set_reaction(
-                    event.get_group_id(), orig_msg_id, "analysis_done"
+                await self._await_with_stop(
+                    adapter.set_reaction(
+                        event.get_group_id(), orig_msg_id, "analysis_done"
+                    ),
+                    stop_request,
                 )
 
             if self.active_task_manager:
-                await self.active_task_manager.update_stage(trace_id, "RENDER_REPORT")
+                await self._await_with_stop(
+                    self.active_task_manager.update_stage(trace_id, "RENDER_REPORT"),
+                    stop_request,
+                )
 
-            async for res in self.send_analysis_report(event, result):
+            async for res in self.send_analysis_report(event, result, stop_request):
                 yield res
+
+            if stop_request.refresh():
+                raise AnalysisStoppedError
 
             if trace and trace.status == "running":
                 trace.finish(event=TaskEvent.SUCCEED)
 
+        except AnalysisStoppedError:
+            if stop_watcher is not None:
+                await stop_watcher.stop()
+            await self._finalize_stopped_analysis(trace_id, trace, group_id)
+            task_finalized = True
+            return
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
                 trace.finish(
@@ -277,17 +349,134 @@ class AnalysisCommandHandler:
                 f"❌ 分析失败: {e!s}。请检查网络连接和LLM配置，或联系管理员"
             )
         finally:
-            if trace_id and self.active_task_manager:
-                await self.active_task_manager.finish_task(trace_id)
+            # 收尾路径全部用同步或单次 await，避免二次取消跳过后续清理。
+            if stop_watcher is not None:
+                stop_watcher.stop_now()
+            if not task_finalized and trace_id and self.active_task_manager:
+                try:
+                    await self.active_task_manager.finish_task(trace_id)
+                except asyncio.CancelledError:
+                    logger.warning("收尾时被二次取消，活跃任务记录可能残留")
+                    raise
+
+    async def _await_with_stop(
+        self, awaitable: Coroutine[object, object, T], stop_request: StopRequest | None
+    ) -> T:
+        """等待协程的同时监听宿主停止请求。
+
+        命中停止时取消协程并等待其退出（最长 STOP_GRACE_SECONDS），随后抛出
+        AnalysisStoppedError，由调用链统一收尾。分析与渲染都走这里，避免渲染
+        这类几十秒的长请求成为不可中断的盲区。
+
+        Args:
+            awaitable: 需要执行的前台工作协程。
+            stop_request: 停止请求；为 None 时退化为普通 await。
+
+        Returns:
+            协程的返回值。
+
+        Raises:
+            AnalysisStoppedError: 宿主请求停止。
+        """
+        if stop_request is None:
+            return await awaitable
+        if stop_request.refresh():
+            awaitable.close()
+            raise AnalysisStoppedError
+
+        work = asyncio.create_task(awaitable)
+        stop_task = asyncio.create_task(stop_request.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {work, stop_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+        except asyncio.CancelledError:
+            # 宿主取消（插件重载/卸载）时也要收掉子任务，避免群锁被泄漏。
+            await self._stop_work(work)
+            raise
+        finally:
+            if not stop_task.done():
+                stop_task.cancel()
+
+        if stop_request.refresh():
+            # 停止与完成同时到：用户按了停止就丢弃这次结果，不再进入保存与发送。
+            await self._stop_work(work)
+            raise AnalysisStoppedError
+
+        if work in done:
+            if work.cancelled():
+                raise RuntimeError("分析子任务被内部取消")
+            return work.result()
+
+        await self._stop_work(work)
+        raise AnalysisStoppedError
+
+    async def _stop_work(self, work: asyncio.Task[object]) -> None:
+        """取消子任务并等它退出，超时则放弃等待并接管其异常。
+
+        Args:
+            work: 需要终止的前台工作子任务。
+
+        Returns:
+            None
+
+        Raises:
+            asyncio.CancelledError: 等待期间宿主再次取消当前任务。
+        """
+        if work.done():
+            _consume_orphan_task_exception(work)
+            return
+        work.cancel()
+        try:
+            exited, _ = await asyncio.wait({work}, timeout=STOP_GRACE_SECONDS)
+            if work not in exited:
+                logger.error(
+                    f"前台任务在取消后 {STOP_GRACE_SECONDS}s 内未退出，继续收尾"
+                )
+        finally:
+            # 即使宽限期等待被二次取消，也必须接管子任务的后续异常。
+            if work.done():
+                _consume_orphan_task_exception(work)
+            else:
+                work.add_done_callback(_consume_orphan_task_exception)
+
+    async def _finalize_stopped_analysis(
+        self, trace_id: str, trace: TraceContext | None, group_id: str | None
+    ) -> None:
+        """收尾被用户停止的分析任务。
+
+        先收敛已创建的 Trace，再移除活跃任务记录；准备阶段可能尚未创建 Trace。
+        群锁仍由实际工作子任务退出时释放，停止回执由宿主负责。
+
+        Args:
+            trace_id: 本次分析的链路追踪 ID。
+            trace: 当前链路追踪对象，未建立时为空。
+            group_id: 群号，仅用于日志。
+        """
+        if trace is not None and trace.status == "running":
+            try:
+                trace.finish(
+                    event=TaskEvent.CANCEL,
+                    error_message="用户通过 stop 中止了本次分析",
+                )
+            except RuntimeError as transition_error:
+                logger.info(f"停止收尾时任务已由并发事件收敛: {transition_error}")
+        if trace_id and self.active_task_manager:
+            await self.active_task_manager.finish_task(trace_id)
+        logger.info(f"群 {group_id} 的群分析被用户停止 (宿主 /stop)")
 
     async def send_analysis_report(
-        self, event: AstrMessageEvent, result: dict[str, object]
+        self,
+        event: AstrMessageEvent,
+        result: dict[str, object],
+        stop_request: StopRequest | None = None,
     ) -> AsyncGenerator[MessageEventResult]:
         """处理分析结果的渲染和发送。
 
         Args:
             event: AstrBot 消息事件对象。
             result: 分析服务产出的结果字典。
+            stop_request: 本次手动分析的停止请求；为 None 时不监听宿主停止。
 
         Returns:
             AsyncGenerator[object, None]: 结果消息生成器。
@@ -295,6 +484,8 @@ class AnalysisCommandHandler:
         if self.terminating or not self.config_manager:
             logger.warning("插件正在关闭，停止发送报告")
             return
+        if stop_request is not None and stop_request.refresh():
+            raise AnalysisStoppedError
 
         group_id = str(result.get("group_id", ""))
         platform_id = str(result["platform_id"]) if result.get("platform_id") else None
@@ -310,14 +501,18 @@ class AnalysisCommandHandler:
             logger.warning(f"群 {group_id} 未找到对应的平台适配器，无法发送报告")
             return
 
-        if self.comic_handler:
-            self.comic_handler.try_trigger_comic_generation(
-                group_id, platform_id, analysis_result
-            )
-        elif self.plugin_instance and self.plugin_instance.comic_command_handler:
-            self.plugin_instance.comic_command_handler.try_trigger_comic_generation(
-                group_id, platform_id, analysis_result
-            )
+        comic_handler = self.comic_handler or (
+            self.plugin_instance.comic_command_handler if self.plugin_instance else None
+        )
+        if comic_handler:
+            if stop_request is None:
+                comic_handler.try_trigger_comic_generation(
+                    group_id, platform_id, analysis_result
+                )
+            else:
+                comic_handler.try_trigger_comic_generation(
+                    group_id, platform_id, analysis_result, stop_request=stop_request
+                )
 
         output_format_list = self.config_manager.get_output_format()
         output_format = output_format_list[0] if output_format_list else "image"
@@ -352,15 +547,19 @@ class AnalysisCommandHandler:
             html_render = bind_group_html_renderer(
                 self.html_render, group_id, platform_id
             )
-            if trace:
-                with trace.span(
+            with (
+                trace.span(
                     "RENDER_REPORT",
                     {"format": "image", "template": template_theme},
-                ):
-                    (
-                        image_url,
-                        _html_content,
-                    ) = await self.report_generator.generate_image_report(
+                )
+                if trace
+                else nullcontext()
+            ):
+                (
+                    image_url,
+                    _html_content,
+                ) = await self._await_with_stop(
+                    self.report_generator.generate_image_report(
                         analysis_result,
                         group_id,
                         html_render,
@@ -369,21 +568,12 @@ class AnalysisCommandHandler:
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=is_qq_official,
                         template_theme=template_theme,
-                    )
-            else:
-                (
-                    image_url,
-                    _html_content,
-                ) = await self.report_generator.generate_image_report(
-                    analysis_result,
-                    group_id,
-                    html_render,
-                    avatar_url_getter=avatar_url_getter,
-                    nickname_getter=nickname_getter,
-                    avatar_cache_namespace=platform_id,
-                    allow_alphanumeric_user_ids=is_qq_official,
-                    template_theme=template_theme,
+                    ),
+                    stop_request,
                 )
+
+            if stop_request is not None and stop_request.refresh():
+                raise AnalysisStoppedError
 
             if image_url:
                 save_history = getattr(
@@ -405,6 +595,8 @@ class AnalysisCommandHandler:
                 )
                 sent = await adapter.send_image(group_id, image_url, caption=caption)
                 if sent:
+                    if stop_request is not None and stop_request.refresh():
+                        raise AnalysisStoppedError
                     upload_img = getattr(
                         self.plugin_instance, "_try_upload_image", None
                     )
@@ -417,28 +609,22 @@ class AnalysisCommandHandler:
                     return
 
             logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
-            send_text = getattr(self.plugin_instance, "_send_text_reports", None)
-            if callable(send_text):
-                res = send_text(group_id, analysis_result, is_qq_official, adapter)
-                if isawaitable(res):
-                    await res
-            else:
-                await self._send_text_reports(
-                    group_id, analysis_result, is_qq_official, adapter
-                )
-            return
 
-        elif output_format == "html":
+        if output_format == "html":
             cur_trace_id = trace.trace_id if trace else None
-            if trace:
-                with trace.span(
+            with (
+                trace.span(
                     "RENDER_REPORT",
                     {"format": "html", "template": template_theme},
-                ):
-                    (
-                        html_path,
-                        _json_path,
-                    ) = await self.report_generator.generate_html_report(
+                )
+                if trace
+                else nullcontext()
+            ):
+                (
+                    html_path,
+                    _json_path,
+                ) = await self._await_with_stop(
+                    self.report_generator.generate_html_report(
                         analysis_result,
                         group_id,
                         avatar_url_getter=avatar_url_getter,
@@ -447,21 +633,11 @@ class AnalysisCommandHandler:
                         allow_alphanumeric_user_ids=is_qq_official,
                         template_theme=template_theme,
                         trace_id=cur_trace_id,
-                    )
-            else:
-                (
-                    html_path,
-                    _json_path,
-                ) = await self.report_generator.generate_html_report(
-                    analysis_result,
-                    group_id,
-                    avatar_url_getter=avatar_url_getter,
-                    nickname_getter=nickname_getter,
-                    avatar_cache_namespace=platform_id,
-                    allow_alphanumeric_user_ids=is_qq_official,
-                    template_theme=template_theme,
-                    trace_id=cur_trace_id,
+                    ),
+                    stop_request,
                 )
+            if stop_request is not None and stop_request.refresh():
+                raise AnalysisStoppedError
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
                 base_url = self.config_manager.get_html_base_url()
@@ -500,10 +676,14 @@ class AnalysisCommandHandler:
                             caption=caption,
                             platform_id=platform_id,
                         )
+                        if stop_request is not None and stop_request.refresh():
+                            raise AnalysisStoppedError
                     elif isinstance(adapter, GroupFileSupportProtocol):
                         sent = await adapter.upload_group_file_to_folder(
                             group_id, html_path, filename=Path(html_path).name
                         )
+                        if stop_request is not None and stop_request.refresh():
+                            raise AnalysisStoppedError
                         if sent and caption:
                             await adapter.send_text(group_id, caption)
 
@@ -512,20 +692,16 @@ class AnalysisCommandHandler:
                             [File(name=Path(html_path).name, file=html_path)]
                         )
                         if caption:
+                            if stop_request is not None and stop_request.refresh():
+                                raise AnalysisStoppedError
                             yield event.plain_result(caption)
             else:
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
-            send_text = getattr(self.plugin_instance, "_send_text_reports", None)
-            if callable(send_text):
-                res = send_text(group_id, analysis_result, is_qq_official, adapter)
-                if isawaitable(res):
-                    await res
-            else:
-                await self._send_text_reports(
-                    group_id, analysis_result, is_qq_official, adapter
-                )
+            await self._send_text_reports(
+                group_id, analysis_result, is_qq_official, adapter, stop_request
+            )
 
     async def _send_text_reports(
         self,
@@ -533,6 +709,7 @@ class AnalysisCommandHandler:
         analysis_result: AnalysisResultPayload,
         is_qq_official: bool,
         adapter: PlatformAdapterProtocol,
+        stop_request: StopRequest | None = None,
     ) -> None:
         """发送纯文本分析报告。
 
@@ -541,27 +718,37 @@ class AnalysisCommandHandler:
             analysis_result: 分析结果字典。
             is_qq_official: 是否为 QQ 官方平台。
             adapter: 平台适配器。
+            stop_request: 本次手动分析的停止请求；为 None 时沿用原有发送流程。
         """
         try:
+            if stop_request is not None and stop_request.refresh():
+                raise AnalysisStoppedError
             if is_qq_official and hasattr(
                 self.report_generator, "generate_markdown_report"
             ):
                 (
                     text_report,
                     fallback_report,
-                ) = await self.report_generator.generate_markdown_report(
-                    analysis_result,
-                    bind_group_html_renderer(
-                        self.html_render, group_id, adapter.platform_id
+                ) = await self._await_with_stop(
+                    self.report_generator.generate_markdown_report(
+                        analysis_result,
+                        bind_group_html_renderer(
+                            self.html_render, group_id, adapter.platform_id
+                        ),
+                        mention_style="qq",
                     ),
-                    mention_style="qq",
+                    stop_request,
                 )
+                if stop_request is not None and stop_request.refresh():
+                    raise AnalysisStoppedError
                 await adapter.send_text_report(
                     group_id, text_report, fallback_content=fallback_report
                 )
                 return
 
             text = self.report_generator.generate_text_report(analysis_result)
+            if stop_request is not None and stop_request.refresh():
+                raise AnalysisStoppedError
             if text and text.strip():
                 await adapter.send_text_report(group_id, text)
         except Exception as e:

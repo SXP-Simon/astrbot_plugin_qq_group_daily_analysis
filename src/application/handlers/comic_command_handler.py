@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from ...infrastructure.platform.bot_manager import BotManager
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
     from ..services.comic_application_service import ComicApplicationService
+    from ..services.stop_request import StopRequest
 
 
 class ComicCommandHandler:
@@ -316,6 +317,7 @@ class ComicCommandHandler:
         *,
         require_auto_enabled: bool = True,
         trace: TraceContext | None = None,
+        stop_request: StopRequest | None = None,
     ) -> str:
         """尝试触发后台漫画生成。
 
@@ -325,12 +327,15 @@ class ComicCommandHandler:
             analysis_result: 分析结果字典（包含 topics 字段）。
             require_auto_enabled: 是否要求开启自动生成配置（手动指令触发时为 False）。
             trace: 当前执行链路追踪上下文。
+            stop_request: 仅关联本次手动分析新建的漫画任务，定时任务不传入。
 
         Returns:
-            str: 触发状态 ("started", "duplicate", "blocked", "no_topics", "disabled", "auto_disabled", "terminating")。
+            str: 触发状态 ("started", "duplicate", "blocked", "no_topics", "disabled", "auto_disabled", "terminating", "stopped")。
         """
         if self.terminating:
             return "terminating"
+        if stop_request is not None and stop_request.refresh():
+            return "stopped"
         enabled_getter = getattr(self.config_manager, "get_enable_daily_comic", None)
         if callable(enabled_getter) and not enabled_getter():
             return "disabled"
@@ -386,7 +391,12 @@ class ComicCommandHandler:
 
         task = asyncio.create_task(
             self._trigger_comic_generation(
-                comic_topics, group_id, platform_id, umo, trace=trace
+                comic_topics,
+                group_id,
+                platform_id,
+                umo,
+                trace=trace,
+                stop_request=stop_request,
             )
         )
         self._comic_group_tasks[task_key] = task
@@ -399,6 +409,8 @@ class ComicCommandHandler:
                 else None
             )
         )
+        if stop_request is not None:
+            stop_request.cancel_on_stop(task)
         return "started"
 
     async def _trigger_comic_generation(
@@ -408,8 +420,24 @@ class ComicCommandHandler:
         platform_id: str | None,
         umo: str,
         trace: TraceContext | None = None,
+        stop_request: StopRequest | None = None,
     ) -> None:
-        """后台生成并上传漫画，通过信号量控制并发"""
+        """后台生成并上传漫画，通过信号量控制并发。
+
+        Args:
+            topics: 用于生成漫画的话题。
+            group_id: 目标群号。
+            platform_id: 平台实例标识。
+            umo: 目标会话标识。
+            trace: 可选的任务追踪上下文。
+            stop_request: 所属手动分析的停止请求，防止取消后仍交付迟到结果。
+
+        Returns:
+            None。
+
+        Raises:
+            asyncio.CancelledError: 本次漫画任务被取消。
+        """
         cur_trace = trace or TraceContext.current()
         if cur_trace:
             from ...shared.trace_context import _current_trace
@@ -417,7 +445,9 @@ class ComicCommandHandler:
             _current_trace.set(cur_trace)
 
         async with self._comic_semaphore:
-            if self.terminating:
+            if self.terminating or (
+                stop_request is not None and stop_request.refresh()
+            ):
                 return
             try:
                 if cur_trace and self.active_task_manager:
@@ -428,6 +458,8 @@ class ComicCommandHandler:
                 comic_bytes, fallback_url = await self.comic_service.generate_comic(
                     topics, group_id, umo
                 )
+                if stop_request is not None and stop_request.refresh():
+                    return
                 if comic_bytes:
                     logger.info(f"群 {group_id} 漫画生成成功，准备发送和保存副本...")
                     ext = self.detect_image_ext(comic_bytes)
