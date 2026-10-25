@@ -591,23 +591,8 @@ class AnalysisCommandHandler:
                     return
 
             logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
-            if stop_request is not None:
-                await self._send_text_reports(
-                    group_id, analysis_result, is_qq_official, adapter, stop_request
-                )
-                return
-            send_text = getattr(self.plugin_instance, "_send_text_reports", None)
-            if callable(send_text):
-                res = send_text(group_id, analysis_result, is_qq_official, adapter)
-                if isawaitable(res):
-                    await res
-            else:
-                await self._send_text_reports(
-                    group_id, analysis_result, is_qq_official, adapter
-                )
-            return
 
-        elif output_format == "html":
+        if output_format == "html":
             cur_trace_id = trace.trace_id if trace else None
             with (
                 trace.span(
@@ -696,20 +681,9 @@ class AnalysisCommandHandler:
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
-            if stop_request is not None:
-                await self._send_text_reports(
-                    group_id, analysis_result, is_qq_official, adapter, stop_request
-                )
-                return
-            send_text = getattr(self.plugin_instance, "_send_text_reports", None)
-            if callable(send_text):
-                res = send_text(group_id, analysis_result, is_qq_official, adapter)
-                if isawaitable(res):
-                    await res
-            else:
-                await self._send_text_reports(
-                    group_id, analysis_result, is_qq_official, adapter
-                )
+            await self._send_text_reports(
+                group_id, analysis_result, is_qq_official, adapter, stop_request
+            )
 
     async def _send_text_reports(
         self,

@@ -379,15 +379,18 @@ def test_qq_official_webhook_uses_official_report_capabilities():
 
     async def scenario():
         adapter = SimpleNamespace(
-            get_platform_name=Mock(return_value="qq_official_webhook")
+            get_platform_name=Mock(return_value="qq_official_webhook"),
+            platform_id="qq-official-main",
+            send_text_report=AsyncMock(),
         )
+        markdown = AsyncMock(return_value=("正文", "回退正文"))
         mock_comic_trigger = Mock()
         plugin = SimpleNamespace(
             _terminating=False,
             config_manager=SimpleNamespace(
                 get_output_format=Mock(return_value=["text"])
             ),
-            _send_text_reports=AsyncMock(return_value=True),
+            report_generator=SimpleNamespace(generate_markdown_report=markdown),
             comic_command_handler=SimpleNamespace(
                 try_trigger_comic_generation=mock_comic_trigger
             ),
@@ -402,7 +405,11 @@ def test_qq_official_webhook_uses_official_report_capabilities():
         async for _ in send_analysis_report(plugin, SimpleNamespace(), result):
             pass
 
-        assert plugin._send_text_reports.await_args.args[2] is True
+        markdown.assert_awaited_once()
+        assert markdown.await_args.kwargs["mention_style"] == "qq"
+        adapter.send_text_report.assert_awaited_once_with(
+            "123456", "正文", fallback_content="回退正文",
+        )
         mock_comic_trigger.assert_called_once_with("123456", "qq-official-main", {})
 
     asyncio.run(scenario())

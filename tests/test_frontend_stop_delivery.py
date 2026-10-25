@@ -1,6 +1,6 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from test_frontend_stop import (
@@ -12,6 +12,7 @@ from test_frontend_stop import (
 from src.application.handlers import analysis_command_handler as handler_module
 from src.application.handlers.comic_command_handler import ComicCommandHandler
 from src.infrastructure.platform.stop_signal import FrontendStopWatcher, StopRequest
+from src.shared.trace_context import TraceContext
 
 
 @pytest.fixture(autouse=True)
@@ -146,6 +147,54 @@ async def test_normal_text_delivery_still_succeeds(monkeypatch):
     await collect(handler, HostEvent())
     assert adapter.sent == ["text"]
     assert captured["trace"].status == "succeeded"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("output", ["text", "image"])
+@pytest.mark.parametrize("platform", ["telegram", "qq_official", "qq_official_webhook"])
+@pytest.mark.parametrize("with_stop", [True, False])
+async def test_text_and_image_fallback_share_delivery(output, platform, with_stop, monkeypatch):
+    """文字与图片回退都直接发送报告，不绕回插件入口。"""
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: None))
+    adapter = DeliveryAdapter(platform)
+    adapter.platform_id = "bot-a"
+    adapter.send_text_report = AsyncMock()
+    generator = SimpleNamespace(
+        generate_image_report=AsyncMock(return_value=(None, None)),
+        generate_markdown_report=AsyncMock(return_value=("Markdown 正文", "回退正文")),
+        generate_text_report=Mock(return_value="普通正文"),
+    )
+    handler = make_handler(
+        object(), StubTaskManager(), report_generator=generator, config=OutputConfig(output),
+    )
+    host_text = AsyncMock(side_effect=AssertionError("不应回调插件私有文字发送方法"))
+    handler.plugin_instance = SimpleNamespace(
+        comic_command_handler=None, _send_text_reports=host_text,
+    )
+    result = {
+        "group_id": "123456", "platform_id": "bot-a",
+        "analysis_result": {}, "adapter": adapter,
+    }
+    delivered = [item async for item in handler.send_analysis_report(
+        HostEvent(), result, StopRequest() if with_stop else None,
+    )]
+    assert not delivered
+    host_text.assert_not_called()
+    if output == "image":
+        generator.generate_image_report.assert_awaited_once()
+    else:
+        generator.generate_image_report.assert_not_called()
+    if platform == "telegram":
+        generator.generate_markdown_report.assert_not_called()
+        generator.generate_text_report.assert_called_once_with({})
+        adapter.send_text_report.assert_awaited_once_with("123456", "普通正文")
+    else:
+        generator.generate_text_report.assert_not_called()
+        generator.generate_markdown_report.assert_awaited_once()
+        assert generator.generate_markdown_report.await_args.kwargs["mention_style"] == "qq"
+        adapter.send_text_report.assert_awaited_once_with(
+            "123456", "Markdown 正文", fallback_content="回退正文",
+        )
 
 
 @pytest.mark.asyncio
