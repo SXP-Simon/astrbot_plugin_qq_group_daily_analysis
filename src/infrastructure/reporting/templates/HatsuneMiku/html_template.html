@@ -2408,11 +2408,14 @@
             if (topBtn) topBtn.classList.toggle("is-show", window.scrollY > 480);
         }
 
-        /* ---------- 2. 列表折叠：每个区块只显示前几条（高度过渡 + 条目错位上浮） ---------- */
+        /* ---------- 2. 列表折叠：按「行」折叠（露几行由当前列数决定，跨断点重排） ---------- */
+        /* 折叠单位必须是行而不是条：同一个条数在单列、两列、四列下的行数完全不同，
+           写死条数（原 3/6/3）会在网格里切出半行空洞，读者会当成排版坏了。
+           规则：单列露 3 行；两列及以上露 2 行。可见条数 = 列数 × 行数。 */
         var FOLD_PLANS = [
-            { sel: ".miku-topic-card", limit: 3, unit: L.unitTopics },
-            { sel: ".miku-user-title-card", limit: 6, unit: L.unitUsers },
-            { sel: ".miku-quote-row", limit: 3, unit: L.unitQuotes }
+            { sel: ".miku-topic-card", unit: L.unitTopics },
+            { sel: ".miku-user-title-card", unit: L.unitUsers },
+            { sel: ".miku-quote-row", unit: L.unitQuotes }
         ];
 
         function sectionOf(el) {
@@ -2424,31 +2427,78 @@
             return null;
         }
 
-        /* 折叠区若落在网格里，内层要复刻父网格的列数与间距；窗口跨断点后重新同步 */
-        var foldGrids = [];
-        function syncFoldGrids() {
-            foldGrids.forEach(function (g) {
-                var cs;
-                try { cs = getComputedStyle(g.parent); } catch (e) { return; }
-                var isGrid = cs.display.indexOf("grid") >= 0;
-                g.wrap.classList.toggle("is-grid", isGrid);
-                if (!isGrid) { g.inner.style.gridTemplateColumns = ""; return; }
-                var n = (cs.gridTemplateColumns || "").trim().split(/\s+/).length;
-                g.inner.style.gridTemplateColumns = n > 1 ? "repeat(" + n + ", minmax(0, 1fr))" : "";
-                g.inner.style.columnGap = cs.columnGap;
-                g.inner.style.rowGap = cs.rowGap;
-            });
+        /* 数出父容器当前真实列数：非 grid（窄屏卡片流是块级堆叠）一律算 1 列 */
+        function colsOf(parent) {
+            var cs;
+            try { cs = getComputedStyle(parent); } catch (e) { return { cols: 1, isGrid: false, cs: null }; }
+            if (!cs || cs.display.indexOf("grid") < 0) return { cols: 1, isGrid: false, cs: cs };
+            var n = (cs.gridTemplateColumns || "").trim().split(/\s+/).filter(Boolean).length;
+            return { cols: n > 0 ? n : 1, isGrid: true, cs: cs };
+        }
+
+        /* 布局变化后重算：先同步内层列轨，再按列数重切可见条数（搬 DOM，保持原始顺序） */
+        function reflowFold(group) {
+            var info = colsOf(group.parent);
+            var cs = info.cs;
+            var isGrid = info.isGrid;
+            var cols = info.cols;
+            var gapKey = isGrid ? (cs.columnGap + "|" + cs.rowGap) : "";
+            var want = Math.min(group.items.length, cols * (cols > 1 ? 2 : 3));
+
+            /* 结构没变就直接退出：既省掉无谓的样式写入，也避免 ResizeObserver 自激。
+               间距也算进判断——断点只调 gap 不改列数时，内层折叠区仍要跟着同步。 */
+            if (want === group.visible && cols === group.cols
+                && isGrid === group.isGrid && gapKey === group.gapKey) return;
+            group.cols = cols;
+            group.isGrid = isGrid;
+            group.gapKey = gapKey;
+
+            group.wrap.classList.toggle("is-grid", isGrid);
+            if (isGrid) {
+                /* 内层折叠区必须复刻父网格的列轨，展开后才与上面几行列位对齐 */
+                group.inner.style.gridTemplateColumns = cols > 1 ? "repeat(" + cols + ", minmax(0, 1fr))" : "";
+                group.inner.style.columnGap = cs.columnGap;
+                group.inner.style.rowGap = cs.rowGap;
+            } else {
+                group.inner.style.gridTemplateColumns = "";
+            }
+
+            if (want !== group.visible) {
+                for (var i = 0; i < group.items.length; i++) {
+                    var el = group.items[i];
+                    var target = i < want ? group.parent : group.inner;
+                    if (el.parentElement === target) continue;
+                    /* 插到后面第一个已在目标容器里的兄弟前，全程保持原始顺序 */
+                    var ref = null;
+                    for (var j = i + 1; j < group.items.length; j++) {
+                        if (group.items[j].parentElement === target) { ref = group.items[j]; break; }
+                    }
+                    if (ref) target.insertBefore(el, ref);
+                    else if (target === group.parent) group.parent.insertBefore(el, group.wrap);
+                    else group.inner.appendChild(el);
+                }
+                /* 折叠区必须紧跟最后一条可见条目：它 grid-column: 1/-1，落在中间会强行截断整行
+                   （表现是 4 列网格里出现 3+4+1 这种错位）。 */
+                if (want > 0) group.parent.insertBefore(group.wrap, group.items[want - 1].nextSibling);
+                group.visible = want;
+            }
+
+            var hiddenCount = group.items.length - group.visible;
+            /* 全部露完只说明「当前宽度用不到折叠」，不代表用户点过展开，所以不动 open；
+               是否真的展开由 hiddenCount 一起决定。 */
+            group.wrap.classList.toggle("is-open", !!group.open && hiddenCount > 0);
+            group.paint();
         }
 
         FOLD_PLANS.forEach(function (plan) {
             var nodes = document.querySelectorAll(plan.sel);
-            if (nodes.length <= plan.limit) return;      // 条数不多就不做折叠，避免无意义的按钮
+            /* 单列最少也要露 3 条：总数不到 4 条时任何宽度都无需折叠 */
+            if (nodes.length <= 3) return;
             var section = sectionOf(nodes[0]);
             if (!section) return;
 
             var items = Array.prototype.slice.call(nodes);
-            var rest = items.slice(plan.limit);
-            var parent = rest[0].parentElement;
+            var parent = items[0].parentElement;
 
             /* 外层只做行高插值、内层负责裁切：既不用测量高度，卡片自带 padding 也不会残留成细条 */
             var wrap = document.createElement("div");
@@ -2456,36 +2506,56 @@
             var inner = document.createElement("div");
             inner.className = "miku-fold-inner";
             wrap.appendChild(inner);
-            parent.insertBefore(wrap, rest[0]);
-            rest.forEach(function (el) { inner.appendChild(el); });
+            parent.insertBefore(wrap, items[3]);
 
             var btn = document.createElement("button");
             btn.type = "button";
             btn.className = "miku-more-btn";
 
-            var group = { open: null, items: items, limit: plan.limit, unit: plan.unit };
+            var group = {
+                open: false, items: items, unit: plan.unit, cols: 0, isGrid: false,
+                wrap: wrap, inner: inner, btn: btn, parent: parent, visible: 0
+            };
+
+            group.paint = function () {
+                var hiddenCount = group.items.length - group.visible;
+                /* 全部露完时按钮和折叠区一起退出布局：空的折叠区仍会占掉一个网格行和行间距 */
+                var fits = hiddenCount <= 0;
+                group.btn.style.display = fits ? "none" : "";
+                group.wrap.style.display = fits ? "none" : "";
+                if (fits) return;
+                group.btn.textContent = group.open
+                    ? (L.foldLess + " " + group.visible + " " + group.unit)
+                    : (L.foldMore + " " + group.items.length + " " + group.unit
+                        + L.foldRest + hiddenCount + L.foldRestTail);
+                group.btn.classList.toggle("is-open", !!group.open);
+            };
 
             group.setOpen = function (v) {
-                var target = !!v;
-                if (target === group.open) return;
-                group.open = target;
-                wrap.classList.toggle("is-open", target);
-                if (target) {
-                    btn.textContent = L.foldLess + " " + plan.limit + " " + plan.unit;
-                } else {
-                    btn.textContent = L.foldMore + " " + items.length + " " + plan.unit
-                        + L.foldRest + (items.length - plan.limit) + L.foldRestTail;
+                if (group.items.length - group.visible <= 0) {
+                    /* 当前宽度用不到折叠：保持收起态，等窄回来时按收起态呈现 */
+                    group.open = false;
+                    group.wrap.classList.remove("is-open");
+                    group.paint();
+                    return;
                 }
-                btn.classList.toggle("is-open", target);
+                var target = !!v;
+                if (target === group.open) {
+                    group.wrap.classList.toggle("is-open", target);
+                    return;
+                }
+                group.open = target;
+                group.wrap.classList.toggle("is-open", target);
+                group.paint();
             };
+
             btn.addEventListener("click", function () {
                 group.setOpen(!group.open);
                 setNavToggle(anyCollapsed());
             });
             section.appendChild(btn);
-            group.setOpen(false);
             foldGroups.push(group);
-            foldGrids.push({ wrap: wrap, inner: inner, parent: parent });
+            reflowFold(group);
         });
 
         /* ---------- 2b. 宽屏编排：同质卡片流（话题卡 / 金句卡）走两列 ---------- */
@@ -2509,6 +2579,7 @@
                 }
             }
         }
+        var twoColSections = [];
         Array.prototype.forEach.call(document.querySelectorAll(".section-header"), function (head) {
             var sec = head.parentElement;
             if (!sec) return;
@@ -2516,23 +2587,54 @@
             var hasQuotes = sec.querySelectorAll(".miku-quote-row").length >= 2;
             if (!hasTopics && !hasQuotes) return;
             sec.classList.add("miku-sec-2col");
-            placeTwoCol(sec);
+            twoColSections.push(sec);
         });
-        syncFoldGrids();
+
+        /* 折叠按列数重切 + 两列区块重排列位：搬过 DOM，列位必须重算；重排后导航按钮文案也要跟上 */
+        function syncFoldLayout() {
+            foldGroups.forEach(reflowFold);
+            twoColSections.forEach(placeTwoCol);
+            setNavToggle(anyCollapsed());
+        }
+        syncFoldLayout();
         var gridTimer = null;
         window.addEventListener("resize", function () {
             clearTimeout(gridTimer);
-            gridTimer = setTimeout(syncFoldGrids, 150);
+            gridTimer = setTimeout(syncFoldLayout, 150);
         });
+        /* 列数由容器宽度决定，而 window.resize 有时早于新布局生效（读到的还是旧列数）。
+           ResizeObserver 在排版完成后才回调，正好兜住这种时序差，也顺带覆盖字体回填、
+           侧边栏开合这类不触发 window.resize 的宽度变化。
+           兜底不要用 requestAnimationFrame：后台标签页里 rAF 会被节流到不执行。 */
+        if (window.ResizeObserver) {
+            var roTimer = null;
+            var gridObserver = new ResizeObserver(function () {
+                if (roTimer) return;
+                roTimer = setTimeout(function () {
+                    roTimer = null;
+                    syncFoldLayout();
+                }, 40);
+            });
+            foldGroups.forEach(function (g) { gridObserver.observe(g.parent); });
+        }
 
+        /* 当前宽度下还有内容被收着的组才算"收起了"：全部露完的组不该让导航一直亮着「全部展开」 */
         function anyCollapsed() {
-            return foldGroups.some(function (g) { return !g.open; });
+            return foldGroups.some(function (g) {
+                return !g.open && g.items.length - g.visible > 0;
+            });
         }
 
         /* ---------- 2c. 导航标签自适应：完整名放不下就换短名，再放不下才折两行 ---------- */
         var navCompact = false;
         function setNavToggle(collapsed) {
             if (!navToggle) return;
+            /* 当前宽度下没有任何区块可折叠时，这颗按钮没有意义 */
+            var foldable = false;
+            for (var i = 0; i < foldGroups.length; i++) {
+                if (foldGroups[i].items.length - foldGroups[i].visible > 0) { foldable = true; break; }
+            }
+            navToggle.style.display = foldable ? "" : "none";
             navToggle.textContent = navCompact
                 ? (collapsed ? L.toggleAllShort : L.toggleNoneShort)
                 : (collapsed ? L.toggleAll : L.toggleNone);
