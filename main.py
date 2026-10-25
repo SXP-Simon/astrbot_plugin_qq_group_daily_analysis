@@ -56,6 +56,7 @@ from .src.infrastructure.persistence.platform_group_registry import (
 )
 from .src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from .src.infrastructure.platform.bot_manager import BotManager
+from .src.infrastructure.platform.stop_signal import FrontendStopWatcher
 from .src.infrastructure.platform.template_preview import (
     TelegramTemplatePreviewHandler,
     TemplatePreviewRouter,
@@ -277,6 +278,7 @@ class GroupDailyAnalysis(Star):
             comic_handler=self.comic_command_handler,
             plugin_data_dir=plugin_data_dir,
             plugin_instance=self,
+            stop_watcher_factory=FrontendStopWatcher,
         )
 
         # 6. LLM Tool 业务服务
