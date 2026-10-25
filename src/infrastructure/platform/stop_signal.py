@@ -96,6 +96,9 @@ class FrontendStopWatcher:
         """启动停止监听。
 
         事件对象不支持读取标记时记一次警告并放弃监听，避免无意义轮询。
+
+        Returns:
+            None
         """
         if not callable(getattr(self._event, "get_extra", None)):
             logger.warning(
@@ -106,7 +109,11 @@ class FrontendStopWatcher:
         self._poll_task = asyncio.create_task(self._poll_loop())
 
     async def stop(self) -> None:
-        """停止监听，可重复调用。"""
+        """停止监听，可重复调用。
+
+        Returns:
+            None
+        """
         task = self._poll_task
         self._poll_task = None
         if task is not None and not task.done():
@@ -114,7 +121,11 @@ class FrontendStopWatcher:
             await asyncio.gather(task, return_exceptions=True)
 
     def stop_now(self) -> None:
-        """同步请求监听协程退出，供无法 await 的收尾路径使用。"""
+        """同步请求监听协程退出，供无法 await 的收尾路径使用。
+
+        Returns:
+            None
+        """
         task = self._poll_task
         self._poll_task = None
         if task is not None and not task.done():
