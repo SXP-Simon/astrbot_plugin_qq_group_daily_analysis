@@ -379,13 +379,7 @@ class AnalysisCommandHandler:
             )
         except asyncio.CancelledError:
             # 宿主取消（插件重载/卸载）时也要收掉子任务，避免群锁被泄漏。
-            work.cancel()
-            exited, _ = await asyncio.wait({work}, timeout=STOP_GRACE_SECONDS)
-            if work not in exited:
-                logger.error(
-                    f"前台任务在宿主取消后 {STOP_GRACE_SECONDS}s 内未退出，放弃等待"
-                )
-                _abandon_task(work)
+            await self._stop_work(work)
             raise
         finally:
             if not stop_task.done():
@@ -420,12 +414,18 @@ class AnalysisCommandHandler:
             _consume_orphan_task_exception(work)
             return
         work.cancel()
-        exited, _ = await asyncio.wait({work}, timeout=STOP_GRACE_SECONDS)
-        if work not in exited:
-            logger.error(f"前台任务在取消后 {STOP_GRACE_SECONDS}s 内未退出，继续收尾")
-            _abandon_task(work)
-            return
-        _consume_orphan_task_exception(work)
+        try:
+            exited, _ = await asyncio.wait({work}, timeout=STOP_GRACE_SECONDS)
+            if work not in exited:
+                logger.error(
+                    f"前台任务在取消后 {STOP_GRACE_SECONDS}s 内未退出，继续收尾"
+                )
+        finally:
+            # 即使宽限期等待被二次取消，也必须接管子任务的后续异常。
+            if work.done():
+                _consume_orphan_task_exception(work)
+            else:
+                _abandon_task(work)
 
     async def _finalize_stopped_analysis(
         self, trace_id: str, trace: TraceContext | None, group_id: str | None
