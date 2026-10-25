@@ -43,13 +43,29 @@ class StopSignalEvent(Protocol):
 class StopRequest:
     """一次前台任务的停止请求，可被重复置位。"""
 
-    def __init__(self) -> None:
+    def __init__(self, event: StopSignalEvent | None = None) -> None:
         self._requested = False
         self._event = asyncio.Event()
+        self._host_event = event
+        self._read_error_logged = False
+        self._tasks: set[asyncio.Task[object]] = set()
 
     @property
     def requested(self) -> bool:
-        """是否已被请求停止。"""
+        """检查停止请求，并即时补读宿主标记，避免轮询间隔内漏停。"""
+        if not self._requested and self._host_event is not None:
+            get_extra = cast(
+                "Callable[[str], object] | None",
+                getattr(self._host_event, "get_extra", None),
+            )
+            if callable(get_extra):
+                try:
+                    if bool(get_extra(STOP_EXTRA_KEY)):
+                        self.request()
+                except Exception as e:
+                    if not self._read_error_logged:
+                        self._read_error_logged = True
+                        logger.warning(f"读取宿主停止标记失败，将继续重试: {e}")
         return self._requested
 
     def request(self) -> None:
@@ -58,6 +74,25 @@ class StopRequest:
             return
         self._requested = True
         self._event.set()
+        for task in self._tasks:
+            task.cancel()
+
+    def cancel_on_stop(self, task: asyncio.Task[object]) -> None:
+        """将本次前台分析启动的后台任务关联到停止请求。
+
+        Args:
+            task: 本次分析拥有的后台任务，不能传入其他分析的任务。
+
+        Returns:
+            None。
+        """
+        if task.done():
+            return
+        if self.requested:
+            task.cancel()
+            return
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     async def wait(self) -> None:
         """等待停止请求置位。"""
@@ -79,8 +114,7 @@ class FrontendStopWatcher:
         self._event = event
         self._poll_interval = poll_interval
         self._poll_task: asyncio.Task[None] | None = None
-        self._stop_request = StopRequest()
-        self._read_error_logged = False
+        self._stop_request = StopRequest(event)
 
     @property
     def stop_request(self) -> StopRequest:
@@ -136,23 +170,8 @@ class FrontendStopWatcher:
 
         单次读取异常只记一次警告并继续轮询，不因此永久放弃监听。
         """
-        get_extra = cast(
-            "Callable[[str], object] | None", getattr(self._event, "get_extra", None)
-        )
-        if not callable(get_extra):
-            return
         while True:
-            try:
-                if bool(get_extra(STOP_EXTRA_KEY)):
-                    self._stop_request.request()
-                    logger.info(
-                        "检测到宿主停止标记 (agent_stop_requested)，中止前台任务"
-                    )
-                    return
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                if not self._read_error_logged:
-                    self._read_error_logged = True
-                    logger.warning(f"读取宿主停止标记失败，将继续重试: {e}")
+            if self._stop_request.requested:
+                logger.info("检测到宿主停止标记 (agent_stop_requested)，中止前台任务")
+                return
             await asyncio.sleep(self._poll_interval)
