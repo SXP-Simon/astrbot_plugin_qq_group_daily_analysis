@@ -3,8 +3,13 @@
 from types import SimpleNamespace
 
 import pytest
-from test_frontend_stop import HostEvent, StubTaskManager, make_handler
-from test_frontend_stop_delivery import DeliveryAdapter, OutputConfig
+from frontend_stop_support import (
+    DeliveryAdapter,
+    HostEvent,
+    OutputConfig,
+    StubTaskManager,
+    make_handler,
+)
 
 from src.application.handlers.analysis_command_handler import AnalysisStoppedError
 from src.shared import trace_context
@@ -15,7 +20,9 @@ from src.shared.trace_context import TraceContext
 @pytest.mark.parametrize("output", ["image", "html"])
 @pytest.mark.parametrize("with_trace", [True, False])
 @pytest.mark.parametrize("outcome", ["normal", "error", "stop"])
-async def test_render_once_with_optional_trace(output, with_trace, outcome, monkeypatch):
+async def test_render_once_with_optional_trace(
+    output, with_trace, outcome, monkeypatch
+):
     trace = TraceContext(trace_id="render_test") if with_trace else None
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
     monkeypatch.setattr(trace_context, "_active_traces", {})
@@ -38,11 +45,16 @@ async def test_render_once_with_optional_trace(output, with_trace, outcome, monk
         generate_text_report=lambda _: "",
     )
     handler = make_handler(
-        object(), StubTaskManager(), report_generator=generator, config=OutputConfig(output),
+        object(),
+        StubTaskManager(),
+        report_generator=generator,
+        config=OutputConfig(output),
     )
     result = {
-        "group_id": "123456", "platform_id": "bot-a",
-        "analysis_result": {}, "adapter": DeliveryAdapter(),
+        "group_id": "123456",
+        "platform_id": "bot-a",
+        "analysis_result": {},
+        "adapter": DeliveryAdapter(),
     }
     if outcome == "normal":
         [item async for item in handler.send_analysis_report(HostEvent(), result)]
@@ -60,4 +72,6 @@ async def test_render_once_with_optional_trace(output, with_trace, outcome, monk
     if trace is not None:
         assert trace._spans[0]["duration_ms"] is not None
         if outcome != "stop":
-            assert trace._spans[0]["status"] == ("failed" if outcome == "error" else "success")
+            assert trace._spans[0]["status"] == (
+                "failed" if outcome == "error" else "success"
+            )

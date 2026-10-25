@@ -3,14 +3,16 @@ import gc
 import weakref
 
 import pytest
-from test_frontend_stop import make_handler, StubTaskManager
+from frontend_stop_support import StubTaskManager, make_handler
 
 from src.application.services.stop_request import StopRequest
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cancel_twice", [False, True])
-async def test_host_cancellation_retrieves_child_cleanup_errors(cancel_twice, monkeypatch):
+async def test_host_cancellation_retrieves_child_cleanup_errors(
+    cancel_twice, monkeypatch
+):
     from src.application.handlers import analysis_command_handler as module
 
     started = asyncio.Event()
@@ -29,9 +31,11 @@ async def test_host_cancellation_retrieves_child_cleanup_errors(cancel_twice, mo
             cancelled.set()
             if cancel_twice:
                 await release.wait()
-            raise RuntimeError("取消清理失败")
+            raise RuntimeError("取消清理失败") from None
 
-    monkeypatch.setattr(module.logger, "warning", lambda text, *a, **k: logs.append(text))
+    monkeypatch.setattr(
+        module.logger, "warning", lambda text, *_args, **_kwargs: logs.append(text)
+    )
     handler = make_handler(object(), StubTaskManager())
     loop = asyncio.get_running_loop()
     errors = []
