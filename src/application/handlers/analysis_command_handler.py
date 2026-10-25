@@ -200,11 +200,19 @@ class AnalysisCommandHandler:
                 yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
                 return
 
+            # 在第一个准备阶段等待前开始监听；只取消工作子任务，保留宿主发送与收尾。
+            if self.stop_watcher_factory is not None:
+                stop_watcher = self.stop_watcher_factory(event)
+                stop_request = stop_watcher.stop_request
+                await stop_watcher.start()
+
             group_name = ""
             try:
                 adapter = self.bot_manager.get_adapter(platform_id)
                 if adapter:
-                    info = await adapter.get_group_info(group_id)
+                    info = await self._await_with_stop(
+                        adapter.get_group_info(group_id), stop_request
+                    )
                     if info and info.group_name:
                         group_name = info.group_name
             except Exception:
@@ -221,14 +229,17 @@ class AnalysisCommandHandler:
                 trigger_type="manual",
             )
             if self.active_task_manager:
-                await self.active_task_manager.register_task(
-                    task_id=trace_id,
-                    group_id=group_id,
-                    group_name=group_name,
-                    platform=platform_id or "",
-                    trigger_type="manual",
-                    current_stage=AnalysisStage.FETCH_MESSAGES,
-                    asyncio_task=current_task,
+                await self._await_with_stop(
+                    self.active_task_manager.register_task(
+                        task_id=trace_id,
+                        group_id=group_id,
+                        group_name=group_name,
+                        platform=platform_id or "",
+                        trigger_type="manual",
+                        current_stage=AnalysisStage.FETCH_MESSAGES,
+                        asyncio_task=current_task,
+                    ),
+                    stop_request,
                 )
 
             adapter = self.bot_manager.get_adapter(platform_id)
@@ -244,16 +255,13 @@ class AnalysisCommandHandler:
             if use_text_reply:
                 yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
             elif adapter and orig_msg_id:
-                await adapter.set_reaction(
-                    event.get_group_id(), orig_msg_id, "analysis_started"
+                await self._await_with_stop(
+                    adapter.set_reaction(
+                        event.get_group_id(), orig_msg_id, "analysis_started"
+                    ),
+                    stop_request,
                 )
 
-            # 真正的工作放进独立子任务：/stop 只取消这个子任务，绝不取消驱动本
-            # 生成器的宿主任务，否则会打断宿主的发送与后续收尾流程。
-            if self.stop_watcher_factory is not None:
-                stop_watcher = self.stop_watcher_factory(event)
-                await stop_watcher.start()
-                stop_request = stop_watcher.stop_request
             result = await self._await_with_stop(
                 self.analysis_service.execute_daily_analysis(
                     group_id=group_id, platform_id=platform_id, manual=True, days=days
@@ -290,12 +298,18 @@ class AnalysisCommandHandler:
                 return
 
             if not use_text_reply and adapter and orig_msg_id:
-                await adapter.set_reaction(
-                    event.get_group_id(), orig_msg_id, "analysis_done"
+                await self._await_with_stop(
+                    adapter.set_reaction(
+                        event.get_group_id(), orig_msg_id, "analysis_done"
+                    ),
+                    stop_request,
                 )
 
             if self.active_task_manager:
-                await self.active_task_manager.update_stage(trace_id, "RENDER_REPORT")
+                await self._await_with_stop(
+                    self.active_task_manager.update_stage(trace_id, "RENDER_REPORT"),
+                    stop_request,
+                )
 
             async for res in self.send_analysis_report(event, result, stop_request):
                 yield res
@@ -431,8 +445,8 @@ class AnalysisCommandHandler:
     ) -> None:
         """收尾被用户停止的分析任务。
 
-        顺序刻意固定为：先结 trace 状态，再释放活跃任务，最后才由调用方发送回执。
-        这样即使宿主发送环节卡住，任务记录也已经清理，不会把群锁或活跃任务拖住。
+        先收敛已创建的 Trace，再移除活跃任务记录；准备阶段可能尚未创建 Trace。
+        群锁仍由实际工作子任务退出时释放，停止回执由宿主负责。
 
         Args:
             trace_id: 本次分析的链路追踪 ID。
