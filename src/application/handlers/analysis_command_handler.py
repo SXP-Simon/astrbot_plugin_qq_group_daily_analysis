@@ -602,6 +602,8 @@ class AnalysisCommandHandler:
                 )
                 sent = await adapter.send_image(group_id, image_url, caption=caption)
                 if sent:
+                    if stop_request is not None and stop_request.requested:
+                        raise AnalysisStoppedError
                     upload_img = getattr(
                         self.plugin_instance, "_try_upload_image", None
                     )

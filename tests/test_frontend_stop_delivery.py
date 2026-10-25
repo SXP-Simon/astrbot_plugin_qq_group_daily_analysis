@@ -1,9 +1,11 @@
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from test_frontend_stop import (
-    HostEvent, ImageConfig, ReportResultService, SlowRenderGenerator,
+    CaptionConfig, FastRenderGenerator, HostEvent, ImageConfig, ReportResultService,
+    SlowRenderGenerator, SlowSendingAdapter,
     StubAdapter, StubBotManager, StubTaskManager, _spy_trace, make_handler,
 )
 
@@ -144,6 +146,58 @@ async def test_normal_text_delivery_still_succeeds(monkeypatch):
     await collect(handler, HostEvent())
     assert adapter.sent == ["text"]
     assert captured["trace"].status == "succeeded"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop_requested", [True, False])
+@pytest.mark.parametrize("upload_owner", ["handler", "host"])
+async def test_image_send_stop_skips_copy_upload(stop_requested, upload_owner, monkeypatch):
+    """图片发送中停止时跳过副本上传，无停止时保留两种上传入口。"""
+    captured = _spy_trace(monkeypatch)
+    monkeypatch.setattr(
+        handler_module, "FrontendStopWatcher",
+        lambda event: FrontendStopWatcher(event, poll_interval=60),
+    )
+    adapter = SlowSendingAdapter()
+    manager = StubTaskManager()
+    handler = make_handler(
+        ReportResultService(adapter), manager,
+        report_generator=FastRenderGenerator(), config=CaptionConfig(),
+    )
+    monkeypatch.setattr(handler, "_save_report_to_history", lambda *_args, **_kwargs: None)
+    upload = AsyncMock()
+    if upload_owner == "host":
+        handler.plugin_instance = SimpleNamespace(
+            comic_command_handler=None, _try_upload_image=upload,
+        )
+    else:
+        monkeypatch.setattr(handler, "_try_upload_image", upload)
+
+    event = HostEvent()
+    parent = asyncio.create_task(collect(handler, event))
+    try:
+        await asyncio.wait_for(adapter.started.wait(), timeout=1)
+        if stop_requested:
+            event.set_extra("agent_stop_requested", True)
+        adapter.release.set()
+        delivered = await asyncio.wait_for(parent, timeout=1)
+        assert adapter.completed
+        assert len(delivered) == 1
+        assert not manager.active
+        assert len(manager.finished) == 1
+        if stop_requested:
+            upload.assert_not_awaited()
+            assert captured["trace"].status == "aborted"
+        else:
+            upload.assert_awaited_once_with(
+                "123456", "http://img.local/report.jpg", "aiocqhttp_1",
+            )
+            assert captured["trace"].status == "succeeded"
+    finally:
+        adapter.release.set()
+        if not parent.done():
+            parent.cancel()
+        await asyncio.gather(parent, return_exceptions=True)
 
 
 @pytest.mark.asyncio
