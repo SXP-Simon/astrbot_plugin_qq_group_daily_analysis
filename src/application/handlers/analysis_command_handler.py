@@ -391,17 +391,41 @@ class AnalysisCommandHandler:
             if not stop_task.done():
                 stop_task.cancel()
 
+        if stop_request.requested:
+            # 停止与完成同时到：用户按了停止就丢弃这次结果，不再进入保存与发送。
+            await self._stop_work(work)
+            raise AnalysisStoppedError
+
         if work in done:
             if work.cancelled():
                 raise RuntimeError("分析子任务被内部取消")
             return work.result()
 
+        await self._stop_work(work)
+        raise AnalysisStoppedError
+
+    async def _stop_work(self, work: asyncio.Task[object]) -> None:
+        """取消子任务并等它退出，超时则放弃等待并接管其异常。
+
+        Args:
+            work: 需要终止的前台工作子任务。
+
+        Returns:
+            None
+
+        Raises:
+            asyncio.CancelledError: 等待期间宿主再次取消当前任务。
+        """
+        if work.done():
+            _consume_orphan_task_exception(work)
+            return
         work.cancel()
         exited, _ = await asyncio.wait({work}, timeout=STOP_GRACE_SECONDS)
         if work not in exited:
             logger.error(f"前台任务在取消后 {STOP_GRACE_SECONDS}s 内未退出，继续收尾")
             _abandon_task(work)
-        raise AnalysisStoppedError
+            return
+        _consume_orphan_task_exception(work)
 
     async def _finalize_stopped_analysis(
         self, trace_id: str, trace: TraceContext | None, group_id: str | None
@@ -420,7 +444,7 @@ class AnalysisCommandHandler:
             try:
                 trace.finish(
                     event=TaskEvent.CANCEL,
-                    error_message="Task cancelled by frontend stop request",
+                    error_message="用户通过 stop 中止了本次分析",
                 )
             except RuntimeError as transition_error:
                 logger.info(f"停止收尾时任务已由并发事件收敛: {transition_error}")
@@ -541,6 +565,9 @@ class AnalysisCommandHandler:
                     ),
                     stop_request,
                 )
+
+            if stop_request is not None and stop_request.requested:
+                raise AnalysisStoppedError
 
             if image_url:
                 save_history = getattr(

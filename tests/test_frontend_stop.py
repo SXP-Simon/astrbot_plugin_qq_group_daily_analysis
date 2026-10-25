@@ -418,7 +418,7 @@ async def test_finalize_stopped_analysis_marks_cancel_reason():
     )
 
     assert calls and calls[0]["event"] == TaskEvent.CANCEL
-    assert calls[0]["error_message"] == "Task cancelled by frontend stop request"
+    assert calls[0]["error_message"] == "用户通过 stop 中止了本次分析"
     assert manager.finished == ["trace_1"]
 
 
