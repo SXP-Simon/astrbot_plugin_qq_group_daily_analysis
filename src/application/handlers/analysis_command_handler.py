@@ -11,6 +11,7 @@ import os
 import re
 import tempfile
 import time
+from contextlib import nullcontext
 from datetime import datetime
 from inspect import isawaitable
 from pathlib import Path
@@ -56,18 +57,6 @@ def _consume_orphan_task_exception(task: asyncio.Task[object]) -> None:
     error = task.exception()
     if error is not None:
         logger.warning(f"孤儿前台任务结束后抛出异常（已取回）: {error!r}")
-
-
-def _abandon_task(task: asyncio.Task[object]) -> None:
-    """放弃等待不响应取消的任务，并接管它后续的异常。
-
-    宽限期结束后仍未退出的子任务无法再强杀，只能不再等待；若它之后以异常
-    结束而没有回调取回，事件循环会打印 Task exception was never retrieved。
-
-    Args:
-        task: 被放弃等待的后台任务。
-    """
-    task.add_done_callback(_consume_orphan_task_exception)
 
 
 class AnalysisStoppedError(BaseException):
@@ -431,7 +420,7 @@ class AnalysisCommandHandler:
             if work.done():
                 _consume_orphan_task_exception(work)
             else:
-                _abandon_task(work)
+                work.add_done_callback(_consume_orphan_task_exception)
 
     async def _finalize_stopped_analysis(
         self, trace_id: str, trace: TraceContext | None, group_id: str | None
@@ -540,28 +529,14 @@ class AnalysisCommandHandler:
             html_render = bind_group_html_renderer(
                 self.html_render, group_id, platform_id
             )
-            if trace:
-                with trace.span(
+            with (
+                trace.span(
                     "RENDER_REPORT",
                     {"format": "image", "template": template_theme},
-                ):
-                    (
-                        image_url,
-                        _html_content,
-                    ) = await self._await_with_stop(
-                        self.report_generator.generate_image_report(
-                            analysis_result,
-                            group_id,
-                            html_render,
-                            avatar_url_getter=avatar_url_getter,
-                            nickname_getter=nickname_getter,
-                            avatar_cache_namespace=platform_id,
-                            allow_alphanumeric_user_ids=is_qq_official,
-                            template_theme=template_theme,
-                        ),
-                        stop_request,
-                    )
-            else:
+                )
+                if trace
+                else nullcontext()
+            ):
                 (
                     image_url,
                     _html_content,
@@ -634,28 +609,14 @@ class AnalysisCommandHandler:
 
         elif output_format == "html":
             cur_trace_id = trace.trace_id if trace else None
-            if trace:
-                with trace.span(
+            with (
+                trace.span(
                     "RENDER_REPORT",
                     {"format": "html", "template": template_theme},
-                ):
-                    (
-                        html_path,
-                        _json_path,
-                    ) = await self._await_with_stop(
-                        self.report_generator.generate_html_report(
-                            analysis_result,
-                            group_id,
-                            avatar_url_getter=avatar_url_getter,
-                            nickname_getter=nickname_getter,
-                            avatar_cache_namespace=platform_id,
-                            allow_alphanumeric_user_ids=is_qq_official,
-                            template_theme=template_theme,
-                            trace_id=cur_trace_id,
-                        ),
-                        stop_request,
-                    )
-            else:
+                )
+                if trace
+                else nullcontext()
+            ):
                 (
                     html_path,
                     _json_path,
