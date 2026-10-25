@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from src.application.handlers.analysis_command_handler import AnalysisStoppedError
+from src.application.services.stop_request import StopRequest
 from src.application.services.task_guard import TaskGuard
 from src.domain.value_objects.task_event import TaskEvent
 from src.infrastructure.platform.stop_signal import (
     STOP_EXTRA_KEY,
     FrontendStopWatcher,
-    StopRequest,
     StopSignalEvent,
 )
 
@@ -233,6 +233,7 @@ def make_handler(
     manager: StubTaskManager,
     report_generator: object | None = None,
     config: object | None = None,
+    stop_watcher_factory=None,
 ):
     from src.application.handlers.analysis_command_handler import (
         AnalysisCommandHandler,
@@ -245,6 +246,9 @@ def make_handler(
         report_generator=report_generator or object(),  # type: ignore[arg-type]
         html_render=None,  # type: ignore[arg-type]
         active_task_manager=manager,  # type: ignore[arg-type]
+        stop_watcher_factory=stop_watcher_factory or (
+            lambda event: FrontendStopWatcher(event, poll_interval=0.01)
+        ),
     )
 
 
@@ -577,8 +581,6 @@ async def test_stop_during_upload_keeps_send_but_finalizes_cleanly(monkeypatch):
 
     走真实的 send_analysis_report（不替换该方法），只替换落盘与图床上传。
     """
-    from src.application.handlers import analysis_command_handler as handler_module
-
     captured = _spy_trace(monkeypatch)
     watchers = []
     watcher_type = FrontendStopWatcher
@@ -588,7 +590,6 @@ async def test_stop_during_upload_keeps_send_but_finalizes_cleanly(monkeypatch):
         watchers.append(watcher)
         return watcher
 
-    monkeypatch.setattr(handler_module, "FrontendStopWatcher", capture_watcher)
     adapter = SlowSendingAdapter()
     manager = StubTaskManager()
     handler = make_handler(
@@ -596,6 +597,7 @@ async def test_stop_during_upload_keeps_send_but_finalizes_cleanly(monkeypatch):
         manager,
         report_generator=FastRenderGenerator(),
         config=CaptionConfig(),
+        stop_watcher_factory=capture_watcher,
     )
     monkeypatch.setattr(handler, "_save_report_to_history", lambda *_a, **_k: None)
 

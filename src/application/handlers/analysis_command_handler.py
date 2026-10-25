@@ -27,7 +27,6 @@ from ...domain.repositories.platform_adapter_repository import (
     PlatformAdapterProtocol,
 )
 from ...domain.value_objects.task_event import TaskEvent
-from ...infrastructure.platform.stop_signal import FrontendStopWatcher, StopRequest
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
@@ -36,6 +35,7 @@ from ..services.analysis_application_service import (
     AnalysisApplicationService,
     DuplicateGroupTaskError,
 )
+from ..services.stop_request import StopRequest
 
 STOP_GRACE_SECONDS = 5.0
 """取消子任务后等待其退出的上限；超时仍继续收尾，避免 handler 无限挂住。"""
@@ -81,6 +81,7 @@ if TYPE_CHECKING:
     from ...infrastructure.platform.bot_manager import BotManager
     from ...infrastructure.reporting.generators import ReportGenerator
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
+    from ..services.stop_request import StopWatcher
     from .comic_command_handler import ComicCommandHandler
 
 
@@ -113,6 +114,7 @@ class AnalysisCommandHandler:
         comic_handler: ComicCommandHandler | None = None,
         plugin_data_dir: Path | None = None,
         plugin_instance: PluginHostProtocol | None = None,
+        stop_watcher_factory: Callable[[AstrMessageEvent], StopWatcher] | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -127,6 +129,7 @@ class AnalysisCommandHandler:
             plugin_data_dir or Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME
         )
         self.plugin_instance = plugin_instance
+        self.stop_watcher_factory = stop_watcher_factory
         self.terminating: bool = False
 
     def set_terminating(self, terminating: bool) -> None:
@@ -171,7 +174,8 @@ class AnalysisCommandHandler:
         trace_id = ""
         group_id: str | None = None
         task_finalized = False
-        stop_watcher: FrontendStopWatcher | None = None
+        stop_watcher: StopWatcher | None = None
+        stop_request = StopRequest()
 
         try:
             event.should_call_llm(True)
@@ -246,13 +250,15 @@ class AnalysisCommandHandler:
 
             # 真正的工作放进独立子任务：/stop 只取消这个子任务，绝不取消驱动本
             # 生成器的宿主任务，否则会打断宿主的发送与后续收尾流程。
-            stop_watcher = FrontendStopWatcher(event)
-            await stop_watcher.start()
+            if self.stop_watcher_factory is not None:
+                stop_watcher = self.stop_watcher_factory(event)
+                await stop_watcher.start()
+                stop_request = stop_watcher.stop_request
             result = await self._await_with_stop(
                 self.analysis_service.execute_daily_analysis(
                     group_id=group_id, platform_id=platform_id, manual=True, days=days
                 ),
-                stop_watcher.stop_request,
+                stop_request,
             )
 
             if not result.get("success"):
@@ -291,12 +297,10 @@ class AnalysisCommandHandler:
             if self.active_task_manager:
                 await self.active_task_manager.update_stage(trace_id, "RENDER_REPORT")
 
-            async for res in self.send_analysis_report(
-                event, result, stop_watcher.stop_request
-            ):
+            async for res in self.send_analysis_report(event, result, stop_request):
                 yield res
 
-            if stop_watcher.stop_request.requested:
+            if stop_request.refresh():
                 raise AnalysisStoppedError
 
             if trace and trace.status == "running":
@@ -362,7 +366,7 @@ class AnalysisCommandHandler:
         """
         if stop_request is None:
             return await awaitable
-        if stop_request.requested:
+        if stop_request.refresh():
             awaitable.close()
             raise AnalysisStoppedError
 
@@ -380,7 +384,7 @@ class AnalysisCommandHandler:
             if not stop_task.done():
                 stop_task.cancel()
 
-        if stop_request.requested:
+        if stop_request.refresh():
             # 停止与完成同时到：用户按了停止就丢弃这次结果，不再进入保存与发送。
             await self._stop_work(work)
             raise AnalysisStoppedError
@@ -466,7 +470,7 @@ class AnalysisCommandHandler:
         if self.terminating or not self.config_manager:
             logger.warning("插件正在关闭，停止发送报告")
             return
-        if stop_request is not None and stop_request.requested:
+        if stop_request is not None and stop_request.refresh():
             raise AnalysisStoppedError
 
         group_id = str(result.get("group_id", ""))
@@ -554,7 +558,7 @@ class AnalysisCommandHandler:
                     stop_request,
                 )
 
-            if stop_request is not None and stop_request.requested:
+            if stop_request is not None and stop_request.refresh():
                 raise AnalysisStoppedError
 
             if image_url:
@@ -577,7 +581,7 @@ class AnalysisCommandHandler:
                 )
                 sent = await adapter.send_image(group_id, image_url, caption=caption)
                 if sent:
-                    if stop_request is not None and stop_request.requested:
+                    if stop_request is not None and stop_request.refresh():
                         raise AnalysisStoppedError
                     upload_img = getattr(
                         self.plugin_instance, "_try_upload_image", None
@@ -618,7 +622,7 @@ class AnalysisCommandHandler:
                     ),
                     stop_request,
                 )
-            if stop_request is not None and stop_request.requested:
+            if stop_request is not None and stop_request.refresh():
                 raise AnalysisStoppedError
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
@@ -658,13 +662,13 @@ class AnalysisCommandHandler:
                             caption=caption,
                             platform_id=platform_id,
                         )
-                        if stop_request is not None and stop_request.requested:
+                        if stop_request is not None and stop_request.refresh():
                             raise AnalysisStoppedError
                     elif isinstance(adapter, GroupFileSupportProtocol):
                         sent = await adapter.upload_group_file_to_folder(
                             group_id, html_path, filename=Path(html_path).name
                         )
-                        if stop_request is not None and stop_request.requested:
+                        if stop_request is not None and stop_request.refresh():
                             raise AnalysisStoppedError
                         if sent and caption:
                             await adapter.send_text(group_id, caption)
@@ -674,7 +678,7 @@ class AnalysisCommandHandler:
                             [File(name=Path(html_path).name, file=html_path)]
                         )
                         if caption:
-                            if stop_request is not None and stop_request.requested:
+                            if stop_request is not None and stop_request.refresh():
                                 raise AnalysisStoppedError
                             yield event.plain_result(caption)
             else:
@@ -703,7 +707,7 @@ class AnalysisCommandHandler:
             stop_request: 本次手动分析的停止请求；为 None 时沿用原有发送流程。
         """
         try:
-            if stop_request is not None and stop_request.requested:
+            if stop_request is not None and stop_request.refresh():
                 raise AnalysisStoppedError
             if is_qq_official and hasattr(
                 self.report_generator, "generate_markdown_report"
@@ -721,7 +725,7 @@ class AnalysisCommandHandler:
                     ),
                     stop_request,
                 )
-                if stop_request is not None and stop_request.requested:
+                if stop_request is not None and stop_request.refresh():
                     raise AnalysisStoppedError
                 await adapter.send_text_report(
                     group_id, text_report, fallback_content=fallback_report
@@ -729,7 +733,7 @@ class AnalysisCommandHandler:
                 return
 
             text = self.report_generator.generate_text_report(analysis_result)
-            if stop_request is not None and stop_request.requested:
+            if stop_request is not None and stop_request.refresh():
                 raise AnalysisStoppedError
             if text and text.strip():
                 await adapter.send_text_report(group_id, text)

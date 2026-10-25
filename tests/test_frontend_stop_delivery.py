@@ -6,21 +6,15 @@ import pytest
 from test_frontend_stop import (
     CaptionConfig, FastRenderGenerator, HostEvent, ImageConfig, ReportResultService,
     SlowRenderGenerator, SlowSendingAdapter,
-    StubAdapter, StubBotManager, StubTaskManager, _spy_trace, make_handler,
+    StubAdapter, StubAnalysisService, StubBotManager, StubTaskManager, _spy_trace, make_handler,
 )
 
 from src.application.handlers import analysis_command_handler as handler_module
 from src.application.handlers.comic_command_handler import ComicCommandHandler
-from src.infrastructure.platform.stop_signal import FrontendStopWatcher, StopRequest
+from src.application.services.stop_request import StopRequest
+from src.application.services.task_guard import TaskGuard
+from src.infrastructure.platform.stop_signal import FrontendStopWatcher
 from src.shared.trace_context import TraceContext
-
-
-@pytest.fixture(autouse=True)
-def fast_stop_poll(monkeypatch):
-    monkeypatch.setattr(
-        handler_module, "FrontendStopWatcher",
-        lambda event: FrontendStopWatcher(event, poll_interval=0.01),
-    )
 
 
 class OutputConfig(ImageConfig):
@@ -103,10 +97,6 @@ async def test_stop_cancels_qq_markdown_including_image_fallback(output, monkeyp
 @pytest.mark.parametrize("output", ["text", "image", "html"])
 async def test_host_stop_at_completion_blocks_delivery_between_polls(output, monkeypatch):
     captured = _spy_trace(monkeypatch)
-    monkeypatch.setattr(
-        handler_module, "FrontendStopWatcher",
-        lambda event: FrontendStopWatcher(event, poll_interval=60),
-    )
     event = HostEvent()
 
     def text(*args, **kwargs):
@@ -129,6 +119,7 @@ async def test_host_stop_at_completion_blocks_delivery_between_polls(output, mon
         ),
         config=OutputConfig(output),
     )
+    handler.stop_watcher_factory = lambda event: FrontendStopWatcher(event, poll_interval=60)
     delivered = await asyncio.wait_for(collect(handler, event), timeout=1)
     assert len(delivered) == 1
     assert not adapter.sent
@@ -203,16 +194,13 @@ async def test_text_and_image_fallback_share_delivery(output, platform, with_sto
 async def test_image_send_stop_skips_copy_upload(stop_requested, upload_owner, monkeypatch):
     """图片发送中停止时跳过副本上传，无停止时保留两种上传入口。"""
     captured = _spy_trace(monkeypatch)
-    monkeypatch.setattr(
-        handler_module, "FrontendStopWatcher",
-        lambda event: FrontendStopWatcher(event, poll_interval=60),
-    )
     adapter = SlowSendingAdapter()
     manager = StubTaskManager()
     handler = make_handler(
         ReportResultService(adapter), manager,
         report_generator=FastRenderGenerator(), config=CaptionConfig(),
     )
+    handler.stop_watcher_factory = lambda event: FrontendStopWatcher(event, poll_interval=60)
     monkeypatch.setattr(handler, "_save_report_to_history", lambda *_args, **_kwargs: None)
     upload = AsyncMock()
     if upload_owner == "host":
@@ -377,3 +365,53 @@ async def test_stop_only_cancels_this_manual_reports_comic(comic_mode, monkeypat
         for task in list(comic._background_tasks):
             task.cancel()
         await asyncio.gather(parent, *list(comic._background_tasks), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_handler_accepts_an_independent_stop_watcher(monkeypatch):
+    """应用入口只依赖注入的监听契约，不需要宿主停止标记。"""
+    captured = _spy_trace(monkeypatch)
+
+    class Watcher:
+        def __init__(self):
+            self.stop_request = StopRequest()
+            self.started = False
+            self.stopped = False
+
+        async def start(self):
+            self.started = True
+
+        async def stop(self):
+            self.stopped = True
+
+        def stop_now(self):
+            self.stopped = True
+
+    watcher = Watcher()
+    event = HostEvent()
+    service = StubAnalysisService(TaskGuard(1))
+    manager = StubTaskManager()
+    factory = Mock(return_value=watcher)
+    handler = make_handler(service, manager, stop_watcher_factory=factory)
+
+    async def collect():
+        return [item async for item in handler.handle_daily_analysis(event)]
+
+    parent = asyncio.create_task(collect())
+    try:
+        await asyncio.wait_for(service.started.wait(), timeout=1)
+        assert watcher.started
+        assert event.get_extra("agent_stop_requested") is None
+        watcher.stop_request.request()
+        delivered = await asyncio.wait_for(parent, timeout=1)
+        factory.assert_called_once_with(event)
+        assert service.cancelled
+        assert watcher.stopped
+        assert len(delivered) == 1
+        assert not manager.active
+        assert len(manager.finished) == 1
+        assert captured["trace"].status == "aborted"
+    finally:
+        if not parent.done():
+            parent.cancel()
+        await asyncio.gather(parent, return_exceptions=True)

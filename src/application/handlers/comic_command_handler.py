@@ -29,9 +29,9 @@ if TYPE_CHECKING:
     from ...domain.value_objects import AnalysisResultPayload
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.platform.bot_manager import BotManager
-    from ...infrastructure.platform.stop_signal import StopRequest
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
     from ..services.comic_application_service import ComicApplicationService
+    from ..services.stop_request import StopRequest
 
 
 class ComicCommandHandler:
@@ -334,7 +334,7 @@ class ComicCommandHandler:
         """
         if self.terminating:
             return "terminating"
-        if stop_request is not None and stop_request.requested:
+        if stop_request is not None and stop_request.refresh():
             return "stopped"
         enabled_getter = getattr(self.config_manager, "get_enable_daily_comic", None)
         if callable(enabled_getter) and not enabled_getter():
@@ -446,7 +446,7 @@ class ComicCommandHandler:
 
         async with self._comic_semaphore:
             if self.terminating or (
-                stop_request is not None and stop_request.requested
+                stop_request is not None and stop_request.refresh()
             ):
                 return
             try:
@@ -458,7 +458,7 @@ class ComicCommandHandler:
                 comic_bytes, fallback_url = await self.comic_service.generate_comic(
                     topics, group_id, umo
                 )
-                if stop_request is not None and stop_request.requested:
+                if stop_request is not None and stop_request.refresh():
                     return
                 if comic_bytes:
                     logger.info(f"群 {group_id} 漫画生成成功，准备发送和保存副本...")

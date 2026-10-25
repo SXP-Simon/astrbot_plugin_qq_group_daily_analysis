@@ -5,7 +5,7 @@ import weakref
 import pytest
 from test_frontend_stop import make_handler, StubTaskManager
 
-from src.infrastructure.platform.stop_signal import StopRequest
+from src.application.services.stop_request import StopRequest
 
 
 @pytest.mark.asyncio
