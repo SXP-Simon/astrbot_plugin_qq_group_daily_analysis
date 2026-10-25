@@ -307,6 +307,9 @@ class AnalysisCommandHandler:
             ):
                 yield res
 
+            if stop_watcher.stop_request.requested:
+                raise AnalysisStoppedError
+
             if trace and trace.status == "running":
                 trace.finish(event=TaskEvent.SUCCEED)
 
@@ -370,6 +373,9 @@ class AnalysisCommandHandler:
         """
         if stop_request is None:
             return await awaitable
+        if stop_request.requested:
+            awaitable.close()
+            raise AnalysisStoppedError
 
         work = asyncio.create_task(awaitable)
         stop_task = asyncio.create_task(stop_request.wait())
@@ -463,6 +469,7 @@ class AnalysisCommandHandler:
         Args:
             event: AstrBot 消息事件对象。
             result: 分析服务产出的结果字典。
+            stop_request: 本次手动分析的停止请求；为 None 时不监听宿主停止。
 
         Returns:
             AsyncGenerator[object, None]: 结果消息生成器。
@@ -470,6 +477,8 @@ class AnalysisCommandHandler:
         if self.terminating or not self.config_manager:
             logger.warning("插件正在关闭，停止发送报告")
             return
+        if stop_request is not None and stop_request.requested:
+            raise AnalysisStoppedError
 
         group_id = str(result.get("group_id", ""))
         platform_id = str(result["platform_id"]) if result.get("platform_id") else None
@@ -485,14 +494,18 @@ class AnalysisCommandHandler:
             logger.warning(f"群 {group_id} 未找到对应的平台适配器，无法发送报告")
             return
 
-        if self.comic_handler:
-            self.comic_handler.try_trigger_comic_generation(
-                group_id, platform_id, analysis_result
-            )
-        elif self.plugin_instance and self.plugin_instance.comic_command_handler:
-            self.plugin_instance.comic_command_handler.try_trigger_comic_generation(
-                group_id, platform_id, analysis_result
-            )
+        comic_handler = self.comic_handler or (
+            self.plugin_instance.comic_command_handler if self.plugin_instance else None
+        )
+        if comic_handler:
+            if stop_request is None:
+                comic_handler.try_trigger_comic_generation(
+                    group_id, platform_id, analysis_result
+                )
+            else:
+                comic_handler.try_trigger_comic_generation(
+                    group_id, platform_id, analysis_result, stop_request=stop_request
+                )
 
         output_format_list = self.config_manager.get_output_format()
         output_format = output_format_list[0] if output_format_list else "image"
@@ -601,6 +614,11 @@ class AnalysisCommandHandler:
                     return
 
             logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
+            if stop_request is not None:
+                await self._send_text_reports(
+                    group_id, analysis_result, is_qq_official, adapter, stop_request
+                )
+                return
             send_text = getattr(self.plugin_instance, "_send_text_reports", None)
             if callable(send_text):
                 res = send_text(group_id, analysis_result, is_qq_official, adapter)
@@ -652,6 +670,8 @@ class AnalysisCommandHandler:
                     ),
                     stop_request,
                 )
+            if stop_request is not None and stop_request.requested:
+                raise AnalysisStoppedError
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
                 base_url = self.config_manager.get_html_base_url()
@@ -690,10 +710,14 @@ class AnalysisCommandHandler:
                             caption=caption,
                             platform_id=platform_id,
                         )
+                        if stop_request is not None and stop_request.requested:
+                            raise AnalysisStoppedError
                     elif isinstance(adapter, GroupFileSupportProtocol):
                         sent = await adapter.upload_group_file_to_folder(
                             group_id, html_path, filename=Path(html_path).name
                         )
+                        if stop_request is not None and stop_request.requested:
+                            raise AnalysisStoppedError
                         if sent and caption:
                             await adapter.send_text(group_id, caption)
 
@@ -702,11 +726,18 @@ class AnalysisCommandHandler:
                             [File(name=Path(html_path).name, file=html_path)]
                         )
                         if caption:
+                            if stop_request is not None and stop_request.requested:
+                                raise AnalysisStoppedError
                             yield event.plain_result(caption)
             else:
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
+            if stop_request is not None:
+                await self._send_text_reports(
+                    group_id, analysis_result, is_qq_official, adapter, stop_request
+                )
+                return
             send_text = getattr(self.plugin_instance, "_send_text_reports", None)
             if callable(send_text):
                 res = send_text(group_id, analysis_result, is_qq_official, adapter)
@@ -723,6 +754,7 @@ class AnalysisCommandHandler:
         analysis_result: AnalysisResultPayload,
         is_qq_official: bool,
         adapter: PlatformAdapterProtocol,
+        stop_request: StopRequest | None = None,
     ) -> None:
         """发送纯文本分析报告。
 
@@ -731,27 +763,37 @@ class AnalysisCommandHandler:
             analysis_result: 分析结果字典。
             is_qq_official: 是否为 QQ 官方平台。
             adapter: 平台适配器。
+            stop_request: 本次手动分析的停止请求；为 None 时沿用原有发送流程。
         """
         try:
+            if stop_request is not None and stop_request.requested:
+                raise AnalysisStoppedError
             if is_qq_official and hasattr(
                 self.report_generator, "generate_markdown_report"
             ):
                 (
                     text_report,
                     fallback_report,
-                ) = await self.report_generator.generate_markdown_report(
-                    analysis_result,
-                    bind_group_html_renderer(
-                        self.html_render, group_id, adapter.platform_id
+                ) = await self._await_with_stop(
+                    self.report_generator.generate_markdown_report(
+                        analysis_result,
+                        bind_group_html_renderer(
+                            self.html_render, group_id, adapter.platform_id
+                        ),
+                        mention_style="qq",
                     ),
-                    mention_style="qq",
+                    stop_request,
                 )
+                if stop_request is not None and stop_request.requested:
+                    raise AnalysisStoppedError
                 await adapter.send_text_report(
                     group_id, text_report, fallback_content=fallback_report
                 )
                 return
 
             text = self.report_generator.generate_text_report(analysis_result)
+            if stop_request is not None and stop_request.requested:
+                raise AnalysisStoppedError
             if text and text.strip():
                 await adapter.send_text_report(group_id, text)
         except Exception as e:

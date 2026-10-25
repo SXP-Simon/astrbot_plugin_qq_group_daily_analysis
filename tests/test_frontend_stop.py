@@ -148,6 +148,7 @@ class StubbornService:
         self.started = asyncio.Event()
         self.task: asyncio.Task[object] | None = None
         self.release = False
+        self.cancel_received = asyncio.Event()
 
     def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
         return False
@@ -159,6 +160,7 @@ class StubbornService:
             try:
                 await asyncio.sleep(30)
             except asyncio.CancelledError:
+                self.cancel_received.set()
                 if self.release:
                     break
                 continue
@@ -262,7 +264,7 @@ async def test_watcher_detects_host_stop_flag():
     event = HostEvent()
     watcher = FrontendStopWatcher(event, poll_interval=0.02)
     await watcher.start()
-    event.set_extra(STOP_EXTRA_KEY, True)
+    event.set_extra("agent_stop_requested", True)
     await asyncio.wait_for(watcher.stop_request.wait(), timeout=1)
     assert watcher.stop_request.requested is True
     await watcher.stop()
@@ -372,6 +374,7 @@ async def test_handler_finishes_when_work_swallows_cancel(
     # 子任务吞掉取消后，宽限期（0.2s）必须真的等满才继续收尾
     assert elapsed >= 0.2
     assert manager.finished
+    assert service.cancel_received.is_set()
 
     service.release = True
     if service.task is not None:
@@ -557,12 +560,13 @@ class SlowSendingAdapter(StubAdapter):
     def __init__(self) -> None:
         self.started = asyncio.Event()
         self.completed = False
+        self.release = asyncio.Event()
 
     async def send_image(
         self, group_id: str, image_url: str, caption: str = ""
     ) -> bool:
         self.started.set()
-        await asyncio.sleep(0.3)
+        await self.release.wait()
         self.completed = True
         return True
 
@@ -573,6 +577,18 @@ async def test_stop_during_upload_keeps_send_but_finalizes_cleanly(monkeypatch):
 
     走真实的 send_analysis_report（不替换该方法），只替换落盘与图床上传。
     """
+    from src.application.handlers import analysis_command_handler as handler_module
+
+    captured = _spy_trace(monkeypatch)
+    watchers = []
+    watcher_type = FrontendStopWatcher
+
+    def capture_watcher(event):
+        watcher = watcher_type(event, poll_interval=0.01)
+        watchers.append(watcher)
+        return watcher
+
+    monkeypatch.setattr(handler_module, "FrontendStopWatcher", capture_watcher)
     adapter = SlowSendingAdapter()
     manager = StubTaskManager()
     handler = make_handler(
@@ -596,14 +612,22 @@ async def test_stop_during_upload_keeps_send_but_finalizes_cleanly(monkeypatch):
             delivered.append(item)
 
     consumer = asyncio.create_task(consume())
-    await asyncio.wait_for(adapter.started.wait(), timeout=3)
-
-    event.set_extra(STOP_EXTRA_KEY, True)
-    await asyncio.wait_for(consumer, timeout=3)
+    try:
+        await asyncio.wait_for(adapter.started.wait(), timeout=3)
+        event.set_extra("agent_stop_requested", True)
+        await asyncio.wait_for(watchers[0].stop_request.wait(), timeout=1)
+        adapter.release.set()
+        await asyncio.wait_for(consumer, timeout=3)
+    finally:
+        adapter.release.set()
+        if not consumer.done():
+            consumer.cancel()
+        await asyncio.gather(consumer, return_exceptions=True)
 
     assert adapter.completed is True  # 上传已完成，停止不会撤回
     assert len(delivered) == 1  # 只有启动提示
     assert manager.finished  # 收尾照常完成
+    assert captured["trace"].status == "aborted"
 
 
 class ExplodingStubbornService:
