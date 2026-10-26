@@ -22,6 +22,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/config/test-custom-t2i": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 用当前未保存的自定义 T2I 配置生成固定测试图片 */
+        post: operations["testCustomT2i"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config/test-template-cdn": {
         parameters: {
             query?: never;
@@ -332,6 +349,20 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CustomT2iProbeRequest: {
+            /** @default http://127.0.0.1:8999/text2img */
+            service_endpoint: string;
+            /** @default  */
+            service_token: string;
+            /** @default 20000 */
+            timeout: number;
+            /** @default 40000 */
+            request_timeout: number;
+        };
+        CustomT2iProbe: {
+            image_data_url: string;
+            elapsed_ms: number;
+        };
         TemplateCdnProbeRequest: {
             base_url: string;
         };
@@ -782,6 +813,48 @@ export interface operations {
             };
             /** @description 配置保存失败 */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    testCustomT2i: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomT2iProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description 经校验的图片与耗时，不保存配置或报告 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: components["schemas"]["CustomT2iProbe"];
+                    };
+                };
+            };
+            /** @description 服务配置无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 服务连接、鉴权、超时或图片校验失败 */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

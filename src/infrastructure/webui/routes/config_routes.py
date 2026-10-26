@@ -20,10 +20,13 @@ from ....utils.logger import logger
 from ...config.config_migrator import LEGACY_RENDERING_RESOURCE_KEYS
 from ...config.rendering_config import (
     CUSTOM_RESOURCE_OPTION,
+    DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS,
     DEFAULT_RENDERING_STRATEGY_PRESETS,
+    ScreenshotOptions,
     parse_rendering_strategies,
 )
 from ...reporting.cdn_probe import probe_template_cdn
+from ...reporting.custom_t2i_client import render_custom_t2i
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
@@ -34,6 +37,7 @@ if TYPE_CHECKING:
     from ....application.dto.webui_dto import (
         ConfigFileContentQueryDTO,
         ConfigSaveDTO,
+        CustomT2iProbeDTO,
     )
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
@@ -197,6 +201,79 @@ class ConfigRoutes:
         except Exception as exc:
             logger.error(f"模板 CDN 检测异常: {exc}", exc_info=True)
             return error_response("这次检测没能完成，请稍后再试。", status_code=500)
+
+    async def api_test_custom_t2i(self) -> WebApiResponse:
+        """用未保存的服务配置生成固定测试图，不写盘、不发送群消息。
+
+        Returns:
+            测试图片和耗时；配置无效返回 400，服务失败返回 502。
+        """
+        try:
+            body = await request.json()
+            if type(body) is not dict:
+                raise ValueError("请提供有效的 T2I 测试配置")
+            plan = parse_rendering_strategies(
+                [
+                    {
+                        "__template_key": "custom",
+                        **{
+                            key: body[key]
+                            for key in (
+                                "service_endpoint",
+                                "service_token",
+                                "timeout",
+                                "request_timeout",
+                            )
+                            if key in body
+                        },
+                    }
+                ]
+            )[0]
+        except (ValueError, TypeError):
+            return error_response(
+                "请检查服务地址、Token 和超时设置是否有效", status_code=400
+            )
+
+        started = time.perf_counter()
+        options: ScreenshotOptions = {
+            "type": "png",
+            "full_page": False,
+            "viewport_width": 480,
+            "viewport_height": 180,
+            "device_scale_factor_level": "normal",
+            "timeout": plan["timeout"],
+        }
+        # 不加载外链字体和图片，只验证接口、鉴权与基本截图能力。
+        html = """<!doctype html><html><head><meta charset="UTF-8">
+<style>body{margin:0;padding:28px;background:#f0f5ff;color:#172554;
+font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
+<body><strong>T2I 渲染测试</strong><p>这是一张测试图片。</p>
+<p>HTML → PNG · 0123456789</p></body></html>"""
+        try:
+            image = await render_custom_t2i(
+                plan["service_endpoint"],
+                html,
+                options,
+                plan["service_token"],
+                request_timeout_ms=plan.get(
+                    "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
+                ),
+            )
+        except (ValueError, RuntimeError, TimeoutError) as exc:
+            return error_response(str(exc), status_code=502)
+        except Exception:
+            # 不记录未保存的地址、Token 或第三方异常正文。
+            return error_response(
+                "这次测试没能完成，请查看 T2I 服务日志后重试。", status_code=502
+            )
+        mime = "image/png" if image.startswith(b"\x89PNG") else "image/jpeg"
+        result: CustomT2iProbeDTO = {
+            "image_data_url": f"data:{mime};base64,{base64.b64encode(image).decode('ascii')}",
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+        }
+        return json_response(
+            {"status": "ok", "data": result}, headers={"Cache-Control": "no-store"}
+        )
 
     async def api_save_config(self) -> WebApiResponse:
         """保存并更新插件配置"""
