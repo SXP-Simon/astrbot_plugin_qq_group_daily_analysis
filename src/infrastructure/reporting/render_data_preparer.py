@@ -17,7 +17,7 @@ import json
 import re
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from markupsafe import Markup
 
@@ -36,6 +36,44 @@ if TYPE_CHECKING:
     from ..visualization.activity_charts import ActivityVisualizer
     from .avatar_service import AvatarService
     from .templates import HTMLTemplates
+
+
+class TemplateResourceContext(TypedDict):
+    """主模板与组件共同使用的资源地址及展示选项。"""
+
+    hide_user_names: bool
+    report_language: str | None
+    t2i_font_source: str
+    t2i_google_fonts_mirror: str
+    t2i_gstatic_mirror: str
+    t2i_atri_font_mirror: str
+    t2i_miku_assets_mirror: str
+    t2i_deepseek_maid_assets_mirror: str
+    t2i_maria_assets_mirror: str
+    t2i_npm_mirror: str
+    cdn_assets_base: str
+
+
+class RenderTemplateContext(TemplateResourceContext):
+    """完成数据准备后传给主模板的固定字段契约。"""
+
+    current_date: str
+    current_datetime: str
+    message_count: int
+    participant_count: int
+    total_characters: int
+    emoji_count: int
+    most_active_period: str
+    topics_html: str
+    titles_html: str
+    quotes_html: str
+    hourly_chart_html: str
+    chat_quality_html: str
+    total_tokens: int
+    prompt_tokens: int
+    completion_tokens: int
+    avatar_reuse_registry: dict[str, str]
+    avatar_reuse_aliases: dict[str, str]
 
 
 class RenderDataPreparer:
@@ -185,7 +223,7 @@ class RenderDataPreparer:
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
         environment: str | None = None,
-    ) -> dict[str, object]:
+    ) -> RenderTemplateContext:
         """组装模板引擎所需的完整数据字典。
 
         Args:
@@ -200,11 +238,52 @@ class RenderDataPreparer:
             environment: 当前渲染方案的资源环境，省略时采用第一优先级方案。
 
         Returns:
-            dict: 包含全量模板渲染变量的字典。
+            包含全量模板渲染变量的强类型上下文。
+
+        Raises:
+            KeyError: 分析结果缺少统计信息或其他必需字段。
         """
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
         user_titles = analysis_result["user_titles"]
+        # 在首次异步等待前固定资源地址，主模板与所有组件共用这一环境。
+        assets_base_url = (
+            self.config_manager.get_template_assets_base_url(environment)
+            if environment
+            else self.config_manager.get_template_assets_base_url()
+        )
+        cdn_base_url = (
+            self.config_manager.get_t2i_cdn_base_url(environment)
+            if environment
+            else self.config_manager.get_t2i_cdn_base_url()
+        )
+        report_language = resolve_report_language(self.config_manager)
+        common_context: TemplateResourceContext = {
+            "hide_user_names": hide_user_names,
+            "report_language": report_language,
+            "t2i_font_source": environment or self.config_manager.get_t2i_font_source(),
+            "t2i_google_fonts_mirror": (
+                self.config_manager.get_t2i_google_fonts_mirror(environment)
+                if environment
+                else self.config_manager.get_t2i_google_fonts_mirror()
+            ),
+            "t2i_gstatic_mirror": (
+                self.config_manager.get_t2i_gstatic_mirror(environment)
+                if environment
+                else self.config_manager.get_t2i_gstatic_mirror()
+            ),
+            "t2i_atri_font_mirror": (
+                self.config_manager.get_t2i_atri_font_mirror(environment)
+                if environment
+                else self.config_manager.get_t2i_atri_font_mirror()
+            ),
+            "t2i_miku_assets_mirror": f"{assets_base_url}/HatsuneMiku",
+            "t2i_deepseek_maid_assets_mirror": f"{assets_base_url}/deepseek_maid",
+            "t2i_maria_assets_mirror": f"{assets_base_url}/maria",
+            "t2i_npm_mirror": f"{cdn_base_url}/npm",
+            "cdn_assets_base": assets_base_url,
+        }
+
         activity_viz = stats.activity_visualization
 
         max_topics = self.config_manager.get_max_topics()
@@ -296,43 +375,6 @@ class RenderDataPreparer:
                     "detail": processed_detail,
                 }
             )
-
-        assets_base_url = (
-            self.config_manager.get_template_assets_base_url(environment)
-            if environment
-            else self.config_manager.get_template_assets_base_url()
-        )
-        cdn_base_url = (
-            self.config_manager.get_t2i_cdn_base_url(environment)
-            if environment
-            else self.config_manager.get_t2i_cdn_base_url()
-        )
-        report_language = resolve_report_language(self.config_manager)
-        common_context = {
-            "hide_user_names": hide_user_names,
-            "report_language": report_language,
-            "t2i_font_source": environment or self.config_manager.get_t2i_font_source(),
-            "t2i_google_fonts_mirror": (
-                self.config_manager.get_t2i_google_fonts_mirror(environment)
-                if environment
-                else self.config_manager.get_t2i_google_fonts_mirror()
-            ),
-            "t2i_gstatic_mirror": (
-                self.config_manager.get_t2i_gstatic_mirror(environment)
-                if environment
-                else self.config_manager.get_t2i_gstatic_mirror()
-            ),
-            "t2i_atri_font_mirror": (
-                self.config_manager.get_t2i_atri_font_mirror(environment)
-                if environment
-                else self.config_manager.get_t2i_atri_font_mirror()
-            ),
-            "t2i_miku_assets_mirror": f"{assets_base_url}/HatsuneMiku",
-            "t2i_deepseek_maid_assets_mirror": f"{assets_base_url}/deepseek_maid",
-            "t2i_maria_assets_mirror": f"{assets_base_url}/maria",
-            "t2i_npm_mirror": f"{cdn_base_url}/npm",
-            "cdn_assets_base": assets_base_url,
-        }
 
         topics_html = (
             self.html_templates.render_template(
@@ -532,7 +574,7 @@ class RenderDataPreparer:
             )
             logger.debug(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
 
-        render_data = {
+        render_data: RenderTemplateContext = {
             **common_context,
             "current_date": format_report_date(report_language, datetime.now()),
             "current_datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
