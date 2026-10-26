@@ -350,13 +350,13 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
 
       {/* 底部添加条目按钮 */}
       {templateKeys.length > 1 ? (
-        <Dropdown menu={{ items: menuItems }} placement="bottomLeft">
+        <Dropdown menu={{ items: menuItems }} placement="bottomLeft" trigger={["click"]}>
           <Button
             type="dashed"
             icon={<PlusOutlined />}
             style={{ width: "100%" }}
           >
-            添加配置项 <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
+            {fieldKey === "t2i_rendering_strategies" ? "添加渲染方案" : "添加配置项"} <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
           </Button>
         </Dropdown>
       ) : templateKeys.length === 1 ? (

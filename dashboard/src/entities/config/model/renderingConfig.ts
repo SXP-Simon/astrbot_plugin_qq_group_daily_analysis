@@ -29,6 +29,26 @@ export const cdnBaseUrlSchema = z.string({ error: "CDN 地址必须是字符串"
     return true;
   }, CDN_FORMAT_ERROR);
 
+export const fontBaseUrlSchema = z.string({ error: "字体地址必须是文字" })
+  .max(2048, "字体地址不能超过 2048 个字符")
+  .refine((value) => !/^\/+$/u.test(value.trim()), "请填写完整的 HTTP(S) 字体地址")
+  .transform((raw, ctx) => {
+    const value = raw.trim().replace(/\/+$/, "");
+    if (!value) return "";
+    const match = /^(https?):\/\/([^/]+)(\/.*)?$/i.exec(value);
+    const origin = match ? `${match[1].toLowerCase()}://${match[2]}` : "";
+    if (!match || /[\s\p{C}?#\\]/u.test(value) || !cdnBaseUrlSchema.safeParse(origin).success) {
+      ctx.addIssue({ code: "custom", message: "请填写完整的 HTTP(S) 字体地址，不要带账号密码、查询参数或 # 片段" });
+      return z.NEVER;
+    }
+    return origin + (match[3] || "");
+  });
+
+export const RENDERING_RESOURCE_DEFAULTS = {
+  Mainland: { cdn_base_url: DEFAULT_TEMPLATE_CDN_BASE_URL, google_fonts: "https://fonts.loli.net", gstatic: "https://gstatic.loli.net" },
+  Overseas: { cdn_base_url: DEFAULT_TEMPLATE_CDN_BASE_URL, google_fonts: "https://fonts.googleapis.com", gstatic: "https://fonts.gstatic.com" },
+};
+
 export const t2iEndpointSchema = z.string({ error: "服务地址必须是文字" })
   .max(2048, "服务地址不能超过 2048 个字符")
   .transform((raw, ctx) => {
@@ -49,7 +69,10 @@ export const t2iEndpointSchema = z.string({ error: "服务地址必须是文字"
 export const renderingStrategySchema = z.object({
   name: z.string({ error: "方案名称必须是文字" }).default("渲染方案"),
   priority: z.number({ error: "优先级必须是数字" }).int("优先级必须是整数").min(0, "优先级不能小于 0").max(10000, "优先级不能大于 10000").default(10),
-  environment: z.enum(["Mainland", "Overseas"], { error: "请选择内地或海外资源环境" }).default("Overseas"),
+  environment: z.enum(["Mainland", "Overseas"], { error: "请选择内地或海外资源环境" }).optional(),
+  cdn_base_url: cdnBaseUrlSchema.optional(),
+  google_fonts: fontBaseUrlSchema.optional(),
+  gstatic: fontBaseUrlSchema.optional(),
   render_service: z.enum(["astrbot", "custom"], { error: "请选择跟随 AstrBot 或自定义服务" }).default("astrbot"),
   service_endpoint: z.string({ error: "服务地址必须是文字" }).trim().default(""),
   service_token: z.string({ error: "服务 Token 必须是文字" }).max(4096, "服务 Token 不能超过 4096 个字符").regex(/^[\x20-\x7e]*$/, "服务 Token 请使用英文、数字或常用符号，不能换行").transform((value) => value.trim()).default(""),
@@ -64,7 +87,7 @@ export const renderingStrategySchema = z.object({
   }
 }).transform((value) => {
   if (value.render_service === "custom") value.service_endpoint = t2iEndpointSchema.parse(value.service_endpoint);
-  return value;
+  return Object.assign(value, { environment: value.environment ?? (value.__template_key === "mainland" ? "Mainland" as const : "Overseas" as const) });
 });
 
 export const renderingConfigSchema = z.object({
@@ -85,30 +108,43 @@ export const renderingConfigLoadSchema = renderingConfigSchema.extend({
   t2i_rendering_strategies: z.unknown().optional(),
 });
 
-// 预览采用最高优先级方案的资源环境；未配置方案时使用海外环境。
-export const renderingRuntimeSchema = z.object({
-  t2i_cdn_base_url: cdnBaseUrlSchema.default(""),
-  t2i_mainland_cdn_base_url: cdnBaseUrlSchema.default(""),
-  t2i_overseas_cdn_base_url: cdnBaseUrlSchema.default(""),
-  t2i_rendering_strategies: z.array(renderingStrategySchema).default([]),
-}).transform((value) => {
-  const first = [...value.t2i_rendering_strategies].sort((a, b) => a.priority - b.priority)[0];
-  const environment = first?.environment ?? "Overseas";
-  const baseUrl = environment === "Mainland"
-    ? value.t2i_mainland_cdn_base_url : value.t2i_overseas_cdn_base_url;
-  return { t2i_cdn_base_url: baseUrl || value.t2i_cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL };
-});
-
-export const renderingSaveSchema = renderingConfigSchema.extend({
+// 仅缺少新字段的旧方案继承环境级地址；显式清空的新字段采用预设默认值。
+const renderingResolvedSchema = renderingConfigSchema.extend({
   t2i_cdn_base_url: cdnBaseUrlSchema.optional(),
   t2i_mainland_cdn_base_url: cdnBaseUrlSchema.optional(),
   t2i_overseas_cdn_base_url: cdnBaseUrlSchema.optional(),
-}).transform((value) => {
-  // 清空后保存也显示实际采用的默认方案，避免编辑器与运行时不一致。
+}).transform((value) => Object.assign(value, {
+  t2i_rendering_strategies: value.t2i_rendering_strategies?.map((plan) => {
+    const defaults = RENDERING_RESOURCE_DEFAULTS[plan.environment];
+    const source = plan.environment.toLowerCase();
+    const legacyCdn = plan.environment === "Mainland" ? value.t2i_mainland_cdn_base_url : value.t2i_overseas_cdn_base_url;
+    const fonts = fontBaseUrlSchema.safeParse(value[`t2i_${source}_google_fonts`]);
+    const gstatic = fontBaseUrlSchema.safeParse(value[`t2i_${source}_gstatic`]);
+    return Object.assign(plan, {
+      cdn_base_url: (plan.cdn_base_url ?? (legacyCdn || value.t2i_cdn_base_url)) || defaults.cdn_base_url,
+      google_fonts: (plan.google_fonts ?? (fonts.success ? fonts.data : "")) || defaults.google_fonts,
+      gstatic: (plan.gstatic ?? (gstatic.success ? gstatic.data : "")) || defaults.gstatic,
+    });
+  }),
+}));
+
+// 图片预览与 HTML 导出均采用第一优先级方案的资源地址。
+export const renderingRuntimeSchema = renderingResolvedSchema.transform((value) => {
+  const first = [...(value.t2i_rendering_strategies || [])].sort((a, b) => a.priority - b.priority)[0];
+  return { t2i_cdn_base_url: first?.cdn_base_url || value.t2i_overseas_cdn_base_url || value.t2i_cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL };
+});
+
+export const renderingSaveSchema = renderingResolvedSchema.transform((value) => {
   if (value.t2i_rendering_strategies?.length === 0) {
-    value.t2i_rendering_strategies = [renderingStrategySchema.parse({
-      __template_key: "strategy", name: "默认方案",
-    })];
+    const fonts = fontBaseUrlSchema.safeParse(value.t2i_overseas_google_fonts);
+    const gstatic = fontBaseUrlSchema.safeParse(value.t2i_overseas_gstatic);
+    value.t2i_rendering_strategies = [{
+      ...renderingStrategySchema.parse({ __template_key: "strategy", name: "默认方案" }),
+      ...RENDERING_RESOURCE_DEFAULTS.Overseas,
+      cdn_base_url: value.t2i_overseas_cdn_base_url || value.t2i_cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL,
+      google_fonts: (fonts.success && fonts.data) || RENDERING_RESOURCE_DEFAULTS.Overseas.google_fonts,
+      gstatic: (gstatic.success && gstatic.data) || RENDERING_RESOURCE_DEFAULTS.Overseas.gstatic,
+    }];
   }
   return value;
 });

@@ -172,7 +172,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     if (fieldKey === "service_token") {
       return <Input.Password aria-label={title} value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" />;
     }
-    if (["t2i_cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"].includes(fieldKey)) {
+    if (["cdn_base_url", "t2i_cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"].includes(fieldKey)) {
       const currentValue = value === undefined
         ? typeof defaultValue === "string" ? defaultValue : ""
         : String(value);

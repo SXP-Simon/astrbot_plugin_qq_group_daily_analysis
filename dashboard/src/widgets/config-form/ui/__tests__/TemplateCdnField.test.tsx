@@ -64,7 +64,7 @@ describe("CDN 预设与自定义地址", () => {
     await waitFor(() => expect(testTemplateCdn).toHaveBeenCalledWith(""));
   });
 
-  it.each(["t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"])("环境字段 %s 保留预设和地址检测", async (key) => {
+  it.each(["cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"])("环境字段 %s 保留预设和地址检测", async (key) => {
     render(<CdnField initial="https://custom.example" fieldKey={key} />);
     expect(screen.getByRole("combobox")).toHaveValue("https://custom.example");
     fireEvent.click(screen.getByRole("button", { name: "检测可用性" }));

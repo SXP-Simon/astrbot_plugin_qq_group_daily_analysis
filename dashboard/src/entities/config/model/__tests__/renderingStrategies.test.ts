@@ -1,3 +1,4 @@
+import resourceCases from "../../../../../../tests/data/rendering_resources.json";
 import { describe, expect, it } from "vitest";
 import schema from "../../../../../../_conf_schema.json";
 import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../configContract";
@@ -11,7 +12,7 @@ describe("可扩展渲染方案", () => {
     expect(Object.keys(schema.t2i_rendering.items).some((key) => /^t2i_r[12]_/.test(key))).toBe(false);
     expect(schema.t2i_rendering.items).not.toHaveProperty("t2i_font_source");
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.default).toEqual([
-      { __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", render_service: "astrbot", service_endpoint: "", service_token: "", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
+      { cdn_base_url: "https://cdn.jsdmirror.com", google_fonts: "https://fonts.googleapis.com", gstatic: "https://fonts.gstatic.com", __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", render_service: "astrbot", service_endpoint: "", service_token: "", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
     ]);
     expect(renderingStrategySchema.parse({}).timeout).toBe(20000);
     expect(schema.t2i_rendering.items.t2i_cdn_base_url.invisible).toBe(true);
@@ -89,5 +90,44 @@ describe("可扩展渲染方案", () => {
   it.each(["t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"])("编辑和保存均校验 %s", (key) => {
     expect(validateSingleFieldWithZod(key, { type: "string" }, "https://example.com/gh/file")).toBeTruthy();
     expect(pluginConfigSaveSchema.safeParse({ t2i_rendering: { [key]: "https://user:pass@example.com" } }).success).toBe(false);
+  });
+});
+
+
+it.each(resourceCases)("前后端共用每轮资源地址边界：%j", ({ plan, expected }) => {
+  const input = { t2i_rendering: { t2i_rendering_strategies: [plan] } };
+  const before = structuredClone(input);
+  const result = pluginConfigSaveSchema.safeParse(input);
+  expect(result.success).toBe(expected !== null);
+  if (result.success) expect(result.data.t2i_rendering?.t2i_rendering_strategies?.[0]).toMatchObject(expected!);
+  expect(input).toEqual(before);
+});
+
+it("相同环境的每轮 CDN 独立，预览跟随优先级且保留旧字段和扩展字段", () => {
+  const saved = pluginConfigSaveSchema.parse({ t2i_rendering: {
+    t2i_mainland_cdn_base_url: "https://legacy.example",
+    t2i_mainland_google_fonts: "https://legacy.example/fonts",
+    t2i_rendering_strategies: [
+      { environment: "Mainland", priority: 20, cdn_base_url: "https://one.example", future: [1] },
+      { environment: "Mainland", priority: 10, cdn_base_url: "https://two.example", google_fonts: "" },
+    ],
+  } });
+  const plans = saved.t2i_rendering!.t2i_rendering_strategies!;
+  expect(plans[0].cdn_base_url).toBe("https://one.example");
+  expect(plans[0].google_fonts).toBe("https://legacy.example/fonts");
+  expect(plans[0].future).toEqual([1]);
+  expect(plans[1].google_fonts).toBe("https://fonts.loli.net");
+  expect(renderingRuntimeSchema.parse(saved.t2i_rendering).t2i_cdn_base_url).toBe("https://two.example");
+});
+
+
+it("旧配置清空方案后，默认方案仍保留原海外字体镜像", () => {
+  const saved = pluginConfigSaveSchema.parse({ t2i_rendering: {
+    t2i_rendering_strategies: [],
+    t2i_overseas_google_fonts: " https://legacy.example/fonts/ ",
+    t2i_overseas_gstatic: "https://legacy.example/static/",
+  } });
+  expect(saved.t2i_rendering?.t2i_rendering_strategies?.[0]).toMatchObject({
+    google_fonts: "https://legacy.example/fonts", gstatic: "https://legacy.example/static",
   });
 });
