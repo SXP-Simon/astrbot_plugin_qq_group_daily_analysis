@@ -119,6 +119,7 @@ src/application/services/
 
 ### 4.1 报表与视觉排版 (`infrastructure/reporting/`)
 - `generators.py` (`ReportGenerator`)：专职负责 Jinja2 模板加载、T2I 渲染与按优先级配置的多方案资源环境回退；
+- `custom_t2i_client.py`：通过官方兼容 HTTP 协议调用按轮指定的服务，处理鉴权、状态码与响应检查；宿主模式继续使用会话绑定的渲染回调。
 - `render_data_preparer.py` (`RenderDataPreparer`)：专职负责脱敏、活跃度图表装配、MBTI/SBTI/ACGTI 人格卡片徽章映射及 HTML 上下文胶囊打包；
 - `profile_mappings.py`：维护 MBTI、SBTI、ACGTI 多套视觉主题的查表与映射规则。
 
