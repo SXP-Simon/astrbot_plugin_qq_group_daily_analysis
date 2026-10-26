@@ -318,7 +318,7 @@
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "https://fonts.googleapis.com",
-                                "hint": "本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。",
+                                "hint": "本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
                                 "options": [
                                     "https://fonts.googleapis.com",
                                     "https://fonts.loli.net",
@@ -337,13 +337,13 @@
                                 "condition": {
                                     "google_fonts": "__custom__"
                                 },
-                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。"
                             },
                             "gstatic": {
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "https://fonts.gstatic.com",
-                                "hint": "本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。",
+                                "hint": "本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
                                 "options": [
                                     "https://fonts.gstatic.com",
                                     "https://gstatic.loli.net",
@@ -362,7 +362,7 @@
                                 "condition": {
                                     "gstatic": "__custom__"
                                 },
-                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。"
                             },
                             "type": {
                                 "type": "string",
@@ -471,7 +471,7 @@
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "https://fonts.loli.net",
-                                "hint": "本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。",
+                                "hint": "本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
                                 "options": [
                                     "https://fonts.googleapis.com",
                                     "https://fonts.loli.net",
@@ -490,13 +490,13 @@
                                 "condition": {
                                     "google_fonts": "__custom__"
                                 },
-                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。"
                             },
                             "gstatic": {
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "https://gstatic.loli.net",
-                                "hint": "本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。",
+                                "hint": "本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
                                 "options": [
                                     "https://fonts.gstatic.com",
                                     "https://gstatic.loli.net",
@@ -515,7 +515,7 @@
                                 "condition": {
                                     "gstatic": "__custom__"
                                 },
-                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。"
                             },
                             "type": {
                                 "type": "string",
@@ -637,7 +637,7 @@
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "",
-                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。",
+                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
                                 "options": [
                                     "",
                                     "https://fonts.googleapis.com",
@@ -658,13 +658,13 @@
                                 "condition": {
                                     "google_fonts": "__custom__"
                                 },
-                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。"
                             },
                             "gstatic": {
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "",
-                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。",
+                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
                                 "options": [
                                     "",
                                     "https://fonts.gstatic.com",
@@ -685,7 +685,7 @@
                                 "condition": {
                                     "gstatic": "__custom__"
                                 },
-                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。"
                             },
                             "type": {
                                 "type": "string",
