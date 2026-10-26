@@ -388,8 +388,14 @@ class ConfigManager:
     def get_t2i_rendering_strategy_config(self) -> list[RenderingStrategyConfig]:
         """获取按优先级排序的方案，未配置时使用默认海外方案。
 
+        Args:
+            无额外参数。
+
         Returns:
             非空渲染方案列表；相同优先级保持配置顺序。
+
+        Raises:
+            无。无效配置会记录警告并回退默认方案。
         """
         group = self._get_group("t2i_rendering")
         raw = group.get("t2i_rendering_strategies", [])
