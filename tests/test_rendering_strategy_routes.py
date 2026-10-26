@@ -40,7 +40,6 @@ async def test_read_shows_single_default_strategy_without_persisting(strategies)
             "name": "默认方案",
             "priority": 10,
             "environment": "Overseas",
-            "render_service": "astrbot",
             "service_endpoint": "",
             "service_token": "",
             "type": "png",
@@ -117,6 +116,7 @@ async def test_save_normalizes_environment_cdn_and_keeps_strategy_extensions():
     expected["t2i_rendering"]["t2i_mainland_cdn_base_url"] = "https://mainland.example"
     expected["t2i_rendering"]["t2i_overseas_cdn_base_url"] = "https://overseas.example"
     expected["t2i_rendering"]["t2i_rendering_strategies"][0].update({
+        "__template_key": "mainland", "service_endpoint": "", "service_token": "",
         "cdn_base_url": "https://mainland.example", "google_fonts": "https://fonts.loli.net", "gstatic": "https://gstatic.loli.net"
     })
     with patch("src.infrastructure.webui.routes.config_routes.request") as request:
@@ -182,13 +182,14 @@ async def test_save_normalizes_custom_service_without_reordering_or_losing_exten
     saved = manager.config["t2i_rendering"]["t2i_rendering_strategies"]
     assert [{k: v for k, v in plan.items() if k not in ("cdn_base_url", "google_fonts", "gstatic")} for plan in saved] == [
         {
-            "render_service": "custom",
             "service_endpoint": "http://127.0.0.1:8999/text2img",
             "service_token": "secret",
+            "__template_key": "custom",
+            "environment": "Overseas",
             "priority": 20,
             "future": [1],
         },
-        {"priority": 10},
+        {"priority": 10, "__template_key": "strategy", "environment": "Overseas", "service_endpoint": "", "service_token": ""},
     ]
 
     assert all(plan["cdn_base_url"] == "https://cdn.jsdmirror.com" for plan in saved)

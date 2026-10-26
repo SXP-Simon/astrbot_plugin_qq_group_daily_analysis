@@ -120,7 +120,7 @@ class ConfigRoutes:
                         {"name": "默认方案"}
                     ]
                     try:
-                        # 只补齐编辑视图，不写盘；保留条目顺序、扩展字段和原模板键。
+                        # 只补齐编辑视图，不写盘；保留顺序和扩展字段，迁移服务条目类型。
                         projected = []
                         if not isinstance(raw, list):
                             raise ValueError("渲染方案必须是列表")
@@ -128,18 +128,14 @@ class ConfigRoutes:
                             normalized = parse_rendering_strategies(
                                 [item], legacy_config=rendering
                             )[0]
-                            projected.append(
-                                {
-                                    **item,
-                                    **normalized,
-                                    "__template_key": item.get(
-                                        "__template_key",
-                                        "mainland"
-                                        if normalized["environment"] == "Mainland"
-                                        else "strategy",
-                                    ),
-                                }
-                            )
+                            projected_item = {**item, **normalized}
+                            projected_item.pop("render_service", None)
+                            # 自定义方案的空地址表示跟随资源环境，编辑与保存均保留此意图。
+                            if normalized["render_service"] == "custom":
+                                for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                                    if item.get(key) == "":
+                                        projected_item[key] = ""
+                            projected.append(projected_item)
                         config_dict["t2i_rendering"] = {
                             **rendering,
                             "t2i_rendering_strategies": projected,
@@ -272,13 +268,20 @@ class ConfigRoutes:
                             for key in ("cdn_base_url", "google_fonts", "gstatic"):
                                 if strategy.get(key) == CUSTOM_RESOURCE_OPTION:
                                     strategy[f"custom_{key}"] = normalized[key]
+                                if (
+                                    normalized["render_service"] == "custom"
+                                    and strategy.get(key) == ""
+                                ):
+                                    continue
                                 strategy[key] = normalized[key]
-                            if strategy.get("render_service") == "custom":
-                                strategy["service_endpoint"] = normalized[
-                                    "service_endpoint"
-                                ]
-                            if "service_token" in strategy:
-                                strategy["service_token"] = normalized["service_token"]
+                            for key in (
+                                "__template_key",
+                                "environment",
+                                "service_endpoint",
+                                "service_token",
+                            ):
+                                strategy[key] = normalized[key]
+                            strategy.pop("render_service", None)
                     except ValueError as exc:
                         return error_response(str(exc), status_code=400)
                 for cdn_key in (
