@@ -118,7 +118,7 @@ src/application/services/
 基础设施层为应用层与领域层提供具体技术实现，各大核心子系统均已完成深度解耦：
 
 ### 4.1 报表与视觉排版 (`infrastructure/reporting/`)
-- `generators.py` (`ReportGenerator`)：专职负责 Jinja2 模板加载、Playwright T2I 渲染与双轮降级输出；
+- `generators.py` (`ReportGenerator`)：专职负责 Jinja2 模板加载、T2I 渲染与按优先级配置的多方案资源环境回退；
 - `render_data_preparer.py` (`RenderDataPreparer`)：专职负责脱敏、活跃度图表装配、MBTI/SBTI/ACGTI 人格卡片徽章映射及 HTML 上下文胶囊打包；
 - `profile_mappings.py`：维护 MBTI、SBTI、ACGTI 多套视觉主题的查表与映射规则。
 
