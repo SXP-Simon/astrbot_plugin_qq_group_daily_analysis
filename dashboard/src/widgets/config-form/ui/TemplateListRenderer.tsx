@@ -19,6 +19,7 @@ import {
   SettingOutlined,
   DownOutlined,
 } from "@ant-design/icons";
+import { isFieldVisible } from "../../../entities/config/model/visibility";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
 import {
   AvailableProvider,
@@ -308,7 +309,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
 
                 {/* 条目内部各字段渲染 */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "10px 16px" }}>
-                  {Object.entries(subItems).map(([subKey, subField]) => {
+                  {Object.entries(subItems).filter(([, subField]) => isFieldVisible(subField, { item })).map(([subKey, subField]) => {
                     const isFullWidth =
                       subField.type === "template_list" ||
                       subField.type === "text" ||

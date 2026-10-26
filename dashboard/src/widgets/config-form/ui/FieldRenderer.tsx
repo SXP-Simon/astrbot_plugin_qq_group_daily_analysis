@@ -169,6 +169,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
   // 渲染不同的表单控件
   const renderControl = () => {
+    if (fieldKey === "service_token") {
+      return <Input.Password aria-label={title} value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" />;
+    }
     if (["t2i_cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"].includes(fieldKey)) {
       const currentValue = value === undefined
         ? typeof defaultValue === "string" ? defaultValue : ""
@@ -416,6 +419,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       const labels = fieldSchema.labels;
       return (
         <Select
+          aria-label={title}
           value={currentVal}
           onChange={(v) => onChange(v)}
           style={{ width: "100%" }}
@@ -508,6 +512,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
       return (
         <Select
+          aria-label={title}
           mode="multiple"
           allowClear
           style={{ width: "100%" }}

@@ -11,7 +11,7 @@ describe("可扩展渲染方案", () => {
     expect(Object.keys(schema.t2i_rendering.items).some((key) => /^t2i_r[12]_/.test(key))).toBe(false);
     expect(schema.t2i_rendering.items).not.toHaveProperty("t2i_font_source");
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.default).toEqual([
-      { __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
+      { __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", render_service: "astrbot", service_endpoint: "", service_token: "", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
     ]);
     expect(renderingStrategySchema.parse({}).timeout).toBe(20000);
     expect(schema.t2i_rendering.items.t2i_cdn_base_url.invisible).toBe(true);

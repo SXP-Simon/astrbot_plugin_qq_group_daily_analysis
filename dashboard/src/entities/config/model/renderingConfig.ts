@@ -29,16 +29,43 @@ export const cdnBaseUrlSchema = z.string({ error: "CDN 地址必须是字符串"
     return true;
   }, CDN_FORMAT_ERROR);
 
+export const t2iEndpointSchema = z.string({ error: "服务地址必须是文字" })
+  .max(2048, "服务地址不能超过 2048 个字符")
+  .transform((raw, ctx) => {
+    const value = raw.trim().replace(/\/+$/, "");
+    const match = /^(https?):\/\/([^/]+)(\/.*)?$/i.exec(value);
+    const origin = match ? `${match[1].toLowerCase()}://${match[2]}` : "";
+    if (!match || /[\s\p{C}?#\\]/u.test(value) || !cdnBaseUrlSchema.safeParse(origin).success) {
+      ctx.addIssue({ code: "custom", message: "请填写完整的 T2I 服务地址，例如 http://127.0.0.1:8999/text2img，不要带账号密码、查询参数或 # 片段" });
+      return z.NEVER;
+    }
+    let path = match[3] || "";
+    if (path.endsWith("/text2img/generate")) path = path.slice(0, -"/generate".length);
+    if (!path.endsWith("/text2img")) path += "/text2img";
+    return origin + path;
+  });
+
 // 方案结构与后端 rendering_config 保持一致，保存时保留扩展字段。
 export const renderingStrategySchema = z.object({
   name: z.string({ error: "方案名称必须是文字" }).default("渲染方案"),
   priority: z.number({ error: "优先级必须是数字" }).int("优先级必须是整数").min(0, "优先级不能小于 0").max(10000, "优先级不能大于 10000").default(10),
   environment: z.enum(["Mainland", "Overseas"], { error: "请选择内地或海外资源环境" }).default("Overseas"),
+  render_service: z.enum(["astrbot", "custom"], { error: "请选择跟随 AstrBot 或自定义服务" }).default("astrbot"),
+  service_endpoint: z.string({ error: "服务地址必须是文字" }).trim().default(""),
+  service_token: z.string({ error: "服务 Token 必须是文字" }).max(4096, "服务 Token 不能超过 4096 个字符").regex(/^[\x20-\x7e]*$/, "服务 Token 请使用英文、数字或常用符号，不能换行").transform((value) => value.trim()).default(""),
   type: z.enum(["png", "jpeg"], { error: "请选择 PNG 或 JPEG 格式" }).default("png"),
   quality: z.number({ error: "图片质量必须是数字" }).int("图片质量必须是整数").min(1, "图片质量不能小于 1").max(100, "图片质量不能大于 100").default(80),
   device_scale: z.enum(["normal", "high", "ultra"], { error: "请选择有效的分辨率等级" }).default("high"),
   timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").default(20000),
-}).catchall(z.unknown());
+}).catchall(z.unknown()).superRefine((value, ctx) => {
+  if (value.render_service === "custom") {
+    const endpoint = t2iEndpointSchema.safeParse(value.service_endpoint);
+    if (!endpoint.success) ctx.addIssue({ code: "custom", path: ["service_endpoint"], message: endpoint.error.issues[0].message });
+  }
+}).transform((value) => {
+  if (value.render_service === "custom") value.service_endpoint = t2iEndpointSchema.parse(value.service_endpoint);
+  return value;
+});
 
 export const renderingConfigSchema = z.object({
   t2i_cdn_base_url: z.string().optional(),
