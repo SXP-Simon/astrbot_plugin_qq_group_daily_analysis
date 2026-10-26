@@ -308,7 +308,7 @@
                                 "type": "string",
                                 "description": "模板资源 CDN",
                                 "default": "https://cdn.jsdmirror.com",
-                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。填写支持 /gh/、/npm/ 的网站根地址，例如 https://fastly.jsdelivr.net/。请先测试截图服务所在网络的速度和可达性；旁边按钮检测的是机器人服务器。留空使用插件默认 CDN，自定义图片地址不受影响。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。地址需支持 /gh/、/npm/，例如 https://fastly.jsdelivr.net/。请从截图服务所在网络测试速度和可达性；插件 WebUI 的检测按钮只检查机器人服务器。留空使用插件默认 CDN，自定义图片地址不变。原生配置页可选择预设或“自定义地址…”，插件 WebUI 可直接输入新地址。",
                                 "options": [
                                     "https://cdn.jsdmirror.com",
                                     "https://cdn.jsdmirror.cn",
@@ -343,7 +343,7 @@
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "https://fonts.googleapis.com",
-                                "hint": "本轮字体样式表的地址。海外可用 https://fonts.googleapis.com，内地可尝试 https://fonts.loli.net；请以截图服务所在网络的实际访问情况为准。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "hint": "本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。",
                                 "options": [
                                     "https://fonts.googleapis.com",
                                     "https://fonts.loli.net",
@@ -368,7 +368,7 @@
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "https://fonts.gstatic.com",
-                                "hint": "本轮字体文件的地址，建议与上面的字体样式表使用配套镜像。内地预设为 https://gstatic.loli.net。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "hint": "本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。",
                                 "options": [
                                     "https://fonts.gstatic.com",
                                     "https://gstatic.loli.net",
@@ -493,7 +493,7 @@
                                 "type": "string",
                                 "description": "模板资源 CDN",
                                 "default": "https://cdn.jsdmirror.com",
-                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。填写支持 /gh/、/npm/ 的网站根地址，例如 https://fastly.jsdelivr.net/。请先测试截图服务所在网络的速度和可达性；旁边按钮检测的是机器人服务器。留空使用插件默认 CDN，自定义图片地址不受影响。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。地址需支持 /gh/、/npm/，例如 https://fastly.jsdelivr.net/。请从截图服务所在网络测试速度和可达性；插件 WebUI 的检测按钮只检查机器人服务器。留空使用插件默认 CDN，自定义图片地址不变。原生配置页可选择预设或“自定义地址…”，插件 WebUI 可直接输入新地址。",
                                 "options": [
                                     "https://cdn.jsdmirror.com",
                                     "https://cdn.jsdmirror.cn",
@@ -528,7 +528,7 @@
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "https://fonts.loli.net",
-                                "hint": "本轮字体样式表的地址。海外可用 https://fonts.googleapis.com，内地可尝试 https://fonts.loli.net；请以截图服务所在网络的实际访问情况为准。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "hint": "本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。",
                                 "options": [
                                     "https://fonts.googleapis.com",
                                     "https://fonts.loli.net",
@@ -553,7 +553,7 @@
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "https://gstatic.loli.net",
-                                "hint": "本轮字体文件的地址，建议与上面的字体样式表使用配套镜像。内地预设为 https://gstatic.loli.net。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "hint": "本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。",
                                 "options": [
                                     "https://fonts.gstatic.com",
                                     "https://gstatic.loli.net",
