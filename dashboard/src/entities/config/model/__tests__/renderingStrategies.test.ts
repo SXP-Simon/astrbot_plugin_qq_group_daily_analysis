@@ -7,13 +7,14 @@ import { renderingRuntimeSchema, renderingStrategySchema } from "../renderingCon
 import { validateSingleFieldWithZod } from "../validation";
 
 describe("可扩展渲染方案", () => {
-  it("真实配置提供一项海外默认方案，移除固定两轮参数", () => {
+  it("真实配置提供海外优先、内地备用两项默认方案", () => {
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.type).toBe("template_list");
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.templates.strategy.items.priority.default).toBe(10);
     expect(Object.keys(schema.t2i_rendering.items).some((key) => /^t2i_r[12]_/.test(key))).toBe(false);
     expect(schema.t2i_rendering.items).not.toHaveProperty("t2i_font_source");
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.default).toEqual([
-      { __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
+      { __template_key: "strategy", name: "海外方案", priority: 10, environment: "Overseas", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
+      { __template_key: "mainland", name: "内地方案", priority: 20, environment: "Mainland", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
     ]);
     expect(renderingStrategySchema.parse({}).timeout).toBe(20000);
     expect(schema.t2i_rendering.items).not.toHaveProperty("t2i_cdn_base_url");
@@ -135,9 +136,10 @@ it("相同环境的每轮 CDN 独立，预览跟随优先级且保留扩展字�
     ],
   } });
   const plans = saved.t2i_rendering!.t2i_rendering_strategies!;
-  expect(plans[0].cdn_base_url).toBe("https://one.example");
+  expect(plans[0].cdn_base_url).toBe("https://two.example");
   expect(plans[0].google_fonts).toBe("https://fonts.loli.net");
-  expect(plans[0].future).toEqual([1]);
+  expect(plans[1].future).toEqual([1]);
+  expect(plans[1].cdn_base_url).toBe("https://one.example");
   expect(plans[1].google_fonts).toBe("https://fonts.loli.net");
   expect(renderingRuntimeSchema.parse(saved.t2i_rendering).t2i_cdn_base_url).toBe("https://two.example");
 });
@@ -152,4 +154,18 @@ it("清空方案后，默认方案使用预设字体，不恢复旧全局地址"
   expect(saved.t2i_rendering?.t2i_rendering_strategies?.[0]).toMatchObject({
     google_fonts: "https://fonts.googleapis.com", gstatic: "https://fonts.gstatic.com",
   });
+});
+
+
+it("保存按优先级稳定排序，保留相同优先级、扩展字段和原草稿", () => {
+  const draft = { t2i_rendering: { t2i_rendering_strategies: [
+    { name: "后执行", priority: 30, future: { keep: true } },
+    { name: "同级甲", priority: 10 },
+    { name: "同级乙", priority: 10 },
+  ] } };
+  const before = structuredClone(draft);
+  const result = pluginConfigSaveSchema.parse(draft);
+  expect(result.t2i_rendering?.t2i_rendering_strategies?.map((plan) => plan.name)).toEqual(["同级甲", "同级乙", "后执行"]);
+  expect(result.t2i_rendering?.t2i_rendering_strategies?.[2].future).toEqual({ keep: true });
+  expect(draft).toEqual(before);
 });

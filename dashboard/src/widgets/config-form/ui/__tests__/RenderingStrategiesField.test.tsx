@@ -35,15 +35,15 @@ it("从内地和海外预设添加方案，各轮独立编辑资源并驱动优�
   expect(screen.queryByRole("combobox", { name: "资源环境" })).not.toBeInTheDocument();
   fireEvent.change(screen.getByRole("combobox", { name: "模板资源 CDN" }), { target: { value: " https://first.example/ " } });
   expect(screen.getByTestId("preview")).toHaveTextContent("https://first.example");
-  fireEvent.change(screen.getAllByRole("spinbutton")[0], { target: { value: "20" } });
+  fireEvent.change(screen.getAllByRole("spinbutton")[0], { target: { value: "30" } });
   fireEvent.click(screen.getByRole("button", { name: /添加渲染方案/ }));
   fireEvent.click(await screen.findByText("内地方案", { exact: true }, { timeout: 5000 }));
   fireEvent.change(screen.getAllByRole("combobox", { name: "模板资源 CDN" })[1], { target: { value: "https://second.example" } });
   expect(screen.getByTestId("preview")).toHaveTextContent("https://second.example");
   const strategies: unknown = JSON.parse(screen.getByTestId("strategies").textContent || "[]");
   expect(strategies).toMatchObject([
-    { __template_key: "strategy", priority: 20, environment: "Overseas", cdn_base_url: " https://first.example/ ", google_fonts: "https://fonts.googleapis.com", timeout: 20000 },
-    { __template_key: "mainland", priority: 10, environment: "Mainland", cdn_base_url: "https://second.example", google_fonts: "https://fonts.loli.net" },
+    { __template_key: "strategy", priority: 30, environment: "Overseas", cdn_base_url: " https://first.example/ ", google_fonts: "https://fonts.googleapis.com", timeout: 20000 },
+    { __template_key: "mainland", priority: 20, environment: "Mainland", cdn_base_url: "https://second.example", google_fonts: "https://fonts.loli.net" },
   ]);
 }, 20000);
 

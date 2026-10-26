@@ -81,3 +81,18 @@ it("保存成功后使用新版本，发生冲突时保留用户草稿", async (
   expect(result.current.isDirty).toBe(true);
   expect(message.error).toHaveBeenLastCalledWith("配置已被其他页面修改，请重新读取后再保存。");
 });
+
+
+it.each([true, false])("保存排序成功状态 %s：更新展示或保留失败草稿", async (success) => {
+  const plans = [{ name: "后执行", priority: 30 }, { name: "同级甲", priority: 10 }, { name: "同级乙", priority: 10 }];
+  vi.mocked(fetchPluginConfig).mockResolvedValue(pluginConfigResponseSchema.parse({ config: { t2i_rendering: { t2i_rendering_strategies: plans } }, schema }));
+  vi.mocked(savePluginConfig).mockResolvedValue({ success });
+  const { result } = renderHook(() => useConfigViewModel());
+  await waitFor(() => expect(result.current.configLoaded).toBe(true));
+  act(() => result.current.handleFieldChange("t2i_rendering", "t2i_rendering_strategies", plans));
+  await act(async () => { await result.current.handleSave(); });
+  expect(savePluginConfig).toHaveBeenCalledWith(expect.objectContaining({ t2i_rendering: expect.objectContaining({ t2i_rendering_strategies: [
+    expect.objectContaining({ name: "同级甲", priority: 10 }), expect.objectContaining({ name: "同级乙", priority: 10 }), expect.objectContaining({ name: "后执行", priority: 30 }),
+  ] }) }));
+  expect(result.current.formData.t2i_rendering.t2i_rendering_strategies).toEqual(success ? [expect.objectContaining({ name: "同级甲" }), expect.objectContaining({ name: "同级乙" }), expect.objectContaining({ name: "后执行" })] : plans);
+});

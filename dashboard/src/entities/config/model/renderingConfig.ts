@@ -151,11 +151,15 @@ export const renderingRuntimeSchema = renderingResolvedSchema.transform((value) 
 
 export const renderingSaveSchema = renderingResolvedSchema.transform((value) => {
   if (value.t2i_rendering_strategies?.length === 0) {
-    value.t2i_rendering_strategies = [{
-      ...renderingStrategySchema.parse({ __template_key: "strategy", name: "默认方案" }),
-      ...RENDERING_RESOURCE_DEFAULTS.Overseas,
-    }];
+    value.t2i_rendering_strategies = [
+      { __template_key: "strategy", name: "海外方案", priority: 10 },
+      { __template_key: "mainland", name: "内地方案", priority: 20 },
+    ].map((preset) => {
+      const plan = renderingStrategySchema.parse(preset);
+      return { ...plan, ...RENDERING_RESOURCE_DEFAULTS[plan.environment] };
+    });
   }
+  value.t2i_rendering_strategies?.sort((a, b) => a.priority - b.priority);
   for (const key of ["t2i_cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_mainland_google_fonts", "t2i_mainland_gstatic", "t2i_overseas_cdn_base_url", "t2i_overseas_google_fonts", "t2i_overseas_gstatic"]) {
     delete value[key];
   }
