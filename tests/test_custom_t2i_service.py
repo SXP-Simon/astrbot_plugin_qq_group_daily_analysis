@@ -183,11 +183,11 @@ async def test_per_attempt_timeout_and_cancellation_are_preserved(service):
     endpoint, state, _messages, started = service
     state["delay"] = 0.1
     with pytest.raises(TimeoutError):
-        await render_custom_t2i(endpoint, "html", {"timeout": 10})
+        await render_custom_t2i(endpoint, "html", {"timeout": 20000}, request_timeout_ms=10)
     started.clear()
     task = asyncio.create_task(render_custom_t2i(endpoint, "html", {}))
     try:
-        await asyncio.wait_for(started.wait(), timeout=1)
+        await asyncio.wait_for(started.wait(), timeout=5)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
@@ -195,6 +195,63 @@ async def test_per_attempt_timeout_and_cancellation_are_preserved(service):
         if not task.done():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_delayed_result_outlives_screenshot_timeout_without_changing_payload(service):
+    endpoint, state, messages, _ = service
+    state["delay"] = 0.08
+    options = {"timeout": 10, "type": "png"}
+    assert await render_custom_t2i(endpoint, "html", options, request_timeout_ms=3000) == state["body"]
+    assert messages[0]["payload"]["options"] == options
+    assert "request_timeout" not in messages[0]["payload"]["options"]
+
+
+@pytest.mark.asyncio
+async def test_custom_request_timeout_still_tries_next_strategy(rendering, service, monkeypatch):
+    manager, generator, png = rendering
+    endpoint, state, messages, _ = service
+    state["delay"] = 2.2
+    manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [
+        {"__template_key": "custom", "service_endpoint": endpoint, "priority": 10, "timeout": 20000, "request_timeout": 1000},
+        {"__template_key": "strategy", "priority": 20},
+    ]
+    trace = TraceContext(trace_id="request-timeout-fallback")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    host = AsyncMock(return_value=png)
+    with trace.span("RENDER_REPORT") as span:
+        assert (await generator.generate_image_report(create_analysis_result(), "123", host))[0]
+    host.assert_awaited_once()
+    assert "request_timeout" not in host.await_args.args[3]
+    attempts = span["payload"]["render_attempts"]
+    assert [item["status"] for item in attempts] == ["failed", "success"]
+    assert "请求等待上限" in attempts[0]["error"]
+    if messages:
+        assert messages[0]["payload"]["options"]["timeout"] == 20000
+        assert "request_timeout" not in messages[0]["payload"]["options"]
+
+
+@pytest.mark.asyncio
+async def test_total_deadline_still_limits_custom_request_wait(rendering, service, monkeypatch):
+    from src.infrastructure.reporting import generators
+
+    manager, generator, png = rendering
+    endpoint, state, _, _ = service
+    state["delay"] = 0.2
+    manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [
+        {"__template_key": "custom", "service_endpoint": endpoint, "priority": 10, "request_timeout": 40000},
+        {"__template_key": "strategy", "priority": 20},
+    ]
+    monkeypatch.setattr(generators, "_RENDER_TOTAL_TIMEOUT_SECONDS", 0.05)
+    trace = TraceContext(trace_id="custom-total-deadline")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    host = AsyncMock(return_value=png)
+    with trace.span("RENDER_REPORT") as span:
+        image, _ = await generator.generate_image_report(create_analysis_result(), "123", host)
+    assert image is None
+    host.assert_not_awaited()
+    attempts = span["payload"]["render_attempts"]
+    assert len(attempts) == 1 and "总等待上限" in attempts[0]["error"]
 
 
 @pytest.mark.asyncio
@@ -238,6 +295,7 @@ async def test_host_and_custom_service_fallback_preserves_resources_and_records_
             "service_endpoint",
             "service_token",
             "resource_environment",
+            "request_timeout",
         }.intersection(options)
     assert manager.config == original
     assert "my-secret" not in json.dumps(span, ensure_ascii=False)

@@ -7,7 +7,11 @@ from io import BytesIO
 import httpx
 from PIL import Image
 
-from ..config.rendering_config import ScreenshotOptions, normalize_t2i_endpoint
+from ..config.rendering_config import (
+    DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS,
+    ScreenshotOptions,
+    normalize_t2i_endpoint,
+)
 from .render_diagnostics import diagnose_non_image_payload
 
 _MAX_RESPONSE_BYTES = 32 * 1024 * 1024
@@ -49,7 +53,12 @@ def _validate_image(content: bytes) -> None:
 
 
 async def render_custom_t2i(
-    endpoint: str, html: str, options: ScreenshotOptions, token: str = ""
+    endpoint: str,
+    html: str,
+    options: ScreenshotOptions,
+    token: str = "",
+    *,
+    request_timeout_ms: int = DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS,
 ) -> bytes:
     """提交完整 HTML，流式获取并验证图片，不修改宿主配置。
 
@@ -58,6 +67,7 @@ async def render_custom_t2i(
         html: 已生成的完整报告 HTML。
         options: 当前轮次的强类型截图选项，包含毫秒超时。
         token: 可选的 Bearer Token；鉴权请求不回显服务错误正文。
+        request_timeout_ms: 整次请求的等待上限，独立于传给服务的截图超时。
 
     Returns:
         不超过 32 MiB 且验证完整、可解码的 PNG 或 JPEG 图片。
@@ -68,7 +78,7 @@ async def render_custom_t2i(
         TimeoutError: 本轮请求超过配置的超时。
     """
     endpoint = normalize_t2i_endpoint(endpoint)
-    timeout = options.get("timeout", 20000) / 1000
+    timeout = request_timeout_ms / 1000
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     content = bytearray()
     status = 0
@@ -114,7 +124,7 @@ async def render_custom_t2i(
                 return data
     except (TimeoutError, httpx.TimeoutException):
         raise TimeoutError(
-            "自定义 T2I 服务等待超时，请查看服务日志或调整本轮超时"
+            f"自定义 T2I 服务等待超过 {timeout:g} 秒，请查看服务日志或调整本轮请求等待上限"
         ) from None
     except httpx.RequestError:
         raise RuntimeError(

@@ -26,6 +26,7 @@ from ...shared.constants import (
 )
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from ..config.rendering_config import DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
 from ..visualization.activity_charts import ActivityVisualizer
 from .avatar_service import (
     AvatarService,
@@ -381,6 +382,9 @@ class ReportGenerator(IReportGenerator):
                     render_service = strategy_options.pop("render_service", "astrbot")
                     service_endpoint = str(strategy_options.pop("service_endpoint", ""))
                     service_token = str(strategy_options.pop("service_token", ""))
+                    request_timeout_ms = strategy_options.pop(
+                        "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
+                    )
                     image_options: ScreenshotOptions = strategy_options
                     service_url = urlsplit(service_endpoint)
                     renderer_info = (
@@ -458,6 +462,11 @@ class ReportGenerator(IReportGenerator):
                             f"viewport={viewport_description}, "
                             f"scale={image_options.get('device_scale_factor_level')}, "
                             f"timeout={image_options.get('timeout')}"
+                            + (
+                                f", request_timeout={request_timeout_ms}"
+                                if render_service == "custom"
+                                else ""
+                            )
                         )
 
                         t2i_start_ts = time.perf_counter()
@@ -470,6 +479,7 @@ class ReportGenerator(IReportGenerator):
                                     html_content,
                                     image_options,
                                     service_token,
+                                    request_timeout_ms=request_timeout_ms,
                                 )
                             else:
                                 if not callable(html_render_func):
