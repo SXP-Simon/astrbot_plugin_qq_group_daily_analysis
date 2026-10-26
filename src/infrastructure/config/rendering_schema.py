@@ -30,7 +30,7 @@ def sync_rendering_schema_options(schema: object, rendering: dict) -> None:
         return
     for item in raw:
         try:
-            plan = parse_rendering_strategies([item], legacy_config=rendering)[0]
+            plan = parse_rendering_strategies([item])[0]
         except ValueError:
             continue
         for template in templates.values():

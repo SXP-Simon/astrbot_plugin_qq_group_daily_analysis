@@ -17,6 +17,11 @@ from src.infrastructure.reporting.render_data_preparer import RenderDataPreparer
 from src.shared.trace_context import TraceContext
 
 
+def make_rendering_plan(environment, **options):
+    suffix = environment.lower()
+    return {"environment": environment, "cdn_base_url": f"https://{suffix}.example", "google_fonts": f"https://fonts-{suffix}.example", "gstatic": f"https://static-{suffix}.example", **options}
+
+
 @pytest.fixture
 def rendering(tmp_path, monkeypatch):
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: None))
@@ -25,16 +30,10 @@ def rendering(tmp_path, monkeypatch):
         "basic": {"report_template": "HatsuneMiku", "profile_display_mode": "sbti"},
         "t2i_rendering": {
             "t2i_rendering_strategies": [
-                {"name": "最终尝试", "priority": 30, "environment": "Mainland"},
-                {"name": "海外回退", "priority": 20, "environment": "Overseas"},
-                {"name": "内地优先", "priority": 10, "environment": "Mainland"},
+                make_rendering_plan("Mainland", name="最终尝试", priority=30),
+                make_rendering_plan("Overseas", name="海外回退", priority=20),
+                make_rendering_plan("Mainland", name="内地优先", priority=10),
             ],
-            "t2i_mainland_cdn_base_url": " https://mainland.example/ ",
-            "t2i_overseas_cdn_base_url": "https://overseas.example",
-            "t2i_mainland_google_fonts": "https://fonts-mainland.example",
-            "t2i_mainland_gstatic": "https://static-mainland.example",
-            "t2i_overseas_google_fonts": "https://fonts-overseas.example",
-            "t2i_overseas_gstatic": "https://static-overseas.example",
         },
     }
     generator = ReportGenerator(manager, tmp_path)
@@ -68,8 +67,8 @@ async def test_default_uses_one_overseas_attempt_with_twenty_second_timeout(
     render.assert_awaited_once()
     assert bool(image) is succeeds
     assert html == render.await_args.args[0]
-    assert "https://overseas.example/gh/" in html
-    assert "https://fonts-overseas.example" in html
+    assert "https://cdn.jsdmirror.com/gh/" in html
+    assert "https://fonts.googleapis.com" in html
     assert render.await_args.args[3]["timeout"] == 20000
 
 

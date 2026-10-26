@@ -11,7 +11,7 @@ import pytest
 import pytest_asyncio
 from aiohttp import web
 from PIL import Image
-from test_rendering_strategies import rendering as rendering
+from test_rendering_strategies import make_rendering_plan, rendering as rendering
 from test_template_section_conditional_rendering import create_analysis_result
 
 from src.infrastructure.config.rendering_config import (
@@ -205,13 +205,14 @@ async def test_host_and_custom_service_fallback_preserves_resources_and_records_
     manager, generator, png = rendering
     endpoint, state, messages, _started = service
     custom = {
+        **make_rendering_plan("Overseas"),
         "render_service": "custom",
         "service_endpoint": endpoint + "/generate",
         "service_token": "my-secret",
         "environment": "Overseas",
         "priority": 10 if custom_first else 20,
     }
-    host = {"priority": 20 if custom_first else 10, "environment": "Mainland"}
+    host = make_rendering_plan("Mainland", priority=20 if custom_first else 10)
     manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [host, custom]
     original = deepcopy(manager.config)
     if custom_first:

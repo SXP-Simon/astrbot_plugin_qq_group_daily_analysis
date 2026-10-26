@@ -57,11 +57,8 @@ def test_schema_has_three_presets_and_only_one_initial_host_round():
     assert custom["service_endpoint"]["default"] == "http://127.0.0.1:8999/text2img"
     assert "condition" not in custom["service_endpoint"]
     assert not custom["environment"].get("invisible")
-    assert all(
-        field.get("invisible")
-        for name, field in fields.items()
-        if name.startswith(("t2i_mainland_", "t2i_overseas_"))
-    )
+    assert not any(name.startswith(("t2i_mainland_", "t2i_overseas_")) for name in fields)
+    assert "t2i_cdn_base_url" not in fields
 
 
 def test_startup_migration_preserves_legacy_addresses_and_explicit_new_values():

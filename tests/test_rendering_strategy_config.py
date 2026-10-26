@@ -3,10 +3,12 @@
 import json
 from copy import deepcopy
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
 from src.infrastructure.config.config_manager import ConfigManager
+from src.infrastructure.config.config_migrator import ConfigMigrator
 from src.infrastructure.config.rendering_config import (
     DEFAULT_RENDERING_STRATEGY,
     parse_rendering_strategies,
@@ -23,6 +25,8 @@ def test_removed_round_parameters_do_not_override_default_strategy():
             "t2i_cdn_base_url": "https://legacy.example/",
         }
     }
+    manager.save_config = Mock()
+    ConfigMigrator(manager).migrate_legacy_configs()
     before = deepcopy(manager.config)
     plans = manager.get_t2i_rendering_strategies()
     assert len(plans) == 1
@@ -91,8 +95,11 @@ def test_blank_profile_cdn_inherits_legacy_address(environment, empty):
         "t2i_rendering": {
             "t2i_cdn_base_url": "https://legacy.example/",
             f"t2i_{environment.lower()}_cdn_base_url": empty,
+            "t2i_rendering_strategies": [{"environment": environment}],
         }
     }
+    manager.save_config = Mock()
+    ConfigMigrator(manager).migrate_legacy_configs()
     assert manager.get_t2i_cdn_base_url(environment) == "https://legacy.example"
 
 

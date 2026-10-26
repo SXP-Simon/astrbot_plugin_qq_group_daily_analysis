@@ -20,7 +20,7 @@ LEGACY_MAPPING = json.loads(
 @pytest.fixture
 def config_manager():
     config = object.__new__(ConfigManager)
-    config.config = {"t2i_rendering": {"t2i_cdn_base_url": "https://fastly.jsdelivr.net/"}}
+    config.config = {"t2i_rendering": {"t2i_rendering_strategies": [{"cdn_base_url": "https://fastly.jsdelivr.net/"}]}}
     return config
 
 
@@ -36,7 +36,7 @@ def test_builtin_profiles_follow_cdn_including_saved_defaults(
         assert profile["profile_image"].startswith(
             f"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/{mode}/"
         )
-    config_manager.config["t2i_rendering"]["t2i_cdn_base_url"] = "https://other.example/"
+    config_manager.config["t2i_rendering"]["t2i_rendering_strategies"][0]["cdn_base_url"] = "https://other.example/"
     profile = resolve_profile_info("INTJ", mode, overrides, manifest, config_manager)
     assert profile["profile_image"].startswith("https://other.example/gh/")
 

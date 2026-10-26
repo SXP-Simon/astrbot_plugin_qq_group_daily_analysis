@@ -737,49 +737,6 @@
                     "step": 10
                 },
                 "hint": "仅在模板未提供 T2I 可识别的数字 height 时传给 AstrBot T2I。图片报告始终使用 full_page，不会按此高度截断整张报告。"
-            },
-            "t2i_cdn_base_url": {
-                "type": "string",
-                "description": "模板资源 CDN 基础地址",
-                "default": "https://cdn.jsdmirror.com",
-                "hint": "用于模板素材、内置人格图片和预览图，也提供 npm 资源地址。插件 WebUI 支持选择预设，也可以自己填写。国内网络可先试 https://cdn.jsdmirror.com/ 或 https://cdn.jsdmirror.cn/，另提供 NOISE https://jsd.cdn.noisework.cn/ 和哔哩 CDN https://cdn.bili33.top/ 备选，请按实际网络检测选用。海外网络可先试 https://cdn.jsdelivr.net/，也可试 https://fastly.jsdelivr.net/ 或 https://gcore.jsdelivr.net/。这些是候选地址，实际速度和可达性以渲染服务所在网络为准，使用前请先测试。自填地址需兼容 /gh/ 和 /npm/，只填网站地址，不带文件路径；末尾的 / 和首尾空白会自动去掉，留空使用默认地址。点“检测可用性”可检查机器人所在服务器的访问情况，远程图片渲染服务还需生成报告确认。Google 字体仍使用单独的镜像设置。",
-                "invisible": true
-            },
-            "t2i_mainland_cdn_base_url": {
-                "type": "string",
-                "description": "旧版资源地址（兼容迁移）",
-                "default": "",
-                "invisible": true
-            },
-            "t2i_mainland_google_fonts": {
-                "type": "string",
-                "description": "旧版资源地址（兼容迁移）",
-                "default": "",
-                "invisible": true
-            },
-            "t2i_mainland_gstatic": {
-                "type": "string",
-                "description": "旧版资源地址（兼容迁移）",
-                "default": "",
-                "invisible": true
-            },
-            "t2i_overseas_cdn_base_url": {
-                "type": "string",
-                "description": "旧版资源地址（兼容迁移）",
-                "default": "",
-                "invisible": true
-            },
-            "t2i_overseas_google_fonts": {
-                "type": "string",
-                "description": "旧版资源地址（兼容迁移）",
-                "default": "",
-                "invisible": true
-            },
-            "t2i_overseas_gstatic": {
-                "type": "string",
-                "description": "旧版资源地址（兼容迁移）",
-                "default": "",
-                "invisible": true
             }
         }
     },
@@ -1056,19 +1013,6 @@
                         }
                     }
                 }
-            },
-            "drawing_reference_image": {
-                "description": "旧版漫画参考图（兼容迁移）",
-                "type": "file",
-                "default": [],
-                "file_types": [
-                    "jpg",
-                    "jpeg",
-                    "png",
-                    "webp"
-                ],
-                "invisible": true,
-                "hint": "旧版配置仅用于自动迁移，不再在面板中显示。"
             },
             "drawing_backend": {
                 "description": "绘图后端",

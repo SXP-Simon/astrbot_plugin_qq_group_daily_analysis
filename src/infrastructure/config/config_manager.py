@@ -55,12 +55,15 @@ class ConfigManager:
     StarTools = StarTools
     config: AstrBotConfig
     _migrator: ConfigMigrator
+    _upgrade_tracking_active: bool = False
 
     def __init__(self, config: AstrBotConfig) -> None:
         self.config = config
+        self._upgrade_tracking_active = False
         self._migrator = ConfigMigrator(self, star_tools=StarTools)
         self._migrator.run_all_migrations()
         self.refresh_rendering_schema_options()
+        self._upgrade_tracking_active = True
 
     def refresh_rendering_schema_options(self) -> None:
         """同步宿主内存中的资源选项，兼容不带 Schema 的离线配置桩。"""
@@ -293,7 +296,7 @@ class ConfigManager:
             try:
                 auto_group = self._ensure_group("auto_analysis")
                 auto_group["auto_analysis_time"] = val_list
-                self.config.save_config()
+                self.save_config()
                 logger.info(f"自动修复配置格式 auto_analysis_time: {val} -> {val_list}")
             except Exception as e:
                 logger.warning(f"修复配置格式失败: {e}")
@@ -374,7 +377,7 @@ class ConfigManager:
     def set_llm_hard_timeout(self, timeout_seconds: int) -> None:
         """设置 LLM 单次请求硬超时时间（秒）。"""
         self._ensure_group("llm")["llm_hard_timeout"] = max(0, int(timeout_seconds))
-        self.config.save_config()
+        self.save_config()
 
     def get_enable_streaming_llm_call(self) -> bool:
         """获取是否启用流式 LLM 调用"""
@@ -408,11 +411,11 @@ class ConfigManager:
         raw = group.get("t2i_rendering_strategies", [])
         if raw:
             try:
-                return parse_rendering_strategies(raw, legacy_config=group)
+                return parse_rendering_strategies(raw)
             except ValueError as exc:
                 logger.warning(f"渲染方案配置无效，将使用默认海外方案: {exc}")
         return parse_rendering_strategies(
-            [{"name": DEFAULT_RENDERING_STRATEGY["name"]}], legacy_config=group
+            [{"name": DEFAULT_RENDERING_STRATEGY["name"]}]
         )
 
     def get_t2i_rendering_strategies(self) -> list[RenderingStrategyOptions]:
@@ -479,7 +482,6 @@ class ConfigManager:
         if strategy is None:
             strategy = parse_rendering_strategies(
                 [{"environment": environment}],
-                legacy_config=self._get_group("t2i_rendering"),
             )[0]
         return {
             "cdn_base_url": strategy["cdn_base_url"],
@@ -590,7 +592,7 @@ class ConfigManager:
     def set_filter_bot_messages(self, enabled: bool):
         """设置是否过滤机器人自己的消息。"""
         self._ensure_group("basic")["filter_bot_messages"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_html_output_dir(self) -> str:
         """获取HTML输出目录"""
@@ -610,7 +612,7 @@ class ConfigManager:
     def set_html_only_url(self, enabled: bool):
         """设置是否仅输出外链而不发送文件本体"""
         self._ensure_group("html")["html_only_url"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_html_filename_format(self) -> str:
         """获取HTML文件名格式"""
@@ -662,7 +664,7 @@ class ConfigManager:
         if "quality_analysis_prompts" not in prompts:
             prompts["quality_analysis_prompts"] = {}
         prompts["quality_analysis_prompts"]["quality_v2_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def _upgrade_config_item(
         self, group: str, key: str, setter_func: Callable[[str], None]
@@ -692,7 +694,7 @@ class ConfigManager:
         if "topic_analysis_prompts" not in prompts:
             prompts["topic_analysis_prompts"] = {}
         prompts["topic_analysis_prompts"]["topic_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_quality_summary_prompt(self, prompt: str):
         """设置聊天质量汇总分析提示词模板"""
@@ -700,7 +702,7 @@ class ConfigManager:
         if "quality_analysis_prompts" not in prompts:
             prompts["quality_analysis_prompts"] = {}
         prompts["quality_analysis_prompts"]["quality_summary_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_user_title_analysis_prompt(self, prompt: str):
         """设置用户称号分析提示词模板"""
@@ -708,7 +710,7 @@ class ConfigManager:
         if "user_title_analysis_prompts" not in prompts:
             prompts["user_title_analysis_prompts"] = {}
         prompts["user_title_analysis_prompts"]["user_title_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_golden_quote_analysis_prompt(self, prompt: str):
         """设置金句分析提示词模板"""
@@ -716,7 +718,7 @@ class ConfigManager:
         if "golden_quote_analysis_prompts" not in prompts:
             prompts["golden_quote_analysis_prompts"] = {}
         prompts["golden_quote_analysis_prompts"]["golden_quote_v2_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_comic_storyboard_prompt(self, prompt: str):
         """设置漫画场景分析提示词模板"""
@@ -724,7 +726,7 @@ class ConfigManager:
         if "comic_analysis_prompts" not in prompts:
             prompts["comic_analysis_prompts"] = {}
         prompts["comic_analysis_prompts"]["comic_storyboard_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_output_format(self, format_types: str | list[str]):
         """设置输出格式"""
@@ -737,17 +739,17 @@ class ConfigManager:
                 raise ValueError(f"无效格式: {f}。有效: image, text, html")
 
         self._ensure_group("basic")["output_format"] = format_types
-        self.config.save_config()
+        self.save_config()
 
     def set_group_list_mode(self, mode: str):
         """设置群组列表模式"""
         self._ensure_group("basic")["group_list_mode"] = mode
-        self.config.save_config()
+        self.save_config()
 
     def set_group_list(self, groups: list[str]):
         """设置群组列表"""
         self._ensure_group("basic")["group_list"] = groups
-        self.config.save_config()
+        self.save_config()
 
     def get_max_concurrent_tasks(self) -> int:
         """获取自动分析最大并发群数"""
@@ -768,12 +770,12 @@ class ConfigManager:
     def set_max_concurrent_tasks(self, count: int):
         """设置自动分析最大并发数"""
         self._ensure_group("performance")["max_concurrent_groups"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_max_messages(self, count: int):
         """设置最大消息数量"""
         self._ensure_group("basic")["max_messages"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_local_history_max_messages(self, count: int) -> None:
         """设置本地群消息历史缓存保留上限。
@@ -784,17 +786,17 @@ class ConfigManager:
         self._ensure_group("basic")["local_history_max_messages"] = max(
             10000, min(100000, int(count))
         )
-        self.config.save_config()
+        self.save_config()
 
     def set_analysis_days(self, days: int):
         """设置分析天数"""
         self._ensure_group("basic")["analysis_days"] = days
-        self.config.save_config()
+        self.save_config()
 
     def set_auto_analysis_time(self, time_val: str | list[str]):
         """设置自动分析时间点"""
         self._ensure_group("auto_analysis")["auto_analysis_time"] = time_val
-        self.config.save_config()
+        self.save_config()
 
     def is_auto_analysis_enabled(self) -> bool:
         """
@@ -825,7 +827,7 @@ class ConfigManager:
     def set_scheduled_group_list_mode(self, mode: str):
         """设置定时分析名单模式"""
         self._ensure_group("auto_analysis")["scheduled_group_list_mode"] = mode
-        self.config.save_config()
+        self.save_config()
 
     def get_scheduled_group_list(self) -> list[str]:
         """获取定时分析目标群列表"""
@@ -834,7 +836,7 @@ class ConfigManager:
     def set_scheduled_group_list(self, groups: list[str]):
         """设置定时分析目标群列表"""
         self._ensure_group("auto_analysis")["scheduled_group_list"] = groups
-        self.config.save_config()
+        self.save_config()
 
     def is_scheduled_group_allowed(self, group_umo_or_id: str) -> bool:
         """判断当前群是否允许参与定时分析。
@@ -886,51 +888,51 @@ class ConfigManager:
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""
         self._ensure_group("basic")["min_messages_threshold"] = threshold
-        self.config.save_config()
+        self.save_config()
 
     def set_topic_analysis_enabled(self, enabled: bool):
         """设置是否启用话题分析"""
         self._ensure_group("analysis_features")["topic_analysis_enabled"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def set_user_title_analysis_enabled(self, enabled: bool):
         """设置是否启用用户称号分析"""
         self._ensure_group("analysis_features")["user_title_analysis_enabled"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def set_golden_quote_analysis_enabled(self, enabled: bool):
         """设置是否启用金句分析"""
         self._ensure_group("analysis_features")["golden_quote_analysis_enabled"] = (
             enabled
         )
-        self.config.save_config()
+        self.save_config()
 
     def set_chat_quality_analysis_enabled(self, enabled: bool):
         """设置是否启用聊天质量分析"""
         self._ensure_group("analysis_features")["chat_quality_analysis_enabled"] = (
             enabled
         )
-        self.config.save_config()
+        self.save_config()
 
     def set_max_topics(self, count: int):
         """设置最大话题数量"""
         self._ensure_group("analysis_features")["max_topics"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_max_user_titles(self, count: int):
         """设置最大用户称号数量"""
         self._ensure_group("analysis_features")["max_user_titles"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_max_golden_quotes(self, count: int):
         """设置最大金句数量"""
         self._ensure_group("analysis_features")["max_golden_quotes"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_html_filename_format(self, format_str: str):
         """设置HTML文件名格式"""
         self._ensure_group("html")["html_filename_format"] = format_str
-        self.config.save_config()
+        self.save_config()
 
     def get_report_template(self) -> str:
         """获取报告模板名称"""
@@ -942,7 +944,7 @@ class ConfigManager:
     def set_report_template(self, template_name: str):
         """设置报告模板名称"""
         self._ensure_group("basic")["report_template"] = template_name
-        self.config.save_config()
+        self.save_config()
 
     def get_enable_user_card(self) -> bool:
         """获取是否使用用户群名片"""
@@ -955,7 +957,7 @@ class ConfigManager:
     def set_enable_analysis_reply(self, enabled: bool):
         """设置是否在群分析完成后发送文本回复"""
         self._ensure_group("basic")["enable_analysis_reply"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_show_report_caption(self) -> bool:
         """获取是否发送 \"📊 每日群聊分析报告已生成\" 前缀文字。"""
@@ -964,7 +966,7 @@ class ConfigManager:
     def set_show_report_caption(self, enabled: bool):
         """设置是否发送 \"📊 每日群聊分析报告已生成\" 前缀文字。"""
         self._ensure_group("basic")["show_report_caption"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_profile_display_mode(self) -> str:
         """获取人格标签展示模式。"""
@@ -1023,7 +1025,7 @@ class ConfigManager:
     def set_group_album_strict_mode(self, enabled: bool):
         """设置群相册上传严格模式"""
         self._ensure_group("qq_group_upload")["group_album_strict_mode"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     # ========== 增量分析配置 ==========
 
@@ -1084,7 +1086,7 @@ class ConfigManager:
     def set_incremental_report_immediately(self, enabled: bool):
         """设置增量分析是否立即发送报告"""
         self._ensure_group("incremental")["incremental_report_immediately"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_incremental_min_messages(self) -> int:
         """获取触发增量分析的最小消息数阈值"""
@@ -1303,11 +1305,7 @@ class ConfigManager:
             当前角色方案最后添加的参考图；未配置角色方案时兼容旧版字段。
         """
         character = self.get_selected_comic_character()
-        reference_images = (
-            character.get("reference_images", [])
-            if character
-            else self._get_group("daily_comic").get("drawing_reference_image", [])
-        )
+        reference_images = character.get("reference_images", []) if character else []
         if isinstance(reference_images, str):
             reference_images = [reference_images]
         if not isinstance(reference_images, list):
@@ -1324,11 +1322,7 @@ class ConfigManager:
             Relative image paths in their configured order.
         """
         character = self.get_selected_comic_character()
-        reference_images = (
-            character.get("reference_images", [])
-            if character
-            else self._get_group("daily_comic").get("drawing_reference_image", [])
-        )
+        reference_images = character.get("reference_images", []) if character else []
         if isinstance(reference_images, str):
             reference_images = [reference_images]
         if not isinstance(reference_images, list):
@@ -1477,6 +1471,8 @@ class ConfigManager:
         try:
             self.config.save_config()
             self.refresh_rendering_schema_options()
+            if self._upgrade_tracking_active:
+                self._migrator.protect_upgrade_data()
             logger.info("配置已保存")
         except Exception as e:
             logger.error(f"保存配置失败: {e}")

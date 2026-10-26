@@ -255,6 +255,7 @@ def load_config_manager_class(plugin_data_dir: Path):
     )
     required_names = {
         "refresh_rendering_schema_options",
+        "save_config",
         "__init__",
         "_get_group",
         "_get_plugin_root",
@@ -456,7 +457,7 @@ def test_reference_image_migrates_old_config_and_uses_last_selected_file(
     )
     config_manager = config_manager_class(config)
 
-    assert config["daily_comic"]["drawing_reference_image"] == []
+    assert "drawing_reference_image" not in config["daily_comic"]
     config.save_config.assert_called_once()
     assert list((tmp_path / "config_backups").glob("*.json"))
 
@@ -474,7 +475,7 @@ def test_reference_image_migrates_old_config_and_uses_last_selected_file(
     character = config["daily_comic"]["comic_characters"][0]
     assert character["name"] == "默认角色方案"
     assert character["reference_images"][-1].endswith("selected.webp")
-    assert config["daily_comic"]["drawing_reference_image"] == []
+    assert "drawing_reference_image" not in config["daily_comic"]
     assert (tmp_path / character["reference_images"][-1]).read_bytes() == b"selected"
     assert config_manager.get_drawing_reference_image().endswith("selected.webp")
 

@@ -10,14 +10,14 @@ from src.infrastructure.config.config_migrator import ConfigMigrator
 from src.infrastructure.config.rendering_schema import sync_rendering_schema_options
 
 
-def test_native_resource_selectors_keep_custom_entry_and_hidden_legacy_fields():
+def test_native_resource_selectors_keep_custom_entry_without_legacy_schema_fields():
     schema = json.loads(
         (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
     )
     group = schema["t2i_rendering"]["items"]
     for environment in ("mainland", "overseas"):
         for key in ("cdn_base_url", "google_fonts", "gstatic"):
-            assert group[f"t2i_{environment}_{key}"]["invisible"]
+            assert f"t2i_{environment}_{key}" not in group
     for template in group["t2i_rendering_strategies"]["templates"].values():
         for key in ("cdn_base_url", "google_fonts", "gstatic"):
             field = template["items"][key]

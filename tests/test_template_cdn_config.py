@@ -40,7 +40,7 @@ def config_manager():
     ],
 )
 def test_cdn_root_normalization(config_manager, value, expected):
-    config_manager.config = {"t2i_rendering": {"t2i_cdn_base_url": value}}
+    config_manager.config = {"t2i_rendering": {"t2i_rendering_strategies": [{"cdn_base_url": value}]}}
     assert config_manager.get_t2i_cdn_base_url() == expected
     assert config_manager.get_template_assets_base_url().startswith(expected + "/gh/")
 
@@ -68,7 +68,7 @@ def test_atri_default_follows_cdn_but_custom_override_is_preserved(
     config_manager, legacy_mirror
 ):
     assert config_manager.get_t2i_cdn_base_url() == DEFAULT_CDN_HOST
-    group = {"t2i_cdn_base_url": "https://fastly.jsdelivr.net/"}
+    group = {"t2i_rendering_strategies": [{"cdn_base_url": "https://fastly.jsdelivr.net/"}]}
     if legacy_mirror is not None:
         group["t2i_atri_font_mirror"] = legacy_mirror
     config_manager.config = {"t2i_rendering": group}
@@ -86,7 +86,7 @@ def test_atri_default_follows_cdn_but_custom_override_is_preserved(
 async def test_cdn_used_by_main_and_component_templates(config_manager, theme):
     config_manager.config = {
         "basic": {"report_template": theme},
-        "t2i_rendering": {"t2i_cdn_base_url": "https://fastly.jsdelivr.net/"},
+        "t2i_rendering": {"t2i_rendering_strategies": [{"cdn_base_url": "https://fastly.jsdelivr.net/"}]},
     }
     templates = MagicMock(wraps=HTMLTemplates(config_manager))
     avatars = MagicMock()
@@ -133,7 +133,7 @@ def test_preview_fallback_reads_current_cdn_configuration(
         ) as from_url,
     ):
         for host in ("https://fastly.jsdelivr.net/", "https://mirror.example.com/"):
-            config_manager.config = {"t2i_rendering": {"t2i_cdn_base_url": host}}
+            config_manager.config = {"t2i_rendering": {"t2i_rendering_strategies": [{"cdn_base_url": host}]}}
             service.build_template_preview_nodes(["HatsuneMiku"], "HatsuneMiku", "123")
             from_url.assert_called_with(
                 config_manager.get_template_assets_base_url() + "/HatsuneMiku-demo.jpg"

@@ -31,7 +31,7 @@ class NativeConfigurationContract(unittest.TestCase):
             (PLUGIN_ROOT / "_conf_schema.json").read_text(encoding="utf-8")
         )
 
-    def load(self, group):
+    def load(self, group, snapshot=None):
         """装配真实宿主配置。
 
         Args:
@@ -41,40 +41,62 @@ class NativeConfigurationContract(unittest.TestCase):
             持有真实 AstrBotConfig 的插件配置管理器。
         """
         self.path.write_text(json.dumps({"t2i_rendering": group}), encoding="utf-8")
+        data_dir = Path(self.directory.name) / "plugin_data"
+        data_dir.mkdir(exist_ok=True)
+        class Tools:
+            @staticmethod
+            def get_data_dir(_name):
+                return data_dir
+        if snapshot is not None:
+            (data_dir / "upgrade_protection_state.json").write_text(json.dumps({"version": "v1.0.0", "schema_fingerprint": "previous-schema", "config": {"t2i_rendering": snapshot}}), encoding="utf-8")
         manager = object.__new__(ConfigManager)
+        manager.StarTools = Tools
+        manager._migrator = ConfigMigrator(manager, star_tools=Tools)
         manager.config = AstrBotConfig(
             config_path=str(self.path), schema=deepcopy(self.schema)
         )
         return manager
 
-    def test_host_cleanup_keeps_legacy_fields_until_migration(self):
-        manager = self.load(
-            {
-                "t2i_mainland_cdn_base_url": "https://legacy.example",
-                "t2i_rendering_strategies": [
-                    {"__template_key": "strategy", "environment": "Mainland"}
-                ],
-            }
-        )
-        self.assertEqual(
-            manager.config["t2i_rendering"]["t2i_mainland_cdn_base_url"],
-            "https://legacy.example",
-        )
-        self.assertTrue(ConfigMigrator(manager).migrate_legacy_configs())
+    def test_host_cleanup_removes_old_schema_keys_and_migration_reads_protected_snapshot(self):
+        group = {"t2i_mainland_cdn_base_url": "https://legacy.example", "t2i_rendering_strategies": [{"__template_key": "strategy", "environment": "Mainland"}]}
+        manager = self.load(group, snapshot=group)
+        self.assertNotIn("t2i_mainland_cdn_base_url", manager.config["t2i_rendering"])
+        manager._migrator.run_all_migrations()
         self.assertEqual(manager.get_t2i_cdn_base_url(), "https://legacy.example")
-        self.assertEqual(
-            manager.config["t2i_rendering"]["t2i_rendering_strategies"][0][
-                "__template_key"
-            ],
-            "mainland",
-        )
+        self.assertEqual(manager.config["t2i_rendering"]["t2i_rendering_strategies"][0]["__template_key"], "mainland")
+        self.assertEqual(len(list((Path(self.directory.name) / "plugin_data/config_backups").glob("plugin_config_*.json"))), 1)
 
-    def test_injected_default_round_does_not_override_older_global_cdn(self):
-        manager = self.load({"t2i_cdn_base_url": "https://legacy-global.example"})
-        self.assertTrue(ConfigMigrator(manager).migrate_legacy_configs())
-        self.assertEqual(
-            manager.get_t2i_cdn_base_url(), "https://legacy-global.example"
-        )
+    def test_injected_default_round_does_not_override_protected_global_cdn(self):
+        group = {"t2i_cdn_base_url": "https://legacy-global.example"}
+        manager = self.load(group, snapshot=group)
+        manager._migrator.run_all_migrations()
+        self.assertEqual(manager.get_t2i_cdn_base_url(), "https://legacy-global.example")
+        self.assertNotIn("t2i_cdn_base_url", manager.config["t2i_rendering"])
+
+    def test_missing_protection_history_uses_defaults_after_host_cleanup(self):
+        manager = self.load({"t2i_cdn_base_url": "https://unrecoverable.example"})
+        manager._migrator.run_all_migrations()
+        self.assertEqual(manager.get_t2i_cdn_base_url(), "https://cdn.jsdmirror.com")
+        self.assertNotIn("t2i_cdn_base_url", manager.config["t2i_rendering"])
+
+    def test_removed_comic_reference_migrates_from_protection_after_real_host_cleanup(self):
+        manager = self.load({})
+        data_dir = manager.StarTools.get_data_dir("verify")
+        relative = "files/daily_comic/drawing_reference_image/old.png"
+        source = data_dir / relative
+        source.parent.mkdir(parents=True)
+        source.write_bytes(b"reference-image")
+        old = {"daily_comic": {"drawing_reference_image": [relative]}}
+        self.path.write_text(json.dumps(old), encoding="utf-8")
+        manager.config = AstrBotConfig(config_path=str(self.path), schema=deepcopy(self.schema))
+        self.assertNotIn("drawing_reference_image", manager.config["daily_comic"])
+        (data_dir / "upgrade_protection_state.json").write_text(json.dumps({"version": "v1.0.0", "schema_fingerprint": "old-schema", "config": old}), encoding="utf-8")
+        with patch("src.infrastructure.config.config_manager.StarTools", manager.StarTools):
+            manager._migrator.run_all_migrations()
+        group = manager.config["daily_comic"]
+        self.assertNotIn("drawing_reference_image", group)
+        self.assertEqual(len(group["comic_characters"]), 1)
+        self.assertEqual((data_dir / group["comic_characters"][0]["reference_images"][0]).read_bytes(), b"reference-image")
 
     def test_custom_service_preset_keeps_local_endpoint_and_resource_selection_on_reload(self):
         fields = self.schema["t2i_rendering"]["items"]["t2i_rendering_strategies"]["templates"]["custom"]["items"]
