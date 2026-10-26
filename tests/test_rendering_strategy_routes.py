@@ -175,6 +175,7 @@ async def test_save_sorts_custom_service_without_losing_extensions():
         {
             "service_endpoint": "http://127.0.0.1:8999/text2img",
             "service_token": "secret",
+            "request_timeout": 40000,
             "__template_key": "custom",
             "environment": "Overseas",
             "priority": 20,

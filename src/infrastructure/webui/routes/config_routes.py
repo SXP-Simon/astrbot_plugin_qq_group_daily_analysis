@@ -279,6 +279,10 @@ class ConfigRoutes:
                                 "service_token",
                             ):
                                 strategy[key] = normalized[key]
+                            if "request_timeout" in normalized:
+                                strategy["request_timeout"] = normalized[
+                                    "request_timeout"
+                                ]
                             strategy.pop("render_service", None)
                         strategies[:] = [
                             item
