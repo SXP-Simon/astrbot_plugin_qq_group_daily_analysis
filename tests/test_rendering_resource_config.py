@@ -47,6 +47,7 @@ def test_schema_has_three_presets_and_two_initial_host_rounds():
         defaults = {name: field["default"] for name, field in items.items()}
         plan = parse_rendering_strategies([defaults])[0]
         assert plan["environment"] == environment
+        assert plan["priority"] == (10 if environment == "Overseas" else 20)
         assert {
             name: plan[name] for name in DEFAULT_RENDERING_RESOURCES[environment]
         } == DEFAULT_RENDERING_RESOURCES[environment]
