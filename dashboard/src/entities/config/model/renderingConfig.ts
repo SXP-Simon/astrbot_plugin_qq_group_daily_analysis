@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const CUSTOM_RESOURCE_OPTION = "__custom__";
+export const DEFAULT_CUSTOM_T2I_ENDPOINT = "http://127.0.0.1:8999/text2img";
 
 export const DEFAULT_TEMPLATE_CDN_BASE_URL = "https://cdn.jsdmirror.com";
 export const TEMPLATE_CDN_PRESETS = [
@@ -75,8 +76,8 @@ export const renderingStrategySchema = z.object({
   cdn_base_url: z.union([cdnBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   google_fonts: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   gstatic: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
-  render_service: z.enum(["astrbot", "custom"], { error: "请选择跟随 AstrBot 或自定义服务" }).default("astrbot"),
-  service_endpoint: z.string({ error: "服务地址必须是文字" }).trim().default(""),
+  render_service: z.enum(["astrbot", "custom"], { error: "请选择有效的渲染方案类型" }).optional(),
+  service_endpoint: z.string({ error: "服务地址必须是文字" }).trim().optional(),
   service_token: z.string({ error: "服务 Token 必须是文字" }).max(4096, "服务 Token 不能超过 4096 个字符").regex(/^[\x20-\x7e]*$/, "服务 Token 请使用英文、数字或常用符号，不能换行").transform((value) => value.trim()).default(""),
   type: z.enum(["png", "jpeg"], { error: "请选择 PNG 或 JPEG 格式" }).default("png"),
   quality: z.number({ error: "图片质量必须是数字" }).int("图片质量必须是整数").min(1, "图片质量不能小于 1").max(100, "图片质量不能大于 100").default(80),
@@ -89,8 +90,9 @@ export const renderingStrategySchema = z.object({
     const parsed = (key === "cdn_base_url" ? cdnBaseUrlSchema : fontBaseUrlSchema).safeParse(raw);
     if (!parsed.success || !parsed.data) ctx.addIssue({ code: "custom", path: [`custom_${key}`], message: "请填写完整的自定义资源地址" });
   }
-  if (value.render_service === "custom") {
-    const endpoint = t2iEndpointSchema.safeParse(value.service_endpoint);
+  const service = value.render_service ?? (value.__template_key === "custom" ? "custom" : "astrbot");
+  if (service === "custom") {
+    const endpoint = t2iEndpointSchema.safeParse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT);
     if (!endpoint.success) ctx.addIssue({ code: "custom", path: ["service_endpoint"], message: endpoint.error.issues[0].message });
   }
 }).transform((value) => {
@@ -101,8 +103,15 @@ export const renderingStrategySchema = z.object({
       value[`custom_${key}`] = address;
     }
   }
-  if (value.render_service === "custom") value.service_endpoint = t2iEndpointSchema.parse(value.service_endpoint);
-  return Object.assign(value, { environment: value.environment ?? (value.__template_key === "mainland" ? "Mainland" as const : "Overseas" as const) });
+  const service = value.render_service ?? (value.__template_key === "custom" ? "custom" as const : "astrbot" as const);
+  const environment = value.environment ?? (value.__template_key === "mainland" ? "Mainland" as const : "Overseas" as const);
+  // 旧调用方式只用于迁移，保存后由条目类型唯一决定服务。
+  const { render_service: _legacyService, ...plan } = value;
+  return Object.assign(plan, {
+    environment,
+    service_endpoint: service === "custom" ? t2iEndpointSchema.parse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT) : value.service_endpoint ?? "",
+    __template_key: service === "custom" ? "custom" : environment === "Mainland" ? "mainland" : "strategy",
+  });
 });
 
 export const renderingConfigSchema = z.object({
@@ -135,18 +144,24 @@ const renderingResolvedSchema = renderingConfigSchema.extend({
     const legacyCdn = plan.environment === "Mainland" ? value.t2i_mainland_cdn_base_url : value.t2i_overseas_cdn_base_url;
     const fonts = fontBaseUrlSchema.safeParse(value[`t2i_${source}_google_fonts`]);
     const gstatic = fontBaseUrlSchema.safeParse(value[`t2i_${source}_gstatic`]);
-    return Object.assign(plan, {
+    const resources = {
       cdn_base_url: (plan.cdn_base_url ?? (legacyCdn || value.t2i_cdn_base_url)) || defaults.cdn_base_url,
       google_fonts: (plan.google_fonts ?? (fonts.success ? fonts.data : "")) || defaults.google_fonts,
       gstatic: (plan.gstatic ?? (gstatic.success ? gstatic.data : "")) || defaults.gstatic,
-    });
+    };
+    if (plan.__template_key === "custom") {
+      for (const key of ["cdn_base_url", "google_fonts", "gstatic"] as const) {
+        if (plan[key] === "") resources[key] = "";
+      }
+    }
+    return Object.assign(plan, resources);
   }),
 }));
 
 // 图片预览与 HTML 导出均采用第一优先级方案的资源地址。
 export const renderingRuntimeSchema = renderingResolvedSchema.transform((value) => {
   const first = [...(value.t2i_rendering_strategies || [])].sort((a, b) => a.priority - b.priority)[0];
-  return { t2i_cdn_base_url: first?.cdn_base_url || value.t2i_overseas_cdn_base_url || value.t2i_cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL };
+  return { t2i_cdn_base_url: first ? first.cdn_base_url || RENDERING_RESOURCE_DEFAULTS[first.environment].cdn_base_url : value.t2i_overseas_cdn_base_url || value.t2i_cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL };
 });
 
 export const renderingSaveSchema = renderingResolvedSchema.transform((value) => {

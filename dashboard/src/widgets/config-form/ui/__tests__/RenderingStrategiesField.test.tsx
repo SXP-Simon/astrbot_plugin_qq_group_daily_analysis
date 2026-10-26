@@ -30,7 +30,8 @@ it("从内地和海外预设添加方案，各轮独立编辑资源并驱动优�
   render(<StrategiesField />);
   fireEvent.click(screen.getByRole("button", { name: /添加渲染方案/ }));
   fireEvent.click(await screen.findByText("海外方案", { exact: true }, { timeout: 5000 }));
-  expect(screen.getByRole("combobox", { name: "渲染服务" })).toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "渲染服务" })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("自定义 T2I 服务地址")).not.toBeInTheDocument();
   expect(screen.queryByRole("combobox", { name: "资源环境" })).not.toBeInTheDocument();
   fireEvent.change(screen.getByRole("combobox", { name: "模板资源 CDN" }), { target: { value: " https://first.example/ " } });
   expect(screen.getByTestId("preview")).toHaveTextContent("https://first.example");
@@ -41,26 +42,27 @@ it("从内地和海外预设添加方案，各轮独立编辑资源并驱动优�
   expect(screen.getByTestId("preview")).toHaveTextContent("https://second.example");
   const strategies: unknown = JSON.parse(screen.getByTestId("strategies").textContent || "[]");
   expect(strategies).toMatchObject([
-    { __template_key: "strategy", priority: 20, environment: "Overseas", cdn_base_url: " https://first.example/ ", google_fonts: "https://fonts.googleapis.com", render_service: "astrbot", timeout: 20000 },
-    { __template_key: "mainland", priority: 10, environment: "Mainland", cdn_base_url: "https://second.example", google_fonts: "https://fonts.loli.net", render_service: "astrbot" },
+    { __template_key: "strategy", priority: 20, environment: "Overseas", cdn_base_url: " https://first.example/ ", google_fonts: "https://fonts.googleapis.com", timeout: 20000 },
+    { __template_key: "mainland", priority: 10, environment: "Mainland", cdn_base_url: "https://second.example", google_fonts: "https://fonts.loli.net" },
   ]);
 }, 20000);
 
-it("切换到自定义服务后才显示地址与隐藏输入的 Token，切回后保留草稿", async () => {
+it("直接添加自定义方案，预填本地服务并独立切换资源环境", async () => {
   render(<StrategiesField />);
   fireEvent.click(screen.getByRole("button", { name: /添加渲染方案/ }));
-  fireEvent.click(await screen.findByText("海外方案", { exact: true }, { timeout: 5000 }));
-  expect(screen.queryByText("自定义 T2I 服务地址")).not.toBeInTheDocument();
-  const service = screen.getByRole("combobox", { name: "渲染服务" });
-  fireEvent.mouseDown(service);
-  fireEvent.click(screen.getByText("自定义 T2I 服务", { exact: true }));
+  fireEvent.click(await screen.findByText("自定义 T2I 方案", { exact: true }, { timeout: 5000 }));
+  expect(screen.queryByRole("combobox", { name: "渲染服务" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("自定义 T2I 服务地址")).toHaveValue("http://127.0.0.1:8999/text2img");
   const token = screen.getByLabelText("服务 Token（可选）");
   expect(token).toHaveAttribute("type", "password");
   fireEvent.change(token, { target: { value: "my-secret" } });
-  expect(screen.getByText("自定义 T2I 服务地址")).toBeVisible();
-  fireEvent.mouseDown(service);
-  fireEvent.click(screen.getByText("跟随 AstrBot", { exact: true }));
-  expect(screen.queryByLabelText("服务 Token（可选）")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole("combobox", { name: "Google Fonts 地址" }), { target: { value: "https://my-fonts.example" } });
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "资源环境" }));
+  fireEvent.click(screen.getByText("内地（Mainland）", { exact: true }));
   const data: unknown = JSON.parse(screen.getByTestId("strategies").textContent || "[]");
-  expect(data).toMatchObject([{ render_service: "astrbot", service_token: "my-secret" }]);
+  expect(data).toMatchObject([{
+    __template_key: "custom", environment: "Mainland",
+    service_endpoint: "http://127.0.0.1:8999/text2img", service_token: "my-secret",
+    google_fonts: "https://my-fonts.example", gstatic: "", cdn_base_url: "",
+  }]);
 }, 20000);

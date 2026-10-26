@@ -15,7 +15,8 @@ it.each(cases.invalid)("拒绝自定义服务地址 %j", (input) => {
 
 it("旧方案默认跟随 AstrBot，未启用的地址草稿不影响保存", () => {
   const result = renderingStrategySchema.parse({ service_endpoint: "还没填写完整" });
-  expect(result.render_service).toBe("astrbot");
+  expect(result.__template_key).toBe("strategy");
+  expect(result).not.toHaveProperty("render_service");
   expect(result.service_token).toBe("");
   expect(result.service_endpoint).toBe("还没填写完整");
 });
@@ -28,5 +29,6 @@ it("保存服务地址和 Token 时整理空白并保留其他扩展字段", () 
   const original = { t2i_rendering: { t2i_rendering_strategies: [{ __template_key: "strategy", render_service: "custom", service_endpoint: " http://127.0.0.1:8999/text2img/generate/ ", service_token: " secret ", future: [1] }] } };
   const saved = pluginConfigSaveSchema.parse(original);
   expect(saved.t2i_rendering?.t2i_rendering_strategies?.[0]).toMatchObject({ service_endpoint: "http://127.0.0.1:8999/text2img", service_token: "secret", future: [1] });
+  expect(saved.t2i_rendering?.t2i_rendering_strategies?.[0]).not.toHaveProperty("render_service");
   expect(original.t2i_rendering.t2i_rendering_strategies[0].service_token).toBe(" secret ");
 });

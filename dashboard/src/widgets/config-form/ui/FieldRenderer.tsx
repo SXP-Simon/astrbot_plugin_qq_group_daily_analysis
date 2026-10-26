@@ -847,6 +847,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         value !== undefined ? String(value) : String(defaultValue ?? "");
       return (
         <Input
+          aria-label={title}
           value={currentVal}
           onChange={(e) => onChange(e.target.value)}
           placeholder={hint || `请输入 ${title}`}

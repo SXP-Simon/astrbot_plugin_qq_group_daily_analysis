@@ -1,4 +1,5 @@
 import resourceCases from "../../../../../../tests/data/rendering_resources.json";
+import serviceCases from "../../../../../../tests/data/rendering_services.json";
 import { describe, expect, it } from "vitest";
 import schema from "../../../../../../_conf_schema.json";
 import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../configContract";
@@ -12,7 +13,7 @@ describe("可扩展渲染方案", () => {
     expect(Object.keys(schema.t2i_rendering.items).some((key) => /^t2i_r[12]_/.test(key))).toBe(false);
     expect(schema.t2i_rendering.items).not.toHaveProperty("t2i_font_source");
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.default).toEqual([
-      { __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", render_service: "astrbot", service_endpoint: "", service_token: "", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
+      { __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
     ]);
     expect(renderingStrategySchema.parse({}).timeout).toBe(20000);
     expect(schema.t2i_rendering.items.t2i_cdn_base_url.invisible).toBe(true);
@@ -101,6 +102,27 @@ it.each(resourceCases)("前后端共用每轮资源地址边界：%j", ({ plan, 
   expect(result.success).toBe(expected !== null);
   if (result.success) expect(result.data.t2i_rendering?.t2i_rendering_strategies?.[0]).toMatchObject(expected!);
   expect(input).toEqual(before);
+});
+
+it.each(serviceCases)("前后端共用方案类型与旧配置边界：%j", ({ plan, expected }) => {
+  const input = { t2i_rendering: { t2i_rendering_strategies: [plan] } };
+  const original = structuredClone(input);
+  const result = pluginConfigSaveSchema.safeParse(input);
+  expect(result.success).toBe(expected !== null);
+  if (result.success) expect(result.data.t2i_rendering?.t2i_rendering_strategies?.[0]).toMatchObject(expected!);
+  expect(input).toEqual(original);
+});
+
+it("自定义方案保存空资源地址，重载后仍可跟随环境且不覆盖手填地址", () => {
+  const saved = pluginConfigSaveSchema.parse({ t2i_rendering: { t2i_rendering_strategies: [{
+    __template_key: "custom", environment: "Overseas", cdn_base_url: "", google_fonts: "", gstatic: "https://static.example",
+  }] } });
+  const plan = saved.t2i_rendering!.t2i_rendering_strategies![0];
+  expect(plan).toMatchObject({ cdn_base_url: "", google_fonts: "", gstatic: "https://static.example" });
+  plan.environment = "Mainland";
+  expect(pluginConfigSaveSchema.parse(saved).t2i_rendering?.t2i_rendering_strategies?.[0]).toMatchObject({
+    __template_key: "custom", environment: "Mainland", google_fonts: "", gstatic: "https://static.example",
+  });
 });
 
 it("相同环境的每轮 CDN 独立，预览跟随优先级且保留旧字段和扩展字段", () => {
