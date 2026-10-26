@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import re
 import time
@@ -25,6 +26,8 @@ from ...reporting.cdn_probe import probe_template_cdn
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from astrbot.api.star import Context
 
     from ....application.dto.webui_dto import (
@@ -53,6 +56,24 @@ def _config_key_to_folder(key_path: str) -> str:
     """与 AstrBot 官方核心完全一致的 config_key 到存储目录转换规则（以 / 分隔）"""
     parts = [_sanitize_path_segment(part) for part in key_path.split(".") if part]
     return "/".join(parts) if parts else "_"
+
+
+def _config_revision(config: Mapping[str, object]) -> str:
+    """计算配置内容的只读版本，不将版本号写入用户配置。
+
+    Args:
+        config: 来自配置文件的 JSON 对象。
+
+    Returns:
+        配置内容稳定排序后的 SHA-256 摘要。
+
+    Raises:
+        TypeError: 配置包含不可序列化的数据。
+    """
+    content = json.dumps(
+        dict(config), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 class ConfigRoutes:
@@ -88,8 +109,10 @@ class ConfigRoutes:
                 )
             )
             config_dict = {}
+            revision = _config_revision(config_dict)
             if cfg_mgr:
                 config_dict = {str(k): v for k, v in cfg_mgr.config.items()}
+                revision = _config_revision(config_dict)
                 rendering = config_dict.get("t2i_rendering")
                 if isinstance(rendering, dict) and not rendering.get(
                     "t2i_rendering_strategies"
@@ -129,6 +152,7 @@ class ConfigRoutes:
                     "data": {
                         "config": config_dict,
                         "schema": schema_dict,
+                        "revision": revision,
                     },
                 }
             )
@@ -169,6 +193,15 @@ class ConfigRoutes:
                 return error_response("缺少有效的 config 配置数据", status_code=400)
 
             save_dto: ConfigSaveDTO = {"config": new_config}
+            if "revision" in body:
+                revision = body["revision"]
+                if not isinstance(revision, str) or not re.fullmatch(
+                    r"[0-9a-f]{64}", revision
+                ):
+                    return error_response(
+                        "配置版本无效，请重新读取后再保存", status_code=400
+                    )
+                save_dto["revision"] = revision
 
             cfg_mgr = (
                 self.analysis_service.config_manager
@@ -182,6 +215,15 @@ class ConfigRoutes:
             config_obj = cfg_mgr.config if cfg_mgr else None
             if config_obj is None:
                 return error_response("配置管理器未初始化", status_code=500)
+
+            # 比较、更新和同步保存之间没有 await，避免两个页面同时覆盖旧快照。
+            if "revision" in save_dto and save_dto["revision"] != _config_revision(
+                config_obj
+            ):
+                return error_response(
+                    "配置已被其他页面修改，请重新读取后再保存。当前改动尚未保存。",
+                    status_code=409,
+                )
 
             if "t2i_rendering" in new_config:
                 rendering_config = new_config["t2i_rendering"]
@@ -343,6 +385,8 @@ class ConfigRoutes:
             if cfg_mgr:
                 cfg_mgr.save_config()
 
+            saved_revision = _config_revision(config_obj)
+
             if self.auto_scheduler is not None and self.context is not None:
                 self.auto_scheduler.schedule_jobs(self.context)
                 if self.auto_scheduler.incremental_trigger is not None:
@@ -355,6 +399,7 @@ class ConfigRoutes:
                 {
                     "status": "ok",
                     "message": "配置已成功保存并持久化生效",
+                    "revision": saved_revision,
                     "data": dict(config_obj),
                 }
             )

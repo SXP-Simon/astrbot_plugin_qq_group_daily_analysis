@@ -4,6 +4,24 @@
  */
 
 export interface paths {
+    "/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取插件配置、表单定义和内容版本 */
+        get: operations["getPluginConfig"];
+        put?: never;
+        /** 保存配置，带版本时拒绝覆盖过期快照 */
+        post: operations["savePluginConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config/test-template-cdn": {
         parameters: {
             query?: never;
@@ -623,6 +641,104 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getPluginConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 版本对应原始配置；表单中的默认方案可能经过补齐 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: {
+                            config: {
+                                [key: string]: unknown;
+                            };
+                            schema: {
+                                [key: string]: unknown;
+                            };
+                            revision: string;
+                        };
+                    };
+                };
+            };
+            /** @description 读取配置失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    savePluginConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    config: {
+                        [key: string]: unknown;
+                    };
+                    /** @description 可选，兼容旧调用方；WebUI 应传入最近读取或保存成功的版本 */
+                    revision?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 配置保存成功，返回新版本供后续保存使用 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        message?: string;
+                        data: {
+                            [key: string]: unknown;
+                        };
+                        revision: string;
+                    };
+                };
+            };
+            /** @description 配置或版本格式无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 配置已被其他页面或管理界面修改，须重新读取后保存 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 配置保存失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     testTemplateCdn: {
         parameters: {
             query?: never;

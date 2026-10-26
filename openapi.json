@@ -6,6 +6,128 @@
     "description": "REST API and data contract specification for AstrBot QQ Group Daily Analysis Dashboard"
   },
   "paths": {
+    "/config": {
+      "get": {
+        "summary": "读取插件配置、表单定义和内容版本",
+        "operationId": "getPluginConfig",
+        "responses": {
+          "200": {
+            "description": "版本对应原始配置；表单中的默认方案可能经过补齐",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "config": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "schema": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "revision": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        }
+                      },
+                      "required": [
+                        "config",
+                        "schema",
+                        "revision"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "读取配置失败"
+          }
+        }
+      },
+      "post": {
+        "summary": "保存配置，带版本时拒绝覆盖过期快照",
+        "operationId": "savePluginConfig",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "可选，兼容旧调用方；WebUI 应传入最近读取或保存成功的版本"
+                  }
+                },
+                "required": [
+                  "config"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "配置保存成功，返回新版本供后续保存使用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "revision": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data",
+                    "revision"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "配置或版本格式无效"
+          },
+          "409": {
+            "description": "配置已被其他页面或管理界面修改，须重新读取后保存"
+          },
+          "500": {
+            "description": "配置保存失败"
+          }
+        }
+      }
+    },
     "/config/test-template-cdn": {
       "post": {
         "summary": "从插件服务器通过 HEAD 检查 GitHub 和 npm 资源链接",
