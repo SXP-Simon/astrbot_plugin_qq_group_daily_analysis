@@ -24,7 +24,7 @@ from ...shared.constants import (
 from ...utils.logger import logger
 from .config_migrator import ConfigMigrator
 from .rendering_config import (
-    DEFAULT_RENDERING_STRATEGY,
+    DEFAULT_RENDERING_STRATEGY_PRESETS,
     RenderingResourceConfig,
     RenderingStrategyConfig,
     RenderingStrategyOptions,
@@ -396,7 +396,7 @@ class ConfigManager:
             return 0.0
 
     def get_t2i_rendering_strategy_config(self) -> list[RenderingStrategyConfig]:
-        """获取按优先级排序的方案，未配置时使用默认海外方案。
+        """获取按优先级排序的方案，未配置时先用海外方案，失败后尝试内地方案。
 
         Args:
             无额外参数。
@@ -413,10 +413,8 @@ class ConfigManager:
             try:
                 return parse_rendering_strategies(raw)
             except ValueError as exc:
-                logger.warning(f"渲染方案配置无效，将使用默认海外方案: {exc}")
-        return parse_rendering_strategies(
-            [{"name": DEFAULT_RENDERING_STRATEGY["name"]}]
-        )
+                logger.warning(f"渲染方案配置无效，将使用默认海外、内地方案: {exc}")
+        return parse_rendering_strategies(list(DEFAULT_RENDERING_STRATEGY_PRESETS))
 
     def get_t2i_rendering_strategies(self) -> list[RenderingStrategyOptions]:
         """将方案转换为截图参数，资源环境由插件消费，不传给 T2I。"""
@@ -1469,6 +1467,17 @@ class ConfigManager:
             Exception: AstrBot 保存配置时发生的原始异常。
         """
         try:
+            strategies = self._get_group("t2i_rendering").get(
+                "t2i_rendering_strategies"
+            )
+            if isinstance(strategies, list):
+                try:
+                    parse_rendering_strategies(strategies)
+                except ValueError:
+                    # 其他设置仍可保存；无效方案保持原样，交给配置页修正。
+                    pass
+                else:
+                    strategies.sort(key=lambda item: item.get("priority", 10))
             self.config.save_config()
             self.refresh_rendering_schema_options()
             if self._upgrade_tracking_active:

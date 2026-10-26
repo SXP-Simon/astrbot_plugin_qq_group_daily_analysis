@@ -35,12 +35,12 @@ def test_shared_resource_address_contract(case):
     assert case["plan"] == before
 
 
-def test_schema_has_three_presets_and_only_one_initial_host_round():
+def test_schema_has_three_presets_and_two_initial_host_rounds():
     fields = json.loads(
         (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
     )["t2i_rendering"]["items"]
     strategies = fields["t2i_rendering_strategies"]
-    assert len(strategies["default"]) == 1
+    assert [(plan["environment"], plan["priority"]) for plan in strategies["default"]] == [("Overseas", 10), ("Mainland", 20)]
     assert set(strategies["templates"]) == {"strategy", "mainland", "custom"}
     for key, environment in (("strategy", "Overseas"), ("mainland", "Mainland")):
         items = strategies["templates"][key]["items"]
@@ -82,11 +82,11 @@ def test_startup_migration_preserves_legacy_addresses_and_explicit_new_values():
     migrator = ConfigMigrator(manager)
     assert migrator.migrate_legacy_configs()
     plans = manager.config["t2i_rendering"]["t2i_rendering_strategies"]
-    assert [item["priority"] for item in plans] == [20, 10]
-    assert plans[0]["cdn_base_url"] == "https://old.example"
-    assert plans[0]["google_fonts"] == "https://old.example/fonts"
-    assert plans[1]["cdn_base_url"] == "https://new.example"
-    assert plans[0]["future"] == [1]
+    assert [item["priority"] for item in plans] == [10, 20]
+    assert plans[1]["cdn_base_url"] == "https://old.example"
+    assert plans[1]["google_fonts"] == "https://old.example/fonts"
+    assert plans[0]["cdn_base_url"] == "https://new.example"
+    assert plans[1]["future"] == [1]
     manager.save_config.assert_called_once()
     assert not migrator.migrate_legacy_configs()
     manager.save_config.assert_called_once()

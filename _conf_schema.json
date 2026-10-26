@@ -227,16 +227,26 @@
                 "default": [
                     {
                         "__template_key": "strategy",
-                        "name": "默认方案",
+                        "name": "海外方案",
                         "priority": 10,
                         "environment": "Overseas",
                         "type": "png",
                         "quality": 80,
                         "device_scale": "high",
                         "timeout": 20000
+                    },
+                    {
+                        "__template_key": "mainland",
+                        "name": "内地方案",
+                        "priority": 20,
+                        "environment": "Mainland",
+                        "type": "png",
+                        "quality": 80,
+                        "device_scale": "high",
+                        "timeout": 20000
                     }
                 ],
-                "hint": "添加内地、海外或自定义 T2I 方案，按优先级依次尝试。内地和海外方案跟随 AstrBot；自定义方案填写自己的截图服务地址。初始只有一项海外方案，清空后仍使用默认方案。所有轮次共用 5 分钟总等待上限；图片已生成但缺少个别素材时，不会自动进入下一轮。",
+                "hint": "添加内地、海外或自定义 T2I 方案，按优先级依次尝试。内地和海外方案跟随 AstrBot；自定义方案填写自己的截图服务地址。初始包含海外（优先级 10）和内地（优先级 20）两项，清空后恢复这两项。保存后按优先级排列，同优先级保持原顺序。所有轮次共用 5 分钟总等待上限；图片已生成但缺少个别素材时，不会自动进入下一轮。",
                 "templates": {
                     "strategy": {
                         "name": "海外方案",

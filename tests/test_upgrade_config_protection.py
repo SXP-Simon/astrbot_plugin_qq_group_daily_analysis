@@ -164,3 +164,21 @@ def test_new_character_selection_is_not_overwritten_by_old_snapshot(protection):
     del p.migrator.migrate_daily_comic_character_references
     p.migrator.run_all_migrations()
     assert p.manager.config["daily_comic"]["comic_characters"] == [character]
+
+
+def test_saved_order_is_stable_on_disk_and_in_protection_snapshot(protection):
+    manager, migrator, state, tmp_path = protection.manager, protection.migrator, protection.state, protection.directory
+    migrator.run_all_migrations()
+    manager._upgrade_tracking_active = True
+    manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [
+        {"__template_key": "custom", "name": "最后", "priority": 30, "future": {"keep": True}, "service_token": "secret"},
+        {"name": "同级甲", "priority": 5},
+        {"name": "同级乙", "priority": 5},
+    ]
+    manager.save_config()
+    persisted = json.loads((tmp_path / "active.json").read_text(encoding="utf-8"))
+    plans = persisted["t2i_rendering"]["t2i_rendering_strategies"]
+    assert [item["name"] for item in plans] == ["同级甲", "同级乙", "最后"]
+    assert plans[-1]["future"] == {"keep": True}
+    assert plans[-1]["service_token"] == "secret"
+    assert json.loads(state.read_text(encoding="utf-8"))["config"] == persisted

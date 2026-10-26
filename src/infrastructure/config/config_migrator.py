@@ -23,7 +23,11 @@ from astrbot.api.star import StarTools
 from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from ...utils.template_utils import upgrade_str_format_template
-from .rendering_config import CUSTOM_RESOURCE_OPTION, parse_rendering_strategies
+from .rendering_config import (
+    CUSTOM_RESOURCE_OPTION,
+    DEFAULT_RENDERING_STRATEGY_PRESETS,
+    parse_rendering_strategies,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -113,11 +117,13 @@ class ConfigMigrator:
         }
         strategies = group.get("t2i_rendering_strategies")
         if strategies is None and group:
-            strategies = [{"name": "默认方案"}]
+            strategies = [dict(item) for item in DEFAULT_RENDERING_STRATEGY_PRESETS]
         if isinstance(strategies, list):
             try:
                 if not strategies:
-                    strategies = [{"name": "默认方案"}]
+                    strategies = [
+                        dict(item) for item in DEFAULT_RENDERING_STRATEGY_PRESETS
+                    ]
                 # 先校验整组再修改，避免异常条目导致只迁移半份配置。
                 normalized = [
                     parse_rendering_strategies([item], legacy_config=legacy)[0]
@@ -146,6 +152,16 @@ class ConfigMigrator:
                                 item[f"custom_{key}"] = plan[key]
                             item[key] = plan[key]
                             modified = True
+                ordered = [
+                    item
+                    for _plan, item in sorted(
+                        zip(normalized, strategies, strict=True),
+                        key=lambda pair: pair[0]["priority"],
+                    )
+                ]
+                if strategies != ordered:
+                    group["t2i_rendering_strategies"] = ordered
+                    modified = True
                 for key in LEGACY_RENDERING_RESOURCE_KEYS:
                     if key in group:
                         del group[key]

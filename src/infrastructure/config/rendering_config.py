@@ -61,6 +61,19 @@ RenderingTemplateMarker = TypedDict(
 )
 
 
+class RenderingStrategyPreset(RenderingTemplateMarker):
+    """初始条目仅声明名称和顺序，资源在解析时补齐，避免覆盖旧地址。"""
+
+    name: str
+    priority: int
+
+
+DEFAULT_RENDERING_STRATEGY_PRESETS: tuple[RenderingStrategyPreset, ...] = (
+    {"__template_key": "strategy", "name": "海外方案", "priority": 10},
+    {"__template_key": "mainland", "name": "内地方案", "priority": 20},
+)
+
+
 class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     """配置面板中的单个渲染方案，数值越小越先执行。"""
 
@@ -74,22 +87,6 @@ class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     quality: int
     device_scale: Literal["normal", "high", "ultra"]
     timeout: int
-
-
-DEFAULT_RENDERING_STRATEGY: RenderingStrategyConfig = {
-    **DEFAULT_RENDERING_RESOURCES["Overseas"],
-    "__template_key": "strategy",
-    "name": "默认方案",
-    "priority": 10,
-    "environment": "Overseas",
-    "render_service": "astrbot",
-    "service_endpoint": "",
-    "service_token": "",
-    "type": "png",
-    "quality": 80,
-    "device_scale": "high",
-    "timeout": 20000,
-}
 
 
 def normalize_t2i_endpoint(value: str) -> str:

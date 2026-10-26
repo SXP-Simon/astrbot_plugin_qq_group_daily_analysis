@@ -55,7 +55,7 @@ def rendering(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("succeeds", [True, False])
-async def test_default_uses_one_overseas_attempt_with_twenty_second_timeout(
+async def test_default_tries_overseas_then_mainland_only_on_failure(
     rendering, succeeds
 ):
     manager, generator, png = rendering
@@ -64,12 +64,14 @@ async def test_default_uses_one_overseas_attempt_with_twenty_second_timeout(
     image, html = await generator.generate_image_report(
         create_analysis_result(), "123", render
     )
-    render.assert_awaited_once()
+    assert render.await_count == (1 if succeeds else 2)
     assert bool(image) is succeeds
     assert html == render.await_args.args[0]
     assert "https://cdn.jsdmirror.com/gh/" in html
-    assert "https://fonts.googleapis.com" in html
-    assert render.await_args.args[3]["timeout"] == 20000
+    assert "https://fonts.googleapis.com" in render.await_args_list[0].args[0]
+    if not succeeds:
+        assert "https://fonts.loli.net" in render.await_args_list[1].args[0]
+    assert all(call.args[3]["timeout"] == 20000 for call in render.await_args_list)
 
 
 @pytest.mark.asyncio

@@ -173,5 +173,31 @@ class NativeConfigurationContract(unittest.TestCase):
         )
 
 
+    def test_native_save_then_reload_persists_priority_order_and_keeps_existing_rounds(self):
+        manager = self.load({"t2i_rendering_strategies": [
+            {"__template_key": "custom", "name": "最后", "priority": 30, "service_token": "secret"},
+            {"__template_key": "strategy", "name": "同级甲", "priority": 10},
+            {"__template_key": "mainland", "name": "同级乙", "priority": 10},
+        ]})
+        # 原生配置保存后会重载插件，在初始化迁移阶段整理顺序。
+        manager.config.save_config()
+        manager._migrator.run_all_migrations()
+        persisted = json.loads(self.path.read_text(encoding="utf-8-sig"))["t2i_rendering"]["t2i_rendering_strategies"]
+        self.assertEqual([plan["name"] for plan in persisted], ["同级甲", "同级乙", "最后"])
+        self.assertEqual(persisted[-1]["service_token"], "secret")
+        reloaded = AstrBotConfig(config_path=str(self.path), schema=deepcopy(self.schema))
+        self.assertEqual(reloaded["t2i_rendering"]["t2i_rendering_strategies"], persisted)
+        self.assertFalse(manager._migrator.migrate_legacy_configs())
+
+    def test_native_initial_config_has_two_defaults_but_keeps_user_single_round(self):
+        manager = self.load({})
+        manager._migrator.run_all_migrations()
+        plans = manager.get_t2i_rendering_strategy_config()
+        self.assertEqual([(plan["environment"], plan["priority"]) for plan in plans], [("Overseas", 10), ("Mainland", 20)])
+        manager = self.load({"t2i_rendering_strategies": [{"__template_key": "custom", "name": "自用", "priority": 3}]})
+        manager._migrator.run_all_migrations()
+        self.assertEqual(len(manager.get_t2i_rendering_strategy_config()), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

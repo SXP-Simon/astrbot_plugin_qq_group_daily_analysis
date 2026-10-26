@@ -10,7 +10,7 @@ import pytest
 from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.config.config_migrator import ConfigMigrator
 from src.infrastructure.config.rendering_config import (
-    DEFAULT_RENDERING_STRATEGY,
+    DEFAULT_RENDERING_STRATEGY_PRESETS,
     parse_rendering_strategies,
 )
 
@@ -29,7 +29,7 @@ def test_removed_round_parameters_do_not_override_default_strategy():
     ConfigMigrator(manager).migrate_legacy_configs()
     before = deepcopy(manager.config)
     plans = manager.get_t2i_rendering_strategies()
-    assert len(plans) == 1
+    assert len(plans) == 2
     assert plans[0]["quality"] == 80
     assert plans[0]["type"] == "png"
     assert plans[0]["resource_environment"] == "Overseas"
@@ -52,9 +52,9 @@ def test_missing_empty_or_invalid_strategies_use_independent_default(group):
     manager.config = {"t2i_rendering": group}
     before = deepcopy(manager.config)
     plans = manager.get_t2i_rendering_strategy_config()
-    assert plans == [DEFAULT_RENDERING_STRATEGY]
+    assert plans == parse_rendering_strategies(list(DEFAULT_RENDERING_STRATEGY_PRESETS))
     plans[0]["priority"] = 999
-    assert manager.get_t2i_rendering_strategy_config() == [DEFAULT_RENDERING_STRATEGY]
+    assert manager.get_t2i_rendering_strategy_config() == parse_rendering_strategies(list(DEFAULT_RENDERING_STRATEGY_PRESETS))
     assert manager.config == before
 
 
@@ -67,7 +67,7 @@ def test_schema_default_matches_runtime_and_removes_old_round_fields():
     assert "t2i_font_source" not in fields
     value = fields["t2i_rendering_strategies"]["default"]
     assert value[0]["__template_key"] == "strategy"
-    assert parse_rendering_strategies(value) == [DEFAULT_RENDERING_STRATEGY]
+    assert parse_rendering_strategies(value) == parse_rendering_strategies(list(DEFAULT_RENDERING_STRATEGY_PRESETS))
     template_defaults = {
         key: field["default"]
         for key, field in fields["t2i_rendering_strategies"]["templates"]["strategy"][
@@ -77,7 +77,7 @@ def test_schema_default_matches_runtime_and_removes_old_round_fields():
     assert parse_rendering_strategies([{ "name": "海外方案" }]) == parse_rendering_strategies(
         [template_defaults]
     )
-    assert template_defaults["timeout"] == DEFAULT_RENDERING_STRATEGY["timeout"]
+    assert template_defaults["timeout"] == 20000
 
 
 def test_same_priority_preserves_order_and_unknown_fields():
