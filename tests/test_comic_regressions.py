@@ -743,7 +743,7 @@ def test_t2i_rendering_strategies_explicitly_set_desktop_viewport():
 
     strategies = config_manager.get_t2i_rendering_strategies()
 
-    assert len(strategies) == 2
+    assert len(strategies) == 1
     assert all(strategy["viewport_width"] == 1360 for strategy in strategies)
     assert all(strategy["viewport_height"] == 900 for strategy in strategies)
 

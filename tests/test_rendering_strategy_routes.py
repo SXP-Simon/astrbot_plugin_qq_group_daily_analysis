@@ -11,16 +11,18 @@ from src.infrastructure.webui.routes.config_routes import ConfigRoutes
 
 
 @pytest.mark.asyncio
-async def test_read_projects_legacy_rounds_without_persisting():
+@pytest.mark.parametrize("strategies", [None, []])
+async def test_read_shows_single_default_strategy_without_persisting(strategies):
     manager = object.__new__(ConfigManager)
     manager.config = {
         "t2i_rendering": {
             "t2i_font_source": "Mainland",
             "t2i_r1_quality": 97,
-            "t2i_rendering_strategies": [],
             "future": {"keep": True},
         }
     }
+    if strategies is not None:
+        manager.config["t2i_rendering"]["t2i_rendering_strategies"] = strategies
     original = deepcopy(manager.config)
     response = await ConfigRoutes(
         SimpleNamespace(config_manager=manager)
@@ -29,9 +31,18 @@ async def test_read_projects_legacy_rounds_without_persisting():
     if "config" not in body:
         body = body["data"]
     projected = body["config"]["t2i_rendering"]
-    assert len(projected["t2i_rendering_strategies"]) == 2
-    assert projected["t2i_rendering_strategies"][0]["quality"] == 97
-    assert projected["t2i_rendering_strategies"][0]["environment"] == "Mainland"
+    assert projected["t2i_rendering_strategies"] == [
+        {
+            "__template_key": "strategy",
+            "name": "默认方案",
+            "priority": 10,
+            "environment": "Overseas",
+            "type": "png",
+            "quality": 80,
+            "device_scale": "high",
+            "timeout": 20000,
+        }
+    ]
     assert projected["future"] == {"keep": True}
     assert manager.config == original
 

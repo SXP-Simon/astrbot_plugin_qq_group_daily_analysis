@@ -25,7 +25,11 @@ from ...shared.constants import (
 from ...utils.cdn_utils import normalize_cdn_base_url
 from ...utils.logger import logger
 from .config_migrator import ConfigMigrator
-from .rendering_config import RenderingStrategyConfig, parse_rendering_strategies
+from .rendering_config import (
+    DEFAULT_RENDERING_STRATEGY,
+    RenderingStrategyConfig,
+    parse_rendering_strategies,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -382,7 +386,7 @@ class ConfigManager:
             return 0.0
 
     def get_t2i_rendering_strategy_config(self) -> list[RenderingStrategyConfig]:
-        """获取按优先级排序的方案，未配置列表时兼容原有两轮参数。
+        """获取按优先级排序的方案，未配置时使用默认海外方案。
 
         Returns:
             非空渲染方案列表；相同优先级保持配置顺序。
@@ -393,29 +397,8 @@ class ConfigManager:
             try:
                 return parse_rendering_strategies(raw)
             except ValueError as exc:
-                logger.warning(f"渲染方案配置无效，将沿用原两轮设置: {exc}")
-        environment = group.get("t2i_font_source", "Overseas")
-        if environment not in ("Mainland", "Overseas"):
-            environment = "Overseas"
-        return parse_rendering_strategies(
-            [
-                {
-                    "name": f"原第 {round_number} 轮",
-                    "priority": round_number * 10,
-                    "environment": environment,
-                    "type": group.get(f"t2i_r{round_number}_type", image_type),
-                    "quality": group.get(f"t2i_r{round_number}_quality", quality),
-                    "device_scale": group.get(
-                        f"t2i_r{round_number}_device_scale", scale
-                    ),
-                    "timeout": group.get(f"t2i_r{round_number}_timeout", timeout),
-                }
-                for round_number, image_type, quality, scale, timeout in (
-                    (1, "png", 100, "ultra", 30000),
-                    (2, "jpeg", 80, "normal", 60000),
-                )
-            ]
-        )
+                logger.warning(f"渲染方案配置无效，将使用默认海外方案: {exc}")
+        return [DEFAULT_RENDERING_STRATEGY.copy()]
 
     def get_t2i_rendering_strategies(self) -> list[dict[str, object]]:
         """将方案转换为截图参数，资源环境由插件消费，不传给 T2I。"""

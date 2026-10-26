@@ -55,6 +55,25 @@ def rendering(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("succeeds", [True, False])
+async def test_default_uses_one_overseas_attempt_with_twenty_second_timeout(
+    rendering, succeeds
+):
+    manager, generator, png = rendering
+    manager.config["t2i_rendering"].pop("t2i_rendering_strategies")
+    render = AsyncMock(return_value=png if succeeds else None)
+    image, html = await generator.generate_image_report(
+        create_analysis_result(), "123", render
+    )
+    render.assert_awaited_once()
+    assert bool(image) is succeeds
+    assert html == render.await_args.args[0]
+    assert "https://overseas.example/gh/" in html
+    assert "https://fonts-overseas.example" in html
+    assert render.await_args.args[3]["timeout"] == 20000
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["timeout", "empty", "non_image"])
 async def test_fallback_rebuilds_resources_and_returns_matching_html(
     rendering, failure
