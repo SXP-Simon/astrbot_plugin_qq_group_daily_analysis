@@ -25,6 +25,11 @@ from ...shared.constants import (
 from ...utils.cdn_utils import normalize_cdn_base_url
 from ...utils.logger import logger
 from .config_migrator import ConfigMigrator
+from .rendering_config import (
+    DEFAULT_RENDERING_STRATEGY,
+    RenderingStrategyConfig,
+    parse_rendering_strategies,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -380,38 +385,47 @@ class ConfigManager:
         except (TypeError, ValueError):
             return 0.0
 
-    def get_t2i_rendering_strategies(self) -> list[dict]:
-        """获取用户配置的两轮 T2I 渲染策略"""
-        group = self._get_group("t2i_rendering")
-        viewport_width = max(1, int(group.get("t2i_viewport_width", 1440)))
-        viewport_height = max(1, int(group.get("t2i_viewport_height", 900)))
+    def get_t2i_rendering_strategy_config(self) -> list[RenderingStrategyConfig]:
+        """获取按优先级排序的方案，未配置时使用默认海外方案。
 
+        Args:
+            无额外参数。
+
+        Returns:
+            非空渲染方案列表；相同优先级保持配置顺序。
+
+        Raises:
+            无。无效配置会记录警告并回退默认方案。
+        """
+        group = self._get_group("t2i_rendering")
+        raw = group.get("t2i_rendering_strategies", [])
+        if raw:
+            try:
+                return parse_rendering_strategies(raw)
+            except ValueError as exc:
+                logger.warning(f"渲染方案配置无效，将使用默认海外方案: {exc}")
+        return [DEFAULT_RENDERING_STRATEGY.copy()]
+
+    def get_t2i_rendering_strategies(self) -> list[dict[str, object]]:
+        """将方案转换为截图参数，资源环境由插件消费，不传给 T2I。"""
+        group = self._get_group("t2i_rendering")
         return [
-            # 第一轮：质量优先
             {
                 "full_page": True,
-                "type": group.get("t2i_r1_type", "png"),
-                "quality": group.get("t2i_r1_quality", 100),
-                "device_scale_factor_level": group.get("t2i_r1_device_scale", "ultra"),
-                "timeout": group.get("t2i_r1_timeout", 30000),
-                "viewport_width": viewport_width,
-                "viewport_height": viewport_height,
-            },
-            # 第二轮：稳定性/回退优先
-            {
-                "full_page": True,
-                "type": group.get("t2i_r2_type", "jpeg"),
-                "quality": group.get("t2i_r2_quality", 80),
-                "device_scale_factor_level": group.get("t2i_r2_device_scale", "normal"),
-                "timeout": group.get("t2i_r2_timeout", 60000),
-                "viewport_width": viewport_width,
-                "viewport_height": viewport_height,
-            },
+                "type": item["type"],
+                "quality": item["quality"],
+                "device_scale_factor_level": item["device_scale"],
+                "timeout": item["timeout"],
+                "viewport_width": max(1, int(group.get("t2i_viewport_width", 1440))),
+                "viewport_height": max(1, int(group.get("t2i_viewport_height", 900))),
+                "resource_environment": item["environment"],
+            }
+            for item in self.get_t2i_rendering_strategy_config()
         ]
 
     def get_t2i_font_source(self) -> str:
-        """获取 T2I 字体源 (Mainland/Overseas)"""
-        return self._get_group("t2i_rendering").get("t2i_font_source", "Overseas")
+        """获取第一优先级方案的环境，独立 HTML 报告也使用此环境。"""
+        return self.get_t2i_rendering_strategy_config()[0]["environment"]
 
     def get_report_language(self) -> str:
         """获取报告语言 (auto/zh-Hans/zh-Hant/en/ja)
@@ -425,54 +439,85 @@ class ConfigManager:
             value = self._get_group("t2i_rendering").get("report_language", "auto")
         return value
 
-    def get_t2i_google_fonts_mirror(self) -> str:
-        """根据环境选择获取 Google Fonts 镜像地址"""
-        source = self.get_t2i_font_source()
+    def get_t2i_google_fonts_mirror(self, environment: str | None = None) -> str:
+        """选择指定资源环境的 Google Fonts 地址。
+
+        Args:
+            environment: 本次方案的环境；省略时采用第一优先级方案。
+
+        Returns:
+            对应环境的字体样式表根地址。
+        """
+        source = environment or self.get_t2i_font_source()
         group = self._get_group("t2i_rendering")
         if source == "Mainland":
             return group.get("t2i_mainland_google_fonts", "https://fonts.loli.net")
         return group.get("t2i_overseas_google_fonts", "https://fonts.googleapis.com")
 
-    def get_t2i_gstatic_mirror(self) -> str:
-        """根据环境选择获取 Gstatic 镜像地址"""
-        source = self.get_t2i_font_source()
+    def get_t2i_gstatic_mirror(self, environment: str | None = None) -> str:
+        """选择指定资源环境的 Gstatic 地址。
+
+        Args:
+            environment: 本次方案的环境；省略时采用第一优先级方案。
+
+        Returns:
+            对应环境的字体静态资源根地址。
+        """
+        source = environment or self.get_t2i_font_source()
         group = self._get_group("t2i_rendering")
         if source == "Mainland":
             return group.get("t2i_mainland_gstatic", "https://gstatic.loli.net")
         return group.get("t2i_overseas_gstatic", "https://fonts.gstatic.com")
 
-    def get_t2i_cdn_base_url(self) -> str:
+    def get_t2i_cdn_base_url(self, environment: str | None = None) -> str:
         """获取不带末尾斜杠的模板 CDN 根地址。
+
+        Args:
+            environment: 本次资源环境；省略时采用第一优先级方案。
 
         Returns:
             HTTP(S) 根地址；空值或不符合根地址格式时使用默认 CDN。
         """
-        value = self._get_group("t2i_rendering").get("t2i_cdn_base_url", "")
+        group = self._get_group("t2i_rendering")
+        source = environment or self.get_t2i_font_source()
+        value = group.get(f"t2i_{source.lower()}_cdn_base_url")
+        if value is None or (isinstance(value, str) and not value.strip()):
+            value = group.get("t2i_cdn_base_url", "")
         try:
             return normalize_cdn_base_url(value if isinstance(value, str) else "")
         except ValueError:
             pass
         return DEFAULT_CDN_HOST
 
-    def get_template_assets_base_url(self) -> str:
-        """获取当前 CDN 下的仓库素材目录。
+    def get_template_assets_base_url(self, environment: str | None = None) -> str:
+        """获取指定资源环境的仓库素材目录。
+
+        Args:
+            environment: 本次资源环境；省略时采用第一优先级方案。
 
         Returns:
             可拼接主题目录或预览图文件名的素材 URL。
         """
         return (
-            f"{self.get_t2i_cdn_base_url()}/gh/"
+            f"{self.get_t2i_cdn_base_url(environment)}/gh/"
             f"{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}@{GITHUB_REPO_BRANCH}/assets"
         )
 
-    def get_t2i_atri_font_mirror(self) -> str:
-        """获取 ATRI 主题字体与静态资源镜像地址"""
+    def get_t2i_atri_font_mirror(self, environment: str | None = None) -> str:
+        """获取 ATRI 镜像，自定义地址优先于环境默认值。
+
+        Args:
+            environment: 本次资源环境；省略时采用第一优先级方案。
+
+        Returns:
+            显式指定的 ATRI 镜像或对应环境中的素材目录。
+        """
         mirror = self._get_group("t2i_rendering").get("t2i_atri_font_mirror", "")
         if isinstance(mirror, str):
             mirror = mirror.strip().rstrip("/")
             if mirror and mirror != DEFAULT_ATRI_ASSETS_CDN_URL:
                 return mirror
-        return f"{self.get_template_assets_base_url()}/ATRI"
+        return f"{self.get_template_assets_base_url(environment)}/ATRI"
 
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""

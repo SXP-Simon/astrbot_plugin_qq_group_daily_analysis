@@ -40,7 +40,7 @@ from .profile_mappings import (
     load_profile_asset_manifest,
     resolve_profile_info,
 )
-from .render_data_preparer import RenderDataPreparer
+from .render_data_preparer import RenderDataPreparer, RenderTemplateContext
 from .render_diagnostics import (
     build_safe_report_path,
     diagnose_non_image_payload,
@@ -57,6 +57,8 @@ _TRACE_META_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _HTML_HEAD_PATTERN = re.compile(r"<head(?:\s[^>]*)?>", re.IGNORECASE)
+# 与单个方案允许的最长超时一致，防止多轮等待无限叠加占用渲染队列。
+_RENDER_TOTAL_TIMEOUT_SECONDS = 300
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -230,6 +232,36 @@ class ReportGenerator(IReportGenerator):
         """解析 T2I 渲染视口选项。"""
         return resolve_t2i_viewport_options(html_content, image_options)
 
+    def _render_prepared_html(
+        self,
+        template_file: str,
+        template_theme: str | None,
+        payload: RenderTemplateContext,
+    ) -> str:
+        """渲染主模板并复用头像，供图片首轮、资源回退和 HTML 导出共用。
+
+        Args:
+            template_file: 图片或网页主模板文件名。
+            template_theme: 本次报告的主题。
+            payload: 当前资源环境下已准备的数据。
+
+        Returns:
+            完成头像去重处理的 HTML。
+
+        Raises:
+            无。模板渲染失败时由模板引擎记录原因并返回空字符串。
+        """
+        if self.html_templates is None:
+            return ""
+        content = self.html_templates.render_template(
+            template_file, template_theme=template_theme, **payload
+        )
+        return self._reuse_avatars_in_final_html(
+            content,
+            payload.get("avatar_reuse_registry"),
+            payload.get("avatar_reuse_aliases"),
+        )
+
     @staticmethod
     def _diagnose_non_image_payload(data: bytes) -> str:
         """诊断非图片响应并提取排查信息。"""
@@ -279,6 +311,9 @@ class ReportGenerator(IReportGenerator):
                 )
 
         try:
+            # 在首次异步准备前固定本次方案，避免保存配置后将旧 HTML 误认为新环境。
+            render_strategies = self.config_manager.get_t2i_rendering_strategies()
+            active_environment = self.config_manager.get_t2i_font_source()
             render_payload = await self._prepare_render_data(
                 analysis_result,
                 template_theme=template_theme,
@@ -288,18 +323,12 @@ class ReportGenerator(IReportGenerator):
                 avatar_cache_namespace=avatar_cache_namespace,
                 hide_user_names=hide_user_names,
                 allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
+                environment=active_environment,
             )
 
             tpl_render_start_ts = time.perf_counter()
-            html_content = self.html_templates.render_template(
-                "image_template.html", template_theme=template_theme, **render_payload
-            )
-            avatar_registry = render_payload.get("avatar_reuse_registry")
-            avatar_aliases = render_payload.get("avatar_reuse_aliases")
-            html_content = self._reuse_avatars_in_final_html(
-                html_content,
-                avatar_registry if isinstance(avatar_registry, dict) else None,
-                avatar_aliases if isinstance(avatar_aliases, dict) else None,
+            html_content = self._render_prepared_html(
+                "image_template.html", template_theme, render_payload
             )
             template_render_ms = round(
                 (time.perf_counter() - tpl_render_start_ts) * 1000, 2
@@ -323,9 +352,9 @@ class ReportGenerator(IReportGenerator):
                 logger.error("图片报告渲染失败：未提供可调用的 html_render_func")
                 return None, html_content
 
-            render_strategies = self.config_manager.get_t2i_rendering_strategies()
-
             async with self._render_semaphore:
+                render_loop = asyncio.get_running_loop()
+                render_deadline = render_loop.time() + _RENDER_TOTAL_TIMEOUT_SECONDS
                 logger.debug(f"[T2I] 已进入渲染队列 (群: {group_id})")
                 renderer_info = describe_html_renderer(html_render_func)
                 logger.debug(
@@ -343,12 +372,41 @@ class ReportGenerator(IReportGenerator):
                             break
                 last_error = "没有可用的渲染策略。"
 
-                for attempt, image_options in enumerate(render_strategies, 1):
+                for attempt, strategy in enumerate(render_strategies, 1):
+                    if render_loop.time() >= render_deadline:
+                        break
+                    image_options = dict(strategy)
+                    environment = image_options.pop(
+                        "resource_environment", active_environment
+                    )
                     viewport_description = "default"
                     render_error = "渲染服务返回了空内容。"
                     response_info: dict[str, object] = {"return_type": "未返回"}
                     attempt_start_ts = time.perf_counter()
                     try:
+                        if (
+                            isinstance(environment, str)
+                            and environment != active_environment
+                        ):
+                            async with asyncio.timeout_at(render_deadline):
+                                next_payload = await self._prepare_render_data(
+                                    analysis_result,
+                                    template_theme=template_theme,
+                                    chart_template="activity_chart.html",
+                                    avatar_url_getter=avatar_url_getter,
+                                    nickname_getter=nickname_getter,
+                                    avatar_cache_namespace=avatar_cache_namespace,
+                                    hide_user_names=hide_user_names,
+                                    allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
+                                    environment=environment,
+                                )
+                            next_html = self._render_prepared_html(
+                                "image_template.html", template_theme, next_payload
+                            )
+                            if not next_html:
+                                raise ValueError("切换资源环境后模板返回空内容")
+                            render_payload, html_content = next_payload, next_html
+                            active_environment = environment
                         image_options, viewport_description = (
                             self._resolve_t2i_viewport_options(
                                 html_content, image_options
@@ -360,7 +418,7 @@ class ReportGenerator(IReportGenerator):
 
                         logger.debug(
                             "正在尝试第 "
-                            f"{attempt} 轮渲染策略: type={image_options['type']}, "
+                            f"{attempt} 轮渲染策略: environment={environment}, type={image_options['type']}, "
                             f"full_page={image_options['full_page']}, "
                             f"viewport={viewport_description}, "
                             f"scale={image_options.get('device_scale_factor_level')}, "
@@ -369,15 +427,16 @@ class ReportGenerator(IReportGenerator):
 
                         t2i_start_ts = time.perf_counter()
                         # 宿主或第三方包装器的运行时返回值仍需在接口边界检查。
-                        image_data = cast(
-                            "object",
-                            await html_render_func(
-                                html_content,
-                                {},
-                                False,
-                                image_options,
-                            ),
-                        )
+                        async with asyncio.timeout_at(render_deadline):
+                            image_data = cast(
+                                "object",
+                                await html_render_func(
+                                    html_content,
+                                    {},
+                                    False,
+                                    image_options,
+                                ),
+                            )
                         t2i_render_ms = round(
                             (time.perf_counter() - t2i_start_ts) * 1000, 2
                         )
@@ -491,6 +550,9 @@ class ReportGenerator(IReportGenerator):
                                                     or "scrapbook",
                                                     "viewport": viewport_description,
                                                     "render_attempt": attempt,
+                                                    "resource_environment": str(
+                                                        environment
+                                                    ),
                                                     "image_format": str(
                                                         image_options.get(
                                                             "type", "jpeg"
@@ -506,19 +568,10 @@ class ReportGenerator(IReportGenerator):
                                                     "quotes_rendered": len(
                                                         golden_quotes_raw
                                                     ),
-                                                    "avatars_processed": (
-                                                        len(
-                                                            render_payload[
-                                                                "avatar_reuse_registry"
-                                                            ]  # type: ignore[arg-type]
+                                                    "avatars_processed": len(
+                                                        render_payload.get(
+                                                            "avatar_reuse_registry", {}
                                                         )
-                                                        if isinstance(
-                                                            render_payload.get(
-                                                                "avatar_reuse_registry"
-                                                            ),
-                                                            (dict, list, set),
-                                                        )
-                                                        else 0
                                                     ),
                                                     "html_chars": len(html_content)
                                                     if html_content
@@ -543,6 +596,9 @@ class ReportGenerator(IReportGenerator):
                                                         "viewport": viewport_description,
                                                         "duration_ms": t2i_render_ms,
                                                         "status": "success",
+                                                        "resource_environment": str(
+                                                            environment
+                                                        ),
                                                     }
                                                 )
                                             break
@@ -572,7 +628,15 @@ class ReportGenerator(IReportGenerator):
                                 else "未提供具体原因"
                             )
                         render_error = f"{type(e).__name__}：{detail}"
-                        if isinstance(e, TimeoutError):
+                        if (
+                            isinstance(e, TimeoutError)
+                            and render_loop.time() >= render_deadline
+                        ):
+                            render_error = (
+                                f"本次图片渲染已达到总等待上限（{_RENDER_TOTAL_TIMEOUT_SECONDS:g} 秒），"
+                                "已停止后续方案。"
+                            )
+                        elif isinstance(e, TimeoutError):
                             render_error += (
                                 "\n排查建议：请先确认 AstrBot 能否连接 T2I 服务，并查看"
                                 "同一时间的服务日志。如果日志显示页面资源加载超时，"
@@ -609,6 +673,7 @@ class ReportGenerator(IReportGenerator):
                                             "viewport": viewport_description,
                                             "duration_ms": duration_ms,
                                             "status": "failed",
+                                            "resource_environment": str(environment),
                                             "error": render_error,
                                             **response_info,
                                         }
@@ -704,31 +769,17 @@ class ReportGenerator(IReportGenerator):
             )
             logger.debug(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
-            avatar_registry = render_data.get("avatar_reuse_registry")
-            avatar_aliases = render_data.get("avatar_reuse_aliases")
-            reg_dict = avatar_registry if isinstance(avatar_registry, dict) else None
-            alias_dict = avatar_aliases if isinstance(avatar_aliases, dict) else None
             try:
-                html_content = self.html_templates.render_template(
-                    "html_template.html", template_theme=template_theme, **render_data
-                )
-                html_content = self._reuse_avatars_in_final_html(
-                    html_content,
-                    reg_dict,
-                    alias_dict,
+                html_content = self._render_prepared_html(
+                    "html_template.html", template_theme, render_data
                 )
                 logger.debug("使用 html_template.html 渲染成功")
             except Exception as e:
                 logger.warning(
                     f"html_template.html 不存在或渲染失败，回退到 image_template.html: {e}"
                 )
-                html_content = self.html_templates.render_template(
-                    "image_template.html", template_theme=template_theme, **render_data
-                )
-                html_content = self._reuse_avatars_in_final_html(
-                    html_content,
-                    reg_dict,
-                    alias_dict,
+                html_content = self._render_prepared_html(
+                    "image_template.html", template_theme, render_data
                 )
                 logger.debug("使用 image_template.html 渲染成功")
 
@@ -763,14 +814,7 @@ class ReportGenerator(IReportGenerator):
                                 "titles_rendered": len(titles_rendered),
                                 "quotes_rendered": len(golden_quotes),
                                 "avatars_processed": (
-                                    len(
-                                        render_data["avatar_reuse_registry"]  # type: ignore[arg-type]
-                                    )
-                                    if isinstance(
-                                        render_data.get("avatar_reuse_registry"),
-                                        (dict, list, set),
-                                    )
-                                    else 0
+                                    len(render_data.get("avatar_reuse_registry", {}))
                                 ),
                                 "hide_user_names": bool(hide_user_names),
                             }
@@ -1014,8 +1058,27 @@ class ReportGenerator(IReportGenerator):
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
-    ) -> dict[str, object]:
-        """组装模板引擎所需的完整数据字典。"""
+        environment: str | None = None,
+    ) -> RenderTemplateContext:
+        """组装模板引擎所需的强类型上下文。
+
+        Args:
+            analysis_result: 本次分析结果。
+            template_theme: 报告主题，省略时使用配置中的主题。
+            chart_template: 活跃度图表模板文件名。
+            avatar_url_getter: 头像地址异步获取回调。
+            nickname_getter: 昵称异步获取回调。
+            avatar_cache_namespace: 隔离平台头像缓存的命名空间。
+            hide_user_names: 是否隐藏用户名。
+            allow_alphanumeric_user_ids: 是否允许字母数字用户 ID。
+            environment: 本轮固定的资源环境，省略时采用第一优先级方案。
+
+        Returns:
+            主模板使用的资源、统计数据与组件 HTML。
+
+        Raises:
+            KeyError: 分析结果缺少统计信息或其他必需字段。
+        """
         return await self._preparer_service.prepare_render_data(
             analysis_result=analysis_result,
             template_theme=template_theme,
@@ -1025,6 +1088,7 @@ class ReportGenerator(IReportGenerator):
             avatar_cache_namespace=avatar_cache_namespace,
             hide_user_names=hide_user_names,
             allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
+            environment=environment,
         )
 
     async def _render_avatar_only_ids(

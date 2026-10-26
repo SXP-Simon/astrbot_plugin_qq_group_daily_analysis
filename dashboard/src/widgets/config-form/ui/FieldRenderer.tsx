@@ -169,7 +169,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
   // 渲染不同的表单控件
   const renderControl = () => {
-    if (fieldKey === "t2i_cdn_base_url") {
+    if (["t2i_cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"].includes(fieldKey)) {
       const currentValue = value === undefined
         ? typeof defaultValue === "string" ? defaultValue : ""
         : String(value);
@@ -187,7 +187,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
               allowClear
             />
           </AutoComplete>
-          <TemplateCdnProbe baseUrl={currentValue} />
+          {currentValue.trim() || fieldKey === "t2i_cdn_base_url"
+            ? <TemplateCdnProbe baseUrl={currentValue} />
+            : <Typography.Text type="secondary">先选择或填写地址，即可检测该环境的 CDN；留空沿用旧地址或默认地址。</Typography.Text>}
         </div>
       );
     }

@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from ....shared.constants import PLUGIN_NAME
 from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
+from ...config.rendering_config import parse_rendering_strategies
 from ...reporting.cdn_probe import probe_template_cdn
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
@@ -86,6 +87,18 @@ class ConfigRoutes:
             config_dict = {}
             if cfg_mgr:
                 config_dict = {str(k): v for k, v in cfg_mgr.config.items()}
+                rendering = config_dict.get("t2i_rendering")
+                if isinstance(rendering, dict) and not rendering.get(
+                    "t2i_rendering_strategies"
+                ):
+                    strategies = cfg_mgr.get_t2i_rendering_strategy_config()
+                    config_dict["t2i_rendering"] = {
+                        **rendering,
+                        "t2i_rendering_strategies": [
+                            {"__template_key": "strategy", **item}
+                            for item in strategies
+                        ],
+                    }
 
             plugin_root = Path(__file__).resolve().parents[4]
             schema_file = plugin_root / "_conf_schema.json"
@@ -173,14 +186,27 @@ class ConfigRoutes:
                     return error_response(
                         "t2i_rendering 必须是配置对象", status_code=400
                     )
-                if "t2i_cdn_base_url" in rendering_config:
-                    cdn_value = rendering_config["t2i_cdn_base_url"]
+                if "t2i_rendering_strategies" in rendering_config:
+                    try:
+                        parse_rendering_strategies(
+                            rendering_config["t2i_rendering_strategies"]
+                        )
+                    except ValueError as exc:
+                        return error_response(str(exc), status_code=400)
+                for cdn_key in (
+                    "t2i_cdn_base_url",
+                    "t2i_mainland_cdn_base_url",
+                    "t2i_overseas_cdn_base_url",
+                ):
+                    if cdn_key not in rendering_config:
+                        continue
+                    cdn_value = rendering_config[cdn_key]
                     if not isinstance(cdn_value, str) or len(cdn_value) > 2048:
                         return error_response(
                             "CDN 地址必须是长度不超过 2048 的字符串", status_code=400
                         )
                     try:
-                        rendering_config["t2i_cdn_base_url"] = (
+                        rendering_config[cdn_key] = (
                             normalize_cdn_base_url(cdn_value)
                             if cdn_value.strip()
                             else ""

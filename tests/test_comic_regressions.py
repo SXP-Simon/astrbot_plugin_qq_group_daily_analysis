@@ -728,9 +728,11 @@ def test_upgrade_config_backups_keep_only_twenty_newest(tmp_path: Path):
     assert not (backup_dir / "plugin_config_v1.0.0_20260812_000000.json").exists()
 
 
-def test_t2i_rendering_strategies_explicitly_set_desktop_viewport(tmp_path: Path):
+def test_t2i_rendering_strategies_explicitly_set_desktop_viewport():
     """图片报告应显式传入视口，避免依赖 T2I 服务的默认尺寸。"""
-    config_manager_class = load_config_manager_class(tmp_path)
+    from src.infrastructure.config.config_manager import ConfigManager
+
+    config_manager_class = ConfigManager
     config_manager = object.__new__(config_manager_class)
     config_manager.config = {
         "t2i_rendering": {
@@ -741,7 +743,7 @@ def test_t2i_rendering_strategies_explicitly_set_desktop_viewport(tmp_path: Path
 
     strategies = config_manager.get_t2i_rendering_strategies()
 
-    assert len(strategies) == 2
+    assert len(strategies) == 1
     assert all(strategy["viewport_width"] == 1360 for strategy in strategies)
     assert all(strategy["viewport_height"] == 900 for strategy in strategies)
 

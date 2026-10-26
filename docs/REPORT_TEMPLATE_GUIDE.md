@@ -63,7 +63,7 @@
 | `current_datetime` | str | 精确时间戳 |
 | `total_tokens` / `prompt_tokens` / `completion_tokens` | int | Token 消耗统计（未消耗为 0） |
 | `hide_user_names` | bool | 是否隐藏真实昵称（隐私模式） |
-| `t2i_font_source` / `t2i_google_fonts_mirror` / `t2i_gstatic_mirror` / `t2i_atri_font_mirror` | str | 字体来源与镜像配置，模板内引字体时应使用 |
+| `t2i_font_source` / `t2i_google_fonts_mirror` / `t2i_gstatic_mirror` / `t2i_atri_font_mirror` | str | 当前方案的资源环境与字体镜像，模板内引字体时应使用 |
 
 主骨架通过 `{% include %}` 或类 CSS 方式组合 5 个 `*_html` 片段为整体画面。
 参考内置 `scrapbook/` 实现（结构最经典）。
@@ -116,14 +116,28 @@
 
 ### 5.2 模板内部引用的图片（重要：渲染链路约束）
 
-在「图片渲染策略 → 模板资源 CDN 基础地址」可以更换模板图片、字体和预览图的下载站点。推荐填写 `https://fastly.jsdelivr.net/` 这样的网站地址，需支持 jsDelivr 的 `/gh/` 和 `/npm/` 路径。只填网站地址，不要带具体文件路径；多余空格和末尾 `/` 会在保存时去掉，留空则使用原来的 `https://cdn.jsdmirror.com`。
+在「图片渲染策略」分别配置「[内地] 模板资源 CDN」和「[海外] 模板资源 CDN」，每个环境使用各自的 Google Fonts、Gstatic 地址。推荐填写 `https://fastly.jsdelivr.net/` 这样的网站根地址，需支持 jsDelivr 的 `/gh/` 和 `/npm/` 路径。首尾空格和末尾 `/` 会在保存时去掉；环境地址留空时沿用旧配置中的 CDN，没有旧地址则使用 `https://cdn.jsdmirror.com`。
 
-填好后，点旁边的「检测可用性」即可测试，不用先保存。检测会向下表中的实际资源地址发送 HEAD 请求，只接收响应头，不下载文件内容。可以展开「查看检测详情」，查看地址、响应耗时和 HTTP 状态。
+「图片渲染方案」使用 AstrBot 的 `template_list` 配置，可添加多轮，设置名称、优先级、资源环境、格式、质量、分辨率和超时。数值越小越先尝试，相同优先级按列表顺序执行；每个方案调用一次宿主渲染接口，成功即停止。进入渲染队列后，资源环境切换与各轮渲染共用 5 分钟的总等待上限；超时会取消当前等待并停止后续方案，避免一直占用渲染队列。切换环境时重新准备主模板和组件 HTML，不修改全局配置，也不重新调用大模型做分析。用户自定义图片与明确指定的 ATRI 镜像不会被改写。
+
+例如先配置优先级 10 的 `Mainland` PNG 方案，再配置优先级 20 的 `Overseas` JPEG 方案。第一项返回错误、空内容或非图片数据时才继续第二项。正常返回的图片中缺少个别外链素材，目前无法据此触发自动切换。独立 HTML 导出不调用 T2I，使用第一优先级方案的资源环境；图片接口返回的 HTML 则与本次实际生成并用于截图的内容一致。模板预览也采用第一优先级环境。
+
+配置入口对应关系：
+
+| 原配置 | 新配置 |
+| --- | --- |
+| `t2i_r1_*`、`t2i_r2_*` | `t2i_rendering_strategies` 方案列表中的格式、质量、分辨率和超时 |
+| 全局 `t2i_font_source` | 每个方案的 `environment` |
+| 全局 `t2i_cdn_base_url` | `t2i_mainland_cdn_base_url` / `t2i_overseas_cdn_base_url` |
+
+原固定两轮字段和全局资源环境已移除，不再读取。初始配置提供一项默认方案：名称“默认方案”、优先级 10、`Overseas`、PNG、JPEG 质量 80（PNG 时忽略）、`high` 分辨率、20000 毫秒超时。方案缺失或列表为空时仍使用这一默认方案，不代表关闭渲染；WebUI 会显示可编辑的默认方案，读取时不会自动保存。在 WebUI 清空列表后保存，会保存并重新显示默认方案。环境 CDN 留空时仍兼容旧的全局 CDN 地址。
+
+选择或填好环境地址后，点旁边的「检测可用性」即可测试，不用先保存。检测会向下表中的实际资源地址发送 HEAD 请求，只接收响应头，不下载文件内容。可以展开「查看检测详情」，查看地址、响应耗时和 HTTP 状态。
 
 | 检查内容 | 实际文件（GitHub 文件均位于本仓库 `assets/` 下） | 用途 |
 | --- | --- | --- |
 | 小图片 | `maria/rose_red.png` | Maria 模板蔷薇装饰 |
-| 较大的图片 | `HatsuneMiku/retouch_2026032810150449.png` | 初音未来模板装饰，约 1 MB |
+| 较大的图片 | `HatsuneMiku/retouch_2026032810150449.png` | 初音未来模板装饰 |
 | 多层目录 | `deepseek_maid/layers/eye-0.png` | 鲸鱼女仆模板图层 |
 | 背景图片 | `ATRI/file/1775130588385_1774881257527_bg1.webp` | ATRI 模板背景 |
 | 中文文件名图片 | `ATRI/file/1775130581843_1774881262835_疑惑.webp` | ATRI 模板表情 |

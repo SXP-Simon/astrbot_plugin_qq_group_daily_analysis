@@ -219,50 +219,92 @@
     "t2i_rendering": {
         "description": "图片渲染策略",
         "type": "object",
-        "hint": "配置 HTML 转图片的渲染参数。支持两轮尝试：第一轮优先保证质量，第二轮作为回退方案，建议使用更低的分辨率和质量以提高成功率。",
+        "hint": "添加渲染方案并设置优先级，数值越小越先尝试；同优先级按列表顺序执行，成功后停止。每个方案选择内地或海外资源环境，对应下方各自的 CDN 和字体设置。独立 HTML 报告与模板预览使用第一优先级方案。初始提供一项海外方案；未配置方案时使用默认海外方案，不会关闭图片渲染。",
         "items": {
-            "t2i_r1_type": {
-                "type": "string",
-                "description": "第一轮：图片格式",
-                "options": [
-                    "jpeg",
-                    "png"
+            "t2i_rendering_strategies": {
+                "type": "template_list",
+                "description": "图片渲染方案",
+                "default": [
+                    {
+                        "__template_key": "strategy",
+                        "name": "默认方案",
+                        "priority": 10,
+                        "environment": "Overseas",
+                        "type": "png",
+                        "quality": 80,
+                        "device_scale": "high",
+                        "timeout": 20000
+                    }
                 ],
-                "default": "png",
-                "hint": "建议：PNG 格式无损但体积较大；JPEG 格式体积较小。"
-            },
-            "t2i_r1_quality": {
-                "type": "int",
-                "description": "第一轮：图片质量 (若为 JPEG)",
-                "default": 100,
-                "slider": {
-                    "min": 1,
-                    "max": 100,
-                    "step": 1
-                },
-                "hint": "仅对 JPEG 格式生效。建议 80-100。"
-            },
-            "t2i_r1_device_scale": {
-                "type": "string",
-                "description": "第一轮：分辨率等级",
-                "options": [
-                    "normal",
-                    "high",
-                    "ultra"
-                ],
-                "default": "ultra",
-                "hint": "影响图片清晰度。normal=1.0x, high=1.3x, ultra=1.8x。高质量日报建议 ultra。"
-            },
-            "t2i_r1_timeout": {
-                "type": "int",
-                "description": "第一轮：渲染超时 (ms)",
-                "default": 50000,
-                "slider": {
-                    "min": 30000,
-                    "max": 180000,
-                    "step": 5000
-                },
-                "hint": "单次渲染的最长等待时间。复杂页面建议调大。"
+                "hint": "点击添加方案，可以配置任意多轮。优先级越小越先执行；相同优先级按上下顺序执行。初始提供一项海外方案，可修改或继续添加。清空列表时使用默认海外方案。进入渲染队列后，所有方案共用 5 分钟的总等待上限，超时停止后续尝试。渲染失败才会尝试下一项；返回了图片但其中个别素材没加载出来时，插件无法据此自动切换。",
+                "templates": {
+                    "strategy": {
+                        "name": "渲染方案",
+                        "display_item": "name",
+                        "items": {
+                            "name": {
+                                "type": "string",
+                                "description": "方案名称",
+                                "default": "渲染方案"
+                            },
+                            "priority": {
+                                "type": "int",
+                                "description": "优先级（越小越先）",
+                                "default": 10,
+                                "min": 0,
+                                "max": 10000
+                            },
+                            "environment": {
+                                "type": "string",
+                                "description": "资源环境",
+                                "options": [
+                                    "Mainland",
+                                    "Overseas"
+                                ],
+                                "labels": [
+                                    "内地（Mainland）",
+                                    "海外（Overseas）"
+                                ],
+                                "default": "Overseas",
+                                "hint": "同时选择该环境的模板 /gh/、npm 和字体资源地址，不改变 T2I 服务地址。"
+                            },
+                            "type": {
+                                "type": "string",
+                                "description": "图片格式",
+                                "options": [
+                                    "png",
+                                    "jpeg"
+                                ],
+                                "default": "png"
+                            },
+                            "quality": {
+                                "type": "int",
+                                "description": "JPEG 质量",
+                                "default": 80,
+                                "min": 1,
+                                "max": 100,
+                                "hint": "PNG 不使用此参数。"
+                            },
+                            "device_scale": {
+                                "type": "string",
+                                "description": "分辨率等级",
+                                "options": [
+                                    "normal",
+                                    "high",
+                                    "ultra"
+                                ],
+                                "default": "high"
+                            },
+                            "timeout": {
+                                "type": "int",
+                                "description": "渲染超时（毫秒）",
+                                "default": 20000,
+                                "min": 1000,
+                                "max": 300000
+                            }
+                        }
+                    }
+                }
             },
             "t2i_viewport_width": {
                 "type": "int",
@@ -286,64 +328,18 @@
                 },
                 "hint": "仅在模板未提供 T2I 可识别的数字 height 时传给 AstrBot T2I。图片报告始终使用 full_page，不会按此高度截断整张报告。"
             },
-            "t2i_r2_type": {
-                "type": "string",
-                "description": "第二轮 (回退)：图片格式",
-                "options": [
-                    "jpeg",
-                    "png"
-                ],
-                "default": "jpeg",
-                "hint": "回退策略建议使用 jpeg 以减少渲染压力。"
-            },
-            "t2i_r2_quality": {
-                "type": "int",
-                "description": "第二轮 (回退)：图片质量 (若为 JPEG)",
-                "default": 80,
-                "slider": {
-                    "min": 1,
-                    "max": 100,
-                    "step": 1
-                },
-                "hint": "仅对 JPEG 格式生效。可以设置较低值以确保生成成功。"
-            },
-            "t2i_r2_device_scale": {
-                "type": "string",
-                "description": "第二轮 (回退)：分辨率等级",
-                "options": [
-                    "normal",
-                    "high",
-                    "ultra"
-                ],
-                "default": "high",
-                "hint": "回退建议使用 high/normal 以降低复杂页面的内存消耗和超时概率。"
-            },
-            "t2i_r2_timeout": {
-                "type": "int",
-                "description": "第二轮 (回退)：渲染超时 (ms)",
-                "default": 100000,
-                "slider": {
-                    "min": 30000,
-                    "max": 180000,
-                    "step": 5000
-                },
-                "hint": "回退尝试通常针对复杂页面，建议设置更长的超时时间（如 100000ms+）。"
-            },
             "t2i_cdn_base_url": {
                 "type": "string",
                 "description": "模板资源 CDN 基础地址",
                 "default": "https://cdn.jsdmirror.com",
-                "hint": "用于模板素材、内置人格图片和预览图，也提供 npm 资源地址。插件 WebUI 支持选择预设，也可以自己填写。国内网络可先试 https://cdn.jsdmirror.com/ 或 https://cdn.jsdmirror.cn/，另提供 NOISE https://jsd.cdn.noisework.cn/ 和哔哩 CDN https://cdn.bili33.top/ 备选，请按实际网络检测选用。海外网络可先试 https://cdn.jsdelivr.net/，也可试 https://fastly.jsdelivr.net/ 或 https://gcore.jsdelivr.net/。这些是候选地址，实际速度和可达性以渲染服务所在网络为准，使用前请先测试。自填地址需兼容 /gh/ 和 /npm/，只填网站地址，不带文件路径；末尾的 / 和首尾空白会自动去掉，留空使用默认地址。点“检测可用性”可检查机器人所在服务器的访问情况，远程图片渲染服务还需生成报告确认。Google 字体仍使用单独的镜像设置。"
+                "hint": "用于模板素材、内置人格图片和预览图，也提供 npm 资源地址。插件 WebUI 支持选择预设，也可以自己填写。国内网络可先试 https://cdn.jsdmirror.com/ 或 https://cdn.jsdmirror.cn/，另提供 NOISE https://jsd.cdn.noisework.cn/ 和哔哩 CDN https://cdn.bili33.top/ 备选，请按实际网络检测选用。海外网络可先试 https://cdn.jsdelivr.net/，也可试 https://fastly.jsdelivr.net/ 或 https://gcore.jsdelivr.net/。这些是候选地址，实际速度和可达性以渲染服务所在网络为准，使用前请先测试。自填地址需兼容 /gh/ 和 /npm/，只填网站地址，不带文件路径；末尾的 / 和首尾空白会自动去掉，留空使用默认地址。点“检测可用性”可检查机器人所在服务器的访问情况，远程图片渲染服务还需生成报告确认。Google 字体仍使用单独的镜像设置。",
+                "invisible": true
             },
-            "t2i_font_source": {
+            "t2i_mainland_cdn_base_url": {
                 "type": "string",
-                "description": "t2i 渲染环境切换",
-                "options": [
-                    "Mainland",
-                    "Overseas"
-                ],
-                "default": "Overseas",
-                "hint": "字体和静态资源的访问环境，内地（Mainland）、海外（Overseas），切换环境会自动应用下方对应的镜像站地址、语言标识(简体中文/繁体中文)及字体优先级。（实测 Overseas 也可以正常渲染简体中文，没有特殊的情况都建议使用 Overseas，Mainland 配置下建议检查镜像站可用性，或者配置可靠的站点）"
+                "description": "[内地] 模板资源 CDN",
+                "default": "",
+                "hint": "用于该环境的模板素材、内置人格图片和 npm 资源。可选择预设或自填兼容 /gh/、/npm/ 的网站根地址，例如 https://fastly.jsdelivr.net/。使用前请测试渲染服务所在网络的速度和可达性；按钮检测的是机器人服务器。留空沿用旧的 CDN 地址，没有旧配置时使用默认地址。Google 字体使用本环境各自的字体配置；用户自定义图片不受影响。"
             },
             "t2i_mainland_google_fonts": {
                 "type": "string",
@@ -356,6 +352,12 @@
                 "description": "[内地] Gstatic 镜像",
                 "default": "https://gstatic.loli.net",
                 "hint": "内地环境下推荐使用 loli.net 或其他可访问镜像。"
+            },
+            "t2i_overseas_cdn_base_url": {
+                "type": "string",
+                "description": "[海外] 模板资源 CDN",
+                "default": "",
+                "hint": "用于该环境的模板素材、内置人格图片和 npm 资源。可选择预设或自填兼容 /gh/、/npm/ 的网站根地址，例如 https://fastly.jsdelivr.net/。使用前请测试渲染服务所在网络的速度和可达性；按钮检测的是机器人服务器。留空沿用旧的 CDN 地址，没有旧配置时使用默认地址。Google 字体使用本环境各自的字体配置；用户自定义图片不受影响。"
             },
             "t2i_overseas_google_fonts": {
                 "type": "string",
