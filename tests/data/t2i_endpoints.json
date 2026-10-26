@@ -1,0 +1,10 @@
+{
+  "valid": [
+    [" http://127.0.0.1:8999/ ", "http://127.0.0.1:8999/text2img"],
+    ["http://localhost:8999/text2img///", "http://localhost:8999/text2img"],
+    ["https://render.example/api/text2img/generate/", "https://render.example/api/text2img"],
+    ["http://[::1]:8999/text2img", "http://[::1]:8999/text2img"],
+    ["HTTPS://RENDER.example/proxy", "https://RENDER.example/proxy/text2img"]
+  ],
+  "invalid": ["", "wrong", "/text2img", "ftp://render.example", "http://user:pass@render.example", "http://render.example?token=secret", "http://render.example#", "http://render.example:0", "http://render.example:65536", "http://render.example/a b", "http://render.example/a\\b", "http://render.example/a\u200bb"]
+}

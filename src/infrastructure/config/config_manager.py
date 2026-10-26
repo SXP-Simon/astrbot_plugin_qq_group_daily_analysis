@@ -419,6 +419,9 @@ class ConfigManager:
                 "viewport_width": max(1, int(group.get("t2i_viewport_width", 1440))),
                 "viewport_height": max(1, int(group.get("t2i_viewport_height", 900))),
                 "resource_environment": item["environment"],
+                "render_service": item["render_service"],
+                "service_endpoint": item["service_endpoint"],
+                "service_token": item["service_token"],
             }
             for item in self.get_t2i_rendering_strategy_config()
         ]

@@ -1,6 +1,9 @@
 """可扩展图片渲染方案的配置契约与边界校验。"""
 
 from typing import Literal, TypedDict
+from urllib.parse import urlsplit
+
+from ...utils.cdn_utils import normalize_cdn_base_url
 
 
 class RenderingStrategyConfig(TypedDict):
@@ -9,6 +12,9 @@ class RenderingStrategyConfig(TypedDict):
     name: str
     priority: int
     environment: Literal["Mainland", "Overseas"]
+    render_service: Literal["astrbot", "custom"]
+    service_endpoint: str
+    service_token: str
     type: Literal["png", "jpeg"]
     quality: int
     device_scale: Literal["normal", "high", "ultra"]
@@ -19,11 +25,49 @@ DEFAULT_RENDERING_STRATEGY: RenderingStrategyConfig = {
     "name": "默认方案",
     "priority": 10,
     "environment": "Overseas",
+    "render_service": "astrbot",
+    "service_endpoint": "",
+    "service_token": "",
     "type": "png",
     "quality": 80,
     "device_scale": "high",
     "timeout": 20000,
 }
+
+
+def normalize_t2i_endpoint(value: str) -> str:
+    """将兼容服务的根地址或生成接口统一为 /text2img 基础地址。
+
+    Args:
+        value: 用户填写的 HTTP(S) 服务地址。
+
+    Returns:
+        去除首尾空白、末尾斜杠和 /generate 的服务基础地址。
+
+    Raises:
+        ValueError: 地址为空、格式无效，或包含认证信息、查询参数和片段。
+    """
+    error = "请填写完整的 T2I 服务地址，例如 http://127.0.0.1:8999/text2img，不要带账号密码、查询参数或 # 片段"
+    if len(value) > 2048:
+        raise ValueError(error)
+    value = value.strip().rstrip("/")
+    if (
+        not value
+        or any(char.isspace() or not char.isprintable() for char in value)
+        or any(char in value for char in "?#\\")
+    ):
+        raise ValueError(error)
+    try:
+        parsed = urlsplit(value)
+        origin = normalize_cdn_base_url(f"{parsed.scheme}://{parsed.netloc}")
+    except ValueError as exc:
+        raise ValueError(error) from exc
+    path = parsed.path.rstrip("/")
+    if path.endswith("/text2img/generate"):
+        path = path.removesuffix("/generate")
+    if not path.endswith("/text2img"):
+        path += "/text2img"
+    return origin + path
 
 
 def parse_rendering_strategies(value: object) -> list[RenderingStrategyConfig]:
@@ -46,12 +90,31 @@ def parse_rendering_strategies(value: object) -> list[RenderingStrategyConfig]:
             raise ValueError(f"第 {index} 个渲染方案必须是配置对象")
         name = item.get("name", "渲染方案")
         environment = item.get("environment", "Overseas")
+        render_service = item.get("render_service", "astrbot")
+        endpoint = item.get("service_endpoint", "")
+        token = item.get("service_token", "")
         image_type = item.get("type", "png")
         scale = item.get("device_scale", "high")
         if not isinstance(name, str):
             raise ValueError(f"第 {index} 个渲染方案的名称必须是文字")
         if environment not in ("Mainland", "Overseas"):
             raise ValueError(f"第 {index} 个渲染方案请选择内地或海外环境")
+        if render_service not in ("astrbot", "custom"):
+            raise ValueError(f"第 {index} 个渲染方案请选择跟随 AstrBot 或自定义服务")
+        if not isinstance(endpoint, str):
+            raise ValueError(f"第 {index} 个渲染方案的服务地址必须是文字")
+        if (
+            not isinstance(token, str)
+            or len(token) > 4096
+            or not token.isascii()
+            or any(not char.isprintable() for char in token)
+        ):
+            raise ValueError(
+                f"第 {index} 个渲染方案的服务 Token 请使用英文、数字或常用符号，不能换行，长度不能超过 4096 个字符"
+            )
+        endpoint = endpoint.strip()
+        if render_service == "custom":
+            endpoint = normalize_t2i_endpoint(endpoint)
         if image_type not in ("png", "jpeg"):
             raise ValueError(f"第 {index} 个渲染方案请选择 PNG 或 JPEG 格式")
         if scale not in ("normal", "high", "ultra"):
@@ -73,6 +136,9 @@ def parse_rendering_strategies(value: object) -> list[RenderingStrategyConfig]:
                 "name": name,
                 "priority": integers["priority"],
                 "environment": environment,
+                "render_service": render_service,
+                "service_endpoint": endpoint,
+                "service_token": token.strip(),
                 "type": image_type,
                 "quality": integers["quality"],
                 "device_scale": scale,

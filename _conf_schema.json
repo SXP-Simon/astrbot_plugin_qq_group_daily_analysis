@@ -233,7 +233,10 @@
                         "type": "png",
                         "quality": 80,
                         "device_scale": "high",
-                        "timeout": 20000
+                        "timeout": 20000,
+                        "render_service": "astrbot",
+                        "service_endpoint": "",
+                        "service_token": ""
                     }
                 ],
                 "hint": "点击添加方案，可以配置任意多轮。优先级越小越先执行；相同优先级按上下顺序执行。初始提供一项海外方案，可修改或继续添加。清空列表时使用默认海外方案。进入渲染队列后，所有方案共用 5 分钟的总等待上限，超时停止后续尝试。渲染失败才会尝试下一项；返回了图片但其中个别素材没加载出来时，插件无法据此自动切换。",
@@ -253,6 +256,38 @@
                                 "default": 10,
                                 "min": 0,
                                 "max": 10000
+                            },
+                            "render_service": {
+                                "type": "string",
+                                "description": "渲染服务",
+                                "options": [
+                                    "astrbot",
+                                    "custom"
+                                ],
+                                "labels": [
+                                    "跟随 AstrBot",
+                                    "自定义 T2I 服务"
+                                ],
+                                "default": "astrbot",
+                                "hint": "跟随 AstrBot 时使用本群绑定配置中的服务地址；自定义服务只影响本轮报告。"
+                            },
+                            "service_endpoint": {
+                                "type": "string",
+                                "description": "自定义 T2I 服务地址",
+                                "default": "",
+                                "condition": {
+                                    "render_service": "custom"
+                                },
+                                "hint": "例如 http://127.0.0.1:8999/text2img。也可填网站根地址或完整的 /text2img/generate 地址，保存时会自动整理。直接连接该服务，不使用环境代理；支持官方 T2I 和兼容的插件服务。"
+                            },
+                            "service_token": {
+                                "type": "string",
+                                "description": "服务 Token（可选）",
+                                "default": "",
+                                "condition": {
+                                    "render_service": "custom"
+                                },
+                                "hint": "只有服务启用鉴权时才填写，会通过 Authorization: Bearer 发送。不要把 Token 放进服务地址。"
                             },
                             "environment": {
                                 "type": "string",
