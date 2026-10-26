@@ -1,0 +1,88 @@
+[
+  {
+    "plan": {
+      "__template_key": "custom"
+    },
+    "expected": {
+      "__template_key": "custom",
+      "service_endpoint": "http://127.0.0.1:8999/text2img",
+      "environment": "Overseas"
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "environment": "Mainland",
+      "service_endpoint": " https://render.example/proxy/text2img/generate/ "
+    },
+    "expected": {
+      "__template_key": "custom",
+      "service_endpoint": "https://render.example/proxy/text2img",
+      "environment": "Mainland"
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "mainland",
+      "render_service": "custom",
+      "service_endpoint": "http://render:8999",
+      "service_token": " token "
+    },
+    "expected": {
+      "__template_key": "custom",
+      "service_endpoint": "http://render:8999/text2img",
+      "environment": "Mainland",
+      "service_token": "token"
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "strategy",
+      "render_service": "astrbot",
+      "service_endpoint": "unused draft"
+    },
+    "expected": {
+      "__template_key": "strategy",
+      "service_endpoint": "unused draft",
+      "environment": "Overseas"
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "mainland"
+    },
+    "expected": {
+      "__template_key": "mainland",
+      "service_endpoint": "",
+      "environment": "Mainland"
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "service_endpoint": ""
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "service_endpoint": "   "
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "service_endpoint": "https://user:password@render.example"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "service_endpoint": "http://render:65536"
+    },
+    "expected": null
+  }
+]

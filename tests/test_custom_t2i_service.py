@@ -27,6 +27,21 @@ CASES = json.loads(
 )
 
 
+@pytest.mark.parametrize(
+    "case",
+    json.loads((Path(__file__).parent / "data/rendering_services.json").read_text(encoding="utf-8")),
+)
+def test_shared_service_presets_and_legacy_contract(case):
+    original = deepcopy(case["plan"])
+    if case["expected"] is None:
+        with pytest.raises(ValueError):
+            parse_rendering_strategies([case["plan"]])
+    else:
+        plan = parse_rendering_strategies([case["plan"]])[0]
+        assert {key: plan[key] for key in case["expected"]} == case["expected"]
+    assert case["plan"] == original
+
+
 @pytest.mark.parametrize("value,expected", CASES["valid"])
 def test_endpoint_normalization(value, expected):
     assert normalize_t2i_endpoint(value) == expected
@@ -233,11 +248,12 @@ async def test_host_and_custom_service_fallback_preserves_resources_and_records_
 
 
 @pytest.mark.asyncio
-async def test_custom_service_does_not_require_host_callback(rendering, service):
+@pytest.mark.parametrize("marker", [{"render_service": "custom"}, {"__template_key": "custom"}])
+async def test_custom_service_does_not_require_host_callback(rendering, service, marker):
     manager, generator, _png = rendering
     endpoint, _state, messages, _started = service
     manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [
-        {"render_service": "custom", "service_endpoint": endpoint}
+        {**marker, "service_endpoint": endpoint}
     ]
     assert (
         await generator.generate_image_report(create_analysis_result(), "123", None)

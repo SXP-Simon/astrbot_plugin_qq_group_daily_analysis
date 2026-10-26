@@ -35,12 +35,13 @@ def test_shared_resource_address_contract(case):
     assert case["plan"] == before
 
 
-def test_schema_has_two_editable_presets_and_only_one_initial_round():
+def test_schema_has_three_presets_and_only_one_initial_host_round():
     fields = json.loads(
         (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
     )["t2i_rendering"]["items"]
     strategies = fields["t2i_rendering_strategies"]
     assert len(strategies["default"]) == 1
+    assert set(strategies["templates"]) == {"strategy", "mainland", "custom"}
     for key, environment in (("strategy", "Overseas"), ("mainland", "Mainland")):
         items = strategies["templates"][key]["items"]
         defaults = {name: field["default"] for name, field in items.items()}
@@ -49,7 +50,13 @@ def test_schema_has_two_editable_presets_and_only_one_initial_round():
         assert {
             name: plan[name] for name in DEFAULT_RENDERING_RESOURCES[environment]
         } == DEFAULT_RENDERING_RESOURCES[environment]
-        assert items["render_service"]["options"] == ["astrbot", "custom"]
+        for name in ("render_service", "service_endpoint", "service_token"):
+            assert name not in items
+    custom = strategies["templates"]["custom"]["items"]
+    assert "render_service" not in custom
+    assert custom["service_endpoint"]["default"] == "http://127.0.0.1:8999/text2img"
+    assert "condition" not in custom["service_endpoint"]
+    assert not custom["environment"].get("invisible")
     assert all(
         field.get("invisible")
         for name, field in fields.items()
@@ -98,3 +105,29 @@ def test_startup_migration_does_not_partially_modify_invalid_plans():
     assert not ConfigMigrator(manager).migrate_legacy_configs()
     assert manager.config == before
     manager.save_config.assert_not_called()
+
+
+@pytest.mark.parametrize("template", ["strategy", "mainland"])
+def test_old_custom_round_moves_to_custom_template_without_losing_configuration(template):
+    manager = object.__new__(ConfigManager)
+    original = {
+        "__template_key": template,
+        "environment": "Mainland",
+        "render_service": "custom",
+        "service_endpoint": "https://render.example/proxy/text2img",
+        "service_token": "secret",
+        "cdn_base_url": "https://cdn.example",
+        "google_fonts": "https://fonts.example/css",
+        "gstatic": "https://static.example/fonts",
+        "priority": 30,
+        "future": [1],
+    }
+    manager.config = {"t2i_rendering": {"t2i_rendering_strategies": [deepcopy(original)]}}
+    manager.save_config = Mock()
+    migrator = ConfigMigrator(manager)
+    assert migrator.migrate_legacy_configs()
+    assert manager.config["t2i_rendering"]["t2i_rendering_strategies"] == [
+        {**{key: value for key, value in original.items() if key != "render_service"}, "__template_key": "custom"}
+    ]
+    assert not migrator.migrate_legacy_configs()
+    manager.save_config.assert_called_once()

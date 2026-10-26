@@ -8,6 +8,7 @@ from ...shared.constants import DEFAULT_CDN_HOST
 from ...utils.cdn_utils import normalize_cdn_base_url
 
 CUSTOM_RESOURCE_OPTION = "__custom__"
+DEFAULT_CUSTOM_T2I_ENDPOINT = "http://127.0.0.1:8999/text2img"
 
 
 class ScreenshotOptions(TypedDict, total=False):
@@ -54,7 +55,13 @@ class RenderingStrategyOptions(ScreenshotOptions, total=False):
     service_token: str
 
 
-class RenderingStrategyConfig(RenderingResourceConfig):
+RenderingTemplateMarker = TypedDict(
+    "RenderingTemplateMarker",
+    {"__template_key": Literal["strategy", "mainland", "custom"]},
+)
+
+
+class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     """配置面板中的单个渲染方案，数值越小越先执行。"""
 
     name: str
@@ -71,6 +78,7 @@ class RenderingStrategyConfig(RenderingResourceConfig):
 
 DEFAULT_RENDERING_STRATEGY: RenderingStrategyConfig = {
     **DEFAULT_RENDERING_RESOURCES["Overseas"],
+    "__template_key": "strategy",
     "name": "默认方案",
     "priority": 10,
     "environment": "Overseas",
@@ -145,8 +153,14 @@ def parse_rendering_strategies(
             "environment",
             "Mainland" if item.get("__template_key") == "mainland" else "Overseas",
         )
-        render_service = item.get("render_service", "astrbot")
-        endpoint = item.get("service_endpoint", "")
+        render_service = item.get(
+            "render_service",
+            "custom" if item.get("__template_key") == "custom" else "astrbot",
+        )
+        endpoint = item.get(
+            "service_endpoint",
+            DEFAULT_CUSTOM_T2I_ENDPOINT if render_service == "custom" else "",
+        )
         token = item.get("service_token", "")
         image_type = item.get("type", "png")
         scale = item.get("device_scale", "high")
@@ -238,6 +252,13 @@ def parse_rendering_strategies(
             integers[key] = number
         result.append(
             {
+                "__template_key": (
+                    "custom"
+                    if render_service == "custom"
+                    else "mainland"
+                    if environment == "Mainland"
+                    else "strategy"
+                ),
                 "cdn_base_url": resources["cdn_base_url"],
                 "google_fonts": resources["google_fonts"],
                 "gstatic": resources["gstatic"],

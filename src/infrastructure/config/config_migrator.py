@@ -83,11 +83,18 @@ class ConfigMigrator:
                     for item in strategies
                 ]
                 for item, plan in zip(strategies, normalized, strict=True):
-                    if (
-                        item.get("__template_key") == "strategy"
-                        and plan["environment"] == "Mainland"
+                    # 旧版自定义服务改用独立条目，保持原资源环境和服务地址。
+                    for key in (
+                        "__template_key",
+                        "environment",
+                        "service_endpoint",
+                        "service_token",
                     ):
-                        item["__template_key"] = "mainland"
+                        if item.get(key) != plan[key]:
+                            item[key] = plan[key]
+                            modified = True
+                    if "render_service" in item:
+                        del item["render_service"]
                         modified = True
                     for key in ("cdn_base_url", "google_fonts", "gstatic"):
                         if key not in item or item[key] == CUSTOM_RESOURCE_OPTION:

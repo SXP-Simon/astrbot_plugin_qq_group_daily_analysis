@@ -76,6 +76,36 @@ class NativeConfigurationContract(unittest.TestCase):
             manager.get_t2i_cdn_base_url(), "https://legacy-global.example"
         )
 
+    def test_custom_service_preset_keeps_local_endpoint_and_resource_selection_on_reload(self):
+        fields = self.schema["t2i_rendering"]["items"]["t2i_rendering_strategies"]["templates"]["custom"]["items"]
+        draft = {key: field["default"] for key, field in fields.items()}
+        draft["__template_key"] = "custom"
+        manager = self.load({"t2i_rendering_strategies": [draft]})
+        for environment, font in (("Overseas", "https://fonts.googleapis.com"), ("Mainland", "https://fonts.loli.net")):
+            raw = manager.config["t2i_rendering"]["t2i_rendering_strategies"][0]
+            raw["environment"] = environment
+            manager.save_config()
+            manager.config = AstrBotConfig(config_path=str(self.path), schema=deepcopy(self.schema))
+            plan = manager.get_t2i_rendering_strategy_config()[0]
+            self.assertEqual(plan["__template_key"], "custom")
+            self.assertEqual(plan["render_service"], "custom")
+            self.assertEqual(plan["service_endpoint"], "http://127.0.0.1:8999/text2img")
+            self.assertEqual(plan["google_fonts"], font)
+            self.assertEqual(manager.config["t2i_rendering"]["t2i_rendering_strategies"][0]["google_fonts"], "")
+
+    def test_host_cleanup_preserves_old_custom_service_until_migration(self):
+        original = {
+            "__template_key": "mainland", "render_service": "custom",
+            "environment": "Mainland", "service_endpoint": "http://render:8999/text2img",
+            "service_token": "secret", "priority": 20,
+            "cdn_base_url": "https://cdn.example", "google_fonts": "https://fonts.example", "gstatic": "https://static.example",
+        }
+        manager = self.load({"t2i_rendering_strategies": [original]})
+        self.assertTrue(ConfigMigrator(manager).migrate_legacy_configs())
+        reloaded = AstrBotConfig(config_path=str(self.path), schema=deepcopy(self.schema))
+        original.pop("render_service")
+        self.assertEqual(reloaded["t2i_rendering"]["t2i_rendering_strategies"], [{**original, "__template_key": "custom"}])
+
     def test_native_custom_mode_and_webui_save_share_persisted_values_and_choices(self):
         manager = self.load(
             {

@@ -233,13 +233,10 @@
                         "type": "png",
                         "quality": 80,
                         "device_scale": "high",
-                        "timeout": 20000,
-                        "render_service": "astrbot",
-                        "service_endpoint": "",
-                        "service_token": ""
+                        "timeout": 20000
                     }
                 ],
-                "hint": "添加时可选内地或海外预设，再按需要修改本轮地址。两种预设都可跟随 AstrBot 或使用自定义截图服务；内地和海外描述的是资源地址，不代表截图服务的位置。初始只有一项海外方案，清空后仍使用默认方案。所有轮次共用 5 分钟总等待上限；图片已生成但缺少个别素材时，不会自动进入下一轮。",
+                "hint": "添加内地、海外或自定义 T2I 方案，按优先级依次尝试。内地和海外方案跟随 AstrBot；自定义方案填写自己的截图服务地址。初始只有一项海外方案，清空后仍使用默认方案。所有轮次共用 5 分钟总等待上限；图片已生成但缺少个别素材时，不会自动进入下一轮。",
                 "templates": {
                     "strategy": {
                         "name": "海外方案",
@@ -256,38 +253,6 @@
                                 "default": 10,
                                 "min": 0,
                                 "max": 10000
-                            },
-                            "render_service": {
-                                "type": "string",
-                                "description": "渲染服务",
-                                "options": [
-                                    "astrbot",
-                                    "custom"
-                                ],
-                                "labels": [
-                                    "跟随 AstrBot",
-                                    "自定义 T2I 服务"
-                                ],
-                                "default": "astrbot",
-                                "hint": "跟随 AstrBot 时使用本群绑定配置中的服务地址；自定义服务只影响本轮报告。"
-                            },
-                            "service_endpoint": {
-                                "type": "string",
-                                "description": "自定义 T2I 服务地址",
-                                "default": "",
-                                "condition": {
-                                    "render_service": "custom"
-                                },
-                                "hint": "例如 http://127.0.0.1:8999/text2img。也可填网站根地址或完整的 /text2img/generate 地址，保存时会自动整理。直接连接该服务，不使用环境代理；支持官方 T2I 和兼容的插件服务。HTTP 适合可信的本机或内网服务，跨网络连接建议使用 HTTPS，避免报告和 Token 明文传输。"
-                            },
-                            "service_token": {
-                                "type": "string",
-                                "description": "服务 Token（可选）",
-                                "default": "",
-                                "condition": {
-                                    "render_service": "custom"
-                                },
-                                "hint": "只有服务启用鉴权时才填写，会通过 Authorization: Bearer 发送。不要把 Token 放进服务地址。"
                             },
                             "environment": {
                                 "type": "string",
@@ -424,7 +389,7 @@
                                 "max": 300000
                             }
                         },
-                        "description": "使用 Google 官方字体地址，CDN 和截图服务均可修改。"
+                        "description": "使用 Google 官方字体地址；截图服务跟随当前群聊的 AstrBot 配置，未设置地址时由框架使用官方服务。"
                     },
                     "mainland": {
                         "name": "内地方案",
@@ -441,38 +406,6 @@
                                 "default": 10,
                                 "min": 0,
                                 "max": 10000
-                            },
-                            "render_service": {
-                                "type": "string",
-                                "description": "渲染服务",
-                                "options": [
-                                    "astrbot",
-                                    "custom"
-                                ],
-                                "labels": [
-                                    "跟随 AstrBot",
-                                    "自定义 T2I 服务"
-                                ],
-                                "default": "astrbot",
-                                "hint": "跟随 AstrBot 时使用本群绑定配置中的服务地址；自定义服务只影响本轮报告。"
-                            },
-                            "service_endpoint": {
-                                "type": "string",
-                                "description": "自定义 T2I 服务地址",
-                                "default": "",
-                                "condition": {
-                                    "render_service": "custom"
-                                },
-                                "hint": "例如 http://127.0.0.1:8999/text2img。也可填网站根地址或完整的 /text2img/generate 地址，保存时会自动整理。直接连接该服务，不使用环境代理；支持官方 T2I 和兼容的插件服务。HTTP 适合可信的本机或内网服务，跨网络连接建议使用 HTTPS，避免报告和 Token 明文传输。"
-                            },
-                            "service_token": {
-                                "type": "string",
-                                "description": "服务 Token（可选）",
-                                "default": "",
-                                "condition": {
-                                    "render_service": "custom"
-                                },
-                                "hint": "只有服务启用鉴权时才填写，会通过 Authorization: Bearer 发送。不要把 Token 放进服务地址。"
                             },
                             "environment": {
                                 "type": "string",
@@ -609,7 +542,177 @@
                                 "max": 300000
                             }
                         },
-                        "description": "使用 loli 字体镜像，CDN 和截图服务均可修改。"
+                        "description": "使用 loli 字体镜像；截图服务跟随当前群聊的 AstrBot 配置，未设置地址时由框架使用官方服务。"
+                    },
+                    "custom": {
+                        "name": "自定义 T2I 方案",
+                        "display_item": "name",
+                        "items": {
+                            "name": {
+                                "type": "string",
+                                "description": "方案名称",
+                                "default": "自定义 T2I 方案"
+                            },
+                            "priority": {
+                                "type": "int",
+                                "description": "优先级（越小越先）",
+                                "default": 10,
+                                "min": 0,
+                                "max": 10000
+                            },
+                            "service_endpoint": {
+                                "type": "string",
+                                "description": "自定义 T2I 服务地址",
+                                "default": "http://127.0.0.1:8999/text2img",
+                                "hint": "默认连接本地 8999 端口，也可填写远程域名、IP 或带前缀的接口地址。AstrBot 在容器中时，127.0.0.1 指向该容器；其他容器或宿主机上的服务需改填对应地址。此方案直接连接服务，不读取 AstrBot 地址，也不使用环境代理。HTTP 适用于可信本机或内网，跨网络建议使用 HTTPS。"
+                            },
+                            "service_token": {
+                                "type": "string",
+                                "description": "服务 Token（可选）",
+                                "default": "",
+                                "hint": "只有服务启用鉴权时才填写，会通过 Authorization: Bearer 发送。不要把 Token 放进服务地址。"
+                            },
+                            "environment": {
+                                "type": "string",
+                                "description": "资源环境",
+                                "options": [
+                                    "Mainland",
+                                    "Overseas"
+                                ],
+                                "labels": [
+                                    "内地（Mainland）",
+                                    "海外（Overseas）"
+                                ],
+                                "default": "Overseas",
+                                "hint": "选择留空资源地址使用的预设；下方已填写的地址优先，不会随切换被覆盖。此选项不改变截图服务地址。"
+                            },
+                            "cdn_base_url": {
+                                "type": "string",
+                                "description": "模板资源 CDN",
+                                "default": "",
+                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。用于本轮模板素材、内置人格图片和 npm 资源。地址需支持 /gh/、/npm/，例如 https://fastly.jsdelivr.net/。请从截图服务所在网络测试速度和可达性；插件 WebUI 的检测按钮只检查机器人服务器。留空使用插件默认 CDN，自定义图片地址不变。原生配置页可选择预设或“自定义地址…”，插件 WebUI 可直接输入新地址。",
+                                "options": [
+                                    "",
+                                    "https://cdn.jsdmirror.com",
+                                    "https://cdn.jsdmirror.cn",
+                                    "https://jsd.cdn.noisework.cn",
+                                    "https://cdn.bili33.top",
+                                    "https://cdn.jsdelivr.net",
+                                    "https://fastly.jsdelivr.net",
+                                    "https://gcore.jsdelivr.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "跟随资源环境预设",
+                                    "JSDMirror（默认） · https://cdn.jsdmirror.com",
+                                    "JSDMirror CN · https://cdn.jsdmirror.cn",
+                                    "NOISE · https://jsd.cdn.noisework.cn",
+                                    "哔哩 CDN · https://cdn.bili33.top",
+                                    "jsDelivr · https://cdn.jsdelivr.net",
+                                    "Fastly · https://fastly.jsdelivr.net",
+                                    "Gcore · https://gcore.jsdelivr.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_cdn_base_url": {
+                                "type": "string",
+                                "description": "自定义模板资源 CDN",
+                                "default": "",
+                                "condition": {
+                                    "cdn_base_url": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                            },
+                            "google_fonts": {
+                                "type": "string",
+                                "description": "Google Fonts 地址",
+                                "default": "",
+                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。",
+                                "options": [
+                                    "",
+                                    "https://fonts.googleapis.com",
+                                    "https://fonts.loli.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "跟随资源环境预设",
+                                    "Google Fonts · https://fonts.googleapis.com",
+                                    "loli 镜像 · https://fonts.loli.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_google_fonts": {
+                                "type": "string",
+                                "description": "自定义Google Fonts 地址",
+                                "default": "",
+                                "condition": {
+                                    "google_fonts": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                            },
+                            "gstatic": {
+                                "type": "string",
+                                "description": "字体文件地址（Gstatic）",
+                                "default": "",
+                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。",
+                                "options": [
+                                    "",
+                                    "https://fonts.gstatic.com",
+                                    "https://gstatic.loli.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "跟随资源环境预设",
+                                    "Google Gstatic · https://fonts.gstatic.com",
+                                    "loli 镜像 · https://gstatic.loli.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_gstatic": {
+                                "type": "string",
+                                "description": "自定义字体文件地址（Gstatic）",
+                                "default": "",
+                                "condition": {
+                                    "gstatic": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                            },
+                            "type": {
+                                "type": "string",
+                                "description": "图片格式",
+                                "options": [
+                                    "png",
+                                    "jpeg"
+                                ],
+                                "default": "png"
+                            },
+                            "quality": {
+                                "type": "int",
+                                "description": "JPEG 质量",
+                                "default": 80,
+                                "min": 1,
+                                "max": 100,
+                                "hint": "PNG 不使用此参数。"
+                            },
+                            "device_scale": {
+                                "type": "string",
+                                "description": "分辨率等级",
+                                "options": [
+                                    "normal",
+                                    "high",
+                                    "ultra"
+                                ],
+                                "default": "high"
+                            },
+                            "timeout": {
+                                "type": "int",
+                                "description": "渲染超时（毫秒）",
+                                "default": 20000,
+                                "min": 1000,
+                                "max": 300000
+                            }
+                        },
+                        "description": "直接连接自己的截图服务，默认本地地址；资源可选内地或海外预设。"
                     }
                 }
             },
