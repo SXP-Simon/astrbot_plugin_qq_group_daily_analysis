@@ -34,10 +34,10 @@ async def test_read_projects_migrated_resources_without_reordering_or_saving():
     plans = response["data"]["data"]["config"]["t2i_rendering"][
         "t2i_rendering_strategies"
     ]
-    assert plans[0]["cdn_base_url"] == "https://old.example"
-    assert plans[0]["google_fonts"] == "https://fonts.loli.net"
-    assert plans[0]["future"] == [1]
-    assert [item["priority"] for item in plans] == [20, 10]
+    assert plans[1]["cdn_base_url"] == "https://old.example"
+    assert plans[1]["google_fonts"] == "https://fonts.loli.net"
+    assert plans[1]["future"] == [1]
+    assert [item["priority"] for item in plans] == [10, 20]
     assert manager.config == before
     manager.save_config.assert_not_called()
 

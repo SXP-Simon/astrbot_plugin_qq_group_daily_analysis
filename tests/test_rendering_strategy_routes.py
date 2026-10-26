@@ -7,12 +7,13 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from src.infrastructure.config.config_manager import ConfigManager
+from src.infrastructure.config.rendering_config import DEFAULT_RENDERING_STRATEGY_PRESETS, parse_rendering_strategies
 from src.infrastructure.webui.routes.config_routes import ConfigRoutes
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strategies", [None, []])
-async def test_read_shows_single_default_strategy_without_persisting(strategies):
+async def test_read_shows_overseas_then_mainland_defaults_without_persisting(strategies):
     manager = object.__new__(ConfigManager)
     manager.config = {
         "t2i_rendering": {
@@ -31,23 +32,11 @@ async def test_read_shows_single_default_strategy_without_persisting(strategies)
     if "config" not in body:
         body = body["data"]
     projected = body["config"]["t2i_rendering"]
-    assert projected["t2i_rendering_strategies"] == [
-        {
-            "cdn_base_url": "https://cdn.jsdmirror.com",
-            "google_fonts": "https://fonts.googleapis.com",
-            "gstatic": "https://fonts.gstatic.com",
-            "__template_key": "strategy",
-            "name": "默认方案",
-            "priority": 10,
-            "environment": "Overseas",
-            "service_endpoint": "",
-            "service_token": "",
-            "type": "png",
-            "quality": 80,
-            "device_scale": "high",
-            "timeout": 20000,
-        }
-    ]
+    expected = parse_rendering_strategies(list(DEFAULT_RENDERING_STRATEGY_PRESETS))
+    for plan in expected:
+        plan.pop("render_service")
+    assert projected["t2i_rendering_strategies"] == expected
+    assert [(plan["environment"], plan["priority"]) for plan in expected] == [("Overseas", 10), ("Mainland", 20)]
     assert projected["future"] == {"keep": True}
     assert manager.config == original
 
@@ -159,7 +148,7 @@ async def test_invalid_custom_service_is_rejected_before_persistence(fields):
 
 
 @pytest.mark.asyncio
-async def test_save_normalizes_custom_service_without_reordering_or_losing_extensions():
+async def test_save_sorts_custom_service_without_losing_extensions():
     manager = SimpleNamespace(config={}, save_config=Mock())
     routes = ConfigRoutes(SimpleNamespace(config_manager=manager))
     plans = [
@@ -181,7 +170,8 @@ async def test_save_normalizes_custom_service_without_reordering_or_losing_exten
         response = await routes.api_save_config()
     assert response["status_code"] == 200
     saved = manager.config["t2i_rendering"]["t2i_rendering_strategies"]
-    assert [{k: v for k, v in plan.items() if k not in ("cdn_base_url", "google_fonts", "gstatic")} for plan in saved] == [
+    assert [plan["priority"] for plan in saved] == [10, 20]
+    assert [{k: v for k, v in plan.items() if k not in ("cdn_base_url", "google_fonts", "gstatic")} for plan in reversed(saved)] == [
         {
             "service_endpoint": "http://127.0.0.1:8999/text2img",
             "service_token": "secret",
@@ -194,3 +184,23 @@ async def test_save_normalizes_custom_service_without_reordering_or_losing_exten
     ]
 
     assert all(plan["cdn_base_url"] == "https://cdn.jsdmirror.com" for plan in saved)
+
+
+@pytest.mark.asyncio
+async def test_save_empty_list_persists_two_defaults_and_stable_ties_keep_unknown_values():
+    manager = SimpleNamespace(config={}, save_config=Mock())
+    routes = ConfigRoutes(SimpleNamespace(config_manager=manager))
+    with patch("src.infrastructure.webui.routes.config_routes.request") as request:
+        request.json = AsyncMock(return_value={"config": {"t2i_rendering": {"t2i_rendering_strategies": []}}})
+        assert (await routes.api_save_config())["status_code"] == 200
+        plans = manager.config["t2i_rendering"]["t2i_rendering_strategies"]
+        assert [(plan["environment"], plan["priority"]) for plan in plans] == [("Overseas", 10), ("Mainland", 20)]
+        request.json = AsyncMock(return_value={"config": {"t2i_rendering": {"t2i_rendering_strategies": [
+            {"name": "最后", "priority": 30},
+            {"name": "甲", "priority": 10, "future": {"keep": True}},
+            {"name": "乙", "priority": 10},
+        ]}}})
+        assert (await routes.api_save_config())["status_code"] == 200
+    plans = manager.config["t2i_rendering"]["t2i_rendering_strategies"]
+    assert [plan["name"] for plan in plans] == ["甲", "乙", "最后"]
+    assert plans[0]["future"] == {"keep": True}

@@ -20,6 +20,7 @@ from ....utils.logger import logger
 from ...config.config_migrator import LEGACY_RENDERING_RESOURCE_KEYS
 from ...config.rendering_config import (
     CUSTOM_RESOURCE_OPTION,
+    DEFAULT_RENDERING_STRATEGY_PRESETS,
     parse_rendering_strategies,
 )
 from ...reporting.cdn_probe import probe_template_cdn
@@ -116,9 +117,9 @@ class ConfigRoutes:
                 revision = _config_revision(config_dict)
                 rendering = config_dict.get("t2i_rendering")
                 if isinstance(rendering, dict):
-                    raw = rendering.get("t2i_rendering_strategies") or [
-                        {"name": "默认方案"}
-                    ]
+                    raw = rendering.get("t2i_rendering_strategies") or list(
+                        DEFAULT_RENDERING_STRATEGY_PRESETS
+                    )
                     try:
                         # 只补齐编辑视图，不写盘；保留顺序和扩展字段，迁移服务条目类型。
                         projected = []
@@ -250,10 +251,18 @@ class ConfigRoutes:
                 if "t2i_rendering_strategies" in rendering_config:
                     try:
                         strategies = rendering_config["t2i_rendering_strategies"]
+                        if strategies == []:
+                            strategies = [
+                                dict(item)
+                                for item in DEFAULT_RENDERING_STRATEGY_PRESETS
+                            ]
+                            rendering_config["t2i_rendering_strategies"] = strategies
                         if not isinstance(strategies, list):
                             raise ValueError("渲染方案必须是列表")
+                        priorities: list[int] = []
                         for strategy in strategies:
                             normalized = parse_rendering_strategies([strategy])[0]
+                            priorities.append(normalized["priority"])
                             for key in ("cdn_base_url", "google_fonts", "gstatic"):
                                 if strategy.get(key) == CUSTOM_RESOURCE_OPTION:
                                     strategy[f"custom_{key}"] = normalized[key]
@@ -271,6 +280,13 @@ class ConfigRoutes:
                             ):
                                 strategy[key] = normalized[key]
                             strategy.pop("render_service", None)
+                        strategies[:] = [
+                            item
+                            for _priority, item in sorted(
+                                zip(priorities, strategies, strict=True),
+                                key=lambda pair: pair[0],
+                            )
+                        ]
                     except ValueError as exc:
                         return error_response(str(exc), status_code=400)
                 for legacy_key in LEGACY_RENDERING_RESOURCE_KEYS:
