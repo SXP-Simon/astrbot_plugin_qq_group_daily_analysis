@@ -56,6 +56,7 @@ it("列出旧版本和缺失元数据，按原始结构展开对象、数组和�
   ).not.toBeInTheDocument();
 }, 15000);
 
+// 真实弹窗和表格涉及多次重渲染，与上面的交互用例使用相同时限。
 it("列表失败可以刷新，备份被删除时给出读取失败说明", async () => {
   vi.mocked(fetchConfigBackups).mockRejectedValueOnce(new Error("offline"));
   render(<ConfigBackupsViewer />);
@@ -63,7 +64,11 @@ it("列表失败可以刷新，备份被删除时给出读取失败说明", asyn
   expect(await screen.findByText(/备份列表暂时读不到/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /刷新列表/ }));
   await screen.findByText("v5.8.3");
+  expect(fetchConfigBackups).toHaveBeenCalledTimes(2);
   vi.mocked(fetchConfigBackup).mockRejectedValueOnce(new Error("removed"));
   fireEvent.click(screen.getAllByRole("button", { name: "查看" })[0]);
   expect(await screen.findByText(/这份备份暂时无法打开/)).toBeInTheDocument();
-});
+  expect(fetchConfigBackup).toHaveBeenCalledWith(
+    mockConfigBackups[0].backup.filename,
+  );
+}, 15000);
