@@ -70,7 +70,7 @@ if TYPE_CHECKING:
 
     from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
-    from ..config.rendering_config import ScreenshotOptions
+    from ..config.rendering_config import RenderingResourceConfig, ScreenshotOptions
 
 
 class ReportGenerator(IReportGenerator):
@@ -316,6 +316,9 @@ class ReportGenerator(IReportGenerator):
             # 在首次异步准备前固定本次方案，避免保存配置后将旧 HTML 误认为新环境。
             render_strategies = self.config_manager.get_t2i_rendering_strategies()
             active_environment = self.config_manager.get_t2i_font_source()
+            active_resources = (
+                render_strategies[0].get("resource_urls") if render_strategies else None
+            )
             render_payload = await self._prepare_render_data(
                 analysis_result,
                 template_theme=template_theme,
@@ -326,6 +329,7 @@ class ReportGenerator(IReportGenerator):
                 hide_user_names=hide_user_names,
                 allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                 environment=active_environment,
+                resources=active_resources,
             )
 
             tpl_render_start_ts = time.perf_counter()
@@ -373,6 +377,7 @@ class ReportGenerator(IReportGenerator):
                     environment = strategy_options.pop(
                         "resource_environment", active_environment
                     )
+                    resources = strategy_options.pop("resource_urls", None)
                     render_service = strategy_options.pop("render_service", "astrbot")
                     service_endpoint = str(strategy_options.pop("service_endpoint", ""))
                     service_token = str(strategy_options.pop("service_token", ""))
@@ -412,7 +417,10 @@ class ReportGenerator(IReportGenerator):
                     attempt_start_ts = time.perf_counter()
                     attempt_timeout = asyncio.timeout_at(render_deadline)
                     try:
-                        if environment != active_environment:
+                        if (
+                            environment != active_environment
+                            or resources != active_resources
+                        ):
                             async with attempt_timeout:
                                 next_payload = await self._prepare_render_data(
                                     analysis_result,
@@ -424,6 +432,7 @@ class ReportGenerator(IReportGenerator):
                                     hide_user_names=hide_user_names,
                                     allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                                     environment=environment,
+                                    resources=resources,
                                 )
                             next_html = self._render_prepared_html(
                                 "image_template.html", template_theme, next_payload
@@ -432,6 +441,7 @@ class ReportGenerator(IReportGenerator):
                                 raise ValueError("切换资源环境后模板返回空内容")
                             render_payload, html_content = next_payload, next_html
                             active_environment = environment
+                            active_resources = resources
                         image_options, viewport_description = (
                             self._resolve_t2i_viewport_options(
                                 html_content, image_options
@@ -1084,6 +1094,7 @@ class ReportGenerator(IReportGenerator):
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
         environment: str | None = None,
+        resources: RenderingResourceConfig | None = None,
     ) -> RenderTemplateContext:
         """组装模板引擎所需的强类型上下文。
 
@@ -1097,6 +1108,7 @@ class ReportGenerator(IReportGenerator):
             hide_user_names: 是否隐藏用户名。
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID。
             environment: 本轮固定的资源环境，省略时采用第一优先级方案。
+            resources: 本轮固定的 CDN 和字体地址。
 
         Returns:
             主模板使用的资源、统计数据与组件 HTML。
@@ -1114,6 +1126,7 @@ class ReportGenerator(IReportGenerator):
             hide_user_names=hide_user_names,
             allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             environment=environment,
+            resources=resources,
         )
 
     async def _render_avatar_only_ids(

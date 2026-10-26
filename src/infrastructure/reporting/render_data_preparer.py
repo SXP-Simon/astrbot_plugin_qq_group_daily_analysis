@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
     from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
+    from ..config.rendering_config import RenderingResourceConfig
     from ..visualization.activity_charts import ActivityVisualizer
     from .avatar_service import AvatarService
     from .templates import HTMLTemplates
@@ -223,6 +224,7 @@ class RenderDataPreparer:
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
         environment: str | None = None,
+        resources: RenderingResourceConfig | None = None,
     ) -> RenderTemplateContext:
         """组装模板引擎所需的完整数据字典。
 
@@ -236,6 +238,7 @@ class RenderDataPreparer:
             hide_user_names: 是否匿名化渲染（纯头像模式）。
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID 识别。
             environment: 当前渲染方案的资源环境，省略时采用第一优先级方案。
+            resources: 当前轮次的资源地址快照，相同环境也可使用不同地址。
 
         Returns:
             包含全量模板渲染变量的强类型上下文。
@@ -246,37 +249,51 @@ class RenderDataPreparer:
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
         user_titles = analysis_result["user_titles"]
-        # 在首次异步等待前固定资源地址，主模板与所有组件共用这一环境。
-        assets_base_url = (
-            self.config_manager.get_template_assets_base_url(environment)
-            if environment
-            else self.config_manager.get_template_assets_base_url()
-        )
-        cdn_base_url = (
-            self.config_manager.get_t2i_cdn_base_url(environment)
-            if environment
-            else self.config_manager.get_t2i_cdn_base_url()
-        )
+        # 在首次异步等待前固定资源地址，主模板与所有组件共用这一快照。
+        if resources is not None:
+            cdn_base_url = resources["cdn_base_url"]
+            google_fonts = resources["google_fonts"]
+            gstatic = resources["gstatic"]
+            assets_base_url = self.config_manager.get_template_assets_base_url(
+                environment, cdn_base_url=cdn_base_url
+            )
+            atri_mirror = self.config_manager.get_t2i_atri_font_mirror(
+                environment, cdn_base_url=cdn_base_url
+            )
+        else:
+            assets_base_url = (
+                self.config_manager.get_template_assets_base_url(environment)
+                if environment
+                else self.config_manager.get_template_assets_base_url()
+            )
+            cdn_base_url = (
+                self.config_manager.get_t2i_cdn_base_url(environment)
+                if environment
+                else self.config_manager.get_t2i_cdn_base_url()
+            )
+            google_fonts = (
+                self.config_manager.get_t2i_google_fonts_mirror(environment)
+                if environment
+                else self.config_manager.get_t2i_google_fonts_mirror()
+            )
+            gstatic = (
+                self.config_manager.get_t2i_gstatic_mirror(environment)
+                if environment
+                else self.config_manager.get_t2i_gstatic_mirror()
+            )
+            atri_mirror = (
+                self.config_manager.get_t2i_atri_font_mirror(environment)
+                if environment
+                else self.config_manager.get_t2i_atri_font_mirror()
+            )
         report_language = resolve_report_language(self.config_manager)
         common_context: TemplateResourceContext = {
             "hide_user_names": hide_user_names,
             "report_language": report_language,
             "t2i_font_source": environment or self.config_manager.get_t2i_font_source(),
-            "t2i_google_fonts_mirror": (
-                self.config_manager.get_t2i_google_fonts_mirror(environment)
-                if environment
-                else self.config_manager.get_t2i_google_fonts_mirror()
-            ),
-            "t2i_gstatic_mirror": (
-                self.config_manager.get_t2i_gstatic_mirror(environment)
-                if environment
-                else self.config_manager.get_t2i_gstatic_mirror()
-            ),
-            "t2i_atri_font_mirror": (
-                self.config_manager.get_t2i_atri_font_mirror(environment)
-                if environment
-                else self.config_manager.get_t2i_atri_font_mirror()
-            ),
+            "t2i_google_fonts_mirror": google_fonts,
+            "t2i_gstatic_mirror": gstatic,
+            "t2i_atri_font_mirror": atri_mirror,
             "t2i_miku_assets_mirror": f"{assets_base_url}/HatsuneMiku",
             "t2i_deepseek_maid_assets_mirror": f"{assets_base_url}/deepseek_maid",
             "t2i_maria_assets_mirror": f"{assets_base_url}/maria",
