@@ -17,7 +17,10 @@ from typing import TYPE_CHECKING
 from ....shared.constants import PLUGIN_NAME
 from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
-from ...config.rendering_config import parse_rendering_strategies
+from ...config.rendering_config import (
+    normalize_t2i_endpoint,
+    parse_rendering_strategies,
+)
 from ...reporting.cdn_probe import probe_template_cdn
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
@@ -191,6 +194,14 @@ class ConfigRoutes:
                         parse_rendering_strategies(
                             rendering_config["t2i_rendering_strategies"]
                         )
+                        for strategy in rendering_config["t2i_rendering_strategies"]:
+                            if strategy.get("render_service", "astrbot") == "custom":
+                                strategy["service_endpoint"] = normalize_t2i_endpoint(
+                                    strategy["service_endpoint"]
+                                )
+                                strategy["service_token"] = strategy.get(
+                                    "service_token", ""
+                                ).strip()
                     except ValueError as exc:
                         return error_response(str(exc), status_code=400)
                 for cdn_key in (

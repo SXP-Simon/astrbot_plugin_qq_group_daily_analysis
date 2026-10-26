@@ -119,3 +119,68 @@ async def test_save_normalizes_environment_cdn_and_keeps_strategy_extensions():
     assert response["status_code"] == 200
     assert manager.config == expected
     manager.save_config.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"service_endpoint": "http://host?token=secret"},
+        {"service_endpoint": ""},
+        {"service_token": "secret\r\nInjected: yes"},
+        {"render_service": "unknown"},
+    ],
+)
+async def test_invalid_custom_service_is_rejected_before_persistence(fields):
+    manager = SimpleNamespace(config={"future": {"keep": True}}, save_config=Mock())
+    routes = ConfigRoutes(SimpleNamespace(config_manager=manager))
+    plan = {
+        "render_service": "custom",
+        "service_endpoint": "http://127.0.0.1:8999/text2img",
+        **fields,
+    }
+    with patch("src.infrastructure.webui.routes.config_routes.request") as request:
+        request.json = AsyncMock(
+            return_value={
+                "config": {"t2i_rendering": {"t2i_rendering_strategies": [plan]}}
+            }
+        )
+        response = await routes.api_save_config()
+    assert response["status_code"] == 400
+    assert manager.config == {"future": {"keep": True}}
+    manager.save_config.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_save_normalizes_custom_service_without_reordering_or_losing_extensions():
+    manager = SimpleNamespace(config={}, save_config=Mock())
+    routes = ConfigRoutes(SimpleNamespace(config_manager=manager))
+    plans = [
+        {
+            "render_service": "custom",
+            "service_endpoint": " http://127.0.0.1:8999/text2img/generate/ ",
+            "service_token": " secret ",
+            "priority": 20,
+            "future": [1],
+        },
+        {"priority": 10},
+    ]
+    with patch("src.infrastructure.webui.routes.config_routes.request") as request:
+        request.json = AsyncMock(
+            return_value={
+                "config": {"t2i_rendering": {"t2i_rendering_strategies": plans}}
+            }
+        )
+        response = await routes.api_save_config()
+    assert response["status_code"] == 200
+    saved = manager.config["t2i_rendering"]["t2i_rendering_strategies"]
+    assert saved == [
+        {
+            "render_service": "custom",
+            "service_endpoint": "http://127.0.0.1:8999/text2img",
+            "service_token": "secret",
+            "priority": 20,
+            "future": [1],
+        },
+        {"priority": 10},
+    ]
