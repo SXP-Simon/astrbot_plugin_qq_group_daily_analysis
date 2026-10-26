@@ -37,7 +37,7 @@ export const renderingStrategySchema = z.object({
   type: z.enum(["png", "jpeg"], { error: "请选择 PNG 或 JPEG 格式" }).default("png"),
   quality: z.number({ error: "图片质量必须是数字" }).int("图片质量必须是整数").min(1, "图片质量不能小于 1").max(100, "图片质量不能大于 100").default(80),
   device_scale: z.enum(["normal", "high", "ultra"], { error: "请选择有效的分辨率等级" }).default("high"),
-  timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").default(60000),
+  timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").default(20000),
 }).catchall(z.unknown());
 
 export const renderingConfigSchema = z.object({
@@ -58,16 +58,15 @@ export const renderingConfigLoadSchema = renderingConfigSchema.extend({
   t2i_rendering_strategies: z.unknown().optional(),
 });
 
-// 预览采用最高优先级方案的资源环境，旧配置继续使用原环境和地址。
+// 预览采用最高优先级方案的资源环境；未配置方案时使用海外环境。
 export const renderingRuntimeSchema = z.object({
   t2i_cdn_base_url: cdnBaseUrlSchema.default(""),
   t2i_mainland_cdn_base_url: cdnBaseUrlSchema.default(""),
   t2i_overseas_cdn_base_url: cdnBaseUrlSchema.default(""),
-  t2i_font_source: z.string().default("Overseas"),
   t2i_rendering_strategies: z.array(renderingStrategySchema).default([]),
 }).transform((value) => {
   const first = [...value.t2i_rendering_strategies].sort((a, b) => a.priority - b.priority)[0];
-  const environment = first?.environment ?? value.t2i_font_source;
+  const environment = first?.environment ?? "Overseas";
   const baseUrl = environment === "Mainland"
     ? value.t2i_mainland_cdn_base_url : value.t2i_overseas_cdn_base_url;
   return { t2i_cdn_base_url: baseUrl || value.t2i_cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL };

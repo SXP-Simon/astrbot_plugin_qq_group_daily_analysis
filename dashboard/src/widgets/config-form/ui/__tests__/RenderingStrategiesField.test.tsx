@@ -31,7 +31,7 @@ it("可添加多轮、设置环境和优先级，并驱动第一优先级预览"
   fireEvent.click(screen.getByRole("button", { name: /添加 渲染方案/ }));
   let strategies: unknown = JSON.parse(screen.getByTestId("strategies").textContent || "[]");
   expect(strategies).toHaveLength(1);
-  expect(strategies).toMatchObject([{ __template_key: "strategy", priority: 10, environment: "Overseas" }]);
+  expect(strategies).toMatchObject([{ __template_key: "strategy", priority: 10, environment: "Overseas", timeout: 20000 }]);
   fireEvent.mouseDown(screen.getAllByRole("combobox")[0]);
   fireEvent.click(screen.getByText("内地（Mainland）"));
   expect(screen.getByTestId("preview")).toHaveTextContent("https://mainland.example");

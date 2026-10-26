@@ -5,12 +5,26 @@ import { renderingRuntimeSchema, renderingStrategySchema } from "../renderingCon
 import { validateSingleFieldWithZod } from "../validation";
 
 describe("可扩展渲染方案", () => {
-  it("真实配置使用方案模板，旧参数仅用于兼容", () => {
+  it("真实配置提供一项海外默认方案，移除固定两轮参数", () => {
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.type).toBe("template_list");
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.templates.strategy.items.priority.default).toBe(10);
-    expect(schema.t2i_rendering.items.t2i_font_source.invisible).toBe(true);
+    expect(Object.keys(schema.t2i_rendering.items).some((key) => /^t2i_r[12]_/.test(key))).toBe(false);
+    expect(schema.t2i_rendering.items).not.toHaveProperty("t2i_font_source");
+    expect(schema.t2i_rendering.items.t2i_rendering_strategies.default).toEqual([
+      { __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
+    ]);
+    expect(renderingStrategySchema.parse({}).timeout).toBe(20000);
     expect(schema.t2i_rendering.items.t2i_cdn_base_url.invisible).toBe(true);
     expect(pluginConfigResponseSchema.safeParse({ config: {}, schema }).success).toBe(true);
+  });
+
+  it.each([{}, { t2i_rendering_strategies: [] }])("未配置方案时预览使用海外环境，忽略已移除的全局环境 %j", (value) => {
+    expect(renderingRuntimeSchema.parse({
+      ...value,
+      t2i_font_source: "Mainland",
+      t2i_mainland_cdn_base_url: "https://mainland.example",
+      t2i_overseas_cdn_base_url: "https://overseas.example",
+    }).t2i_cdn_base_url).toBe("https://overseas.example");
   });
 
   it("预览采用最高优先级方案的环境，且不改变列表顺序", () => {
