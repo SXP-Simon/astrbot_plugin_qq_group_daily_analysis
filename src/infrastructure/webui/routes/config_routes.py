@@ -19,7 +19,6 @@ from ....shared.constants import PLUGIN_NAME
 from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
 from ...config.rendering_config import (
-    normalize_t2i_endpoint,
     parse_rendering_strategies,
 )
 from ...reporting.cdn_probe import probe_template_cdn
@@ -114,17 +113,38 @@ class ConfigRoutes:
                 config_dict = {str(k): v for k, v in cfg_mgr.config.items()}
                 revision = _config_revision(config_dict)
                 rendering = config_dict.get("t2i_rendering")
-                if isinstance(rendering, dict) and not rendering.get(
-                    "t2i_rendering_strategies"
-                ):
-                    strategies = cfg_mgr.get_t2i_rendering_strategy_config()
-                    config_dict["t2i_rendering"] = {
-                        **rendering,
-                        "t2i_rendering_strategies": [
-                            {"__template_key": "strategy", **item}
-                            for item in strategies
-                        ],
-                    }
+                if isinstance(rendering, dict):
+                    raw = rendering.get("t2i_rendering_strategies") or [
+                        {"name": "默认方案"}
+                    ]
+                    try:
+                        # 只补齐编辑视图，不写盘；保留条目顺序、扩展字段和原模板键。
+                        projected = []
+                        if not isinstance(raw, list):
+                            raise ValueError("渲染方案必须是列表")
+                        for item in raw:
+                            normalized = parse_rendering_strategies(
+                                [item], legacy_config=rendering
+                            )[0]
+                            projected.append(
+                                {
+                                    **item,
+                                    **normalized,
+                                    "__template_key": item.get(
+                                        "__template_key",
+                                        "mainland"
+                                        if normalized["environment"] == "Mainland"
+                                        else "strategy",
+                                    ),
+                                }
+                            )
+                        config_dict["t2i_rendering"] = {
+                            **rendering,
+                            "t2i_rendering_strategies": projected,
+                        }
+                    except ValueError:
+                        # 异常草稿原样交给编辑器，避免读取时吞掉用户配置。
+                        pass
 
             plugin_root = Path(__file__).resolve().parents[4]
             schema_file = plugin_root / "_conf_schema.json"
@@ -233,17 +253,28 @@ class ConfigRoutes:
                     )
                 if "t2i_rendering_strategies" in rendering_config:
                     try:
-                        parse_rendering_strategies(
-                            rendering_config["t2i_rendering_strategies"]
-                        )
-                        for strategy in rendering_config["t2i_rendering_strategies"]:
-                            if strategy.get("render_service", "astrbot") == "custom":
-                                strategy["service_endpoint"] = normalize_t2i_endpoint(
-                                    strategy["service_endpoint"]
-                                )
-                                strategy["service_token"] = strategy.get(
-                                    "service_token", ""
-                                ).strip()
+                        strategies = rendering_config["t2i_rendering_strategies"]
+                        if not isinstance(strategies, list):
+                            raise ValueError("渲染方案必须是列表")
+                        old_rendering = config_obj.get("t2i_rendering", {})
+                        legacy = {
+                            **(
+                                old_rendering if isinstance(old_rendering, dict) else {}
+                            ),
+                            **rendering_config,
+                        }
+                        for strategy in strategies:
+                            normalized = parse_rendering_strategies(
+                                [strategy], legacy_config=legacy
+                            )[0]
+                            for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                                strategy[key] = normalized[key]
+                            if strategy.get("render_service") == "custom":
+                                strategy["service_endpoint"] = normalized[
+                                    "service_endpoint"
+                                ]
+                            if "service_token" in strategy:
+                                strategy["service_token"] = normalized["service_token"]
                     except ValueError as exc:
                         return error_response(str(exc), status_code=400)
                 for cdn_key in (

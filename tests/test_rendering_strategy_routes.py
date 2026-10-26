@@ -33,6 +33,9 @@ async def test_read_shows_single_default_strategy_without_persisting(strategies)
     projected = body["config"]["t2i_rendering"]
     assert projected["t2i_rendering_strategies"] == [
         {
+            "cdn_base_url": "https://cdn.jsdmirror.com",
+            "google_fonts": "https://fonts.googleapis.com",
+            "gstatic": "https://fonts.gstatic.com",
             "__template_key": "strategy",
             "name": "默认方案",
             "priority": 10,
@@ -113,6 +116,9 @@ async def test_save_normalizes_environment_cdn_and_keeps_strategy_extensions():
     expected = deepcopy(config)
     expected["t2i_rendering"]["t2i_mainland_cdn_base_url"] = "https://mainland.example"
     expected["t2i_rendering"]["t2i_overseas_cdn_base_url"] = "https://overseas.example"
+    expected["t2i_rendering"]["t2i_rendering_strategies"][0].update({
+        "cdn_base_url": "https://mainland.example", "google_fonts": "https://fonts.loli.net", "gstatic": "https://gstatic.loli.net"
+    })
     with patch("src.infrastructure.webui.routes.config_routes.request") as request:
         request.json = AsyncMock(return_value={"config": config})
         response = await routes.api_save_config()
@@ -174,7 +180,7 @@ async def test_save_normalizes_custom_service_without_reordering_or_losing_exten
         response = await routes.api_save_config()
     assert response["status_code"] == 200
     saved = manager.config["t2i_rendering"]["t2i_rendering_strategies"]
-    assert saved == [
+    assert [{k: v for k, v in plan.items() if k not in ("cdn_base_url", "google_fonts", "gstatic")} for plan in saved] == [
         {
             "render_service": "custom",
             "service_endpoint": "http://127.0.0.1:8999/text2img",
@@ -184,3 +190,5 @@ async def test_save_normalizes_custom_service_without_reordering_or_losing_exten
         },
         {"priority": 10},
     ]
+
+    assert all(plan["cdn_base_url"] == "https://cdn.jsdmirror.com" for plan in saved)
