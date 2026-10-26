@@ -28,7 +28,7 @@ export function buildFieldZodSchema(
   fieldKey: string,
   field: SchemaFieldItem
 ): z.ZodType {
-  if (["cdn_base_url", "t2i_cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"].includes(fieldKey)) {
+  if (fieldKey === "cdn_base_url") {
     return cdnBaseUrlSchema.optional();
   }
   if (["google_fonts", "gstatic"].includes(fieldKey)) return fontBaseUrlSchema.optional();

@@ -20,16 +20,16 @@ describe("配置 API 边界", () => {
     await expect(fetchPluginConfig()).rejects.toThrow("配置响应结构无效");
   });
   it("保存与检测在网络调用前拒绝错误格式", async () => {
-    const result = await savePluginConfig({ t2i_rendering: { t2i_cdn_base_url: "bad" } });
+    const result = await savePluginConfig({ t2i_rendering: { t2i_rendering_strategies: [{ cdn_base_url: "bad" }] } });
     expect(result.success).toBe(false);
     await expect(testTemplateCdn("bad")).rejects.toThrow();
     expect(apiPost).not.toHaveBeenCalled();
   });
   it("保存规范化地址并保留未知字段", async () => {
     vi.mocked(apiPost).mockResolvedValue({ status: "ok", message: "保存成功" });
-    const config = { t2i_rendering: { t2i_cdn_base_url: " https://example.com/ ", extra: [1] }, future: { value: null } };
+    const config = { t2i_rendering: { t2i_rendering_strategies: [{ cdn_base_url: " https://example.com/ " }], extra: [1] }, future: { value: null } };
     expect((await savePluginConfig(config)).success).toBe(true);
-    expect(apiPost).toHaveBeenCalledWith("config", { config: { ...config, t2i_rendering: { ...config.t2i_rendering, t2i_cdn_base_url: "https://example.com" } } });
+    expect(apiPost).toHaveBeenCalledWith("config", { config: expect.objectContaining({ future: config.future, t2i_rendering: expect.objectContaining({ extra: [1], t2i_rendering_strategies: [expect.objectContaining({ cdn_base_url: "https://example.com" })] }) }) });
   });
   it("内层保存错误不能被外层 ok 掩盖", async () => {
     vi.mocked(apiPost).mockResolvedValue({ status: "ok", data: { status: "error", message: "CDN 地址无效" } });

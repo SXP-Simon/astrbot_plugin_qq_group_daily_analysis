@@ -115,9 +115,6 @@ export const renderingStrategySchema = z.object({
 });
 
 export const renderingConfigSchema = z.object({
-  t2i_cdn_base_url: z.string().optional(),
-  t2i_mainland_cdn_base_url: z.string().optional(),
-  t2i_overseas_cdn_base_url: z.string().optional(),
   t2i_rendering_strategies: z.array(renderingStrategySchema).optional(),
   t2i_atri_font_mirror: z.string().optional(),
 }).catchall(z.unknown());
@@ -126,28 +123,17 @@ export type RenderingConfig = z.infer<typeof renderingConfigSchema>;
 
 // 编辑时保留异常值，显示错误并允许修正；保存和业务使用严格契约。
 export const renderingConfigLoadSchema = renderingConfigSchema.extend({
-  t2i_cdn_base_url: z.unknown().optional(),
-  t2i_mainland_cdn_base_url: z.unknown().optional(),
-  t2i_overseas_cdn_base_url: z.unknown().optional(),
   t2i_rendering_strategies: z.unknown().optional(),
 });
 
-// 仅缺少新字段的旧方案继承环境级地址；显式清空的新字段采用预设默认值。
-const renderingResolvedSchema = renderingConfigSchema.extend({
-  t2i_cdn_base_url: cdnBaseUrlSchema.optional(),
-  t2i_mainland_cdn_base_url: cdnBaseUrlSchema.optional(),
-  t2i_overseas_cdn_base_url: cdnBaseUrlSchema.optional(),
-}).transform((value) => Object.assign(value, {
+// 运行时只读取每轮配置，旧资源键由后端迁移后移除。
+const renderingResolvedSchema = renderingConfigSchema.transform((value) => Object.assign(value, {
   t2i_rendering_strategies: value.t2i_rendering_strategies?.map((plan) => {
     const defaults = RENDERING_RESOURCE_DEFAULTS[plan.environment];
-    const source = plan.environment.toLowerCase();
-    const legacyCdn = plan.environment === "Mainland" ? value.t2i_mainland_cdn_base_url : value.t2i_overseas_cdn_base_url;
-    const fonts = fontBaseUrlSchema.safeParse(value[`t2i_${source}_google_fonts`]);
-    const gstatic = fontBaseUrlSchema.safeParse(value[`t2i_${source}_gstatic`]);
     const resources = {
-      cdn_base_url: (plan.cdn_base_url ?? (legacyCdn || value.t2i_cdn_base_url)) || defaults.cdn_base_url,
-      google_fonts: (plan.google_fonts ?? (fonts.success ? fonts.data : "")) || defaults.google_fonts,
-      gstatic: (plan.gstatic ?? (gstatic.success ? gstatic.data : "")) || defaults.gstatic,
+      cdn_base_url: plan.cdn_base_url || defaults.cdn_base_url,
+      google_fonts: plan.google_fonts || defaults.google_fonts,
+      gstatic: plan.gstatic || defaults.gstatic,
     };
     if (plan.__template_key === "custom") {
       for (const key of ["cdn_base_url", "google_fonts", "gstatic"] as const) {
@@ -158,23 +144,20 @@ const renderingResolvedSchema = renderingConfigSchema.extend({
   }),
 }));
 
-// 图片预览与 HTML 导出均采用第一优先级方案的资源地址。
 export const renderingRuntimeSchema = renderingResolvedSchema.transform((value) => {
   const first = [...(value.t2i_rendering_strategies || [])].sort((a, b) => a.priority - b.priority)[0];
-  return { t2i_cdn_base_url: first ? first.cdn_base_url || RENDERING_RESOURCE_DEFAULTS[first.environment].cdn_base_url : value.t2i_overseas_cdn_base_url || value.t2i_cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL };
+  return { t2i_cdn_base_url: first?.cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL };
 });
 
 export const renderingSaveSchema = renderingResolvedSchema.transform((value) => {
   if (value.t2i_rendering_strategies?.length === 0) {
-    const fonts = fontBaseUrlSchema.safeParse(value.t2i_overseas_google_fonts);
-    const gstatic = fontBaseUrlSchema.safeParse(value.t2i_overseas_gstatic);
     value.t2i_rendering_strategies = [{
       ...renderingStrategySchema.parse({ __template_key: "strategy", name: "默认方案" }),
       ...RENDERING_RESOURCE_DEFAULTS.Overseas,
-      cdn_base_url: value.t2i_overseas_cdn_base_url || value.t2i_cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL,
-      google_fonts: (fonts.success && fonts.data) || RENDERING_RESOURCE_DEFAULTS.Overseas.google_fonts,
-      gstatic: (gstatic.success && gstatic.data) || RENDERING_RESOURCE_DEFAULTS.Overseas.gstatic,
     }];
+  }
+  for (const key of ["t2i_cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_mainland_google_fonts", "t2i_mainland_gstatic", "t2i_overseas_cdn_base_url", "t2i_overseas_google_fonts", "t2i_overseas_gstatic"]) {
+    delete value[key];
   }
   return value;
 });

@@ -26,21 +26,21 @@ it("加载失败要提示且禁止保存空配置", async () => {
 
 it.each(["wrong", 123, null])("CDN 草稿错误 %j 不会驱动默认预览，修正后保存规范化值", async (value) => {
   vi.mocked(fetchPluginConfig).mockResolvedValue({
-    config: { t2i_rendering: { t2i_cdn_base_url: value, extra: "保留" } },
-    schema: { t2i_rendering: { type: "object", description: "渲染", items: { t2i_cdn_base_url: { type: "string" } } } },
+    config: { t2i_rendering: { t2i_rendering_strategies: [{ cdn_base_url: value }], extra: "保留" } },
+    schema: { t2i_rendering: { type: "object", description: "渲染", items: { t2i_rendering_strategies: { type: "template_list" } } } },
   });
   vi.mocked(savePluginConfig).mockResolvedValue({ success: true });
   const { result } = renderHook(() => useConfigViewModel());
   await waitFor(() => expect(result.current.configLoaded).toBe(true));
   expect(result.current.templateCdnBaseUrl).toBeNull();
-  expect(result.current.errors.t2i_rendering.t2i_cdn_base_url).toBeTruthy();
+  expect(result.current.errors.t2i_rendering.t2i_rendering_strategies).toBeTruthy();
   await act(async () => { await result.current.handleSave(); });
   expect(savePluginConfig).not.toHaveBeenCalled();
-  act(() => result.current.handleFieldChange("t2i_rendering", "t2i_cdn_base_url", " https://example.com/ "));
+  act(() => result.current.handleFieldChange("t2i_rendering", "t2i_rendering_strategies", [{ cdn_base_url: " https://example.com/ " }]));
   expect(result.current.templateCdnBaseUrl).toBe("https://example.com");
   await act(async () => { await result.current.handleSave(); });
-  expect(savePluginConfig).toHaveBeenCalledWith({ t2i_rendering: { t2i_cdn_base_url: "https://example.com", extra: "保留" } });
-  expect(result.current.formData.t2i_rendering.t2i_cdn_base_url).toBe("https://example.com");
+  expect(savePluginConfig).toHaveBeenCalledWith(expect.objectContaining({ t2i_rendering: expect.objectContaining({ extra: "保留", t2i_rendering_strategies: [expect.objectContaining({ cdn_base_url: "https://example.com" })] }) }));
+  expect(result.current.formData.t2i_rendering.t2i_rendering_strategies).toEqual([expect.objectContaining({ cdn_base_url: "https://example.com" })]);
   expect(result.current.isDirty).toBe(false);
 });
 

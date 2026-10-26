@@ -172,7 +172,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     if (fieldKey === "service_token") {
       return <Input.Password aria-label={title} value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" />;
     }
-    if (["cdn_base_url", "google_fonts", "gstatic", "t2i_cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"].includes(fieldKey)) {
+    if (["cdn_base_url", "google_fonts", "gstatic"].includes(fieldKey)) {
       const currentValue = value === undefined
         ? typeof defaultValue === "string" ? defaultValue : ""
         : String(value);
@@ -194,9 +194,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
               allowClear
             />
           </AutoComplete>
-          {isCdn && (currentValue.trim() || fieldKey === "t2i_cdn_base_url"
+          {isCdn && (currentValue.trim()
             ? <TemplateCdnProbe baseUrl={currentValue} />
-            : <Typography.Text type="secondary">先选择或填写地址，即可检测 CDN；留空{fieldKey === "cdn_base_url" ? "使用默认地址" : "沿用旧地址或默认地址"}。</Typography.Text>)}
+            : <Typography.Text type="secondary">先选择或填写地址，即可检测 CDN；留空使用当前资源环境的预设。</Typography.Text>)}
         </div>
       );
     }
