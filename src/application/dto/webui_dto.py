@@ -386,6 +386,13 @@ class TemplateCdnProbeDTO(TypedDict):
     checks: list[TemplateCdnCheckDTO]
 
 
+class CustomT2iProbeDTO(TypedDict):
+    """固定 HTML 的真实 T2I 渲染结果，仅供当前页面预览。"""
+
+    image_data_url: str
+    elapsed_ms: float
+
+
 class ConfigSaveDTO(TypedDict):
     """保存插件配置请求数据传输对象。
 
