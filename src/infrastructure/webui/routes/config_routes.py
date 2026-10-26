@@ -19,6 +19,7 @@ from ....shared.constants import PLUGIN_NAME
 from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
 from ...config.rendering_config import (
+    CUSTOM_RESOURCE_OPTION,
     parse_rendering_strategies,
 )
 from ...reporting.cdn_probe import probe_template_cdn
@@ -110,6 +111,7 @@ class ConfigRoutes:
             config_dict = {}
             revision = _config_revision(config_dict)
             if cfg_mgr:
+                cfg_mgr.refresh_rendering_schema_options()
                 config_dict = {str(k): v for k, v in cfg_mgr.config.items()}
                 revision = _config_revision(config_dict)
                 rendering = config_dict.get("t2i_rendering")
@@ -268,6 +270,8 @@ class ConfigRoutes:
                                 [strategy], legacy_config=legacy
                             )[0]
                             for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                                if strategy.get(key) == CUSTOM_RESOURCE_OPTION:
+                                    strategy[f"custom_{key}"] = normalized[key]
                                 strategy[key] = normalized[key]
                             if strategy.get("render_service") == "custom":
                                 strategy["service_endpoint"] = normalized[
