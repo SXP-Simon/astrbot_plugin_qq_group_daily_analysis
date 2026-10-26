@@ -6,6 +6,27 @@ from urllib.parse import urlsplit
 from ...utils.cdn_utils import normalize_cdn_base_url
 
 
+class ScreenshotOptions(TypedDict, total=False):
+    """插件交给宿主或自定义服务的截图选项，不包含地址和凭据。"""
+
+    full_page: bool
+    type: Literal["png", "jpeg"]
+    quality: int
+    device_scale_factor_level: Literal["normal", "high", "ultra"]
+    timeout: int
+    viewport_width: int
+    viewport_height: int
+
+
+class RenderingStrategyOptions(ScreenshotOptions, total=False):
+    """运行时方案，服务与资源元数据在调用截图接口前移除。"""
+
+    resource_environment: Literal["Mainland", "Overseas"]
+    render_service: Literal["astrbot", "custom"]
+    service_endpoint: str
+    service_token: str
+
+
 class RenderingStrategyConfig(TypedDict):
     """配置面板中的单个渲染方案，数值越小越先执行。"""
 

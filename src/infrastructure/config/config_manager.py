@@ -28,6 +28,7 @@ from .config_migrator import ConfigMigrator
 from .rendering_config import (
     DEFAULT_RENDERING_STRATEGY,
     RenderingStrategyConfig,
+    RenderingStrategyOptions,
     parse_rendering_strategies,
 )
 
@@ -406,7 +407,7 @@ class ConfigManager:
                 logger.warning(f"渲染方案配置无效，将使用默认海外方案: {exc}")
         return [DEFAULT_RENDERING_STRATEGY.copy()]
 
-    def get_t2i_rendering_strategies(self) -> list[dict[str, object]]:
+    def get_t2i_rendering_strategies(self) -> list[RenderingStrategyOptions]:
         """将方案转换为截图参数，资源环境由插件消费，不传给 T2I。"""
         group = self._get_group("t2i_rendering")
         return [

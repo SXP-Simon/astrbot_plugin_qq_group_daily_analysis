@@ -278,7 +278,7 @@
                                 "condition": {
                                     "render_service": "custom"
                                 },
-                                "hint": "例如 http://127.0.0.1:8999/text2img。也可填网站根地址或完整的 /text2img/generate 地址，保存时会自动整理。直接连接该服务，不使用环境代理；支持官方 T2I 和兼容的插件服务。"
+                                "hint": "例如 http://127.0.0.1:8999/text2img。也可填网站根地址或完整的 /text2img/generate 地址，保存时会自动整理。直接连接该服务，不使用环境代理；支持官方 T2I 和兼容的插件服务。HTTP 适合可信的本机或内网服务，跨网络连接建议使用 HTTPS，避免报告和 Token 明文传输。"
                             },
                             "service_token": {
                                 "type": "string",

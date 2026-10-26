@@ -316,7 +316,10 @@ def load_config_manager_class(plugin_data_dir: Path):
         decorator_list=[],
     )
     isolated_module = ast.fix_missing_locations(
-        ast.Module(body=[isolated_class], type_ignores=[])
+        ast.Module(
+            body=[ast.parse("from __future__ import annotations").body[0], isolated_class],
+            type_ignores=[],
+        )
     )
     namespace = {
         "__name__": "src.infrastructure.config.config_manager",
