@@ -22,6 +22,7 @@ export { isFieldVisible, resolveDependencyValue } from "../../../entities/config
 export function useConfigViewModel(onConfigSaved?: () => void) {
   const [loading, setLoading] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [revision, setRevision] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [schema, setSchema] = useState<PluginSchema>({});
   const [originalConfig, setOriginalConfig] = useState<Record<string, Record<string, unknown>>>({});
@@ -57,6 +58,7 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
       if (configData.status === "fulfilled") {
         setConfigLoaded(true);
         const data = configData.value;
+        setRevision(data.revision);
         setSchema(data.schema || {});
         setOriginalConfig(data.config || {});
         // 深拷贝一份 formData
@@ -207,8 +209,9 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
         return;
       }
       const normalized = parsed.data;
-      const res = await savePluginConfig(normalized);
+      const res = revision ? await savePluginConfig(normalized, revision) : await savePluginConfig(normalized);
       if (res.success) {
+        setRevision(res.revision ?? revision);
         message.success(res.message || "配置已成功保存并生效");
         setOriginalConfig(normalized);
         setFormData((current) => current === formData ? normalized : current);

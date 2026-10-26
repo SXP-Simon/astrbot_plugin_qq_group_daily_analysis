@@ -40,3 +40,21 @@ describe("配置 API 边界", () => {
     expect((await savePluginConfig({})).success).toBe(false);
   });
 });
+
+
+it("读取和保存时传递配置版本，并接收新的版本", async () => {
+  const revision = "a".repeat(64);
+  const nextRevision = "b".repeat(64);
+  vi.mocked(apiGet).mockResolvedValue({ status: "ok", data: { config: {}, schema: {}, revision } });
+  expect((await fetchPluginConfig()).revision).toBe(revision);
+  vi.mocked(apiPost).mockResolvedValue({ status: "ok", data: { status: "ok", revision: nextRevision } });
+  expect(await savePluginConfig({}, revision)).toEqual({ success: true, message: "配置已成功保存并持久化生效", revision: nextRevision });
+  expect(apiPost).toHaveBeenCalledWith("config", { config: {}, revision });
+});
+
+it("旧版本冲突保留后端提示，损坏版本不能通过响应校验", async () => {
+  vi.mocked(apiPost).mockResolvedValue({ status: "error", message: "配置已被其他页面修改，请重新读取后再保存。当前改动尚未保存。" });
+  expect((await savePluginConfig({}, "a".repeat(64))).success).toBe(false);
+  vi.mocked(apiGet).mockResolvedValue({ status: "ok", data: { config: {}, schema: {}, revision: 123 } });
+  await expect(fetchPluginConfig()).rejects.toThrow("配置响应结构无效");
+});

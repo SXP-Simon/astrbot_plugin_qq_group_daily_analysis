@@ -62,15 +62,17 @@ export async function fetchAvailablePersonas(): Promise<AvailablePersona[]> {
 }
 
 export async function savePluginConfig(
-  config: Record<string, unknown>
-): Promise<{ success: boolean; message?: string }> {
+  config: Record<string, unknown>,
+  revision?: string
+): Promise<{ success: boolean; message?: string; revision?: string }> {
   try {
     const input = pluginConfigSaveSchema.safeParse(config);
     if (!input.success) return { success: false, message: input.error.issues[0].message };
     const payload = input.data;
-    const res = await apiPost<unknown>("config", { config: payload });
+    const res = await apiPost<unknown>("config", { config: payload, ...(revision ? { revision } : {}) });
     const envelope = z.object({
       status: z.string().optional(),
+      revision: z.string().regex(/^[0-9a-f]{64}$/).optional(),
       code: z.number().optional(),
       error: z.unknown().optional(),
       message: z.string().optional(),
@@ -92,7 +94,7 @@ export async function savePluginConfig(
         continue;
       }
       if (raw.status === "ok" || raw.status === "success") {
-        return { success: true, message: raw.message || "配置已成功保存并持久化生效" };
+        return { success: true, message: raw.message || "配置已成功保存并持久化生效", ...(raw.revision ? { revision: raw.revision } : {}) };
       }
       break;
     }

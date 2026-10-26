@@ -33,6 +33,7 @@ export const pluginConfigSchema = z.object({
 
 export const pluginConfigResponseSchema = z.object({
   config: pluginConfigSchema,
+  revision: z.string().regex(/^[0-9a-f]{64}$/, "配置版本无效").optional(),
   schema: z.record(z.string(), schemaGroup),
 }).catchall(z.unknown());
 

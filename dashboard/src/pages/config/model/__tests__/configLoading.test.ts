@@ -60,3 +60,24 @@ it.each([true, false])("清空方案后保存结果为 %s 时，正确更新默�
   expect(result.current.isDirty).toBe(!success);
   expect(message.success).toHaveBeenCalledTimes(success ? 1 : 0);
 });
+
+
+it("保存成功后使用新版本，发生冲突时保留用户草稿", async () => {
+  const revision = "a".repeat(64);
+  const nextRevision = "b".repeat(64);
+  vi.mocked(fetchPluginConfig).mockResolvedValue({ config: { basic: { max_topics: 3 } }, schema: {}, revision });
+  vi.mocked(savePluginConfig).mockResolvedValueOnce({ success: true, revision: nextRevision });
+  const { result } = renderHook(() => useConfigViewModel());
+  await waitFor(() => expect(result.current.configLoaded).toBe(true));
+  act(() => result.current.handleFieldChange("basic", "max_topics", 5));
+  await act(async () => { await result.current.handleSave(); });
+  expect(savePluginConfig).toHaveBeenLastCalledWith({ basic: { max_topics: 5 } }, revision);
+  expect(result.current.isDirty).toBe(false);
+  act(() => result.current.handleFieldChange("basic", "max_topics", 7));
+  vi.mocked(savePluginConfig).mockResolvedValueOnce({ success: false, message: "配置已被其他页面修改，请重新读取后再保存。" });
+  await act(async () => { await result.current.handleSave(); });
+  expect(savePluginConfig).toHaveBeenLastCalledWith({ basic: { max_topics: 7 } }, nextRevision);
+  expect(result.current.formData.basic.max_topics).toBe(7);
+  expect(result.current.isDirty).toBe(true);
+  expect(message.error).toHaveBeenLastCalledWith("配置已被其他页面修改，请重新读取后再保存。");
+});
