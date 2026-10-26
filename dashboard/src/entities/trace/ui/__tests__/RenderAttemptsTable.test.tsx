@@ -19,3 +19,10 @@ it("没有服务信息的旧记录仍可显示", () => {
   expect(screen.getByText("渲染成功")).toBeVisible();
   expect(screen.queryByText(/服务：/)).not.toBeInTheDocument();
 });
+
+
+it("主动取消的轮次显示已停止", () => {
+  render(<RenderAttemptsTable attempts={[{ attempt: 1, status: "cancelled", error: "本轮图片渲染已停止。" }]} />);
+  expect(screen.getByText("已停止")).toBeVisible();
+  expect(screen.queryByText("渲染失败")).not.toBeInTheDocument();
+});
