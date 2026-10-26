@@ -76,4 +76,12 @@ export const renderingSaveSchema = renderingConfigSchema.extend({
   t2i_cdn_base_url: cdnBaseUrlSchema.optional(),
   t2i_mainland_cdn_base_url: cdnBaseUrlSchema.optional(),
   t2i_overseas_cdn_base_url: cdnBaseUrlSchema.optional(),
+}).transform((value) => {
+  // 清空后保存也显示实际采用的默认方案，避免编辑器与运行时不一致。
+  if (value.t2i_rendering_strategies?.length === 0) {
+    value.t2i_rendering_strategies = [renderingStrategySchema.parse({
+      __template_key: "strategy", name: "默认方案",
+    })];
+  }
+  return value;
 });

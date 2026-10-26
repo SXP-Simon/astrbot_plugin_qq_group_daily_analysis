@@ -69,6 +69,14 @@ describe("可扩展渲染方案", () => {
     expect(saved.extra).toEqual({ untouched: [1] });
   });
 
+  it("清空方案后保存明确的默认方案，不改变编辑草稿和扩展字段", () => {
+    const draft = { t2i_rendering: { t2i_rendering_strategies: [], future: "保留" } };
+    const saved = pluginConfigSaveSchema.parse(draft);
+    expect(saved.t2i_rendering?.t2i_rendering_strategies).toEqual(schema.t2i_rendering.items.t2i_rendering_strategies.default);
+    expect(saved.t2i_rendering?.future).toBe("保留");
+    expect(draft.t2i_rendering.t2i_rendering_strategies).toEqual([]);
+  });
+
   it.each([
     { priority: true }, { priority: -1 }, { environment: "Local" },
     { type: "gif" }, { quality: 101 }, { timeout: 0 }, { device_scale: "wrong" }, { name: 1 },
