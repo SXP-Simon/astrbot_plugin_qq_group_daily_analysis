@@ -7,6 +7,8 @@ from urllib.parse import urlsplit
 from ...shared.constants import DEFAULT_CDN_HOST
 from ...utils.cdn_utils import normalize_cdn_base_url
 
+CUSTOM_RESOURCE_OPTION = "__custom__"
+
 
 class ScreenshotOptions(TypedDict, total=False):
     """插件交给宿主或自定义服务的截图选项，不包含地址和凭据。"""
@@ -180,6 +182,10 @@ def parse_rendering_strategies(
             ("gstatic", "字体文件地址"),
         ):
             candidate = item.get(key)
+            if candidate == CUSTOM_RESOURCE_OPTION:
+                candidate = item.get(f"custom_{key}")
+                if not isinstance(candidate, str) or not candidate.strip():
+                    raise ValueError(f"第 {index} 个渲染方案请填写自定义{label}")
             if key not in item and legacy_config is not None:
                 candidate = legacy_config.get(f"t2i_{environment.lower()}_{key}")
                 if key == "cdn_base_url" and (

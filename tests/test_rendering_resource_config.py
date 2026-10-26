@@ -50,8 +50,10 @@ def test_schema_has_two_editable_presets_and_only_one_initial_round():
             name: plan[name] for name in DEFAULT_RENDERING_RESOURCES[environment]
         } == DEFAULT_RENDERING_RESOURCES[environment]
         assert items["render_service"]["options"] == ["astrbot", "custom"]
-    assert not any(
-        name.startswith(("t2i_mainland_", "t2i_overseas_")) for name in fields
+    assert all(
+        field.get("invisible")
+        for name, field in fields.items()
+        if name.startswith(("t2i_mainland_", "t2i_overseas_"))
     )
 
 

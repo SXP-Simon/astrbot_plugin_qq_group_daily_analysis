@@ -254,6 +254,7 @@ def load_config_manager_class(plugin_data_dir: Path):
         if isinstance(node, ast.ClassDef) and node.name == "ConfigManager"
     )
     required_names = {
+        "refresh_rendering_schema_options",
         "__init__",
         "_get_group",
         "_get_plugin_root",
@@ -339,6 +340,9 @@ def load_config_manager_class(plugin_data_dir: Path):
         "re": re,
         "shutil": shutil,
         "logger": Mock(),
+        "sync_rendering_schema_options": __import__(
+            "src.infrastructure.config.rendering_schema", fromlist=["sync_rendering_schema_options"]
+        ).sync_rendering_schema_options,
         "ConfigMigrator": __import__(
             "src.infrastructure.config.config_migrator",
             fromlist=["ConfigMigrator"],

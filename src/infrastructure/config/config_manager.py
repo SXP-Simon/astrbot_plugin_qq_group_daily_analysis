@@ -30,6 +30,7 @@ from .rendering_config import (
     RenderingStrategyOptions,
     parse_rendering_strategies,
 )
+from .rendering_schema import sync_rendering_schema_options
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -59,6 +60,12 @@ class ConfigManager:
         self.config = config
         self._migrator = ConfigMigrator(self, star_tools=StarTools)
         self._migrator.run_all_migrations()
+        self.refresh_rendering_schema_options()
+
+    def refresh_rendering_schema_options(self) -> None:
+        """同步宿主内存中的资源选项，兼容不带 Schema 的离线配置桩。"""
+        schema: dict | None = getattr(self.config, "schema", None)
+        sync_rendering_schema_options(schema, self._get_group("t2i_rendering"))
 
     def _protect_upgrade_data(self) -> None:
         """在插件升级且配置结构发生变更时备份旧配置（委托 ConfigMigrator）。"""
@@ -1469,6 +1476,7 @@ class ConfigManager:
         """
         try:
             self.config.save_config()
+            self.refresh_rendering_schema_options()
             logger.info("配置已保存")
         except Exception as e:
             logger.error(f"保存配置失败: {e}")

@@ -23,7 +23,7 @@ from astrbot.api.star import StarTools
 from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from ...utils.template_utils import upgrade_str_format_template
-from .rendering_config import parse_rendering_strategies
+from .rendering_config import CUSTOM_RESOURCE_OPTION, parse_rendering_strategies
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -83,8 +83,16 @@ class ConfigMigrator:
                     for item in strategies
                 ]
                 for item, plan in zip(strategies, normalized, strict=True):
+                    if (
+                        item.get("__template_key") == "strategy"
+                        and plan["environment"] == "Mainland"
+                    ):
+                        item["__template_key"] = "mainland"
+                        modified = True
                     for key in ("cdn_base_url", "google_fonts", "gstatic"):
-                        if key not in item:
+                        if key not in item or item[key] == CUSTOM_RESOURCE_OPTION:
+                            if item.get(key) == CUSTOM_RESOURCE_OPTION:
+                                item[f"custom_{key}"] = plan[key]
                             item[key] = plan[key]
                             modified = True
             except ValueError:

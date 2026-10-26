@@ -236,10 +236,7 @@
                         "timeout": 20000,
                         "render_service": "astrbot",
                         "service_endpoint": "",
-                        "service_token": "",
-                        "cdn_base_url": "https://cdn.jsdmirror.com",
-                        "google_fonts": "https://fonts.googleapis.com",
-                        "gstatic": "https://fonts.gstatic.com"
+                        "service_token": ""
                     }
                 ],
                 "hint": "添加时可选内地或海外预设，再按需要修改本轮地址。两种预设都可跟随 AstrBot 或使用自定义截图服务；内地和海外描述的是资源地址，不代表截图服务的位置。初始只有一项海外方案，清空后仍使用默认方案。所有轮次共用 5 分钟总等待上限；图片已生成但缺少个别素材时，不会自动进入下一轮。",
@@ -311,19 +308,86 @@
                                 "type": "string",
                                 "description": "模板资源 CDN",
                                 "default": "https://cdn.jsdmirror.com",
-                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。填写支持 /gh/、/npm/ 的网站根地址，例如 https://fastly.jsdelivr.net/。请先测试截图服务所在网络的速度和可达性；旁边按钮检测的是机器人服务器。留空使用插件默认 CDN，自定义图片地址不受影响。"
+                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。填写支持 /gh/、/npm/ 的网站根地址，例如 https://fastly.jsdelivr.net/。请先测试截图服务所在网络的速度和可达性；旁边按钮检测的是机器人服务器。留空使用插件默认 CDN，自定义图片地址不受影响。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "options": [
+                                    "https://cdn.jsdmirror.com",
+                                    "https://cdn.jsdmirror.cn",
+                                    "https://jsd.cdn.noisework.cn",
+                                    "https://cdn.bili33.top",
+                                    "https://cdn.jsdelivr.net",
+                                    "https://fastly.jsdelivr.net",
+                                    "https://gcore.jsdelivr.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "JSDMirror（默认） · https://cdn.jsdmirror.com",
+                                    "JSDMirror CN · https://cdn.jsdmirror.cn",
+                                    "NOISE · https://jsd.cdn.noisework.cn",
+                                    "哔哩 CDN · https://cdn.bili33.top",
+                                    "jsDelivr · https://cdn.jsdelivr.net",
+                                    "Fastly · https://fastly.jsdelivr.net",
+                                    "Gcore · https://gcore.jsdelivr.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_cdn_base_url": {
+                                "type": "string",
+                                "description": "自定义模板资源 CDN",
+                                "default": "",
+                                "condition": {
+                                    "cdn_base_url": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
                             },
                             "google_fonts": {
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "https://fonts.googleapis.com",
-                                "hint": "本轮字体样式表的地址。海外可用 https://fonts.googleapis.com，内地可尝试 https://fonts.loli.net；请以截图服务所在网络的实际访问情况为准。"
+                                "hint": "本轮字体样式表的地址。海外可用 https://fonts.googleapis.com，内地可尝试 https://fonts.loli.net；请以截图服务所在网络的实际访问情况为准。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "options": [
+                                    "https://fonts.googleapis.com",
+                                    "https://fonts.loli.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "Google Fonts · https://fonts.googleapis.com",
+                                    "loli 镜像 · https://fonts.loli.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_google_fonts": {
+                                "type": "string",
+                                "description": "自定义Google Fonts 地址",
+                                "default": "",
+                                "condition": {
+                                    "google_fonts": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
                             },
                             "gstatic": {
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "https://fonts.gstatic.com",
-                                "hint": "本轮字体文件的地址，建议与上面的字体样式表使用配套镜像。内地预设为 https://gstatic.loli.net。"
+                                "hint": "本轮字体文件的地址，建议与上面的字体样式表使用配套镜像。内地预设为 https://gstatic.loli.net。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "options": [
+                                    "https://fonts.gstatic.com",
+                                    "https://gstatic.loli.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "Google Gstatic · https://fonts.gstatic.com",
+                                    "loli 镜像 · https://gstatic.loli.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_gstatic": {
+                                "type": "string",
+                                "description": "自定义字体文件地址（Gstatic）",
+                                "default": "",
+                                "condition": {
+                                    "gstatic": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
                             },
                             "type": {
                                 "type": "string",
@@ -429,19 +493,86 @@
                                 "type": "string",
                                 "description": "模板资源 CDN",
                                 "default": "https://cdn.jsdmirror.com",
-                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。填写支持 /gh/、/npm/ 的网站根地址，例如 https://fastly.jsdelivr.net/。请先测试截图服务所在网络的速度和可达性；旁边按钮检测的是机器人服务器。留空使用插件默认 CDN，自定义图片地址不受影响。"
+                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。填写支持 /gh/、/npm/ 的网站根地址，例如 https://fastly.jsdelivr.net/。请先测试截图服务所在网络的速度和可达性；旁边按钮检测的是机器人服务器。留空使用插件默认 CDN，自定义图片地址不受影响。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "options": [
+                                    "https://cdn.jsdmirror.com",
+                                    "https://cdn.jsdmirror.cn",
+                                    "https://jsd.cdn.noisework.cn",
+                                    "https://cdn.bili33.top",
+                                    "https://cdn.jsdelivr.net",
+                                    "https://fastly.jsdelivr.net",
+                                    "https://gcore.jsdelivr.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "JSDMirror（默认） · https://cdn.jsdmirror.com",
+                                    "JSDMirror CN · https://cdn.jsdmirror.cn",
+                                    "NOISE · https://jsd.cdn.noisework.cn",
+                                    "哔哩 CDN · https://cdn.bili33.top",
+                                    "jsDelivr · https://cdn.jsdelivr.net",
+                                    "Fastly · https://fastly.jsdelivr.net",
+                                    "Gcore · https://gcore.jsdelivr.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_cdn_base_url": {
+                                "type": "string",
+                                "description": "自定义模板资源 CDN",
+                                "default": "",
+                                "condition": {
+                                    "cdn_base_url": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
                             },
                             "google_fonts": {
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "https://fonts.loli.net",
-                                "hint": "本轮字体样式表的地址。海外可用 https://fonts.googleapis.com，内地可尝试 https://fonts.loli.net；请以截图服务所在网络的实际访问情况为准。"
+                                "hint": "本轮字体样式表的地址。海外可用 https://fonts.googleapis.com，内地可尝试 https://fonts.loli.net；请以截图服务所在网络的实际访问情况为准。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "options": [
+                                    "https://fonts.googleapis.com",
+                                    "https://fonts.loli.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "Google Fonts · https://fonts.googleapis.com",
+                                    "loli 镜像 · https://fonts.loli.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_google_fonts": {
+                                "type": "string",
+                                "description": "自定义Google Fonts 地址",
+                                "default": "",
+                                "condition": {
+                                    "google_fonts": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
                             },
                             "gstatic": {
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "https://gstatic.loli.net",
-                                "hint": "本轮字体文件的地址，建议与上面的字体样式表使用配套镜像。内地预设为 https://gstatic.loli.net。"
+                                "hint": "本轮字体文件的地址，建议与上面的字体样式表使用配套镜像。内地预设为 https://gstatic.loli.net。 AstrBot 配置页请选择预设或“自定义地址”，再填写下方地址；保存后会保留实际地址。插件 WebUI 可直接在选框中输入。",
+                                "options": [
+                                    "https://fonts.gstatic.com",
+                                    "https://gstatic.loli.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "Google Gstatic · https://fonts.gstatic.com",
+                                    "loli 镜像 · https://gstatic.loli.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_gstatic": {
+                                "type": "string",
+                                "description": "自定义字体文件地址（Gstatic）",
+                                "default": "",
+                                "condition": {
+                                    "gstatic": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
                             },
                             "type": {
                                 "type": "string",
@@ -509,6 +640,42 @@
                 "description": "模板资源 CDN 基础地址",
                 "default": "https://cdn.jsdmirror.com",
                 "hint": "用于模板素材、内置人格图片和预览图，也提供 npm 资源地址。插件 WebUI 支持选择预设，也可以自己填写。国内网络可先试 https://cdn.jsdmirror.com/ 或 https://cdn.jsdmirror.cn/，另提供 NOISE https://jsd.cdn.noisework.cn/ 和哔哩 CDN https://cdn.bili33.top/ 备选，请按实际网络检测选用。海外网络可先试 https://cdn.jsdelivr.net/，也可试 https://fastly.jsdelivr.net/ 或 https://gcore.jsdelivr.net/。这些是候选地址，实际速度和可达性以渲染服务所在网络为准，使用前请先测试。自填地址需兼容 /gh/ 和 /npm/，只填网站地址，不带文件路径；末尾的 / 和首尾空白会自动去掉，留空使用默认地址。点“检测可用性”可检查机器人所在服务器的访问情况，远程图片渲染服务还需生成报告确认。Google 字体仍使用单独的镜像设置。",
+                "invisible": true
+            },
+            "t2i_mainland_cdn_base_url": {
+                "type": "string",
+                "description": "旧版资源地址（兼容迁移）",
+                "default": "",
+                "invisible": true
+            },
+            "t2i_mainland_google_fonts": {
+                "type": "string",
+                "description": "旧版资源地址（兼容迁移）",
+                "default": "",
+                "invisible": true
+            },
+            "t2i_mainland_gstatic": {
+                "type": "string",
+                "description": "旧版资源地址（兼容迁移）",
+                "default": "",
+                "invisible": true
+            },
+            "t2i_overseas_cdn_base_url": {
+                "type": "string",
+                "description": "旧版资源地址（兼容迁移）",
+                "default": "",
+                "invisible": true
+            },
+            "t2i_overseas_google_fonts": {
+                "type": "string",
+                "description": "旧版资源地址（兼容迁移）",
+                "default": "",
+                "invisible": true
+            },
+            "t2i_overseas_gstatic": {
+                "type": "string",
+                "description": "旧版资源地址（兼容迁移）",
+                "default": "",
                 "invisible": true
             }
         }
