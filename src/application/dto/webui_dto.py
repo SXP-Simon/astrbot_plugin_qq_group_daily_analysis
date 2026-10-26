@@ -7,7 +7,7 @@ Web 控制台请求与响应数据传输对象 (Rest DTOs)
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 # ============================================================================
 # 1. 任务控制与调度 DTO (Task Control & Scheduling)
@@ -391,9 +391,11 @@ class ConfigSaveDTO(TypedDict):
 
     Attributes:
         config: 全量配置项字典。
+        revision: 可选的读取版本，用于拒绝过期快照。
     """
 
     config: dict[str, object]
+    revision: NotRequired[str]
 
 
 class ConfigFileUploadDTO(TypedDict, total=False):
