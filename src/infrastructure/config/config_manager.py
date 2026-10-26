@@ -24,6 +24,7 @@ from ...shared.constants import (
 from ...utils.logger import logger
 from .config_migrator import ConfigMigrator
 from .rendering_config import (
+    DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS,
     DEFAULT_RENDERING_STRATEGY_PRESETS,
     RenderingResourceConfig,
     RenderingStrategyConfig,
@@ -437,6 +438,9 @@ class ConfigManager:
                 "render_service": item["render_service"],
                 "service_endpoint": item["service_endpoint"],
                 "service_token": item["service_token"],
+                "request_timeout": item.get(
+                    "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
+                ),
             }
             for item in self.get_t2i_rendering_strategy_config()
         ]

@@ -111,6 +111,8 @@ class NativeConfigurationContract(unittest.TestCase):
             plan = manager.get_t2i_rendering_strategy_config()[0]
             self.assertEqual(plan["__template_key"], "custom")
             self.assertEqual(plan["render_service"], "custom")
+            self.assertEqual(plan["request_timeout"], 40000)
+            self.assertEqual(plan["timeout"], 20000)
             self.assertEqual(plan["service_endpoint"], "http://127.0.0.1:8999/text2img")
             self.assertEqual(plan["google_fonts"], font)
             self.assertEqual(manager.config["t2i_rendering"]["t2i_rendering_strategies"][0]["google_fonts"], "")
@@ -126,7 +128,7 @@ class NativeConfigurationContract(unittest.TestCase):
         self.assertTrue(ConfigMigrator(manager).migrate_legacy_configs())
         reloaded = AstrBotConfig(config_path=str(self.path), schema=deepcopy(self.schema))
         original.pop("render_service")
-        self.assertEqual(reloaded["t2i_rendering"]["t2i_rendering_strategies"], [{**original, "__template_key": "custom"}])
+        self.assertEqual(reloaded["t2i_rendering"]["t2i_rendering_strategies"], [{**original, "__template_key": "custom", "request_timeout": 40000}])
 
     def test_native_custom_mode_and_webui_save_share_persisted_values_and_choices(self):
         manager = self.load(
@@ -197,6 +199,20 @@ class NativeConfigurationContract(unittest.TestCase):
         manager = self.load({"t2i_rendering_strategies": [{"__template_key": "custom", "name": "自用", "priority": 3}]})
         manager._migrator.run_all_migrations()
         self.assertEqual(len(manager.get_t2i_rendering_strategy_config()), 1)
+
+
+    def test_custom_wait_budget_saves_and_reloads_independently(self):
+        manager = self.load({"t2i_rendering_strategies": [{"__template_key": "custom", "timeout": 20000, "request_timeout": 70000}]})
+        manager._migrator.run_all_migrations()
+        manager.save_config()
+        manager.config = AstrBotConfig(config_path=str(self.path), schema=deepcopy(self.schema))
+        plan = manager.get_t2i_rendering_strategy_config()[0]
+        self.assertEqual((plan["timeout"], plan["request_timeout"]), (20000, 70000))
+        self.assertEqual(manager.get_t2i_rendering_strategies()[0]["request_timeout"], 70000)
+        templates = self.schema["t2i_rendering"]["items"]["t2i_rendering_strategies"]["templates"]
+        self.assertEqual(templates["custom"]["items"]["request_timeout"]["default"], 40000)
+        for kind in ("strategy", "mainland"):
+            self.assertNotIn("request_timeout", templates[kind]["items"])
 
 
 if __name__ == "__main__":

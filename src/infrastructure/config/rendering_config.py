@@ -1,7 +1,7 @@
 """可扩展图片渲染方案的配置契约与边界校验。"""
 
 from collections.abc import Mapping
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 from urllib.parse import urlsplit
 
 from ...shared.constants import DEFAULT_CDN_HOST
@@ -9,6 +9,7 @@ from ...utils.cdn_utils import normalize_cdn_base_url
 
 CUSTOM_RESOURCE_OPTION = "__custom__"
 DEFAULT_CUSTOM_T2I_ENDPOINT = "http://127.0.0.1:8999/text2img"
+DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS = 40000
 
 
 class ScreenshotOptions(TypedDict, total=False):
@@ -53,6 +54,7 @@ class RenderingStrategyOptions(ScreenshotOptions, total=False):
     render_service: Literal["astrbot", "custom"]
     service_endpoint: str
     service_token: str
+    request_timeout: int
 
 
 RenderingTemplateMarker = TypedDict(
@@ -87,6 +89,7 @@ class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     quality: int
     device_scale: Literal["normal", "high", "ultra"]
     timeout: int
+    request_timeout: NotRequired[int]
 
 
 def normalize_t2i_endpoint(value: str) -> str:
@@ -247,28 +250,39 @@ def parse_rendering_strategies(
                     f"第 {index} 个渲染方案的{label} 必须是 {lower} 到 {upper} 的整数"
                 )
             integers[key] = number
-        result.append(
-            {
-                "__template_key": (
-                    "custom"
-                    if render_service == "custom"
-                    else "mainland"
-                    if environment == "Mainland"
-                    else "strategy"
-                ),
-                "cdn_base_url": resources["cdn_base_url"],
-                "google_fonts": resources["google_fonts"],
-                "gstatic": resources["gstatic"],
-                "name": name,
-                "priority": integers["priority"],
-                "environment": environment,
-                "render_service": render_service,
-                "service_endpoint": endpoint,
-                "service_token": token.strip(),
-                "type": image_type,
-                "quality": integers["quality"],
-                "device_scale": scale,
-                "timeout": integers["timeout"],
-            }
-        )
+        plan: RenderingStrategyConfig = {
+            "__template_key": (
+                "custom"
+                if render_service == "custom"
+                else "mainland"
+                if environment == "Mainland"
+                else "strategy"
+            ),
+            "cdn_base_url": resources["cdn_base_url"],
+            "google_fonts": resources["google_fonts"],
+            "gstatic": resources["gstatic"],
+            "name": name,
+            "priority": integers["priority"],
+            "environment": environment,
+            "render_service": render_service,
+            "service_endpoint": endpoint,
+            "service_token": token.strip(),
+            "type": image_type,
+            "quality": integers["quality"],
+            "device_scale": scale,
+            "timeout": integers["timeout"],
+        }
+        if render_service == "custom" or "request_timeout" in item:
+            request_timeout = item.get(
+                "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
+            )
+            if (
+                type(request_timeout) is not int
+                or not 1000 <= request_timeout <= 300000
+            ):
+                raise ValueError(
+                    f"第 {index} 个渲染方案的请求等待上限必须是 1000 到 300000 的整数"
+                )
+            plan["request_timeout"] = request_timeout
+        result.append(plan)
     return sorted(result, key=lambda strategy: strategy["priority"])

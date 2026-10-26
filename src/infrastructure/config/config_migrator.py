@@ -143,6 +143,12 @@ class ConfigMigrator:
                         if item.get(key) != plan[key]:
                             item[key] = plan[key]
                             modified = True
+                    if (
+                        "request_timeout" in plan
+                        and item.get("request_timeout") != plan["request_timeout"]
+                    ):
+                        item["request_timeout"] = plan["request_timeout"]
+                        modified = True
                     if "render_service" in item:
                         del item["render_service"]
                         modified = True
