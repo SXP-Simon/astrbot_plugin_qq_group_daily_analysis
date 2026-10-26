@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal, TypeAlias, TypedDict
 
 JsonValue: TypeAlias = (
-    str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+    str | int | float | bool | list["JsonValue"] | dict[str, "JsonValue"] | None
 )
 BackupKind = Literal["upgrade", "comic_migration", "other"]
 MAX_BACKUP_BYTES = 8 * 1024 * 1024
