@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const CUSTOM_RESOURCE_OPTION = "__custom__";
+
 export const DEFAULT_TEMPLATE_CDN_BASE_URL = "https://cdn.jsdmirror.com";
 export const TEMPLATE_CDN_PRESETS = [
   { value: DEFAULT_TEMPLATE_CDN_BASE_URL, label: "国内可先试 · JSDMirror（默认） · https://cdn.jsdmirror.com" },
@@ -70,9 +72,9 @@ export const renderingStrategySchema = z.object({
   name: z.string({ error: "方案名称必须是文字" }).default("渲染方案"),
   priority: z.number({ error: "优先级必须是数字" }).int("优先级必须是整数").min(0, "优先级不能小于 0").max(10000, "优先级不能大于 10000").default(10),
   environment: z.enum(["Mainland", "Overseas"], { error: "请选择内地或海外资源环境" }).optional(),
-  cdn_base_url: cdnBaseUrlSchema.optional(),
-  google_fonts: fontBaseUrlSchema.optional(),
-  gstatic: fontBaseUrlSchema.optional(),
+  cdn_base_url: z.union([cdnBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
+  google_fonts: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
+  gstatic: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   render_service: z.enum(["astrbot", "custom"], { error: "请选择跟随 AstrBot 或自定义服务" }).default("astrbot"),
   service_endpoint: z.string({ error: "服务地址必须是文字" }).trim().default(""),
   service_token: z.string({ error: "服务 Token 必须是文字" }).max(4096, "服务 Token 不能超过 4096 个字符").regex(/^[\x20-\x7e]*$/, "服务 Token 请使用英文、数字或常用符号，不能换行").transform((value) => value.trim()).default(""),
@@ -81,11 +83,24 @@ export const renderingStrategySchema = z.object({
   device_scale: z.enum(["normal", "high", "ultra"], { error: "请选择有效的分辨率等级" }).default("high"),
   timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").default(20000),
 }).catchall(z.unknown()).superRefine((value, ctx) => {
+  for (const key of ["cdn_base_url", "google_fonts", "gstatic"] as const) {
+    if (value[key] !== CUSTOM_RESOURCE_OPTION) continue;
+    const raw = value[`custom_${key}`];
+    const parsed = (key === "cdn_base_url" ? cdnBaseUrlSchema : fontBaseUrlSchema).safeParse(raw);
+    if (!parsed.success || !parsed.data) ctx.addIssue({ code: "custom", path: [`custom_${key}`], message: "请填写完整的自定义资源地址" });
+  }
   if (value.render_service === "custom") {
     const endpoint = t2iEndpointSchema.safeParse(value.service_endpoint);
     if (!endpoint.success) ctx.addIssue({ code: "custom", path: ["service_endpoint"], message: endpoint.error.issues[0].message });
   }
 }).transform((value) => {
+  for (const key of ["cdn_base_url", "google_fonts", "gstatic"] as const) {
+    if (value[key] === CUSTOM_RESOURCE_OPTION) {
+      const address = (key === "cdn_base_url" ? cdnBaseUrlSchema : fontBaseUrlSchema).parse(value[`custom_${key}`]);
+      value[key] = address;
+      value[`custom_${key}`] = address;
+    }
+  }
   if (value.render_service === "custom") value.service_endpoint = t2iEndpointSchema.parse(value.service_endpoint);
   return Object.assign(value, { environment: value.environment ?? (value.__template_key === "mainland" ? "Mainland" as const : "Overseas" as const) });
 });

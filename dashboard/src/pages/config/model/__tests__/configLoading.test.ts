@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { message } from "antd";
 import { fetchPluginConfig, savePluginConfig } from "../../../../entities/config/api/configApi";
-import { pluginConfigResponseSchema } from "../../../../entities/config/model/configContract";
+import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../../../../entities/config/model/configContract";
 import { useConfigViewModel } from "../useConfigViewModel";
 import schema from "../../../../../../_conf_schema.json";
 
@@ -45,7 +45,7 @@ it.each(["wrong", 123, null])("CDN 草稿错误 %j 不会驱动默认预览，�
 });
 
 it.each([true, false])("清空方案后保存结果为 %s 时，正确更新默认方案或保留未保存草稿", async (success) => {
-  const initial = schema.t2i_rendering.items.t2i_rendering_strategies.default;
+  const initial = pluginConfigSaveSchema.parse({ t2i_rendering: { t2i_rendering_strategies: schema.t2i_rendering.items.t2i_rendering_strategies.default } }).t2i_rendering!.t2i_rendering_strategies!;
   vi.mocked(fetchPluginConfig).mockResolvedValue(pluginConfigResponseSchema.parse({
     config: { t2i_rendering: { t2i_rendering_strategies: initial } }, schema,
   }));

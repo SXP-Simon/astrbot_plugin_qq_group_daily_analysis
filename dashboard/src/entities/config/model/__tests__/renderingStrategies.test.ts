@@ -12,7 +12,7 @@ describe("可扩展渲染方案", () => {
     expect(Object.keys(schema.t2i_rendering.items).some((key) => /^t2i_r[12]_/.test(key))).toBe(false);
     expect(schema.t2i_rendering.items).not.toHaveProperty("t2i_font_source");
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.default).toEqual([
-      { cdn_base_url: "https://cdn.jsdmirror.com", google_fonts: "https://fonts.googleapis.com", gstatic: "https://fonts.gstatic.com", __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", render_service: "astrbot", service_endpoint: "", service_token: "", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
+      { __template_key: "strategy", name: "默认方案", priority: 10, environment: "Overseas", render_service: "astrbot", service_endpoint: "", service_token: "", type: "png", quality: 80, device_scale: "high", timeout: 20000 },
     ]);
     expect(renderingStrategySchema.parse({}).timeout).toBe(20000);
     expect(schema.t2i_rendering.items.t2i_cdn_base_url.invisible).toBe(true);
@@ -73,7 +73,7 @@ describe("可扩展渲染方案", () => {
   it("清空方案后保存明确的默认方案，不改变编辑草稿和扩展字段", () => {
     const draft = { t2i_rendering: { t2i_rendering_strategies: [], future: "保留" } };
     const saved = pluginConfigSaveSchema.parse(draft);
-    expect(saved.t2i_rendering?.t2i_rendering_strategies).toEqual(schema.t2i_rendering.items.t2i_rendering_strategies.default);
+    expect(saved.t2i_rendering?.t2i_rendering_strategies).toEqual(pluginConfigSaveSchema.parse({ t2i_rendering: { t2i_rendering_strategies: schema.t2i_rendering.items.t2i_rendering_strategies.default } }).t2i_rendering?.t2i_rendering_strategies);
     expect(saved.t2i_rendering?.future).toBe("保留");
     expect(draft.t2i_rendering.t2i_rendering_strategies).toEqual([]);
   });
