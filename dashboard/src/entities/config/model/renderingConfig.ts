@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const CUSTOM_RESOURCE_OPTION = "__custom__";
 export const DEFAULT_CUSTOM_T2I_ENDPOINT = "http://127.0.0.1:8999/text2img";
+export const DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS = 40000;
 
 export const DEFAULT_TEMPLATE_CDN_BASE_URL = "https://cdn.jsdmirror.com";
 export const TEMPLATE_CDN_PRESETS = [
@@ -82,6 +83,7 @@ export const renderingStrategySchema = z.object({
   type: z.enum(["png", "jpeg"], { error: "请选择 PNG 或 JPEG 格式" }).default("png"),
   quality: z.number({ error: "图片质量必须是数字" }).int("图片质量必须是整数").min(1, "图片质量不能小于 1").max(100, "图片质量不能大于 100").default(80),
   device_scale: z.enum(["normal", "high", "ultra"], { error: "请选择有效的分辨率等级" }).default("high"),
+  request_timeout: z.number({ error: "请求等待上限必须是数字" }).int("请求等待上限必须是整数").min(1000, "请求等待上限不能小于 1000 毫秒").max(300000, "请求等待上限不能大于 300000 毫秒").optional(),
   timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").default(20000),
 }).catchall(z.unknown()).superRefine((value, ctx) => {
   for (const key of ["cdn_base_url", "google_fonts", "gstatic"] as const) {
@@ -109,6 +111,7 @@ export const renderingStrategySchema = z.object({
   const { render_service: _legacyService, ...plan } = value;
   return Object.assign(plan, {
     environment,
+    ...(service === "custom" ? { request_timeout: value.request_timeout ?? DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS } : {}),
     service_endpoint: service === "custom" ? t2iEndpointSchema.parse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT) : value.service_endpoint ?? "",
     __template_key: service === "custom" ? "custom" : environment === "Mainland" ? "mainland" : "strategy",
   });

@@ -84,5 +84,93 @@
       "service_endpoint": "http://render:65536"
     },
     "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "timeout": 20000
+    },
+    "expected": {
+      "request_timeout": 40000,
+      "timeout": 20000
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": 70000,
+      "timeout": 20000
+    },
+    "expected": {
+      "request_timeout": 70000,
+      "timeout": 20000
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": 1000
+    },
+    "expected": {
+      "request_timeout": 1000
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": 300000
+    },
+    "expected": {
+      "request_timeout": 300000
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": true
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": 0
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": 999
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": 300001
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": 40000.5
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": "40000"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "__template_key": "custom",
+      "request_timeout": null
+    },
+    "expected": null
   }
 ]

@@ -53,6 +53,7 @@ it("直接添加自定义方案，预填本地服务并独立切换资源环境"
   fireEvent.click(await screen.findByText("自定义 T2I 方案", { exact: true }, { timeout: 5000 }));
   expect(screen.queryByRole("combobox", { name: "渲染服务" })).not.toBeInTheDocument();
   expect(screen.getByLabelText("自定义 T2I 服务地址")).toHaveValue("http://127.0.0.1:8999/text2img");
+  fireEvent.change(screen.getByDisplayValue("40000"), { target: { value: "70000" } });
   const token = screen.getByLabelText("服务 Token（可选）");
   expect(token).toHaveAttribute("type", "password");
   fireEvent.change(token, { target: { value: "my-secret" } });
@@ -61,7 +62,7 @@ it("直接添加自定义方案，预填本地服务并独立切换资源环境"
   fireEvent.click(screen.getByText("内地（Mainland）", { exact: true }));
   const data: unknown = JSON.parse(screen.getByTestId("strategies").textContent || "[]");
   expect(data).toMatchObject([{
-    __template_key: "custom", environment: "Mainland",
+    __template_key: "custom", environment: "Mainland", timeout: 20000, request_timeout: 70000,
     service_endpoint: "http://127.0.0.1:8999/text2img", service_token: "my-secret",
     google_fonts: "https://my-fonts.example", gstatic: "", cdn_base_url: "",
   }]);
