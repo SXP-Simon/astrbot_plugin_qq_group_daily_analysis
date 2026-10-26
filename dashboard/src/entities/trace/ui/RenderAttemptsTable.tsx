@@ -92,6 +92,7 @@ export const RenderAttemptsTable: React.FC<RenderAttemptsTableProps> = ({ attemp
                   </span>
                   <span style={{ color: isDark ? "#c9d1d9" : "#1e293b" }}>
                     格式: <b>{String(att.type || "jpeg")}</b>
+                    {att.resource_environment === "Mainland" ? " | 资源环境: 内地" : att.resource_environment === "Overseas" ? " | 资源环境: 海外" : ""}
                     {att.viewport ? ` | 视口: ${String(att.viewport)}` : ""}
                   </span>
                 </div>
