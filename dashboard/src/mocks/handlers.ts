@@ -4,6 +4,7 @@ import { mockTraces } from "./data/traces";
 import { mockReportHistory, mockReportTemplates } from "./data/reports";
 import { mockPluginConfig, mockProviders, mockPersonas } from "./data/configs";
 import { mockPluginLogs } from "./data/logs";
+import { mockConfigBackups } from "./data/configBackups";
 import {
   mockPluginDataOverview,
   mockIncrementalBatches,
@@ -189,6 +190,11 @@ export const mockHandlers = {
 
   // 7. 数据存储管理
   "GET plugin-data/overview": () => ({ status: "ok", data: mockPluginDataOverview }),
+  "GET plugin-data/config-backups": () => ({ status: "ok", data: { items: mockConfigBackups.map((item) => item.backup) } }),
+  "GET plugin-data/config-backups/detail": (params?: Record<string, unknown>) => {
+    const detail = mockConfigBackups.find((item) => item.backup.filename === params?.filename);
+    return detail ? { status: "ok", data: detail } : { status: "error", message: "备份不存在" };
+  },
   "POST plugin-data/:section/clear": () => ({ status: "ok", data: { deleted: 10 } }),
   "GET data/incremental/groups": () => ({
     status: "ok",

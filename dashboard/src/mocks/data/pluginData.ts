@@ -8,7 +8,7 @@ export const mockPluginDataOverview: PluginDataOverview = {
   avatars: { count: 82, size_bytes: 3120000 },
   custom_templates: { count: 3, size_bytes: 2518900 },
   config_files: { count: 6, size_bytes: 620000 },
-  config_backups: { count: 5, size_bytes: 210000 },
+  config_backups: { count: 3, size_bytes: 19794 },
   reports: { count: 18, size_bytes: 14420000 },
   temp_files: { count: 8, size_bytes: 2400000 },
 };

@@ -1,4 +1,6 @@
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
+import { configBackupListSchema, configBackupDetailSchema } from "../model/configBackup";
+
 import {
   PluginDataOverview,
   IncrementalBatchesResponse,
@@ -8,6 +10,16 @@ import {
 } from "../model/types";
 
 export * from "../model/types";
+
+export async function fetchConfigBackups() {
+  const response = await apiGet<unknown>("plugin-data/config-backups");
+  return configBackupListSchema.parse(extractData<unknown>(response)).items;
+}
+
+export async function fetchConfigBackup(filename: string) {
+  const response = await apiGet<unknown>("plugin-data/config-backups/detail", { filename });
+  return configBackupDetailSchema.parse(extractData<unknown>(response));
+}
 
 export async function fetchPluginDataOverview(): Promise<PluginDataOverview> {
   const res = await apiGet<PluginDataOverview>("plugin-data/overview");

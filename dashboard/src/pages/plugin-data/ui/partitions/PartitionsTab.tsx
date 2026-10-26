@@ -29,6 +29,7 @@ import { MetricCard } from "../../../../shared/ui/MetricCard";
 import { formatBytes } from "../../../../shared/lib/formatters";
 import { usePluginDataViewModel } from "../../model/usePluginDataViewModel";
 import { SANS_NUM_STYLE, PartitionItem } from "../constants";
+import { ConfigBackupsViewer } from "../../../../features/view-config-backups/ui/ConfigBackupsViewer";
 
 const { Text } = Typography;
 
@@ -248,6 +249,8 @@ export const PartitionsTab: React.FC<PartitionsTabProps> = ({ vm }) => {
         const isEmpty = item.count === 0 && item.sizeBytes === 0;
 
         return (
+          <Space direction="vertical" size={4}>
+          {item.key === "config_backups" && <ConfigBackupsViewer />}
           <Popconfirm
             title={`确认清空「${item.name}」？`}
             description={
@@ -278,6 +281,7 @@ export const PartitionsTab: React.FC<PartitionsTabProps> = ({ vm }) => {
               清空
             </Button>
           </Popconfirm>
+          </Space>
         );
       },
     },
