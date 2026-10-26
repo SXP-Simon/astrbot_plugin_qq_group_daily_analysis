@@ -30,7 +30,8 @@ from ..visualization.activity_charts import ActivityVisualizer
 from .avatar_service import (
     AvatarService,
 )
-from .html_renderer import describe_html_renderer
+from .custom_t2i_client import render_custom_t2i
+from .html_renderer import RenderServiceInfo, describe_html_renderer
 from .markdown_report_generator import (
     MarkdownReportGenerator,
 )
@@ -348,47 +349,70 @@ class ReportGenerator(IReportGenerator):
                 f"大小: {html_size_kb} KB ({len(html_content)} 字符)"
             )
 
-            if not callable(html_render_func):
-                logger.error("图片报告渲染失败：未提供可调用的 html_render_func")
-                return None, html_content
-
             async with self._render_semaphore:
                 render_loop = asyncio.get_running_loop()
                 render_deadline = render_loop.time() + _RENDER_TOTAL_TIMEOUT_SECONDS
                 logger.debug(f"[T2I] 已进入渲染队列 (群: {group_id})")
-                renderer_info = describe_html_renderer(html_render_func)
-                logger.debug(
-                    "[T2I诊断 v2] 开始生成图片；"
-                    f"配置读取：{renderer_info['config_lookup']}；"
-                    f"配置地址：{renderer_info['configured_endpoint']}"
+                host_renderer_info: RenderServiceInfo = (
+                    describe_html_renderer(html_render_func)
+                    if callable(html_render_func)
+                    else {
+                        "config_lookup": "未提供宿主渲染回调",
+                        "configured_endpoint": "未设置",
+                    }
                 )
-                trace_ctx = TraceContext.current()
-                if trace_ctx:
-                    for span in reversed(trace_ctx._spans):
-                        if span.get("stage_name") == AnalysisStage.RENDER_REPORT.value:
-                            span.setdefault("payload", {})["render_service"] = (
-                                renderer_info
-                            )
-                            break
+                renderer_info = host_renderer_info
                 last_error = "没有可用的渲染策略。"
+                deadline_exhausted = False
 
                 for attempt, strategy in enumerate(render_strategies, 1):
-                    if render_loop.time() >= render_deadline:
+                    if deadline_exhausted or render_loop.time() >= render_deadline:
                         break
                     image_options = dict(strategy)
                     environment = image_options.pop(
                         "resource_environment", active_environment
                     )
+                    render_service = image_options.pop("render_service", "astrbot")
+                    service_endpoint = str(image_options.pop("service_endpoint", ""))
+                    service_token = str(image_options.pop("service_token", ""))
+                    renderer_info = (
+                        {
+                            "config_lookup": "本轮自定义 T2I 服务",
+                            "configured_endpoint": service_endpoint,
+                        }
+                        if render_service == "custom"
+                        else host_renderer_info
+                    )
+                    logger.debug(
+                        "[T2I诊断 v2] 开始生成图片；"
+                        f"配置读取：{renderer_info['config_lookup']}；"
+                        f"配置地址：{renderer_info['configured_endpoint']}"
+                    )
+                    trace_ctx = TraceContext.current()
+                    if trace_ctx:
+                        for span in reversed(trace_ctx._spans):
+                            if (
+                                span.get("stage_name")
+                                == AnalysisStage.RENDER_REPORT.value
+                            ):
+                                span.setdefault("payload", {})["render_service"] = (
+                                    renderer_info
+                                )
+                                break
                     viewport_description = "default"
                     render_error = "渲染服务返回了空内容。"
-                    response_info: dict[str, object] = {"return_type": "未返回"}
+                    response_info: dict[str, object] = {
+                        "return_type": "未返回",
+                        "render_service": renderer_info,
+                    }
                     attempt_start_ts = time.perf_counter()
+                    attempt_timeout = asyncio.timeout_at(render_deadline)
                     try:
                         if (
                             isinstance(environment, str)
                             and environment != active_environment
                         ):
-                            async with asyncio.timeout_at(render_deadline):
+                            async with attempt_timeout:
                                 next_payload = await self._prepare_render_data(
                                     analysis_result,
                                     template_theme=template_theme,
@@ -427,16 +451,26 @@ class ReportGenerator(IReportGenerator):
 
                         t2i_start_ts = time.perf_counter()
                         # 宿主或第三方包装器的运行时返回值仍需在接口边界检查。
-                        async with asyncio.timeout_at(render_deadline):
-                            image_data = cast(
-                                "object",
-                                await html_render_func(
+                        attempt_timeout = asyncio.timeout_at(render_deadline)
+                        async with attempt_timeout:
+                            if render_service == "custom":
+                                image_data = await render_custom_t2i(
+                                    service_endpoint,
                                     html_content,
-                                    {},
-                                    False,
                                     image_options,
-                                ),
-                            )
+                                    service_token,
+                                )
+                            else:
+                                if not callable(html_render_func):
+                                    raise RuntimeError(
+                                        "未提供可调用的 AstrBot 渲染接口"
+                                    )
+                                image_data = cast(
+                                    "object",
+                                    await html_render_func(
+                                        html_content, {}, False, image_options
+                                    ),
+                                )
                         t2i_render_ms = round(
                             (time.perf_counter() - t2i_start_ts) * 1000, 2
                         )
@@ -596,6 +630,7 @@ class ReportGenerator(IReportGenerator):
                                                         "viewport": viewport_description,
                                                         "duration_ms": t2i_render_ms,
                                                         "status": "success",
+                                                        "render_service": renderer_info,
                                                         "resource_environment": str(
                                                             environment
                                                         ),
@@ -628,15 +663,13 @@ class ReportGenerator(IReportGenerator):
                                 else "未提供具体原因"
                             )
                         render_error = f"{type(e).__name__}：{detail}"
-                        if (
-                            isinstance(e, TimeoutError)
-                            and render_loop.time() >= render_deadline
-                        ):
+                        if isinstance(e, TimeoutError) and attempt_timeout.expired():
+                            deadline_exhausted = True
                             render_error = (
                                 f"本次图片渲染已达到总等待上限（{_RENDER_TOTAL_TIMEOUT_SECONDS:g} 秒），"
                                 "已停止后续方案。"
                             )
-                        elif isinstance(e, TimeoutError):
+                        elif isinstance(e, TimeoutError) and render_service != "custom":
                             render_error += (
                                 "\n排查建议：请先确认 AstrBot 能否连接 T2I 服务，并查看"
                                 "同一时间的服务日志。如果日志显示页面资源加载超时，"
