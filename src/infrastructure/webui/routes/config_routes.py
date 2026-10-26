@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ....shared.constants import PLUGIN_NAME
-from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
+from ...config.config_migrator import LEGACY_RENDERING_RESOURCE_KEYS
 from ...config.rendering_config import (
     CUSTOM_RESOURCE_OPTION,
     parse_rendering_strategies,
@@ -125,9 +125,7 @@ class ConfigRoutes:
                         if not isinstance(raw, list):
                             raise ValueError("渲染方案必须是列表")
                         for item in raw:
-                            normalized = parse_rendering_strategies(
-                                [item], legacy_config=rendering
-                            )[0]
+                            normalized = parse_rendering_strategies([item])[0]
                             projected_item = {**item, **normalized}
                             projected_item.pop("render_service", None)
                             # 自定义方案的空地址表示跟随资源环境，编辑与保存均保留此意图。
@@ -254,17 +252,8 @@ class ConfigRoutes:
                         strategies = rendering_config["t2i_rendering_strategies"]
                         if not isinstance(strategies, list):
                             raise ValueError("渲染方案必须是列表")
-                        old_rendering = config_obj.get("t2i_rendering", {})
-                        legacy = {
-                            **(
-                                old_rendering if isinstance(old_rendering, dict) else {}
-                            ),
-                            **rendering_config,
-                        }
                         for strategy in strategies:
-                            normalized = parse_rendering_strategies(
-                                [strategy], legacy_config=legacy
-                            )[0]
+                            normalized = parse_rendering_strategies([strategy])[0]
                             for key in ("cdn_base_url", "google_fonts", "gstatic"):
                                 if strategy.get(key) == CUSTOM_RESOURCE_OPTION:
                                     strategy[f"custom_{key}"] = normalized[key]
@@ -284,26 +273,12 @@ class ConfigRoutes:
                             strategy.pop("render_service", None)
                     except ValueError as exc:
                         return error_response(str(exc), status_code=400)
-                for cdn_key in (
-                    "t2i_cdn_base_url",
-                    "t2i_mainland_cdn_base_url",
-                    "t2i_overseas_cdn_base_url",
-                ):
-                    if cdn_key not in rendering_config:
-                        continue
-                    cdn_value = rendering_config[cdn_key]
-                    if not isinstance(cdn_value, str) or len(cdn_value) > 2048:
-                        return error_response(
-                            "CDN 地址必须是长度不超过 2048 的字符串", status_code=400
-                        )
-                    try:
-                        rendering_config[cdn_key] = (
-                            normalize_cdn_base_url(cdn_value)
-                            if cdn_value.strip()
-                            else ""
-                        )
-                    except ValueError as exc:
-                        return error_response(str(exc), status_code=400)
+                for legacy_key in LEGACY_RENDERING_RESOURCE_KEYS:
+                    rendering_config.pop(legacy_key, None)
+
+            daily_comic_config = new_config.get("daily_comic")
+            if isinstance(daily_comic_config, dict):
+                daily_comic_config.pop("drawing_reference_image", None)
 
             auto_analysis_config = new_config.get("auto_analysis")
             if isinstance(auto_analysis_config, dict) and (

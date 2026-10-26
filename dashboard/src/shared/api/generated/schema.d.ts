@@ -277,6 +277,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugin-data/config-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configuration backups */
+        get: operations["getConfigBackups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/config-backups/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an original JSON configuration backup */
+        get: operations["getConfigBackup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -512,6 +546,22 @@ export interface components {
             items: components["schemas"]["PluginLogItem"][];
             total: number;
             available_tags: components["schemas"]["AvailableTag"][];
+        };
+        ConfigBackupInfo: {
+            filename: string;
+            size_bytes: number;
+            /** @enum {string} */
+            kind: "upgrade" | "comic_migration" | "other";
+            plugin_version: string | null;
+            saved_at: string | null;
+            error: string | null;
+        };
+        ConfigBackupDetail: {
+            backup: components["schemas"]["ConfigBackupInfo"];
+            content: components["schemas"]["BackupJsonValue"];
+        };
+        BackupJsonValue: string | number | boolean | null | components["schemas"]["BackupJsonValue"][] | {
+            [key: string]: components["schemas"]["BackupJsonValue"];
         };
         SectionStats: {
             count: number;
@@ -1147,6 +1197,70 @@ export interface operations {
                         data?: components["schemas"]["PluginDataOverview"];
                     };
                 };
+            };
+        };
+    };
+    getConfigBackups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status?: string;
+                        data?: {
+                            items: components["schemas"]["ConfigBackupInfo"][];
+                        };
+                    };
+                };
+            };
+        };
+    };
+    getConfigBackup: {
+        parameters: {
+            query: {
+                filename: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup JSON */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status?: string;
+                        data?: components["schemas"]["ConfigBackupDetail"];
+                    };
+                };
+            };
+            /** @description Invalid backup or filename */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Backup no longer exists */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

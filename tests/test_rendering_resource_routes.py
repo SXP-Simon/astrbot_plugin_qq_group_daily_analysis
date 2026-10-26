@@ -7,12 +7,13 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from src.infrastructure.config.config_manager import ConfigManager
+from src.infrastructure.config.config_migrator import ConfigMigrator
 from src.infrastructure.config.rendering_config import parse_rendering_strategies
 from src.infrastructure.webui.routes.config_routes import ConfigRoutes
 
 
 @pytest.mark.asyncio
-async def test_read_projects_legacy_resources_without_reordering_or_saving():
+async def test_read_projects_migrated_resources_without_reordering_or_saving():
     manager = object.__new__(ConfigManager)
     manager.config = {
         "t2i_rendering": {
@@ -24,6 +25,8 @@ async def test_read_projects_legacy_resources_without_reordering_or_saving():
         }
     }
     manager.save_config = Mock()
+    ConfigMigrator(manager).migrate_legacy_configs()
+    manager.save_config.reset_mock()
     before = deepcopy(manager.config)
     response = await ConfigRoutes(
         SimpleNamespace(config_manager=manager)

@@ -645,6 +645,73 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                 }
             },
+            "/plugin-data/config-backups": {
+                "get": {
+                    "summary": "List configuration backups",
+                    "operationId": "getConfigBackups",
+                    "responses": {
+                        "200": {
+                            "description": "Backup list",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "items": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "$ref": "#/components/schemas/ConfigBackupInfo"
+                                                        },
+                                                    }
+                                                },
+                                                "required": ["items"],
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/plugin-data/config-backups/detail": {
+                "get": {
+                    "summary": "Read an original JSON configuration backup",
+                    "operationId": "getConfigBackup",
+                    "parameters": [
+                        {
+                            "in": "query",
+                            "name": "filename",
+                            "required": True,
+                            "schema": {"type": "string"},
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Backup JSON",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/ConfigBackupDetail"
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "Invalid backup or filename"},
+                        "404": {"description": "Backup no longer exists"},
+                    },
+                }
+            },
             "/openapi.json": {
                 "get": {
                     "summary": "Get OpenAPI 3.1 specification for the plugin Web API",
@@ -1112,6 +1179,54 @@ def generate_openapi_spec() -> dict[str, Any]:
                         },
                     },
                     "required": ["items", "total", "available_tags"],
+                },
+                "ConfigBackupInfo": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {"type": "string"},
+                        "size_bytes": {"type": "integer"},
+                        "kind": {
+                            "type": "string",
+                            "enum": ["upgrade", "comic_migration", "other"],
+                        },
+                        "plugin_version": {"type": "string", "nullable": True},
+                        "saved_at": {"type": "string", "nullable": True},
+                        "error": {"type": "string", "nullable": True},
+                    },
+                    "required": [
+                        "filename",
+                        "size_bytes",
+                        "kind",
+                        "plugin_version",
+                        "saved_at",
+                        "error",
+                    ],
+                },
+                "ConfigBackupDetail": {
+                    "type": "object",
+                    "properties": {
+                        "backup": {"$ref": "#/components/schemas/ConfigBackupInfo"},
+                        "content": {"$ref": "#/components/schemas/BackupJsonValue"},
+                    },
+                    "required": ["backup", "content"],
+                },
+                "BackupJsonValue": {
+                    "oneOf": [
+                        {"type": "string"},
+                        {"type": "number"},
+                        {"type": "boolean"},
+                        {"type": "null"},
+                        {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/BackupJsonValue"},
+                        },
+                        {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/components/schemas/BackupJsonValue"
+                            },
+                        },
+                    ],
                 },
                 "SectionStats": {
                     "type": "object",

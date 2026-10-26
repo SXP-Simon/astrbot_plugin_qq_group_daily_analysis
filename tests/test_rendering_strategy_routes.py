@@ -54,19 +54,19 @@ async def test_read_shows_single_default_strategy_without_persisting(strategies)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "key", ["t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"]
+    "environment", ["Mainland", "Overseas"]
 )
 @pytest.mark.parametrize(
     "value",
     ["bad", 42, "https://host.example/gh/file", "https://user:pass@host.example"],
 )
-async def test_invalid_environment_cdn_is_rejected_before_saving(key, value):
+async def test_invalid_environment_cdn_is_rejected_before_saving(environment, value):
     manager = SimpleNamespace(config={"old": {"keep": True}}, save_config=Mock())
     original = deepcopy(manager.config)
     routes = ConfigRoutes(SimpleNamespace(config_manager=manager))
     with patch("src.infrastructure.webui.routes.config_routes.request") as request:
         request.json = AsyncMock(
-            return_value={"config": {"t2i_rendering": {key: value}}}
+            return_value={"config": {"t2i_rendering": {"t2i_rendering_strategies": [{"environment": environment, "cdn_base_url": value}]}}}
         )
         response = await routes.api_save_config()
     assert response["status_code"] == 400
@@ -106,6 +106,7 @@ async def test_save_normalizes_environment_cdn_and_keeps_strategy_extensions():
                     "__template_key": "strategy",
                     "priority": 20,
                     "environment": "Mainland",
+                    "cdn_base_url": " https://mainland.example/ ",
                     "future": [" untouched "],
                 }
             ],
@@ -113,8 +114,8 @@ async def test_save_normalizes_environment_cdn_and_keeps_strategy_extensions():
         "future": {"data": [None, True]},
     }
     expected = deepcopy(config)
-    expected["t2i_rendering"]["t2i_mainland_cdn_base_url"] = "https://mainland.example"
-    expected["t2i_rendering"]["t2i_overseas_cdn_base_url"] = "https://overseas.example"
+    expected["t2i_rendering"].pop("t2i_mainland_cdn_base_url")
+    expected["t2i_rendering"].pop("t2i_overseas_cdn_base_url")
     expected["t2i_rendering"]["t2i_rendering_strategies"][0].update({
         "__template_key": "mainland", "service_endpoint": "", "service_token": "",
         "cdn_base_url": "https://mainland.example", "google_fonts": "https://fonts.loli.net", "gstatic": "https://gstatic.loli.net"

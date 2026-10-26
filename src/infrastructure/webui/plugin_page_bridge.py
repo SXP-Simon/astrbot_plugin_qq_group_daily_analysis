@@ -339,6 +339,18 @@ class PluginPageWebUIBridge:
                 ["POST"],
                 "Clear historical automatic configuration backup files",
             ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/config-backups",
+                self.data_management_routes.api_get_config_backups,
+                ["GET"],
+                "List configuration backups",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/config-backups/detail",
+                self.data_management_routes.api_get_config_backup,
+                ["GET"],
+                "Read a configuration backup",
+            ),
             # 7. 增量批次与 Checkpoint 观测及 CRUD 管理
             (
                 f"/{PLUGIN_NAME}/data/incremental/groups",
