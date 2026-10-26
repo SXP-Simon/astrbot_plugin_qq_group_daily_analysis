@@ -16,17 +16,16 @@ from astrbot.api.star import StarTools
 
 from ...shared.constants import (
     DEFAULT_ATRI_ASSETS_CDN_URL,
-    DEFAULT_CDN_HOST,
     GITHUB_REPO_BRANCH,
     GITHUB_REPO_NAME,
     GITHUB_REPO_OWNER,
     PLUGIN_NAME,
 )
-from ...utils.cdn_utils import normalize_cdn_base_url
 from ...utils.logger import logger
 from .config_migrator import ConfigMigrator
 from .rendering_config import (
     DEFAULT_RENDERING_STRATEGY,
+    RenderingResourceConfig,
     RenderingStrategyConfig,
     RenderingStrategyOptions,
     parse_rendering_strategies,
@@ -402,10 +401,12 @@ class ConfigManager:
         raw = group.get("t2i_rendering_strategies", [])
         if raw:
             try:
-                return parse_rendering_strategies(raw)
+                return parse_rendering_strategies(raw, legacy_config=group)
             except ValueError as exc:
                 logger.warning(f"渲染方案配置无效，将使用默认海外方案: {exc}")
-        return [DEFAULT_RENDERING_STRATEGY.copy()]
+        return parse_rendering_strategies(
+            [{"name": DEFAULT_RENDERING_STRATEGY["name"]}], legacy_config=group
+        )
 
     def get_t2i_rendering_strategies(self) -> list[RenderingStrategyOptions]:
         """将方案转换为截图参数，资源环境由插件消费，不传给 T2I。"""
@@ -420,6 +421,11 @@ class ConfigManager:
                 "viewport_width": max(1, int(group.get("t2i_viewport_width", 1440))),
                 "viewport_height": max(1, int(group.get("t2i_viewport_height", 900))),
                 "resource_environment": item["environment"],
+                "resource_urls": {
+                    "cdn_base_url": item["cdn_base_url"],
+                    "google_fonts": item["google_fonts"],
+                    "gstatic": item["gstatic"],
+                },
                 "render_service": item["render_service"],
                 "service_endpoint": item["service_endpoint"],
                 "service_token": item["service_token"],
@@ -443,75 +449,74 @@ class ConfigManager:
             value = self._get_group("t2i_rendering").get("report_language", "auto")
         return value
 
-    def get_t2i_google_fonts_mirror(self, environment: str | None = None) -> str:
-        """选择指定资源环境的 Google Fonts 地址。
+    def get_t2i_resource_config(
+        self, environment: str | None = None
+    ) -> RenderingResourceConfig:
+        """读取首轮或指定旧环境对应的资源快照。
 
         Args:
-            environment: 本次方案的环境；省略时采用第一优先级方案。
+            environment: 兼容按环境查询的旧调用；省略时使用第一优先级方案。
 
         Returns:
-            对应环境的字体样式表根地址。
+            独立的 CDN、字体样式和字体文件地址。
         """
-        source = environment or self.get_t2i_font_source()
-        group = self._get_group("t2i_rendering")
-        if source == "Mainland":
-            return group.get("t2i_mainland_google_fonts", "https://fonts.loli.net")
-        return group.get("t2i_overseas_google_fonts", "https://fonts.googleapis.com")
+        strategies = self.get_t2i_rendering_strategy_config()
+        strategy = next(
+            (
+                item
+                for item in strategies
+                if environment is None or item["environment"] == environment
+            ),
+            None,
+        )
+        if strategy is None:
+            strategy = parse_rendering_strategies(
+                [{"environment": environment}],
+                legacy_config=self._get_group("t2i_rendering"),
+            )[0]
+        return {
+            "cdn_base_url": strategy["cdn_base_url"],
+            "google_fonts": strategy["google_fonts"],
+            "gstatic": strategy["gstatic"],
+        }
+
+    def get_t2i_google_fonts_mirror(self, environment: str | None = None) -> str:
+        """获取首轮或指定旧环境的字体样式地址。"""
+        return self.get_t2i_resource_config(environment)["google_fonts"]
 
     def get_t2i_gstatic_mirror(self, environment: str | None = None) -> str:
-        """选择指定资源环境的 Gstatic 地址。
-
-        Args:
-            environment: 本次方案的环境；省略时采用第一优先级方案。
-
-        Returns:
-            对应环境的字体静态资源根地址。
-        """
-        source = environment or self.get_t2i_font_source()
-        group = self._get_group("t2i_rendering")
-        if source == "Mainland":
-            return group.get("t2i_mainland_gstatic", "https://gstatic.loli.net")
-        return group.get("t2i_overseas_gstatic", "https://fonts.gstatic.com")
+        """获取首轮或指定旧环境的字体文件地址。"""
+        return self.get_t2i_resource_config(environment)["gstatic"]
 
     def get_t2i_cdn_base_url(self, environment: str | None = None) -> str:
-        """获取不带末尾斜杠的模板 CDN 根地址。
+        """获取首轮或指定旧环境的模板 CDN 地址。"""
+        return self.get_t2i_resource_config(environment)["cdn_base_url"]
 
-        Args:
-            environment: 本次资源环境；省略时采用第一优先级方案。
-
-        Returns:
-            HTTP(S) 根地址；空值或不符合根地址格式时使用默认 CDN。
-        """
-        group = self._get_group("t2i_rendering")
-        source = environment or self.get_t2i_font_source()
-        value = group.get(f"t2i_{source.lower()}_cdn_base_url")
-        if value is None or (isinstance(value, str) and not value.strip()):
-            value = group.get("t2i_cdn_base_url", "")
-        try:
-            return normalize_cdn_base_url(value if isinstance(value, str) else "")
-        except ValueError:
-            pass
-        return DEFAULT_CDN_HOST
-
-    def get_template_assets_base_url(self, environment: str | None = None) -> str:
+    def get_template_assets_base_url(
+        self, environment: str | None = None, *, cdn_base_url: str | None = None
+    ) -> str:
         """获取指定资源环境的仓库素材目录。
 
         Args:
             environment: 本次资源环境；省略时采用第一优先级方案。
+            cdn_base_url: 本轮已固定的资源地址，避免同环境的方案相互覆盖。
 
         Returns:
             可拼接主题目录或预览图文件名的素材 URL。
         """
         return (
-            f"{self.get_t2i_cdn_base_url(environment)}/gh/"
+            f"{cdn_base_url or self.get_t2i_cdn_base_url(environment)}/gh/"
             f"{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}@{GITHUB_REPO_BRANCH}/assets"
         )
 
-    def get_t2i_atri_font_mirror(self, environment: str | None = None) -> str:
+    def get_t2i_atri_font_mirror(
+        self, environment: str | None = None, *, cdn_base_url: str | None = None
+    ) -> str:
         """获取 ATRI 镜像，自定义地址优先于环境默认值。
 
         Args:
             environment: 本次资源环境；省略时采用第一优先级方案。
+            cdn_base_url: 本轮已固定的资源地址，避免同环境的方案相互覆盖。
 
         Returns:
             显式指定的 ATRI 镜像或对应环境中的素材目录。
@@ -521,7 +526,7 @@ class ConfigManager:
             mirror = mirror.strip().rstrip("/")
             if mirror and mirror != DEFAULT_ATRI_ASSETS_CDN_URL:
                 return mirror
-        return f"{self.get_template_assets_base_url(environment)}/ATRI"
+        return f"{self.get_template_assets_base_url(environment, cdn_base_url=cdn_base_url)}/ATRI"
 
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""

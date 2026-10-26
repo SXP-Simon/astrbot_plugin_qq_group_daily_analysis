@@ -1,0 +1,112 @@
+[
+  {
+    "plan": {},
+    "expected": {
+      "cdn_base_url": "https://cdn.jsdmirror.com",
+      "google_fonts": "https://fonts.googleapis.com",
+      "gstatic": "https://fonts.gstatic.com"
+    }
+  },
+  {
+    "plan": {
+      "__template_key": "mainland"
+    },
+    "expected": {
+      "cdn_base_url": "https://cdn.jsdmirror.com",
+      "google_fonts": "https://fonts.loli.net",
+      "gstatic": "https://gstatic.loli.net"
+    }
+  },
+  {
+    "plan": {
+      "environment": "Mainland",
+      "cdn_base_url": " https://custom.example/// ",
+      "google_fonts": " https://proxy.example/fonts/ ",
+      "gstatic": "https://proxy.example/static/"
+    },
+    "expected": {
+      "cdn_base_url": "https://custom.example",
+      "google_fonts": "https://proxy.example/fonts",
+      "gstatic": "https://proxy.example/static"
+    }
+  },
+  {
+    "plan": {
+      "environment": "Mainland",
+      "cdn_base_url": "",
+      "google_fonts": "",
+      "gstatic": ""
+    },
+    "expected": {
+      "cdn_base_url": "https://cdn.jsdmirror.com",
+      "google_fonts": "https://fonts.loli.net",
+      "gstatic": "https://gstatic.loli.net"
+    }
+  },
+  {
+    "plan": {
+      "cdn_base_url": "https://example.com/gh/file"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "cdn_base_url": "////"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "cdn_base_url": null
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "google_fonts": "/"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "google_fonts": "https://example.com?key=secret"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "google_fonts": "https://user:pass@example.com"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "google_fonts": "https://example.com/a b"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "gstatic": "https://example.com:99999"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "gstatic": "https://example.com/abc#"
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "gstatic": 42
+    },
+    "expected": null
+  },
+  {
+    "plan": {
+      "google_fonts": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 "
+    },
+    "expected": null
+  }
+]

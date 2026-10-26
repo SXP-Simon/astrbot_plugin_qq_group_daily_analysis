@@ -1,8 +1,10 @@
 """可扩展图片渲染方案的配置契约与边界校验。"""
 
+from collections.abc import Mapping
 from typing import Literal, TypedDict
 from urllib.parse import urlsplit
 
+from ...shared.constants import DEFAULT_CDN_HOST
 from ...utils.cdn_utils import normalize_cdn_base_url
 
 
@@ -18,16 +20,39 @@ class ScreenshotOptions(TypedDict, total=False):
     viewport_height: int
 
 
+class RenderingResourceConfig(TypedDict):
+    """单轮资源地址快照；与具体截图服务无关。"""
+
+    cdn_base_url: str
+    google_fonts: str
+    gstatic: str
+
+
+DEFAULT_RENDERING_RESOURCES: dict[str, RenderingResourceConfig] = {
+    "Mainland": {
+        "cdn_base_url": DEFAULT_CDN_HOST,
+        "google_fonts": "https://fonts.loli.net",
+        "gstatic": "https://gstatic.loli.net",
+    },
+    "Overseas": {
+        "cdn_base_url": DEFAULT_CDN_HOST,
+        "google_fonts": "https://fonts.googleapis.com",
+        "gstatic": "https://fonts.gstatic.com",
+    },
+}
+
+
 class RenderingStrategyOptions(ScreenshotOptions, total=False):
     """运行时方案，服务与资源元数据在调用截图接口前移除。"""
 
     resource_environment: Literal["Mainland", "Overseas"]
+    resource_urls: RenderingResourceConfig
     render_service: Literal["astrbot", "custom"]
     service_endpoint: str
     service_token: str
 
 
-class RenderingStrategyConfig(TypedDict):
+class RenderingStrategyConfig(RenderingResourceConfig):
     """配置面板中的单个渲染方案，数值越小越先执行。"""
 
     name: str
@@ -43,6 +68,7 @@ class RenderingStrategyConfig(TypedDict):
 
 
 DEFAULT_RENDERING_STRATEGY: RenderingStrategyConfig = {
+    **DEFAULT_RENDERING_RESOURCES["Overseas"],
     "name": "默认方案",
     "priority": 10,
     "environment": "Overseas",
@@ -91,11 +117,14 @@ def normalize_t2i_endpoint(value: str) -> str:
     return origin + path
 
 
-def parse_rendering_strategies(value: object) -> list[RenderingStrategyConfig]:
+def parse_rendering_strategies(
+    value: object, legacy_config: Mapping[str, object] | None = None
+) -> list[RenderingStrategyConfig]:
     """校验方案列表并按优先级稳定排序，不修改输入，运行时只读取已声明字段。
 
     Args:
         value: 配置文件或保存请求中的方案列表。
+        legacy_config: 旧环境级资源地址，仅在方案没有对应字段时继承。
 
     Returns:
         供运行时使用的规范化方案；相同优先级保持原列表顺序。
@@ -110,7 +139,10 @@ def parse_rendering_strategies(value: object) -> list[RenderingStrategyConfig]:
         if not isinstance(item, dict):
             raise ValueError(f"第 {index} 个渲染方案必须是配置对象")
         name = item.get("name", "渲染方案")
-        environment = item.get("environment", "Overseas")
+        environment = item.get(
+            "environment",
+            "Mainland" if item.get("__template_key") == "mainland" else "Overseas",
+        )
         render_service = item.get("render_service", "astrbot")
         endpoint = item.get("service_endpoint", "")
         token = item.get("service_token", "")
@@ -140,6 +172,52 @@ def parse_rendering_strategies(value: object) -> list[RenderingStrategyConfig]:
             raise ValueError(f"第 {index} 个渲染方案请选择 PNG 或 JPEG 格式")
         if scale not in ("normal", "high", "ultra"):
             raise ValueError(f"第 {index} 个渲染方案的分辨率等级无效")
+        defaults = DEFAULT_RENDERING_RESOURCES[environment]
+        resources: dict[str, str] = {}
+        for key, label in (
+            ("cdn_base_url", "模板资源 CDN"),
+            ("google_fonts", "Google Fonts 地址"),
+            ("gstatic", "字体文件地址"),
+        ):
+            candidate = item.get(key)
+            if key not in item and legacy_config is not None:
+                candidate = legacy_config.get(f"t2i_{environment.lower()}_{key}")
+                if key == "cdn_base_url" and (
+                    candidate is None
+                    or (isinstance(candidate, str) and not candidate.strip())
+                ):
+                    candidate = legacy_config.get("t2i_cdn_base_url")
+            try:
+                if candidate is None and key not in item:
+                    candidate = defaults[key]
+                if not isinstance(candidate, str):
+                    raise ValueError("地址必须是文字")
+                if len(candidate) > 2048:
+                    raise ValueError("地址不能超过 2048 个字符")
+                candidate = candidate.strip()
+                if not candidate:
+                    candidate = defaults[key]
+                if key == "cdn_base_url":
+                    candidate = normalize_cdn_base_url(candidate)
+                else:
+                    parsed = urlsplit(candidate)
+                    origin = normalize_cdn_base_url(
+                        f"{parsed.scheme}://{parsed.netloc}"
+                    )
+                    if len(candidate) > 2048 or any(
+                        ch.isspace() or not ch.isprintable() or ch in "?#\\"
+                        for ch in candidate
+                    ):
+                        raise ValueError("字体地址格式无效")
+                    candidate = origin + parsed.path.rstrip("/")
+                resources[key] = candidate
+            except ValueError as exc:
+                if key in item:
+                    raise ValueError(
+                        f"第 {index} 个渲染方案的{label}无效，请填写完整的 HTTP(S) 地址"
+                    ) from exc
+                # 旧字段只负责兼容读取，无效值沿用环境默认地址。
+                resources[key] = defaults[key]
         integers = {}
         for key, label, default, lower, upper in (
             ("priority", "优先级", 10, 0, 10000),
@@ -154,6 +232,9 @@ def parse_rendering_strategies(value: object) -> list[RenderingStrategyConfig]:
             integers[key] = number
         result.append(
             {
+                "cdn_base_url": resources["cdn_base_url"],
+                "google_fonts": resources["google_fonts"],
+                "gstatic": resources["gstatic"],
                 "name": name,
                 "priority": integers["priority"],
                 "environment": environment,

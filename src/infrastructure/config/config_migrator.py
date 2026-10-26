@@ -23,6 +23,7 @@ from astrbot.api.star import StarTools
 from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from ...utils.template_utils import upgrade_str_format_template
+from .rendering_config import parse_rendering_strategies
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -71,6 +72,23 @@ class ConfigMigrator:
             self.cm._ensure_group("basic")["output_format"] = [val]
             logger.info("output_format 已从旧版 string 自动迁移为 list")
             modified = True
+
+        group = self.cm._get_group("t2i_rendering")
+        strategies = group.get("t2i_rendering_strategies")
+        if isinstance(strategies, list):
+            try:
+                # 先校验整组再修改，避免异常条目导致只迁移半份配置。
+                normalized = [
+                    parse_rendering_strategies([item], legacy_config=group)[0]
+                    for item in strategies
+                ]
+                for item, plan in zip(strategies, normalized, strict=True):
+                    for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                        if key not in item:
+                            item[key] = plan[key]
+                            modified = True
+            except ValueError:
+                logger.debug("渲染方案尚有无效字段，暂不迁移资源地址，请在配置页面修正")
 
         if modified:
             self.cm.save_config()

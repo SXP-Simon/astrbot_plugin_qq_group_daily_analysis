@@ -70,7 +70,7 @@ def test_schema_default_matches_runtime_and_removes_old_round_fields():
             "items"
         ].items()
     }
-    assert parse_rendering_strategies([{}]) == parse_rendering_strategies(
+    assert parse_rendering_strategies([{ "name": "海外方案" }]) == parse_rendering_strategies(
         [template_defaults]
     )
     assert template_defaults["timeout"] == DEFAULT_RENDERING_STRATEGY["timeout"]
