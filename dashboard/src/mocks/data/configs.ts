@@ -6,6 +6,12 @@ export const mockPluginConfig: PluginConfigData = {
   config: {
     t2i_rendering: {
       t2i_cdn_base_url: configSchema.t2i_rendering.items.t2i_cdn_base_url.default,
+      t2i_mainland_cdn_base_url: "https://cdn.jsdmirror.com",
+      t2i_overseas_cdn_base_url: "https://cdn.jsdelivr.net",
+      t2i_rendering_strategies: [
+        { __template_key: "strategy", name: "内地优先", priority: 10, environment: "Mainland", type: "png", quality: 100, device_scale: "ultra", timeout: 50000 },
+        { __template_key: "strategy", name: "海外回退", priority: 20, environment: "Overseas", type: "jpeg", quality: 80, device_scale: "high", timeout: 100000 },
+      ],
     },
     general: {
       analysis_time: "00:00",
