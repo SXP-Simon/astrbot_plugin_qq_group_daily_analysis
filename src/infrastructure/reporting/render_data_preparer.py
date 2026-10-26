@@ -184,6 +184,7 @@ class RenderDataPreparer:
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
+        environment: str | None = None,
     ) -> dict[str, object]:
         """组装模板引擎所需的完整数据字典。
 
@@ -196,6 +197,7 @@ class RenderDataPreparer:
             avatar_cache_namespace: 平台隔离的头像缓存命名空间。
             hide_user_names: 是否匿名化渲染（纯头像模式）。
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID 识别。
+            environment: 当前渲染方案的资源环境，省略时采用第一优先级方案。
 
         Returns:
             dict: 包含全量模板渲染变量的字典。
@@ -295,21 +297,40 @@ class RenderDataPreparer:
                 }
             )
 
-        assets_base_url = self.config_manager.get_template_assets_base_url()
+        assets_base_url = (
+            self.config_manager.get_template_assets_base_url(environment)
+            if environment
+            else self.config_manager.get_template_assets_base_url()
+        )
+        cdn_base_url = (
+            self.config_manager.get_t2i_cdn_base_url(environment)
+            if environment
+            else self.config_manager.get_t2i_cdn_base_url()
+        )
         report_language = resolve_report_language(self.config_manager)
         common_context = {
             "hide_user_names": hide_user_names,
             "report_language": report_language,
-            "t2i_font_source": self.config_manager.get_t2i_font_source(),
+            "t2i_font_source": environment or self.config_manager.get_t2i_font_source(),
             "t2i_google_fonts_mirror": (
-                self.config_manager.get_t2i_google_fonts_mirror()
+                self.config_manager.get_t2i_google_fonts_mirror(environment)
+                if environment
+                else self.config_manager.get_t2i_google_fonts_mirror()
             ),
-            "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
-            "t2i_atri_font_mirror": (self.config_manager.get_t2i_atri_font_mirror()),
+            "t2i_gstatic_mirror": (
+                self.config_manager.get_t2i_gstatic_mirror(environment)
+                if environment
+                else self.config_manager.get_t2i_gstatic_mirror()
+            ),
+            "t2i_atri_font_mirror": (
+                self.config_manager.get_t2i_atri_font_mirror(environment)
+                if environment
+                else self.config_manager.get_t2i_atri_font_mirror()
+            ),
             "t2i_miku_assets_mirror": f"{assets_base_url}/HatsuneMiku",
             "t2i_deepseek_maid_assets_mirror": f"{assets_base_url}/deepseek_maid",
             "t2i_maria_assets_mirror": f"{assets_base_url}/maria",
-            "t2i_npm_mirror": f"{self.config_manager.get_t2i_cdn_base_url()}/npm",
+            "t2i_npm_mirror": f"{cdn_base_url}/npm",
             "cdn_assets_base": assets_base_url,
         }
 
@@ -347,6 +368,7 @@ class RenderDataPreparer:
                 profile_mapping_overrides,
                 self.profile_asset_manifest,
                 self.config_manager,
+                cdn_base_url=cdn_base_url,
             )
             title_reason = title.reason
             if hide_user_names:

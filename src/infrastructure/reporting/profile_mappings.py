@@ -161,6 +161,7 @@ def resolve_profile_info(
     overrides: dict[str, dict],
     manifest: dict[str, dict],
     config_manager: ConfigManager,
+    cdn_base_url: str | None = None,
 ) -> dict[str, str | float]:
     """根据当前展示模式解析人格标签的展示信息。
 
@@ -170,6 +171,7 @@ def resolve_profile_info(
         overrides: 用户自定义的人格映射覆盖配置。
         manifest: 静态人格资源清单。
         config_manager: 配置管理器实例。
+        cdn_base_url: 本次渲染环境的 CDN；自定义图片地址不受影响。
 
     Returns:
         包含展示文本、图片地址、透明度等渲染参数的字典。
@@ -226,7 +228,9 @@ def resolve_profile_info(
     if builtin_image and image:
         image_path = urlsplit(image).path
         if image_path.startswith(f"/gh/SXP-Simon/profile_assets@main/{profile_mode}/"):
-            image = f"{config_manager.get_t2i_cdn_base_url()}{image_path}"
+            image = (
+                f"{cdn_base_url or config_manager.get_t2i_cdn_base_url()}{image_path}"
+            )
 
     # 3. 构造显示文本 (Code + 中文名)
     display = str(base_info.get("display", "")).strip()
