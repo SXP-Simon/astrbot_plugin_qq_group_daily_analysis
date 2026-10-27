@@ -70,7 +70,7 @@ class TemplateCommandService:
         1. 自定义模板目录内随模板打包的预览图
            （custom_t2i_templates/reporting_templates/<模板名>/ 下的
            preview.jpg/png 或 demo.jpg/png）；
-        2. 插件仓库 assets/<模板名>-demo.jpg（本地）；
+        2. 插件仓库 assets/<模板名>-demo.webp（本地，兼容 JPG）；
         3. 无本地文件时返回 None，由调用方回退仓库图库链接。
         """
         from ...infrastructure.reporting.template_installer import (
@@ -94,12 +94,38 @@ class TemplateCommandService:
                 return str(candidate)
 
         candidate_paths = [
-            os.path.join(self.plugin_root, "assets", f"{template_name}-demo.jpg"),
+            str(Path(self.plugin_root) / "assets" / f"{template_name}-demo{suffix}")
+            for suffix in (".webp", ".jpg")
         ]
         for candidate in candidate_paths:
             if os.path.exists(candidate):
                 return candidate
         return None
+
+    def resolve_template_preview_source(self, template_name: str) -> str | None:
+        """返回本地预览原图；内置模板缺图时使用当前 CDN。
+
+        Args:
+            template_name: 模板目录名称。
+
+        Returns:
+            本地路径或内置预览 URL；自定义模板没有预览图时返回 None。
+        """
+        local = self.resolve_template_preview_path(template_name)
+        if local:
+            return local
+        from ...infrastructure.reporting.template_installer import (
+            builtin_template_names,
+        )
+
+        if template_name not in builtin_template_names():
+            return None
+        base = (
+            self.config_provider.get_template_assets_base_url()
+            if self.config_provider
+            else DEFAULT_ASSETS_CDN_URL
+        )
+        return f"{base}/{template_name}-demo.webp"
 
     def list_available_templates(self) -> list[str]:
         """获取本地所有可用模板名称列表（内置 + 用户自定义）。"""
@@ -211,13 +237,24 @@ class TemplateCommandService:
         available_templates: list[str],
         current_template: str,
         bot_id: str,
+        command_prefix: str = "",
     ) -> Nodes:
-        """构建模板预览的合并消息节点。"""
+        """构建模板预览的合并消息节点。
+
+        Args:
+            available_templates: 可用模板名称列表。
+            current_template: 当前使用的模板名称。
+            bot_id: 合并消息展示的机器人标识。
+            command_prefix: 调用方按当前会话配置选定的激活前缀，允许为空。
+
+        Returns:
+            包含操作提示和预览图的合并消息。
+        """
         node_list: list[Node] = []
 
         header_content: list[BaseMessageComponent] = [
             Plain(
-                f"🎨 可用报告模板列表\n📌 当前使用: {current_template}\n💡 使用 /设置模板 [序号] 切换"
+                f"🎨 可用报告模板列表\n📌 当前使用: {current_template}\n💡 使用 {command_prefix}设置模板 [序号] 切换"
             )
         ]
         node_list.append(Node(uin=bot_id, name="模板预览", content=header_content))
@@ -226,36 +263,18 @@ class TemplateCommandService:
             current_mark = " ✅" if template_name == current_template else ""
             num_label = self._format_index_label(index)
 
-            preview_image_path = self.resolve_template_preview_path(template_name)
-            if preview_image_path:
-                node_content: list[BaseMessageComponent] = [
-                    Plain(f"{num_label} {template_name}{current_mark}"),
-                    Image.fromFileSystem(preview_image_path),
-                ]
-            else:
-                from ...infrastructure.reporting.template_installer import (
-                    builtin_template_names,
+            source = self.resolve_template_preview_source(template_name)
+            node_content: list[BaseMessageComponent] = [
+                Plain(f"{num_label} {template_name}{current_mark}")
+            ]
+            if source:
+                node_content.append(
+                    Image.fromURL(source)
+                    if source.startswith(("http://", "https://"))
+                    else Image.fromFileSystem(source)
                 )
-
-                # 仅内置模板在本地 assets 缺失时尝试从官方 GitHub CDN 加载；
-                # 自定义模板若未提供本地预览图，避免拼接 404 的 CDN 链接
-                if template_name in builtin_template_names():
-                    assets_base_url = (
-                        self.config_provider.get_template_assets_base_url()
-                        if self.config_provider is not None
-                        else DEFAULT_ASSETS_CDN_URL
-                    )
-                    cdn_url = f"{assets_base_url}/{template_name}-demo.jpg"
-                    node_content = [
-                        Plain(f"{num_label} {template_name}{current_mark}"),
-                        Image.fromURL(cdn_url),
-                    ]
-                else:
-                    node_content = [
-                        Plain(
-                            f"{num_label} {template_name}{current_mark}\n(未提供预览图)"
-                        )
-                    ]
+            else:
+                node_content.append(Plain("未提供预览图"))
 
             node_list.append(Node(uin=bot_id, name=template_name, content=node_content))
 

@@ -14,6 +14,7 @@ pages/** text eol=lf
 
 ### 模板预览图与设计资源 — 仅用于文档/仓库展示/CDN，插件运行时不需要
 assets/*.jpg              export-ignore
+assets/*.webp             export-ignore
 assets/*.png              export-ignore
 assets/HatsuneMiku/       export-ignore
 assets/ATRI/              export-ignore

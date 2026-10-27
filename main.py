@@ -58,9 +58,11 @@ from .src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from .src.infrastructure.platform.bot_manager import BotManager
 from .src.infrastructure.platform.stop_signal import FrontendStopWatcher
 from .src.infrastructure.platform.template_preview import (
+    QQOfficialTemplatePreviewHandler,
     TelegramTemplatePreviewHandler,
     TemplatePreviewRouter,
 )
+from .src.infrastructure.platform.template_preview.image_cache import PreviewImageCache
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.visualization.activity_charts import ActivityVisualizer
@@ -201,12 +203,25 @@ class GroupDailyAnalysis(Star):
         self.template_command_service = TemplateCommandService(
             plugin_root=os.path.dirname(__file__), config_provider=self.config_manager
         )
+        preview_image_cache = PreviewImageCache(
+            self.plugin_data_dir / "template_preview_cache"
+        )
         self.telegram_template_preview_handler = TelegramTemplatePreviewHandler(
             config_manager=self.config_manager,
             template_service=self.template_command_service,
+            image_cache=preview_image_cache,
         )
         self.template_preview_router = TemplatePreviewRouter(
-            handlers=[self.telegram_template_preview_handler]
+            handlers=[
+                QQOfficialTemplatePreviewHandler(
+                    self.config_manager,
+                    self.template_command_service,
+                    preview_image_cache,
+                ),
+                self.telegram_template_preview_handler,
+            ],
+            template_service=self.template_command_service,
+            image_cache=preview_image_cache,
         )
 
         # 调度与发送
@@ -622,12 +637,19 @@ class GroupDailyAnalysis(Star):
     @filter.command("查看模板", alias={"view_templates"})
     @filter.permission_type(PermissionType.ADMIN)
     async def view_templates(
-        self, event: AstrMessageEvent
+        self, event: AstrMessageEvent, template_input: str = ""
     ) -> AsyncGenerator[MessageEventResult]:
         """查看所有可用的报告模板及预览图（跨平台支持）"""
         platform_id = str(self._get_platform_id_from_event(event) or "")
+        logger.debug(
+            "[模板预览] 命令入口: platform=%s platform_id=%s message_id=%s module=%s",
+            event.get_platform_name(),
+            platform_id,
+            event.message_obj.message_id,
+            Path(__file__).resolve(),
+        )
         async for result in self.settings_command_handler.handle_view_templates(
-            event, platform_id
+            event, platform_id, template_input
         ):
             yield result
 

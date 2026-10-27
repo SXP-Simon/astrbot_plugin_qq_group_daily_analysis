@@ -1,18 +1,17 @@
 import argparse
 import asyncio
+import base64
+import json
 import os
 import sys
 import types
+from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 
-# ==========================================
-# 1. Environment Setup
-# ==========================================
-# Add src to path so we can import our modules
-# Assuming we are in scripts/
-current_dir = os.path.dirname(os.path.abspath(__file__))
-plugin_root = os.path.abspath(os.path.join(current_dir, ".."))
-sys.path.insert(0, plugin_root)
+# 离线加载插件模块，不启动 AstrBot 或访问真实群聊数据。
+plugin_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(plugin_root))
 
 # Mock astrbot.api before importing our modules
 astrbot_api = types.ModuleType("astrbot.api")
@@ -42,6 +41,27 @@ astrbot_api.logger = MockLogger()
 astrbot_api.AstrBotConfig = dict
 sys.modules["astrbot.api"] = astrbot_api
 
+# 配置模块在导入时引用 StarTools；离线调试不需要启动宿主。
+astrbot_star = types.ModuleType("astrbot.api.star")
+
+
+class MockStarTools:
+    @staticmethod
+    def get_data_dir(name: str = "") -> Path:
+        """返回离线示例数据目录。
+
+        Args:
+            name: 插件名称。
+
+        Returns:
+            与真实插件数据隔离的调试目录。
+        """
+        return plugin_root / "data" / "debug_data" / name
+
+
+astrbot_star.StarTools = MockStarTools
+sys.modules["astrbot.api.star"] = astrbot_star
+
 # Mock astrbot.core.utils.astrbot_path
 astrbot_core_utils = types.ModuleType("astrbot.core.utils")
 astrbot_path = types.ModuleType("astrbot.core.utils.astrbot_path")
@@ -49,19 +69,16 @@ astrbot_path.get_astrbot_data_path = lambda: Path(".")
 sys.modules["astrbot.core.utils"] = astrbot_core_utils
 sys.modules["astrbot.core.utils.astrbot_path"] = astrbot_path
 
+from PIL import Image, ImageDraw  # noqa: E402
+
 from src.domain.value_objects import (  # noqa: E402
-    ActivityVisualization,
-    EmojiStatistics,
-    GoldenQuote,
     GroupStatistics,
-    QualityDimension,
-    QualityReview,
     SummaryTopic,
-    TokenUsage,
     UserTitle,
 )
 from src.infrastructure.reporting.generators import ReportGenerator  # noqa: E402
 from src.shared.constants import DEFAULT_ASSETS_CDN_URL, DEFAULT_CDN_HOST  # noqa: E402
+from src.shared.report_language import format_report_date  # noqa: E402
 
 
 class MockConfigManager:
@@ -146,7 +163,7 @@ class MockConfigManager:
         return ""
 
     def get_t2i_atri_font_mirror(self) -> str:
-        return "https://tc.ciallo.ccwu.cc"
+        return f"{self.get_template_assets_base_url()}/ATRI"
 
     def get_t2i_cdn_base_url(self) -> str:
         return DEFAULT_CDN_HOST
@@ -164,9 +181,37 @@ class MockConfigManager:
         return []
 
 
-async def mock_get_user_avatar(user_id: str) -> str:
-    # Return a known avatar URL for testing
-    return f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=640"
+async def mock_get_user_avatar(user_id: str, size: int | None = None) -> str:
+    """生成不关联真实账号的内嵌示例头像，不访问 QQ 头像服务。
+
+    Args:
+        user_id: 示例用户 ID，用于选择固定颜色。
+        size: 兼容头像获取接口；示例头像统一使用 192 像素。
+
+    Returns:
+        PNG 头像的 Data URI。
+    """
+    colors = [
+        "#54a6b8",
+        "#e59b9f",
+        "#9491c9",
+        "#d3a459",
+        "#71ad93",
+        "#b17c9f",
+        "#7f9cb5",
+        "#aab46b",
+    ]
+    image = Image.new(
+        "RGB", (192, 192), colors[(int(user_id) - 80010001) % len(colors)]
+    )
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((61, 36, 131, 106), fill="#fff7e6")
+    draw.rounded_rectangle((34, 113, 158, 216), radius=58, fill="#fff7e6")
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(
+        "ascii"
+    )
 
 
 async def debug_render(
@@ -176,169 +221,269 @@ async def debug_render(
     template_file: str = "image_template.html",
     report_language: str = "auto",
 ) -> None:
-    # 1. Setup Mock Data
+    """使用固定的日常交流示例生成 HTML，不调用模型或真实账号接口。
+
+    Args:
+        template_name: 内置主题目录名。
+        output_file: 输出 HTML 文件路径。
+        profile_mode: 人格展示方式。
+        template_file: 图片或网页报告主模板。
+        report_language: 报告界面语言；示例正文保持中文。
+    """
     config_manager = MockConfigManager(
         template_name=template_name,
         profile_mode=profile_mode,
         report_language=report_language,
     )
 
-    # 2. Mock Analysis Result using Data Models
-    stats = GroupStatistics(
-        message_count=1250,
-        total_characters=45000,
-        participant_count=42,
-        most_active_period="20:00 - 22:00",
-        golden_quotes=[],  # Will be filled later
-        emoji_count=156,
-        emoji_statistics=EmojiStatistics(face_count=100, mface_count=56),
-        activity_visualization=ActivityVisualization(
-            hourly_activity={
-                i: (10 + i * 5 if i < 12 else 100 - i * 2) for i in range(24)
-            }
-        ),
-        token_usage=TokenUsage(
-            prompt_tokens=1500, completion_tokens=800, total_tokens=2300
-        ),
-        chat_quality_review=QualityReview(
-            title="互联网难民收容所",
-            subtitle="只要不工作，我们就是最好的朋友",
-            dimensions=[
-                QualityDimension(
-                    "水群闲聊",
-                    44.0,
-                    "这里的群友不生产代码，只生产各种表情包和废话，建议送去加个班。",
-                    "#607d8b",
-                ),
-                QualityDimension(
-                    "技术探讨",
-                    25.5,
-                    "偶尔冒出的技术术语像是在荒漠里发现绿洲，虽然很快就被废话淹没了。",
-                    "#2196f3",
-                ),
-                QualityDimension(
-                    "深夜发情",
-                    15.0,
-                    "凌晨三点的群聊内容需要打上 R18 标签，建议各位群友早点休息。",
-                    "#f44336",
-                ),
-                QualityDimension(
-                    "就业焦虑",
-                    10.5,
-                    "谈到工作时群里笼罩着一股淡淡的忧伤，大家都在比谁的工位更像牢房。",
-                    "#ff9800",
-                ),
+    # 所有数字、人物和交流内容均为模拟数据，用于检查真实模板的排版。
+    mock_data = {
+        "statistics": {
+            "message_count": 964,
+            "total_characters": 24782,
+            "participant_count": 28,
+            "most_active_period": "21:00-22:00",
+            "emoji_count": 96,
+            "golden_quotes": [
+                {
+                    "content": "可以先吃再拍吗？这次我想吃热的。",
+                    "sender": "小满",
+                    "reason": "[80010005] 和 [80010004] "
+                    "正讨论野餐那天怎么拍照，[80010006] "
+                    "一句“想吃热的”把重点拉回了吃饭。不是反对拍照，只是提醒大家别顾着出片忘了开饭，随后还真把带菜分工定了下来。",
+                    "user_id": "80010006",
+                },
+                {
+                    "content": "我的薄荷不是水培，但我一直按水培在养。",
+                    "sender": "青柠",
+                    "reason": "[80010004] 从照片里发现托盘一直积水，[80010008] "
+                    "才意识到自己把土培薄荷浇成了水培。用一句自嘲把问题讲明白，比继续问“是不是水还不够”更有用，也让 "
+                    "[80010006] 顺势补充了检查盆土的方法。",
+                    "user_id": "80010008",
+                },
+                {
+                    "content": "今晚先救队友，明早再救闹钟。",
+                    "sender": "林间",
+                    "reason": "[80010007] 刚装好游戏，担心跟不上进度，[80010003] "
+                    "先留出练习时间，再用闹钟的梗约定十点收工。既给新手留了位置，也替第二天要上班的人守住了下线时间。",
+                    "user_id": "80010003",
+                },
             ],
-            summary="今天也是充满活力（或者说充满废话）的一天，继续保持这份不求上进的快乐吧。",
-        ),
-    )
-
-    topics = [
-        SummaryTopic(
-            topic="关于AstrBot插件开发的讨论",
-            contributors=["张三", "李四", "王五"],
-            detail="大家深入探讨了专家 [123456789] 提到的如何利用Jinja2模板渲染出精美的分析报告，[987654321] 也分享了调试技巧。",
-        ),
-        SummaryTopic(
-            topic="午餐吃什么的终极哲学问题",
-            contributors=["赵六", "孙七"],
-            detail="[112233445] 提议去吃黄焖鸡，但群友对螺蛳粉的优劣进行了长达一小时的辩论，最终未能达成共识。",
-        ),
-        SummaryTopic(
-            topic="新出的3A大作测评",
-            contributors=["周八", "吴九"],
-            detail="[200000000] 开始尝试新的游戏，发现 INTJ 类型的玩家在策略游戏中非常吃香。",
-        ),
-    ]
-
-    mbti_types = [
-        "INTJ",
-        "INTP",
-        "ENTJ",
-        "ENTP",
-        "INFJ",
-        "INFP",
-        "ENFJ",
-        "ENFP",
-        "ISTJ",
-        "ISFJ",
-        "ESTJ",
-        "ESTP",
-        "ISTP",
-        "ISFP",
-        "ESFJ",
-        "ESFP",
-    ]
-    user_titles = []
-    user_analysis = {
-        "123456789": {"nickname": "张三"},
-        "987654321": {"nickname": "李四"},
-        "112233445": {"nickname": "潜水员"},
+            "emoji_statistics": {"face_count": 61, "mface_count": 35},
+            "activity_visualization": {
+                "hourly_activity": {
+                    "0": 6,
+                    "1": 2,
+                    "2": 0,
+                    "3": 0,
+                    "4": 0,
+                    "5": 0,
+                    "6": 3,
+                    "7": 18,
+                    "8": 36,
+                    "9": 27,
+                    "10": 41,
+                    "11": 56,
+                    "12": 71,
+                    "13": 38,
+                    "14": 26,
+                    "15": 39,
+                    "16": 63,
+                    "17": 44,
+                    "18": 58,
+                    "19": 82,
+                    "20": 102,
+                    "21": 136,
+                    "22": 77,
+                    "23": 39,
+                },
+                "user_activity_ranking": [
+                    {"user_id": "80010001", "nickname": "小岚", "message_count": 141},
+                    {"user_id": "80010002", "nickname": "阿澄", "message_count": 128},
+                    {"user_id": "80010003", "nickname": "林间", "message_count": 104},
+                    {"user_id": "80010004", "nickname": "浅夏", "message_count": 97},
+                    {"user_id": "80010005", "nickname": "星河", "message_count": 84},
+                    {"user_id": "80010006", "nickname": "小满", "message_count": 76},
+                    {"user_id": "80010007", "nickname": "墨白", "message_count": 65},
+                    {"user_id": "80010008", "nickname": "青柠", "message_count": 52},
+                ],
+            },
+            "token_usage": {
+                "prompt_tokens": 18642,
+                "completion_tokens": 4708,
+                "total_tokens": 23350,
+            },
+            "chat_quality_review": {
+                "title": "计划排上了，晚饭也没耽误",
+                "subtitle": "从周末出游聊到今晚吃什么，热闹之外也有几件事落了地",
+                "dimensions": [
+                    {
+                        "name": "周末计划",
+                        "percentage": 30.0,
+                        "comment": "集合时间、带什么、下雨怎么办都说清楚了。只差周五再确认一遍，别让计划留在聊天记录里。",
+                        "color": "#5c8d89",
+                    },
+                    {
+                        "name": "厨房交流",
+                        "percentage": 26.0,
+                        "comment": "大家没有只说“看起来好吃”，而是聊到了水量、焖饭和不辣版本，第一次下厨的人也能照着试。",
+                        "color": "#d6a76c",
+                    },
+                    {
+                        "name": "随手摄影",
+                        "percentage": 20.0,
+                        "comment": "有成片，也有拍失败的照片。建议围绕测光和时间展开，实用程度比报一串设备型号高。",
+                        "color": "#7596b8",
+                    },
+                    {
+                        "name": "游戏组队",
+                        "percentage": 16.0,
+                        "comment": "给新手留了练习时间，提前确认更新和语音，还约好按时收工。队伍没开，准备工作先到位了。",
+                        "color": "#9482b2",
+                    },
+                    {
+                        "name": "生活小问答",
+                        "percentage": 8.0,
+                        "comment": "一盆薄荷让几个人交流了养花经验。先看环境再给建议，比一句“多喝水”靠谱。",
+                        "color": "#83a876",
+                    },
+                ],
+                "summary": "今天的群聊没什么大事，但从一张失败的照片到一份能照着做的配方，都有人接话，也有人回来反馈。这种小事有回应的感觉，就是日常群聊最好看的地方。",
+            },
+        },
+        "topics": [
+            {
+                "topic": "周六去公园，先把集合地点说清楚",
+                "contributors": ["小岚", "阿澄", "浅夏", "青柠"],
+                "contributor_ids": ["80010001", "80010002", "80010004", "80010008"],
+                "detail": "[80010001] "
+                "提议周六去湖边公园野餐，最初大家说“地铁口见”，后来发现附近有两个站。[80010002]查了路线，确定上午十点在东门集合，坐二号线的从 "
+                "B "
+                "口出来步行八分钟。[80010004]带野餐垫，[80010008]准备水果，其他人各带一份食物，不用重复买饮料。天气预报下午可能下雨，大家约好周五晚上再确认一次；如果下雨就改去附近的桌游店。",
+            },
+            {
+                "topic": "电饭锅鸡腿饭，成功了但水放多了",
+                "contributors": ["小满", "阿澄", "墨白"],
+                "contributor_ids": ["80010006", "80010002", "80010007"],
+                "detail": "[80010006] "
+                "分享了第一次做鸡腿饭的照片：鸡腿提前腌半小时，和胡萝卜、香菇一起放进电饭锅。味道不错，就是米饭有点软。[80010002]提醒蔬菜和腌料也会出水，下次可以比平常少加一点水，煮好后再焖十分钟。[80010007]照着做了不辣的版本，家里人也能一起吃。两人把各自用量整理到群公告，约好周末再试一次，不再靠“适量”猜配方。",
+            },
+            {
+                "topic": "手机拍落日，先别急着把亮度拉满",
+                "contributors": ["星河", "浅夏", "小岚"],
+                "contributor_ids": ["80010005", "80010004", "80010001"],
+                "detail": "[80010005] "
+                "发了下班路上拍的落日，天空很好看，前景却黑成一片。[80010004]建议先点击天空测光，再略微降低曝光，保住云层颜色；如果想留住人物细节，可以换个有路灯的位置，不一定要靠后期把暗部全部提亮。[80010001]用同一路段补拍了一组，发现提前二十分钟到，颜色和光线都更柔和。大家决定野餐那天顺便练习，但先吃饭，免得又拍到食物凉了。",
+            },
+            {
+                "topic": "周日组队，新手也留一个位置",
+                "contributors": ["林间", "墨白", "青柠", "小满"],
+                "contributor_ids": ["80010003", "80010007", "80010008", "80010006"],
+                "detail": "[80010003] "
+                "想约周日晚上玩合作游戏，[80010007]说自己刚装好，还没过教程。大家没有直接开高难度，而是约定七点半先用半小时熟悉操作，八点再开正式关卡。[80010008]负责建房，[80010006]提醒先更新游戏和语音设置，避免全员到齐才开始下载。群里最终确认四人参加，其他人有空再替补；十点收工，第二天还要上班，不临时加一局到半夜。",
+            },
+            {
+                "topic": "阳台薄荷没精神，原来不只是缺水",
+                "contributors": ["青柠", "浅夏", "小满"],
+                "contributor_ids": ["80010008", "80010004", "80010006"],
+                "detail": "[80010008] "
+                "问薄荷为什么每天浇水还是蔫，照片里花盆下面一直积着水。[80010004]建议先倒掉托盘积水，检查排水孔，不要看叶子没精神就继续浇。[80010006]补充，最近天气转凉，表层土干了也不代表整盆都干透。[80010008]换了通风位置，打算观察两三天再决定要不要换土。大家还约好，下次分享照片时把花盆和摆放环境一起拍进去，省得隔着屏幕全靠猜。",
+            },
+        ],
+        "user_titles": [
+            {
+                "name": "小岚",
+                "user_id": "80010001",
+                "title": "行程整理员",
+                "mbti": "ENFJ",
+                "reason": "把零散的出游想法整理成时间、地点和分工，还记得给雨天留一个备选。",
+            },
+            {
+                "name": "阿澄",
+                "user_id": "80010002",
+                "title": "配方校对员",
+                "mbti": "ISTJ",
+                "reason": "给做饭建议时会补充用量和步骤，也愿意帮大家查路线，回答很具体。",
+            },
+            {
+                "name": "林间",
+                "user_id": "80010003",
+                "title": "组队发起人",
+                "mbti": "ENTP",
+                "reason": "先把游戏局约起来，再根据新手的进度调整玩法，愿意换个办法让大家都能参加。",
+            },
+            {
+                "name": "浅夏",
+                "user_id": "80010004",
+                "title": "细节观察员",
+                "mbti": "ISFJ",
+                "reason": "摄影和养花的话题里都会先问实际情况，提醒也很温和，不急着下结论。",
+            },
+            {
+                "name": "星河",
+                "user_id": "80010005",
+                "title": "下班追光人",
+                "mbti": "ISFP",
+                "reason": "会把通勤路上的光线和风景带进群里，愿意晒失败的照片，也认真听建议。",
+            },
+            {
+                "name": "小满",
+                "user_id": "80010006",
+                "title": "厨房实验员",
+                "mbti": "ESFP",
+                "reason": "新配方做完就分享成果，水放多了也照样发图，给群里提供了不少真实经验。",
+            },
+            {
+                "name": "墨白",
+                "user_id": "80010007",
+                "title": "认真补课的新手",
+                "mbti": "INTP",
+                "reason": "不懂的操作直接问，自己试过之后会回来反馈，游戏和做饭都学得很认真。",
+            },
+            {
+                "name": "青柠",
+                "user_id": "80010008",
+                "title": "随手记录员",
+                "mbti": "INFP",
+                "reason": "记得大家说过的小约定，从准备水果到更新薄荷近况，都有后续。",
+            },
+        ],
+        "user_analysis": {
+            "80010001": {"nickname": "小岚", "message_count": 141},
+            "80010002": {"nickname": "阿澄", "message_count": 128},
+            "80010003": {"nickname": "林间", "message_count": 104},
+            "80010004": {"nickname": "浅夏", "message_count": 97},
+            "80010005": {"nickname": "星河", "message_count": 84},
+            "80010006": {"nickname": "小满", "message_count": 76},
+            "80010007": {"nickname": "墨白", "message_count": 65},
+            "80010008": {"nickname": "青柠", "message_count": 52},
+        },
+        "group_name": "日常闲聊小站（模拟示例）",
+        "group_id": "80010000",
+        "analysis_date": "2026-10-23",
     }
-
-    for i, mbti in enumerate(mbti_types):
-        uid = str(200000000 + i)
-        uname = f"用户_{mbti}"
-        user_titles.append(
-            UserTitle(
-                name=uname,
-                user_id=uid,
-                title=f"{mbti} 王者",
-                mbti=mbti,
-                reason=f"在日常交流中表现出极强的 {mbti} 特征，获得了大家的认可。",
-            )
-        )
-        user_analysis[uid] = {"nickname": uname}
-
-    golden_quotes = [
-        GoldenQuote(
-            content="代码写得好，下班走得早。",
-            sender="张三",
-            reason="深刻揭示了程序员的生存法则",
-            user_id="123456789",
-        ),
-        GoldenQuote(
-            content="这个Bug我不修，它就是个Feature。",
-            sender="李四",
-            reason="经典的开发辩解",
-            user_id="987654321",
-        ),
-        GoldenQuote(
-            content="PHP是世界上最好的语言！",
-            sender="王五",
-            reason="[200000001] 表示强烈赞同，并引发了后续的长篇大论。",
-            user_id="112233445",
-        ),
-    ]
-
-    stats.golden_quotes = golden_quotes
-    # token_usage already set in constructor
-
+    stats = GroupStatistics.from_dict(mock_data["statistics"])
+    # JSON 风格数据的小时键是字符串，绘图器使用整数小时。
+    stats.activity_visualization.hourly_activity = {
+        int(hour): count
+        for hour, count in stats.activity_visualization.hourly_activity.items()
+    }
     analysis_result = {
         "statistics": stats,
-        "topics": topics,
-        "user_titles": user_titles,
-        "user_analysis": user_analysis,
+        "topics": [SummaryTopic.from_dict(topic) for topic in mock_data["topics"]],
+        "user_titles": [
+            UserTitle.from_dict(title) for title in mock_data["user_titles"]
+        ],
+        "user_analysis": mock_data["user_analysis"],
         "chat_quality_review": stats.chat_quality_review,
-        "analysis_date": "2026年02月11日",
-        "group_id": "123456",
-        "group_name": "插件逻辑调试群",
+        "analysis_date": mock_data["analysis_date"],
+        "group_id": mock_data["group_id"],
+        "group_name": mock_data["group_name"],
     }
 
-    # 3. Initialize Generator
-    data_dir = Path("data/debug_data")
+    data_dir = plugin_root / "data" / "debug_data"
     data_dir.mkdir(parents=True, exist_ok=True)
     generator = ReportGenerator(config_manager, data_dir)
-
-    # Mock avatar cache to avoid KeyError in debug mode
-    class MockCache(dict):
-        def __getitem__(self, key):
-            return self.get(key, "")
-
-        def set(self, key, value, expire=None):
-            self[key] = value
-
-    generator._avatar_cache = MockCache()
 
     # 4. Prepare Render Data
     # Note: _prepare_render_data handles converting Entities to template-friendly dicts
@@ -351,7 +496,14 @@ async def debug_render(
     # 报告语言：由 DEBUG_REPORT_LANGUAGE 驱动 Mock 配置（见 MockConfigManager.get_report_language），
     # 因此 report_language 与 current_date 都由核心逻辑产出，离线产物与线上走同一条路。
 
-    # Use Jinja2 renderer
+    # 固定示例日期，保证重复渲染时不混入当天时间；语言仍复用正式日期格式。
+    moment = datetime.fromisoformat(mock_data["analysis_date"])
+    render_payload["current_date"] = (
+        format_report_date(render_payload["report_language"], moment) + " · Demo"
+    )
+    render_payload["current_datetime"] = moment.strftime("%Y-%m-%d 23:59:00")
+
+    # 使用正式模板渲染器。
     final_html = generator.html_templates.render_template(
         template_file, template_theme=template_name, **render_payload
     )
@@ -365,15 +517,14 @@ async def debug_render(
 
     # 6. Save to file
     output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(final_html, encoding="utf-8")
 
     # 7. Close generator
     await generator.close()
 
-    print(
-        f"Successfully rendered template '{template_name}' in mode '{profile_mode}' to {output_path.absolute()}"
-    )
-    print("You can now open this file with your browser to debug your HTML/CSS.")
+    print(f"已生成 {template_name} / {profile_mode} 示例：{output_path.absolute()}")
+    print("可用浏览器打开 HTML 检查排版；日期后的 Demo 表示内容为模拟数据。")
 
 
 def _print_detection_report(texts: list[str], source: str) -> None:
@@ -482,7 +633,6 @@ def _run_language_cases(path: str) -> int:
     与 tests/test_report_language.py 共用同一份用例数据：测试器先跑一遍，contributor 不用装
     pytest 也能确认自己没把判据改坏。
     """
-    import json
 
     from src.shared.report_language import detect_language_from_messages
 

@@ -560,6 +560,32 @@ async def test_view_templates_router_handled(plugin):
     assert results[0]["text"] == "Telegram preview keyboard"
 
 
+@pytest.mark.asyncio
+async def test_view_templates_forwards_selection(plugin):
+    event = MockEvent(group_id="123456")
+    plugin.template_preview_router.handle_view_templates = AsyncMock(
+        return_value=(True, [])
+    )
+    assert [result async for result in plugin.view_templates(event, "2")] == []
+    assert plugin.template_preview_router.handle_view_templates.call_args.kwargs[
+        "template_input"
+    ] == "2"
+
+
+@pytest.mark.asyncio
+async def test_view_templates_logs_loaded_entrypoint_at_debug(plugin, caplog):
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="astrbot-test")
+    plugin.template_preview_router.handle_view_templates = AsyncMock(return_value=(True, []))
+    event = MockEvent(platform_name="qq_official")
+    assert [result async for result in plugin.view_templates(event)] == []
+    entries = [record for record in caplog.records if "[模板预览] 命令入口" in record.getMessage()]
+    assert len(entries) == 1 and entries[0].levelno == logging.DEBUG
+    assert "platform=qq_official" in entries[0].getMessage()
+    assert "module=" in entries[0].getMessage() and "main.py" in entries[0].getMessage()
+
+
 # ==============================================================================
 # 6. /分析设置 (analysis_settings) 单元测试
 # ==============================================================================

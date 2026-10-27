@@ -121,10 +121,11 @@ export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
 
 export const GITHUB_REPO_OWNER = "SXP-Simon";
 export const GITHUB_REPO_NAME = "astrbot_plugin_qq_group_daily_analysis";
-export const GITHUB_REPO_BRANCH = "main";
+// PR #279 测试使用分支素材；合并前单独 revert 这次临时提交以恢复 main。
+export const GITHUB_REPO_BRANCH = "feat/template-previews-webp-qq-official";
 export function getTemplateCdnUrl(templateKey: string, cdnBaseUrl: string | null): string | undefined {
   if (cdnBaseUrl === null) return undefined;
-  return `${cdnBaseUrl}/gh/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}@${GITHUB_REPO_BRANCH}/assets/${templateKey}-demo.jpg`;
+  return `${cdnBaseUrl}/gh/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}@${GITHUB_REPO_BRANCH}/assets/${templateKey}-demo.webp`;
 }
 
 export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [
