@@ -188,6 +188,10 @@ async def test_cache_diagnostics_show_progress_without_resource_credentials(
         "status=200",
         "JPEG 准备完成",
         "JPEG 缓存命中",
+        "图片读取完成",
+        "wait_ms=",
+        "read_ms=",
+        "convert_ms=",
     ]:
         assert expected in messages
     for sensitive in [
@@ -198,3 +202,16 @@ async def test_cache_diagnostics_show_progress_without_resource_credentials(
     ]:
         assert sensitive not in messages
     assert not [record for record in caplog.records if record.levelno == logging.INFO]
+
+
+@pytest.mark.asyncio
+async def test_palette_transparency_is_composited_on_white(tmp_path):
+    source = tmp_path / "palette.png"
+    image = Image.new("P", (12, 12), 0)
+    image.putpalette([255, 0, 0] + [0, 0, 0] * 255)
+    image.save(source, transparency=0)
+    cache = PreviewImageCache(tmp_path / "cache")
+    target = await cache.get_jpeg(str(source))
+    with Image.open(target) as converted:
+        assert converted.format == "JPEG" and converted.mode == "RGB"
+        assert converted.getpixel((6, 6)) == (255, 255, 255)

@@ -76,7 +76,9 @@ class PreviewImageCache:
             identity = f"{local}:{stat.st_mtime_ns}:{stat.st_size}"
         key = hashlib.sha256(f"jpeg-v1:{identity}".encode()).hexdigest()
         target = self.directory / f"{key}.jpg"
+        lock_started = time.monotonic()
         async with self._lock:
+            wait_ms = round((time.monotonic() - lock_started) * 1000)
             if (
                 target.is_file()
                 and target.stat().st_size
@@ -85,9 +87,15 @@ class PreviewImageCache:
                     or time.time() - target.stat().st_mtime < self.REMOTE_TTL_SECONDS
                 )
             ):
-                logger.debug("[模板预览] JPEG 缓存命中: key=%s", key[:12])
+                logger.debug(
+                    "[模板预览] JPEG 缓存命中: key=%s wait_ms=%s elapsed_ms=%s",
+                    key[:12],
+                    wait_ms,
+                    round((time.monotonic() - started) * 1000),
+                )
                 return str(target.resolve())
             logger.debug("[模板预览] JPEG 缓存需生成或刷新: key=%s", key[:12])
+            read_started = time.monotonic()
             if remote:
                 async with (
                     aiohttp.ClientSession(
@@ -110,11 +118,23 @@ class PreviewImageCache:
             else:
                 assert local is not None
                 raw = await asyncio.to_thread(local.read_bytes)
+            read_ms = round((time.monotonic() - read_started) * 1000)
+            logger.debug(
+                "[模板预览] 图片读取完成: key=%s source_type=%s source_bytes=%s read_ms=%s",
+                key[:12],
+                "HTTP" if remote else "local",
+                len(raw),
+                read_ms,
+            )
+            convert_started = time.monotonic()
             await asyncio.to_thread(self._write_jpeg, raw, target)
             logger.debug(
-                "[模板预览] JPEG 准备完成: key=%s source_bytes=%s elapsed_ms=%s",
+                "[模板预览] JPEG 准备完成: key=%s source_bytes=%s wait_ms=%s read_ms=%s convert_ms=%s elapsed_ms=%s",
                 key[:12],
                 len(raw),
+                wait_ms,
+                read_ms,
+                round((time.monotonic() - convert_started) * 1000),
                 round((time.monotonic() - started) * 1000),
             )
             return str(target.resolve())
@@ -134,9 +154,12 @@ class PreviewImageCache:
                     raise ValueError("预览图片像素过大")
                 image.seek(0)
                 image = ImageOps.exif_transpose(image)
-                rgba = image.convert("RGBA")
-                result = Image.new("RGB", rgba.size, "white")
-                result.paste(rgba, mask=rgba.getchannel("A"))
+                if "A" in image.getbands() or "transparency" in image.info:
+                    rgba = image.convert("RGBA")
+                    result = Image.new("RGB", rgba.size, "white")
+                    result.paste(rgba, mask=rgba.getchannel("A"))
+                else:
+                    result = image.convert("RGB")
                 result.save(temporary, format="JPEG", quality=88, optimize=True)
             os.replace(temporary, target)
         finally:

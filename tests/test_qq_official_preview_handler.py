@@ -2,6 +2,7 @@
 
 import sys
 import logging
+import asyncio
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -58,6 +59,21 @@ def preview(monkeypatch):
     )
     event.sent = []
     event.send = AsyncMock(side_effect=lambda result: event.sent.append(result))
+    return handler, event, request
+
+
+@pytest.fixture
+def inline_preview(preview, tmp_path):
+    from PIL import Image
+
+    handler, event, request = preview
+    jpeg = tmp_path / "cached.jpg"
+    Image.new("RGB", (160, 900), "white").save(jpeg)
+    handler.image_cache.get_jpeg.return_value = str(jpeg)
+    handler.template_service.plugin_root = str(tmp_path)
+    handler.template_service.resolve_template_preview_source.return_value = (
+        "https://cdn.example.test/gh/repo/assets/scrapbook-demo.webp"
+    )
     return handler, event, request
 
 
@@ -152,9 +168,8 @@ async def test_native_unavailable_keeps_plain_and_jpeg(preview, monkeypatch, fai
     _, results = await handler.handle_view_templates(event, "qq", ["scrapbook"])
     assert results == []
     results = event.sent
-    assert [result.kind for result in results] == ["plain", "image"]
-    assert "/设置模板 1" not in results[0].value
-    assert "/设置模板 序号" in results[0].value
+    assert [result.kind for result in results] == ["image", "plain"]
+    assert "/设置模板 1" in results[1].value
     assert all(result.markdown is False and result.t2i is False for result in results)
     assert request.call_count == (2 if failure == "permission" else 0)
 
@@ -221,7 +236,7 @@ async def test_failures_are_warnings_without_sensitive_error_body(
         event.send.side_effect = RuntimeError(secret)
     else:
         event.bot = None
-        event.send.side_effect = [RuntimeError(secret), None]
+        event.send.side_effect = [None, RuntimeError(secret)]
     assert await handler.handle_view_templates(event, "qq", ["scrapbook"]) == (True, [])
     messages = "\n".join(record.getMessage() for record in caplog.records)
     warnings = "\n".join(
@@ -273,7 +288,7 @@ async def test_permission_rejection_has_actionable_warning_without_sdk_body(
     )
     assert "QQ 接口拒绝访问，请检查消息及按钮权限" in warnings
     assert "secret-response-token" not in caplog.text
-    assert [result.kind for result in event.sent] == ["plain", "image"]
+    assert [result.kind for result in event.sent] == ["image", "plain"]
 
 
 @pytest.mark.asyncio
@@ -309,7 +324,7 @@ async def test_settings_to_real_qq_router_awaits_cached_image(
         result async for result in settings.handle_view_templates(event, "qq")
     ] == []
     assert event.send.await_count == (2 if native_fails else 1)
-    image = event.sent[-1]
+    image = event.sent[0]
     assert image.kind == "image"
     with Image.open(image.value) as decoded:
         assert decoded.format == "JPEG" and decoded.size == (20, 16)
@@ -319,3 +334,178 @@ async def test_settings_to_real_qq_router_awaits_cached_image(
         for record in caplog.records
     )
     assert not [record for record in caplog.records if record.levelno == logging.INFO]
+
+
+@pytest.mark.asyncio
+async def test_public_preview_is_one_compact_verified_card(inline_preview):
+    handler, event, request = inline_preview
+    assert await handler.handle_view_templates(event, "qq", ["scrapbook", "ATRI"]) == (
+        True,
+        [],
+    )
+    payload = request.call_args.kwargs["json"]
+    assert request.await_count == 1 and payload["msg_type"] == 2
+    assert payload["markdown"]["force_verify_image_resource"] is True
+    content = payload["markdown"]["content"]
+    assert "scrapbook · 1/2" in content and "当前正在使用" in content
+    assert (
+        "![img#160px #900px](https://cdn.example.test/gh/repo/assets/scrapbook-demo.webp)"
+        in content
+    )
+    assert "ATRI" not in content and "可用报告模板列表" not in content
+    assert "keyboard" in payload
+    event.send.assert_not_called()
+    handler.config_manager.set_report_template.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["rejected", "empty", "missing_id"])
+async def test_inline_failure_falls_back_image_before_compact_card(
+    inline_preview, failure
+):
+    handler, event, request = inline_preview
+    order = []
+
+    async def native(_route, *, json):
+        if "force_verify_image_resource" in json["markdown"]:
+            order.append("inline")
+            if failure == "rejected":
+                raise RuntimeError("image transfer failed")
+            if failure == "missing_id":
+                return {}
+            return None
+        order.append("caption")
+        return {"id": "caption"}
+
+    request.side_effect = native
+    event.send.side_effect = lambda result: order.append(result.kind)
+    await handler.handle_view_templates(event, "qq", ["scrapbook"])
+    assert order == ["inline", "image", "caption"]
+    assert event.send.await_count == 1
+    first, second = [call.kwargs["json"] for call in request.call_args_list]
+    assert second["msg_seq"] == first["msg_seq"] + 1
+    assert "![img" not in second["markdown"]["content"]
+    assert "force_verify_image_resource" not in second["markdown"]
+
+
+@pytest.mark.asyncio
+async def test_prepare_blocks_all_sends_and_local_fallback_sends_image_first(preview):
+    handler, event, request = preview
+    preparing, release = asyncio.Event(), asyncio.Event()
+    order = []
+
+    async def prepare(_source):
+        preparing.set()
+        await release.wait()
+        order.append("prepared")
+        return "/cache/demo.jpg"
+
+    async def native(*_args, **_kwargs):
+        order.append("caption")
+        return {"id": "reply"}
+
+    handler.image_cache.get_jpeg.side_effect = prepare
+    event.send.side_effect = lambda result: order.append(result.kind)
+    request.side_effect = native
+    task = asyncio.create_task(
+        handler.handle_view_templates(event, "qq", ["scrapbook"])
+    )
+    try:
+        await asyncio.wait_for(preparing.wait(), 2)
+        event.send.assert_not_called()
+        request.assert_not_called()
+    finally:
+        release.set()
+        await task
+    assert order == ["prepared", "image", "caption"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filename", ["preview.png", "scrapbook-demo.webp"])
+async def test_local_custom_image_is_not_replaced_with_builtin_cdn(
+    inline_preview, tmp_path, filename
+):
+    handler, event, request = inline_preview
+    custom = tmp_path / "custom" / filename
+    handler.template_service.resolve_template_preview_source.return_value = str(custom)
+    await handler.handle_view_templates(event, "qq", ["scrapbook"])
+    assert request.await_count == 1 and event.send.await_count == 1
+    assert (
+        "force_verify_image_resource"
+        not in request.call_args.kwargs["json"]["markdown"]
+    )
+    handler.config_manager.get_template_assets_base_url.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_local_builtin_preview_uses_configured_cdn_for_inline_card(
+    inline_preview, tmp_path
+):
+    handler, event, request = inline_preview
+    source = tmp_path / "assets" / "scrapbook-demo.webp"
+    handler.template_service.resolve_template_preview_source.return_value = str(source)
+    handler.config_manager.get_template_assets_base_url.return_value = (
+        "https://mirror.example.test/gh/repo@preview/assets"
+    )
+    await handler.handle_view_templates(event, "qq", ["scrapbook"])
+    assert (
+        "https://mirror.example.test/gh/repo@preview/assets/scrapbook-demo.webp"
+        in request.call_args.kwargs["json"]["markdown"]["content"]
+    )
+    event.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("suffix", ["?token=private-token", "#private-token"])
+async def test_signed_or_private_source_is_not_sent_to_qq_for_transfer(
+    inline_preview, suffix
+):
+    handler, event, request = inline_preview
+    handler.template_service.resolve_template_preview_source.return_value += suffix
+    await handler.handle_view_templates(event, "qq", ["scrapbook"])
+    assert "private-token" not in str(request.call_args.kwargs["json"])
+    assert event.send.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_guild_does_not_claim_unsupported_image_verification(inline_preview):
+    handler, event, request = inline_preview
+    event.message_obj.raw_message = SimpleNamespace(channel_id="channel")
+    await handler.handle_view_templates(event, "qq", ["scrapbook"])
+    assert request.await_count == 1 and event.send.await_count == 1
+    assert (
+        "force_verify_image_resource"
+        not in request.call_args.kwargs["json"]["markdown"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_inline_and_permission_fallback_use_distinct_sequences(inline_preview):
+    handler, event, request = inline_preview
+    request.side_effect = [
+        RuntimeError("image transfer failed"),
+        RuntimeError("keyboard unavailable"),
+        {"id": "caption"},
+    ]
+    await handler.handle_view_templates(event, "qq", ["scrapbook"])
+    payloads = [call.kwargs["json"] for call in request.call_args_list]
+    assert len(payloads) == 3
+    assert [payload["msg_seq"] for payload in payloads] == list(
+        range(payloads[0]["msg_seq"], payloads[0]["msg_seq"] + 3)
+    )
+    assert "keyboard" not in payloads[-1]
+    assert event.send.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_image_preparation_failure_never_attempts_inline(inline_preview):
+    handler, event, request = inline_preview
+    handler.image_cache.get_jpeg.side_effect = ValueError("not an image")
+    await handler.handle_view_templates(event, "qq", ["scrapbook"])
+    assert request.await_count == 1
+    assert (
+        "force_verify_image_resource"
+        not in request.call_args.kwargs["json"]["markdown"]
+    )
+    assert all(result.kind == "plain" for result in event.sent)
+    assert "暂时无法获取" in event.sent[0].value
