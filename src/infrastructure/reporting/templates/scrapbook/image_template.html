@@ -5,12 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>五彩斑斓的一天，来看看群里发生了什么吧！ · {{current_date}}</title>
+    {% if t2i_font_mode|default('network') != 'local' %}
     <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
     <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <!-- 引入手写字体和正文阅读字体 -->
     <link
         href="{{ t2i_google_fonts_mirror }}/css2?family=ZCOOL+KuaiLe&family=Long+Cang&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Patrick+Hand&display=swap"
         rel="stylesheet">
+    {% endif %}
 
     <style>
         :root {

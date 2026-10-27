@@ -7,9 +7,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>私立莉莉安女学园 · 茶会公报 · {{ current_date }}</title>
     {% if t2i_google_fonts_mirror %}
+    {% if t2i_font_mode|default('network') != 'local' %}
     <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
     <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <link href="{{ t2i_google_fonts_mirror }}/css2?family=Cinzel:wght@600;700;800&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Serif+SC:wght@400;500;600;700;900&family=Noto+Serif+TC:wght@400;500;600;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    {% endif %}
     {% endif %}
 
     <style>

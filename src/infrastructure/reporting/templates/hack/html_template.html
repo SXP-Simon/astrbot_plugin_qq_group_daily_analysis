@@ -5,11 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Night Mode Analysis Portal</title>
+    {% if t2i_font_mode|default('network') != 'local' %}
     <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
     <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <link
         href="{{ t2i_google_fonts_mirror }}/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap"
         rel="stylesheet">
+    {% endif %}
     {% include 'shared_styles.html' %}
 </head>
 

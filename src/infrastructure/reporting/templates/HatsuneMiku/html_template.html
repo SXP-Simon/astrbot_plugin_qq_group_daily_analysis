@@ -67,11 +67,13 @@
     <meta name="google" content="notranslate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ T.title[REPORT_LANG] }} · {{current_date}}</title>
+    {% if t2i_font_mode|default('network') != 'local' %}
     <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
     <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <link
         href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+JP:wght@400;700&family=Outfit:wght@400;600;800&family=Share+Tech+Mono{# 英文报告才加载 Inter（拉丁正文字体）：中文/繁体报告一个字节都不多下 #}{% if REPORT_LANG == 'en' %}&family=Inter:wght@400;500;600;700{% endif %}&display=swap"
         rel="stylesheet">
+    {% endif %}
     <!-- cjkfonts font-face removed for T2I rendering performance; uses Noto Sans SC fallback -->
     <!-- 图标已内联为 SVG（11 个），不再依赖 lucide CDN：少 647KB 请求，且断网/被墙也不会静默丢图标 -->
     <style>

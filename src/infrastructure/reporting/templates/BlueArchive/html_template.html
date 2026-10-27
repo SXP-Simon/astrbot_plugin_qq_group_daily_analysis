@@ -6,13 +6,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>阿洛娜的今日群聊速报！ · {{current_datetime}}</title>
 
+    {% if t2i_font_mode|default('network') != 'local' %}
     <link rel="stylesheet" href="//cdn.xcnahida.cn/fonts/bluearchive/Blueaka/Blueaka.css">
     <link rel="stylesheet" href="//cdn.xcnahida.cn/fonts/bluearchive/Blueaka_Bold/Blueaka_Bold.css">
 
     <!--<link rel="stylesheet" href="//cdn.jsdelivr.net/gh/VanillaNahida/BA-Spark-Cursor/fonts/Blueaka/Blueaka.css">-->
     <!--<link rel="stylesheet" href="//cdn.jsdelivr.net/gh/VanillaNahida/BA-Spark-Cursor/fonts/Blueaka_Bold/Blueaka_Bold.css">-->
 
+    {% endif %}
+
     <style>
+        {% if t2i_font_mode|default('network') == 'local' %}
+        /* 保留上游字体样式表中的本地名称映射，不请求网络字体。 */
+        @font-face {
+            font-family: "Blueaka";
+            src: local("BlueakaBeta2GBK DemiBold"), local("Blueaka");
+            font-weight: 400;
+        }
+        @font-face {
+            font-family: "Blueaka";
+            src: local("BlueakaBeta2GBK"), local("Blueaka Bold");
+            font-weight: 700;
+        }
+        {% endif %}
+
         :root {
             --ba-blue: #3593f3;
             --ba-blue-light: #58c3e5;

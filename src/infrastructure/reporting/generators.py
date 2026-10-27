@@ -71,7 +71,11 @@ if TYPE_CHECKING:
 
     from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
-    from ..config.rendering_config import RenderingResourceConfig, ScreenshotOptions
+    from ..config.rendering_config import (
+        FontMode,
+        RenderingResourceConfig,
+        ScreenshotOptions,
+    )
 
 
 class ReportGenerator(IReportGenerator):
@@ -320,6 +324,12 @@ class ReportGenerator(IReportGenerator):
             active_resources = (
                 render_strategies[0].get("resource_urls") if render_strategies else None
             )
+            active_font_mode = (
+                render_strategies[0].get("font_mode", "network")
+                if render_strategies
+                and render_strategies[0].get("render_service") == "custom"
+                else "network"
+            )
             render_payload = await self._prepare_render_data(
                 analysis_result,
                 template_theme=template_theme,
@@ -331,6 +341,7 @@ class ReportGenerator(IReportGenerator):
                 allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                 environment=active_environment,
                 resources=active_resources,
+                font_mode=active_font_mode,
             )
 
             tpl_render_start_ts = time.perf_counter()
@@ -380,6 +391,12 @@ class ReportGenerator(IReportGenerator):
                     )
                     resources = strategy_options.pop("resource_urls", None)
                     render_service = strategy_options.pop("render_service", "astrbot")
+                    configured_font_mode = strategy_options.pop("font_mode", "network")
+                    font_mode = (
+                        configured_font_mode
+                        if render_service == "custom"
+                        else "network"
+                    )
                     service_endpoint = str(strategy_options.pop("service_endpoint", ""))
                     service_token = str(strategy_options.pop("service_token", ""))
                     request_timeout_ms = strategy_options.pop(
@@ -424,6 +441,7 @@ class ReportGenerator(IReportGenerator):
                         if (
                             environment != active_environment
                             or resources != active_resources
+                            or font_mode != active_font_mode
                         ):
                             async with attempt_timeout:
                                 next_payload = await self._prepare_render_data(
@@ -437,6 +455,7 @@ class ReportGenerator(IReportGenerator):
                                     allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                                     environment=environment,
                                     resources=resources,
+                                    font_mode=font_mode,
                                 )
                             next_html = self._render_prepared_html(
                                 "image_template.html", template_theme, next_payload
@@ -446,6 +465,7 @@ class ReportGenerator(IReportGenerator):
                             render_payload, html_content = next_payload, next_html
                             active_environment = environment
                             active_resources = resources
+                            active_font_mode = font_mode
                         image_options, viewport_description = (
                             self._resolve_t2i_viewport_options(
                                 html_content, image_options
@@ -463,7 +483,7 @@ class ReportGenerator(IReportGenerator):
                             f"scale={image_options.get('device_scale_factor_level')}, "
                             f"timeout={image_options.get('timeout')}"
                             + (
-                                f", request_timeout={request_timeout_ms}"
+                                f", request_timeout={request_timeout_ms}, font_mode={font_mode}"
                                 if render_service == "custom"
                                 else ""
                             )
@@ -1105,6 +1125,7 @@ class ReportGenerator(IReportGenerator):
         allow_alphanumeric_user_ids: bool = False,
         environment: str | None = None,
         resources: RenderingResourceConfig | None = None,
+        font_mode: FontMode = "network",
     ) -> RenderTemplateContext:
         """组装模板引擎所需的强类型上下文。
 
@@ -1119,6 +1140,7 @@ class ReportGenerator(IReportGenerator):
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID。
             environment: 本轮固定的资源环境，省略时采用第一优先级方案。
             resources: 本轮固定的 CDN 和字体地址。
+            font_mode: 本轮图片截图的字体加载方式。
 
         Returns:
             主模板使用的资源、统计数据与组件 HTML。
@@ -1137,6 +1159,7 @@ class ReportGenerator(IReportGenerator):
             allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             environment=environment,
             resources=resources,
+            font_mode=font_mode,
         )
 
     async def _render_avatar_only_ids(

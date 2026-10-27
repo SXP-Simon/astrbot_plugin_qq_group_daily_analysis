@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
     from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
-    from ..config.rendering_config import RenderingResourceConfig
+    from ..config.rendering_config import FontMode, RenderingResourceConfig
     from ..visualization.activity_charts import ActivityVisualizer
     from .avatar_service import AvatarService
     from .templates import HTMLTemplates
@@ -45,6 +45,7 @@ class TemplateResourceContext(TypedDict):
     hide_user_names: bool
     report_language: str | None
     t2i_font_source: str
+    t2i_font_mode: FontMode
     t2i_google_fonts_mirror: str
     t2i_gstatic_mirror: str
     t2i_atri_font_mirror: str
@@ -225,6 +226,7 @@ class RenderDataPreparer:
         allow_alphanumeric_user_ids: bool = False,
         environment: str | None = None,
         resources: RenderingResourceConfig | None = None,
+        font_mode: FontMode = "network",
     ) -> RenderTemplateContext:
         """组装模板引擎所需的完整数据字典。
 
@@ -239,6 +241,7 @@ class RenderDataPreparer:
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID 识别。
             environment: 当前渲染方案的资源环境，省略时采用第一优先级方案。
             resources: 当前轮次的资源地址快照，相同环境也可使用不同地址。
+            font_mode: 图片截图的字体加载方式；独立 HTML 导出保持在线字体。
 
         Returns:
             包含全量模板渲染变量的强类型上下文。
@@ -291,6 +294,7 @@ class RenderDataPreparer:
             "hide_user_names": hide_user_names,
             "report_language": report_language,
             "t2i_font_source": environment or self.config_manager.get_t2i_font_source(),
+            "t2i_font_mode": font_mode,
             "t2i_google_fonts_mirror": google_fonts,
             "t2i_gstatic_mirror": gstatic,
             "t2i_atri_font_mirror": atri_mirror,

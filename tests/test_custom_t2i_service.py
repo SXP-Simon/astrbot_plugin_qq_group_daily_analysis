@@ -101,6 +101,8 @@ async def service():
             }
         )
         started.set()
+        if state.get("release") is not None:
+            await state["release"].wait()
         if state["delay"]:
             await asyncio.sleep(state["delay"])
         if state.get("stream"):
@@ -389,25 +391,34 @@ async def test_cancelled_custom_attempt_is_recorded_once_and_releases_queue(
             "service_token": "secret",
         }
     ]
-    state["delay"] = 0.1
+    # 用事件固定取消发生在请求已到达、响应未返回的阶段。
+    release = asyncio.Event()
+    state["release"] = release
     trace = TraceContext(trace_id="cancel-custom")
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
     with trace.span("RENDER_REPORT") as span:
         task = asyncio.create_task(
             generator.generate_image_report(create_analysis_result(), "123", None)
         )
-        await asyncio.wait_for(started.wait(), 2)
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
+        try:
+            # 模板初始化与 HTTP 握手单独计时，取消响应仍须在两秒内完成。
+            await asyncio.wait_for(started.wait(), 10)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, 2)
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
     attempts = span["payload"]["render_attempts"]
     assert len(attempts) == 1
     assert attempts[0]["status"] == "cancelled"
     assert attempts[0]["duration_ms"] >= 0
-    state["delay"] = 0
+    state.pop("release")
     assert (
         await asyncio.wait_for(
-            generator.generate_image_report(create_analysis_result(), "123", None), 2
+            generator.generate_image_report(create_analysis_result(), "123", None), 10
         )
     )[0]
 
