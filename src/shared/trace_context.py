@@ -337,12 +337,14 @@ class TraceContext:
         }
         self._spans.append(span_record)
 
+        was_cancelled = False
         try:
             yield span_record
             if span_record.get("status") in ("running", None):
                 span_record["status"] = "success"
         except asyncio.CancelledError:
-            span_record["status"] = "aborted"
+            # 不抢写阶段终态；仓储会按已提交的取消或超时结果收敛 running Span。
+            was_cancelled = True
             raise
         except Exception as exc:
             span_record["status"] = "failed"
@@ -369,7 +371,7 @@ class TraceContext:
 
             # 外部取消可能已先落库终态；在 finish 读取该快照前保存本协程的取消收尾。
             if _global_trace_store is not None and (
-                self.status != "running" or span_record["status"] == "aborted"
+                self.status != "running" or was_cancelled
             ):
                 try:
                     self.persist_snapshot()
