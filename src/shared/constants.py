@@ -90,8 +90,7 @@ class ReportFormat(str, Enum):
 PLUGIN_NAME = "astrbot_plugin_qq_group_daily_analysis"
 GITHUB_REPO_OWNER = "SXP-Simon"
 GITHUB_REPO_NAME = "astrbot_plugin_qq_group_daily_analysis"
-# PR #279 测试使用分支素材；合并前单独 revert 这次临时提交以恢复 main。
-GITHUB_REPO_BRANCH = "feat/template-previews-webp-qq-official"
+GITHUB_REPO_BRANCH = "main"
 
 # ==========================================
 # 静态资源与 CDN 配置常量
