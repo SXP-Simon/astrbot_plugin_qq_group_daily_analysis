@@ -65,9 +65,9 @@ async def render_custom_t2i(
     Args:
         endpoint: 兼容 /text2img/generate 的服务地址。
         html: 已生成的完整报告 HTML。
-        options: 当前轮次的强类型截图选项，包含毫秒超时。
+        options: 当前轮次的强类型T2I选项，包含毫秒超时。
         token: 可选的 Bearer Token；鉴权请求不回显服务错误正文。
-        request_timeout_ms: 整次请求的等待上限，独立于传给服务的截图超时。
+        request_timeout_ms: 整次请求的等待上限，独立于传给服务的T2I超时。
 
     Returns:
         不超过 32 MiB 且验证完整、可解码的 PNG 或 JPEG 图片。

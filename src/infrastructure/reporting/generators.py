@@ -1140,7 +1140,7 @@ class ReportGenerator(IReportGenerator):
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID。
             environment: 本轮固定的资源环境，省略时采用第一优先级方案。
             resources: 本轮固定的 CDN 和字体地址。
-            font_mode: 本轮图片截图的字体加载方式。
+            font_mode: 本轮图片T2I的字体加载方式。
 
         Returns:
             主模板使用的资源、统计数据与组件 HTML。

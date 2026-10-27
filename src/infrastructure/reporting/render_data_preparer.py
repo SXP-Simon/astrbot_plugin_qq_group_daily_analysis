@@ -241,7 +241,7 @@ class RenderDataPreparer:
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID 识别。
             environment: 当前渲染方案的资源环境，省略时采用第一优先级方案。
             resources: 当前轮次的资源地址快照，相同环境也可使用不同地址。
-            font_mode: 图片截图的字体加载方式；独立 HTML 导出保持在线字体。
+            font_mode: 图片T2I的字体加载方式；独立 HTML 导出保持在线字体。
 
         Returns:
             包含全量模板渲染变量的强类型上下文。
