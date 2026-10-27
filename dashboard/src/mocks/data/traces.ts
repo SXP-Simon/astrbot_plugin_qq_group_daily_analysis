@@ -85,7 +85,25 @@ export const mockTraces: TraceRecord[] = [
         status: "succeeded",
         started_at: Date.now() - 3590950,
         duration_ms: 2880,
-        payload: { template: "spring_card", width: 1080, height: 2840 },
+        payload: {
+          template: "spring_card", width: 1080, height: 2840,
+          render_attempts: [
+            {
+              attempt: 1, strategy_name: "海外方案", priority: 10, service_type: "astrbot",
+              status: "failed", font_mode: "network", resource_environment: "Overseas",
+              render_timeout_ms: 20000, duration_ms: 1200, error: "T2I 服务暂时不可用。",
+              render_service: { config_lookup: "按群聊会话查询", configured_endpoint: "使用宿主默认地址池" },
+              resource_urls: { cdn_base_url: "https://cdn.jsdmirror.com", google_fonts: "https://fonts.googleapis.com", gstatic: "https://fonts.gstatic.com" },
+            },
+            {
+              attempt: 2, strategy_name: "本地备用服务", priority: 20, service_type: "custom",
+              status: "success", font_mode: "local", resource_environment: "Mainland",
+              render_timeout_ms: 20000, request_timeout_ms: 40000, duration_ms: 1680,
+              render_service: { config_lookup: "本轮自定义 T2I 服务", configured_endpoint: "http://127.0.0.1:8999" },
+              resource_urls: { cdn_base_url: "https://cdn.jsdmirror.com", google_fonts: "https://fonts.loli.net", gstatic: "https://gstatic.loli.net" },
+            },
+          ],
+        },
       },
       {
         span_id: "span-dispatch-1",
