@@ -641,6 +641,13 @@ class GroupDailyAnalysis(Star):
     ) -> AsyncGenerator[MessageEventResult]:
         """查看所有可用的报告模板及预览图（跨平台支持）"""
         platform_id = str(self._get_platform_id_from_event(event) or "")
+        logger.debug(
+            "[模板预览] 命令入口: platform=%s platform_id=%s message_id=%s module=%s",
+            event.get_platform_name(),
+            platform_id,
+            event.message_obj.message_id,
+            Path(__file__).resolve(),
+        )
         async for result in self.settings_command_handler.handle_view_templates(
             event, platform_id, template_input
         ):
