@@ -90,7 +90,7 @@ PROBE_RESOURCES = (
         "模板预览图",
         "模板选择页面中的 Maria 预览图",
         "gh",
-        "maria-demo.jpg",
+        "maria-demo.webp",
     ),
     CdnProbeResource(
         "npm-css",

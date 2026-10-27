@@ -110,7 +110,7 @@
 
 ### 5.1 预览图
 
-- 插件仓库 `assets/<模板名>-demo.jpg`（本地优先，回退仓库图库链接）；
+- 插件仓库 `assets/<模板名>-demo.webp`（本地优先，回退仓库图库链接）；
 - **随模板打包**：模板目录内的 `preview.jpg/png` 或 `demo.jpg/png`
   （经安装器装入数据目录后，QQ `/查看模板` 优先显示；见 §6.5）。
 
@@ -171,7 +171,7 @@ AstrBot 原生配置页的三个资源地址都是单选下拉框。需要新增
 | 中文文件名图片 | `ATRI/file/1775130581843_1774881262835_疑惑.webp` | ATRI 模板表情 |
 | 中文文件名动图 | `ATRI/file/1775132805081_1774881262835_疑惑.gif` | ATRI 话题卡片动图 |
 | 字体文件 | `ATRI/file/1775130743963_1774880718993_LXGWWenKai-Regular.woff2` | ATRI 霞鹜文楷字体，约 8 MB |
-| 预览图 | `maria-demo.jpg` | WebUI 模板选择页面 |
+| 预览图 | `maria-demo.webp` | WebUI 模板选择页面 |
 | npm 兼容性 | `/npm/normalize.css@8.0.1/normalize.css` | 额外检查；当前内置模板未使用该文件 |
 
 这些文件覆盖当前内置模板在此 CDN 上使用的路径类型：`/gh/用户/仓库@main/assets/...`、大小写目录、多层目录、英文和中文文件名，以及 PNG、JPG、WebP、GIF、WOFF2。中文文件名发送时会自动进行 URL 编码。npm 目前只是额外的兼容性测试，不能说成内置模板的实际依赖；项目目前没有使用 npm 作用域包、版本别名或无版本路径，因此没有加入这些无关检查。以后模板增加了新的路径类型，需要同步补充检测文件。
@@ -291,7 +291,7 @@ AstrBot 原生配置页的三个资源地址都是单选下拉框。需要新增
 在模板目录内放 `preview.jpg`（或 `preview.png` / `demo.jpg` / `demo.png`），
 大小需 ≤ 3MB（防止超大图片造成内存与网络带宽消耗）。
 随 zip 一起安装后，QQ `/查看模板` 与 WebUI 画廊会优先显示该图（其次查找插件仓库
-`assets/<模板名>-demo.jpg`，最后回退仓库图库链接）。
+`assets/<模板名>-demo.webp`，最后回退仓库图库链接）。
 
 ```text
 <模板名>/
@@ -315,6 +315,43 @@ AstrBot 原生配置页的三个资源地址都是单选下拉框。需要新增
 python scripts/debug_render.py -t <模板名> -o debug_output.html [-m mbti|sbti|acgti]
 ```
 
+脚本内置同一份日常交流群模拟数据，包含出游、做饭、摄影、游戏和养花，
+统计、话题、群友画像与金句可以一起检查。人物与头像均为虚构，头像直接内嵌，
+不访问真实账号；日期固定为 `2026-10-23`，并标有 `Demo`。
+正文保持中文，`-l` 调整的是报告界面语言。
+
+例如，生成仓库初音预览图使用的 HTML：
+
+```bash
+uv run python scripts/debug_render.py -t HatsuneMiku -l zh-Hans -o scripts/output/HatsuneMiku.html
+```
+
+打开 HTML 时仍需加载模板字体和装饰素材。更新预览图时，先确认资源加载完整，
+再以 2 倍像素密度截取整页 PNG；复古未来等超长图也可用 1.5 倍。
+保留这份 PNG 作为原图，导出 `assets/<模板名>-demo.webp` 时按比例缩小到最多
+1600 像素宽，使用 WebP 有损压缩，参数为 `quality=82`、`method=6`。
+较小的原图不放大，最终宽高均不得超过 WebP 的 16,383 像素上限。
+
+例如，已有截图 `scripts/output/HatsuneMiku.png` 时，可按以下方式导出：
+
+```python
+from pathlib import Path
+
+from PIL import Image
+
+source = Path("scripts/output/HatsuneMiku.png")
+target = Path("assets/HatsuneMiku-demo.webp")
+with Image.open(source) as original:
+    image = original.convert("RGB")
+    image.thumbnail((1600, 16383), Image.Resampling.LANCZOS)
+    image.save(target, format="WEBP", quality=82, method=6)
+```
+
+导出后按实际尺寸检查话题正文、金句锐评和用户引用的文字是否清楚。
+需要调整参数时，从保留的 PNG 重新导出，不要反复压缩已经生成的 WebP，
+也不要放大旧 JPG。漫画示例保留原内容，按同样参数压缩。
+这些尺寸和压缩参数仅用于仓库预览图，不改变插件生成报告的设置。
+
 ## 9. 安全须知
 
 - **仅安装可信来源的模板**：安装器不执行模板代码，但模板会在**渲染服务端**
@@ -337,7 +374,7 @@ python scripts/debug_render.py -t <模板名> -o debug_output.html [-m mbti|sbti
 | `src/infrastructure/reporting/templates.py` | `KNOWN_TEMPLATE_NAMES` 增加 `"<模板名>": "中文名"` |
 | `_conf_schema.json` | `report_template.options` 数组追加模板名（WebUI 配置下拉） |
 | `dashboard/src/entities/report/model/templates.ts` | `KNOWN_TEMPLATES`（画廊信息：名称/描述/标签/标签色）与 `DEFAULT_REPORT_TEMPLATES`（兜底列表） |
-| `assets/<模板名>-demo.jpg` | 预览图（仓库展示与图库链接） |
+| `assets/<模板名>-demo.webp` | 预览图（仓库展示与图库链接） |
 | `README.md` / `CHANGELOG.md` | 模板展示与更新记录 |
 
 前端改动后需重新构建 dashboard：`cd dashboard && pnpm install && pnpm build`

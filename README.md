@@ -48,29 +48,29 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
   <tr>
     <td align="center" width="33.3%" valign="top">
       <p><b>HatsuneMiku (默认)</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.webp" alt="HatsuneMiku 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>maria</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.jpg" alt="圣母在上 (Maria · 山百合会) 报告示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.webp" alt="圣母在上 (Maria · 山百合会) 报告示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>Scrapbook</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg" alt="Scrapbook 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.webp" alt="Scrapbook 示例" height="520"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="33.3%" valign="top">
       <p><b>Hack</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.jpg" alt="Hack 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.webp" alt="Hack 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>ATRI</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.webp" alt="ATRI 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>DeepSeek 鲸鱼女仆娘</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.webp" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>
       <p><code>deepseek_maid</code> · <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid/SOURCE-NOTICE.md">素材署名与许可</a></p>
     </td>
   </tr>
@@ -81,7 +81,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 <table align="center" width="100%">
   <tr>
     <td align="center" width="100%" valign="top">
-      <img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="60%">
+      <img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.webp" alt="群每日漫画功能" width="60%">
       <p><b>参考 Atri 人格的群每日漫画 Demo</b></p>
     </td>
   </tr>

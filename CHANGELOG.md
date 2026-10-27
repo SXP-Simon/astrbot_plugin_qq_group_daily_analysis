@@ -1,5 +1,9 @@
 # 更新日志 (CHANGELOG)
 
+## [Unreleased]
+
+*   **更新模板示例图**：使用可复用的日常交流群模拟数据重新生成各主题报告，话题和金句锐评展示头像与昵称引用。预览图改为兼顾体积和文字清晰度的 WebP，整套约 6.5 MiB；模板预览、文档和 CDN 检测同步使用新地址。漫画示例保留原内容。正常生成报告的图片设置不受影响。
+
 ## [v5.9.1] - 修正用户引用的默认说明、减少重复日志、任务详情补全图片渲染过程
 
 *   **修正用户引用的默认说明（#276）**：默认话题提示词明确保留用户引用的方括号，并补充实际描述示例；内置人格说明尊重任务要求的字段和引用格式，避免将方括号当作装饰符号省略。已有提示词不自动修改。
@@ -55,7 +59,7 @@
 
 ## [v5.7.8] - 新增圣母在上 (Maria / 山百合会) 古典日报模板、省察窗双角色互动彩蛋与专属分析人格指南
 
-<a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.jpg" alt="圣母在上 (Maria · 山百合会) 报告示例" height="520"></a>
+<a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.webp" alt="圣母在上 (Maria · 山百合会) 报告示例" height="520"></a>
 <p><code>maria</code> · <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria/persona.md">专属人格与提示词配置指南</a></p>
 
 *   **🌹 【视觉呈现与全新主题】新增「圣母在上 (Maria · 山百合会)」古典学园日报模板 (#257)**：
@@ -139,7 +143,7 @@
 
 ## [v5.7.2] - DeepSeek 女仆娘主题、同群多 Bot Profile 隔离与模型内容安全风控拦截识别
 
-<a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>
+<a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.webp" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>
 <p><code>deepseek_maid</code> · <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid/SOURCE-NOTICE.md">素材署名与许可</a></p>
 
 *   **🎨 【视觉呈现与全新主题】新增 DeepSeek 鲸鱼女仆娘日报主题 (#248)**：
@@ -329,7 +333,7 @@
     *   **复古艺术美学设计**：以 19 世纪末新艺术运动与穆夏（Alphonse Mucha）装饰艺术为灵感，采用温润羊皮纸底色、流动藤蔓花纹与古典金边装饰，将群聊数据装帧为古典画报。
     *   **双色交错和谐排版**：核心数据、热议话题、群芳雅鉴与金句回响采用森林绿与复古金双色交替排版，层次分明、典雅克制。
 
-<a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
+<a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.webp" alt="art_nouveau 示例" height="520"></a>
 
 
 *   **🪄 【体验优化】模版分析区域智能隐藏（告别未开启功能的空白标题）**：
@@ -613,7 +617,7 @@
 <table align="center" width="100%">
   <tr>
     <td align="center" width="100%" valign="top">
-      <img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="60%">
+      <img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.webp" alt="群每日漫画功能" width="60%">
       <p><b>参考 Atri 人格的群每日漫画 Demo</b></p>
     </td>
   </tr>
@@ -731,7 +735,7 @@
 ## [v4.9.13] - feat(ATRI): ATRI 模板 (@Liangyu-G)
 *   **✨ 新模板 ATRI**: 感谢 @Liangyu-G 的贡献，新增了一个名为 ATRI 的模板，灵感来源于 ATRI 的可爱风格，适合喜欢二次元风格的用户使用。（“她太可爱了，就是太可爱了，那个剧情也特别好，但她真的太可爱了。在聊天的过程中，Soulter不止一次和我强调了亚托莉可爱这一点，甚至一度说不出其他话了”
 ）
-<img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI" width="100%">
+<img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.webp" alt="ATRI" width="100%">
 
 ## [v4.9.12] - 移除无效的重试器
 
@@ -748,7 +752,7 @@
 ## [v4.9.8] - feat(HatsuneMiku): 新增了一个名为 HatsuneMiku 的模板 (#134 @Shiitin)
 *   **🐛 黑白名单修复**: 分析名单准入并修复 AstrBot 内置白名单绕过问题 （情况如 #133 所述）
 *   **✨ 新模板 HatsuneMiku**: 感谢 @Shiitin 的贡献，新增了一个名为 HatsuneMiku 的模板，灵感来源于初音未来的可爱风格，适合喜欢二次元风格的用户使用。      
-<img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku" width="100%">
+<img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.webp" alt="HatsuneMiku" width="100%">
 
 ## [v4.9.7] - feat(分析配置细粒度化): 引入三层黑白名单机制（基础群分析开关、定时分析、增量分析），支持更细粒度的群级分析控制；修复自动分析生命周期管理情况避免任务被静默跳过
 *   **🐛 自动分析调度修复**: 修复自动分析任务生命周期检查链路，重置 `schedule_jobs` 后 `_terminating` 状态，避免任务被静默跳过；增量分析任务生命周期行为与定时分析保持一致。(#130 @Dongmayyys)

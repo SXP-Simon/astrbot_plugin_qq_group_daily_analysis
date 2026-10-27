@@ -43,7 +43,7 @@ def test_probe_files_cover_current_template_path_shapes():
     }
     for path in probe_paths:
         assert (root / "assets" / path).is_file()
-        if not path.endswith("-demo.jpg"):
+        if not path.endswith("-demo.webp"):
             assert path in referenced
     # 同时覆盖文件类型、目录深度及中文文件名；模板新增形态时提示维护检测清单。
     shapes = {
@@ -55,7 +55,7 @@ def test_probe_files_cover_current_template_path_shapes():
         for path in probe_paths
     }
     assert shapes <= covered
-    assert any(path.endswith("-demo.jpg") for path in probe_paths)
+    assert any(path.endswith("-demo.webp") for path in probe_paths)
     assert "t2i_npm_mirror" not in template_text, (
         "新增 npm 依赖后，请替换兼容性样本并更新用途说明"
     )
