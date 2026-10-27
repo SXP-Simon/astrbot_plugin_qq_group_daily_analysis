@@ -10,7 +10,7 @@ body:
 
   - type: dropdown
     attributes:
-      label: 功能所属模块 (Module)
+      label: 涉及模块 (Module)
       description: 该功能建议主要涉及哪个子系统？
       options:
         - 'WebUI 控制台 (Dashboard & Pages)'
@@ -19,6 +19,7 @@ body:
         - '报告模版样式与可视化 (Report Design & Charts)'
         - '定时调度与多群管理 (Scheduler & Multi-group)'
         - '链路排错与性能监控 (Trace & Telemetry)'
+        - '指令交互与配置项 (Commands & Config)'
         - '其他'
     validations:
       required: true
@@ -50,18 +51,20 @@ body:
 
   - type: dropdown
     attributes:
-      label: 优先级评估
+      label: 优先级评估 (Priority)
       description: 您认为该需求的紧迫程度如何？
       options:
-        - '中 / 低优先级（体验优化或锦上添花）'
         - '高优先级（核心流程缺失或严重影响运营效率）'
+        - '中优先级（功能可用但操作不便，影响效率）'
+        - '低优先级（体验优化或锦上添花）'
     validations:
       required: true
 
   - type: checkboxes
     attributes:
-      label: 贡献意愿
+      label: 贡献意愿 (Contribution)
       description: 是否愿意参与该特性的设计与开发？
       options:
-        - label: 是的，我愿意参与设计与提交 PR！
+        - label: 我愿意参与功能设计
+        - label: 我愿意提交 PR 实现该功能
         - label: 我可以提供测试数据或详细反馈
