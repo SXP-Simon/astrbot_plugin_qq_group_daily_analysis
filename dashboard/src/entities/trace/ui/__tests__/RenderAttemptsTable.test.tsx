@@ -4,7 +4,7 @@ import { RenderAttemptsTable } from "../RenderAttemptsTable";
 
 vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 
-it("每轮显示实际服务地址，区分资源环境与截图服务", () => {
+it("每轮显示实际服务地址，区分资源环境与T2I服务", () => {
   render(<RenderAttemptsTable attempts={[
     { attempt: 1, status: "failed", resource_environment: "Overseas", render_service: { config_lookup: "本轮自定义 T2I 服务", configured_endpoint: "http://127.0.0.1:8999/text2img" }, error: "HTTP 503" },
     { attempt: 2, status: "success", resource_environment: "Mainland", render_service: { configured_endpoint: "使用宿主默认地址池" } },
