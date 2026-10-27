@@ -73,7 +73,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
                     max_golden_quotes=max_golden_quotes,
                     messages_text=messages_text,
                 )
-                logger.info("使用配置中的金句分析提示词")
+                logger.debug("使用配置中的金句分析提示词")
                 return prompt
             except Exception as e:
                 logger.warning(f"应用金句分析提示词失败: {e}")
@@ -153,10 +153,10 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
             interesting_messages = self.extract_interesting_messages(messages)
 
             if not interesting_messages:
-                logger.info("没有符合条件的圣经消息，返回空结果")
+                logger.debug("没有符合条件的圣经消息，返回空结果")
                 return [], TokenUsage()
 
-            logger.info(f"开始从 {len(interesting_messages)} 条圣经消息中提取金句")
+            logger.debug(f"开始从 {len(interesting_messages)} 条圣经消息中提取金句")
             quotes, usage = await self.analyze(interesting_messages, umo)
 
             # 建立 ID 到昵称的映射表用于恢复显示

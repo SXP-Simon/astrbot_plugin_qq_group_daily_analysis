@@ -172,6 +172,60 @@ async def test_trace_routes_direct(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("terminal", [False, True])
+async def test_trace_detail_uses_live_rounds_but_never_overwrites_terminal_status(
+    mock_trace_store, mock_active_mgr, monkeypatch, terminal
+):
+    """启动快照不遮挡实时轮次，仓储终态不被仍在清理的内存任务覆盖。"""
+    from astrbot_plugin_qq_group_daily_analysis.src.application.services.task_lifecycle_service import (
+        TaskLifecycleService,
+    )
+    from astrbot_plugin_qq_group_daily_analysis.src.domain.value_objects.task_event import (
+        TaskEvent,
+    )
+
+    route_module = importlib.import_module(TraceRoutes.__module__)
+    trace = route_module.TraceContext(trace_id="live-round-detail", group_id="123")
+    mock_trace_store.save_trace(trace.to_dict())
+    monkeypatch.setattr(route_module.TraceContext, "get_active_trace", staticmethod(lambda _: trace))
+    monkeypatch.setattr(route_module, "json_response", lambda payload: payload)
+    routes = TraceRoutes(MagicMock(), mock_trace_store, mock_active_mgr, MagicMock())
+    with trace.span("RENDER_REPORT") as span:
+        span["payload"]["render_attempts"] = [{"attempt": 1, "status": "running", "strategy_name": "本地备用"}]
+        if terminal:
+            TaskLifecycleService(mock_trace_store).transition(trace.trace_id, TaskEvent.CANCEL)
+        result = await routes.api_get_trace_detail(trace.trace_id)
+        if terminal:
+            assert result["data"]["status"] == "aborted"
+            assert result["data"]["spans"] == []
+        else:
+            assert result["data"]["status"] == "running"
+            assert result["data"]["spans"][0]["payload"]["render_attempts"][0]["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_trace_detail_rechecks_terminal_status_when_active_trace_disappears(
+    mock_trace_store, mock_active_mgr, monkeypatch
+):
+    """在两次查询之间完成取消，详情不能返回第一次读到的运行快照。"""
+    from astrbot_plugin_qq_group_daily_analysis.src.application.services.task_lifecycle_service import TaskLifecycleService
+    from astrbot_plugin_qq_group_daily_analysis.src.domain.value_objects.task_event import TaskEvent
+
+    route_module = importlib.import_module(TraceRoutes.__module__)
+    mock_trace_store.save_trace({"trace_id": "cancel-between-reads", "group_id": "123", "status": "running"})
+
+    def finish_before_active_lookup_returns(trace_id):
+        TaskLifecycleService(mock_trace_store).transition(trace_id, TaskEvent.CANCEL)
+        return None
+
+    monkeypatch.setattr(route_module.TraceContext, "get_active_trace", staticmethod(finish_before_active_lookup_returns))
+    monkeypatch.setattr(route_module, "json_response", lambda payload: payload)
+    routes = TraceRoutes(MagicMock(), mock_trace_store, mock_active_mgr, MagicMock())
+    result = await routes.api_get_trace_detail("cancel-between-reads")
+    assert result["data"]["status"] == "aborted"
+
+
+@pytest.mark.asyncio
 async def test_template_routes_direct():
     """测试 TemplateRoutes 独立路由行为"""
     mock_svc = MagicMock()

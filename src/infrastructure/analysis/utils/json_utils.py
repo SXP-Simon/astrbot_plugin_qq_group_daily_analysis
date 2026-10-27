@@ -110,7 +110,7 @@ def _parse_json_with_pattern(
         try:
             data = json.loads(json_text)
             count_info = f"，包含 {len(data)} 条数据" if isinstance(data, list) else ""
-            logger.info(f"{data_type}直接解析成功{count_info}")
+            logger.debug(f"{data_type}直接解析成功{count_info}")
             return True, data, None
         except json.JSONDecodeError:
             logger.debug(f"{data_type}直接解析失败，尝试修复JSON...")
@@ -125,7 +125,7 @@ def _parse_json_with_pattern(
                 count_info = (
                     f"，包含 {len(data)} 条数据" if isinstance(data, list) else ""
                 )
-                logger.info(f"{data_type}修复后解析成功{count_info}")
+                logger.debug(f"{data_type}修复后解析成功{count_info}")
                 return True, data, None
             except json.JSONDecodeError as e:
                 error_msg = f"{data_type}JSON修复后解析仍失败: {e}"
@@ -218,7 +218,7 @@ def extract_topics_with_regex(result_text: str, max_topics: int) -> list[dict]:
                 }
             )
 
-        logger.info(f"话题正则表达式提取成功，提取到 {len(topics)} 条有效话题内容")
+        logger.debug(f"话题正则表达式提取成功，提取到 {len(topics)} 条有效话题内容")
         return topics
 
     except Exception as e:
@@ -266,7 +266,7 @@ def extract_user_titles_with_regex(result_text: str, max_count: int) -> list[dic
                 }
             )
 
-        logger.info(f"用户称号正则表达式提取成功，提取到 {len(titles)} 条有效用户称号")
+        logger.debug(f"用户称号正则表达式提取成功，提取到 {len(titles)} 条有效用户称号")
         return titles
 
     except Exception as e:
@@ -304,7 +304,7 @@ def extract_golden_quotes_with_regex(result_text: str, max_count: int) -> list[d
 
             quotes.append({"content": content, "sender": sender, "reason": reason})
 
-        logger.info(f"金句正则表达式提取成功，提取到 {len(quotes)} 条有效金句")
+        logger.debug(f"金句正则表达式提取成功，提取到 {len(quotes)} 条有效金句")
         return quotes
 
     except Exception as e:
@@ -359,7 +359,7 @@ def extract_quality_with_regex(result_text: str) -> dict | None:
             "summary": summary_m.group(1) if summary_m else "今天也是充满活力的一天。",
         }
 
-        logger.info(f"聊天质量正则表达式提取成功，提取到 {len(dims)} 个维度")
+        logger.debug(f"聊天质量正则表达式提取成功，提取到 {len(dims)} 个维度")
         return data
 
     except Exception as e:

@@ -57,6 +57,8 @@ class RenderingStrategyOptions(ScreenshotOptions, total=False):
     service_token: str
     request_timeout: int
     font_mode: FontMode
+    strategy_name: str
+    strategy_priority: int
 
 
 RenderingTemplateMarker = TypedDict(

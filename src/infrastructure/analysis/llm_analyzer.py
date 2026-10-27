@@ -91,7 +91,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (话题列表, Token使用统计)
         """
         try:
-            logger.info("开始话题分析")
+            logger.debug("开始话题分析")
             return await self.topic_analyzer.analyze_topics(messages, umo)
         except Exception as e:
             logger.error(f"话题分析失败: {e}")
@@ -116,7 +116,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (用户称号列表, Token使用统计)
         """
         try:
-            logger.info("开始用户称号分析")
+            logger.debug("开始用户称号分析")
             return await self.user_title_analyzer.analyze_user_titles(
                 messages, user_activity, umo, top_users
             )
@@ -139,7 +139,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (金句列表, Token使用统计)
         """
         try:
-            logger.info("开始金句分析")
+            logger.debug("开始金句分析")
             return await self.golden_quote_analyzer.analyze_golden_quotes(messages, umo)
         except Exception as e:
             logger.error(f"金句分析失败: {e}")
@@ -164,7 +164,7 @@ class LLMAnalyzer(IAnalysisProvider):
             分镜列表和 Token 使用统计。
         """
         try:
-            logger.info("开始漫画分镜分析")
+            logger.debug("开始漫画分镜分析")
             (
                 storyboards,
                 usage,
@@ -229,7 +229,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (话题列表, 用户称号列表, 金句列表, 总Token使用统计)
         """
         try:
-            logger.info(
+            logger.debug(
                 f"开始并发执行分析任务 (话题:{topic_enabled}, 称号:{user_title_enabled}, 金句:{golden_quote_enabled}, 质量:{chat_quality_enabled})"
             )
 
@@ -446,7 +446,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (话题列表, 金句列表, 总Token使用统计)
         """
         try:
-            logger.info(
+            logger.debug(
                 f"开始增量并发分析 (话题:{topic_enabled}/{topics_per_batch}, 金句:{golden_quote_enabled}/{quotes_per_batch}, 质量锐评:{chat_quality_enabled})，"
                 f"消息数量: {len(messages)}"
             )

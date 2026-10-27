@@ -423,6 +423,8 @@ class ConfigManager:
         return [
             {
                 "full_page": True,
+                "strategy_name": item["name"],
+                "strategy_priority": item["priority"],
                 "type": item["type"],
                 "quality": item["quality"],
                 "device_scale_factor_level": item["device_scale"],

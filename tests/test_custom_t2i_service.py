@@ -293,6 +293,8 @@ async def test_host_and_custom_service_fallback_preserves_resources_and_records_
     )
     for options in (messages[0]["payload"]["options"], render.await_args.args[3]):
         assert not {
+            "strategy_name",
+            "strategy_priority",
             "render_service",
             "service_endpoint",
             "service_token",
@@ -306,6 +308,67 @@ async def test_host_and_custom_service_fallback_preserves_resources_and_records_
     assert attempts[0 if custom_first else 1]["render_service"][
         "configured_endpoint"
     ] == endpoint.removesuffix("/text2img")
+
+
+@pytest.mark.asyncio
+async def test_render_attempt_is_visible_while_waiting_and_survives_sqlite(
+    rendering, service, monkeypatch, tmp_path
+):
+    """同一轮从等待更新为成功，配置快照可落盘且不泄露服务凭据。"""
+    from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+
+    manager, generator, _ = rendering
+    endpoint, state, _, started = service
+    release = asyncio.Event()
+    state["release"] = release
+    manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [
+        {
+            **make_rendering_plan("Mainland"), "__template_key": "custom",
+            "name": "本地字体备用", "priority": 30, "font_mode": "local",
+            "service_endpoint": endpoint.removesuffix("/text2img") + "/private-key/text2img",
+            "service_token": "my-secret", "timeout": 12000, "request_timeout": 45000,
+        }
+    ]
+    trace = TraceContext(trace_id="live-render-round")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    with trace.span("RENDER_REPORT") as span:
+        task = asyncio.create_task(generator.generate_image_report(create_analysis_result(), "123", None))
+        try:
+            await asyncio.wait_for(started.wait(), 10)
+            attempts = span["payload"]["render_attempts"]
+            assert len(attempts) == 1
+            attempt = attempts[0]
+            assert attempt["status"] == "running"
+            assert attempt["strategy_name"] == "本地字体备用"
+            assert attempt["priority"] == 30
+            assert attempt["service_type"] == "custom"
+            assert attempt["font_mode"] == "local"
+            assert attempt["resource_urls"] == {
+                "cdn_base_url": "https://mainland.example",
+                "google_fonts": "https://fonts-mainland.example",
+                "gstatic": "https://static-mainland.example",
+            }
+            assert attempt["render_timeout_ms"] == 12000
+            assert attempt["request_timeout_ms"] == 45000
+            assert attempt["started_at"] > 0
+            assert "duration_ms" not in attempt
+            release.set()
+            assert (await asyncio.wait_for(task, 10))[0]
+            assert len(attempts) == 1 and attempts[0] is attempt
+            assert attempt["status"] == "success"
+            assert attempt["duration_ms"] >= 0
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+    store = TraceSQLiteStore(tmp_path / "render-trace.db")
+    store.save_trace(trace.to_dict())
+    saved = store.get_trace(trace.trace_id)
+    assert saved["spans"][0]["payload"]["render_attempts"] == attempts
+    serialized = json.dumps(saved)
+    assert "my-secret" not in serialized
+    assert "private-key" not in serialized
 
 
 @pytest.mark.asyncio
@@ -448,6 +511,96 @@ async def test_custom_path_is_used_but_not_recorded_in_trace(
         span["payload"]["render_attempts"][0]["render_service"]["configured_endpoint"]
         == origin
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint,origin", [
+    ("https://private-user:private-password@renderer.example:8443/private-key/text2img", "https://renderer.example:8443"),
+    ("http://private-user:private-password@[::1]:8999/private-key/text2img", "http://[::1]:8999"),
+])
+async def test_diagnostic_endpoint_excludes_userinfo_even_if_config_boundary_is_bypassed(
+    rendering, monkeypatch, endpoint, origin
+):
+    """配置已拒绝账号密码，诊断入口仍不信任绕过校验的运行时地址。"""
+    from src.infrastructure.reporting import generators
+
+    manager, generator, png = rendering
+    monkeypatch.setattr(manager, "get_t2i_rendering_strategies", lambda: [{"render_service": "custom", "service_endpoint": endpoint}])
+    monkeypatch.setattr(generators, "render_custom_t2i", AsyncMock(return_value=png))
+    trace = TraceContext(trace_id="diagnostic-userinfo")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    with trace.span("RENDER_REPORT") as span:
+        assert (await generator.generate_image_report(create_analysis_result(), "123", None))[0]
+    assert span["payload"]["render_attempts"][0]["render_service"]["configured_endpoint"] == origin
+    assert "private-" not in json.dumps(span)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("conflicting_finish", [False, True])
+async def test_webui_cancellation_persists_finished_render_round_before_terminal_reload(
+    rendering, service, monkeypatch, tmp_path, conflicting_finish
+):
+    """覆盖 WebUI 先落库终态、再取消协程、最后 finish 重读快照的完整顺序。"""
+    from src.application.services.task_lifecycle_service import ConcurrentTaskTransitionError, TaskLifecycleService
+    from src.domain.value_objects.task_event import TaskEvent
+    from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+    from src.infrastructure.webui.active_task_manager import ActiveTaskManager
+    from src.shared import trace_context
+
+    manager, generator, _ = rendering
+    endpoint, state, _, started = service
+    release = asyncio.Event()
+    state["release"] = release
+    manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [{"__template_key": "custom", "service_endpoint": endpoint}]
+    store = TraceSQLiteStore(tmp_path / "webui-cancel.db")
+    lifecycle = TaskLifecycleService(store)
+    active = ActiveTaskManager(lifecycle)
+    monkeypatch.setattr(trace_context, "_global_trace_store", store)
+    monkeypatch.setattr(trace_context, "_global_task_lifecycle_service", lifecycle)
+    monkeypatch.setattr(trace_context, "_global_active_task_manager", None)
+    trace = TraceContext(trace_id="webui-cancel-round", group_id="123")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+
+    async def run():
+        with trace:
+            try:
+                with trace.span("RENDER_REPORT"):
+                    await generator.generate_image_report(create_analysis_result(), "123", None)
+            except asyncio.CancelledError:
+                # 不依赖后续 finish 成功：取消收尾先保存，避免冲突分支重读旧轮次。
+                assert store.get_trace(trace.trace_id)["spans"][0]["payload"]["render_attempts"][0]["status"] == "cancelled"
+                if conflicting_finish:
+                    with pytest.raises(ConcurrentTaskTransitionError):
+                        trace.finish(event=TaskEvent.FAIL)
+                else:
+                    trace.finish(event=TaskEvent.CANCEL)
+                raise
+
+    task = asyncio.create_task(run())
+    await active.register_task(trace.trace_id, "123", asyncio_task=task)
+    try:
+        await asyncio.wait_for(started.wait(), 10)
+        assert await active.cancel_task(trace.trace_id)
+        terminal_time = store.get_trace(trace.trace_id)["completed_at"]
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 2)
+        saved = store.get_trace(trace.trace_id)
+        assert saved["status"] == "aborted"
+        assert saved["completed_at"] == terminal_time
+        assert "WebUI" in saved["error_message"]
+        span = saved["spans"][0]
+        assert span["status"] == "aborted"
+        assert span["duration_ms"] >= 0
+        rounds = span["payload"]["render_attempts"]
+        assert len(rounds) == 1
+        assert rounds[0]["status"] == "cancelled"
+        assert rounds[0]["duration_ms"] >= 0
+        assert trace._spans[0]["payload"]["render_attempts"] == rounds
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio

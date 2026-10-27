@@ -1,5 +1,7 @@
 import React from "react";
 import { useTheme } from "../../../shared/lib/useTheme";
+import { formatDuration } from "../../../shared/lib/formatters";
+import { renderAttemptSchema } from "../model/renderAttempts";
 
 interface RenderAttemptsTableProps {
   attempts: Array<Record<string, unknown>>;
@@ -35,7 +37,7 @@ export const RenderAttemptsTable: React.FC<RenderAttemptsTableProps> = ({ attemp
         }}
       >
         <span style={{ fontWeight: 600, color: isDark ? "#c9d1d9" : "#334155" }}>
-          图片渲染策略与降级观测
+          图片渲染过程
         </span>
         <span className="font-mono" style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b" }}>
           共 {attempts.length} 轮策略
@@ -43,13 +45,25 @@ export const RenderAttemptsTable: React.FC<RenderAttemptsTableProps> = ({ attemp
       </div>
 
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {attempts.map((att: Record<string, unknown>, i: number) => {
+        {attempts.map((record, i) => {
+          const parsed = renderAttemptSchema.safeParse(record);
+          if (!parsed.success) return null;
+          const att = parsed.data;
           const isSuccess = att.status === "success";
           const isCancelled = att.status === "cancelled";
+          const isRunning = att.status === "running";
           const hasError = !isSuccess && Boolean(att.error);
-          const service = att.render_service;
-          const endpoint = service && typeof service === "object" && "configured_endpoint" in service
-            ? String(service.configured_endpoint || "") : "";
+          const endpoint = att.render_service?.configured_endpoint;
+          const resources = att.resource_urls;
+          const details = [
+            att.strategy_name,
+            att.priority != null ? `优先级 ${att.priority}` : undefined,
+            att.service_type === "custom" ? "自定义 T2I" : att.service_type === "astrbot" ? "AstrBot T2I" : undefined,
+            att.font_mode === "local" ? "字体：本地已安装字体" : att.font_mode === "network" ? "字体：在线加载" : undefined,
+            typeof att.duration_ms === "number" ? `耗时：${att.duration_ms === 0 ? "0ms" : formatDuration(att.duration_ms)}` : undefined,
+            typeof att.render_timeout_ms === "number" ? `渲染超时：${formatDuration(att.render_timeout_ms)}` : undefined,
+            typeof att.request_timeout_ms === "number" ? `请求等待上限：${formatDuration(att.request_timeout_ms)}` : undefined,
+          ].filter(Boolean).join(" · ");
 
           return (
             <div
@@ -107,24 +121,33 @@ export const RenderAttemptsTable: React.FC<RenderAttemptsTableProps> = ({ attemp
                     padding: "1px 5px",
                     borderRadius: 3,
                     fontWeight: 500,
-                    background: isSuccess
+                    background: isRunning ? (isDark ? "#172b4d" : "#eff6ff") : isSuccess
                       ? (isDark ? "rgba(22, 163, 74, 0.12)" : "#f0fdf4")
                       : (isDark ? "rgba(220, 38, 38, 0.12)" : "#fef2f2"),
-                    color: isSuccess
+                    color: isRunning ? (isDark ? "#60a5fa" : "#1d4ed8") : isSuccess
                       ? (isDark ? "#4ade80" : "#15803d")
                       : (isDark ? "#f87171" : "#b91c1c"),
                     border: `1px solid ${
-                      isSuccess
+                      isRunning ? (isDark ? "#1d4ed8" : "#bfdbfe") : isSuccess
                         ? (isDark ? "rgba(22, 163, 74, 0.25)" : "#bbf7d0")
                         : (isDark ? "rgba(220, 38, 38, 0.25)" : "#fecaca")
                     }`,
                   }}
                 >
-                  {isSuccess ? "渲染成功" : isCancelled ? "已停止" : "渲染失败"}
+                  {isRunning ? "正在渲染" : isSuccess ? "渲染成功" : isCancelled ? "已停止" : att.status === "failed" ? "渲染失败" : "状态未知"}
                 </span>
               </div>
 
+              {details && <div style={{ marginTop: 4, overflowWrap: "anywhere", color: isDark ? "#8b949e" : "#64748b" }}>{details}</div>}
               {endpoint && <div style={{ marginTop: 4, overflowWrap: "anywhere", color: isDark ? "#8b949e" : "#64748b" }}>服务：{endpoint}</div>}
+              {att.render_service?.config_lookup && <div style={{ marginTop: 4, color: isDark ? "#8b949e" : "#64748b" }}>配置来源：{att.render_service.config_lookup}</div>}
+              {resources && <div style={{ marginTop: 4, overflowWrap: "anywhere", color: isDark ? "#8b949e" : "#64748b" }}>
+                {resources.cdn_base_url && <div>模板资源：{resources.cdn_base_url}</div>}
+                {att.font_mode !== "local" && <>
+                  {resources.google_fonts && <div>字体 CSS：{resources.google_fonts}</div>}
+                  {resources.gstatic && <div>字体文件：{resources.gstatic}</div>}
+                </>}
+              </div>}
               {hasError && (
                 <div
                   className="font-mono"

@@ -281,7 +281,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                 self.validate_parsed_data(regex_data)
             )
             if validated_success and validated_data:
-                logger.info(
+                logger.warning(
                     f"{self.get_data_type()}结构化解析失败后，正则降级提取成功，获得 {len(validated_data)} 条数据"
                 )
                 return True, validated_data, None
@@ -308,7 +308,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         if not system_prompt or not system_prompt.strip():
             return prompt
 
-        logger.info(f"[{self.get_data_type()}分析] 已启用人格设定（深度强化模式）")
+        logger.debug(f"[{self.get_data_type()}分析] 已启用人格设定（深度强化模式）")
 
         # 构造更具强制性的标识符
         persona_content = system_prompt.strip()
@@ -356,7 +356,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             logger.debug(f"{self.get_data_type()}分析输入数据长度: {data_length}")
 
             prompt = self.build_prompt_with_override(data, prompt_override)
-            logger.info(f"开始{self.get_data_type()}分析，构建提示词完成")
+            logger.debug(f"开始{self.get_data_type()}分析，构建提示词完成")
             logger.debug(
                 f"{self.get_data_type()}分析prompt长度: {len(prompt) if prompt else 0}"
             )
@@ -391,7 +391,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             # 应用人格强化注入
             prompt = self._apply_persona_reinforcement(prompt, system_prompt)
 
-            logger.info(f"[{self.get_data_type()}分析] 开始发起 LLM 请求, umo: {umo}")
+            logger.debug(f"[{self.get_data_type()}分析] 开始发起 LLM 请求, umo: {umo}")
 
             from ....shared.trace_context import TraceContext
 

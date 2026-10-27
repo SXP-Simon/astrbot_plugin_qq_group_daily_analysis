@@ -202,6 +202,8 @@ async def test_failed_attempts_preserve_reason_and_duration(
     if kind == "missing":
         assert attempts[-1]["file_exists"] is False
     assert "render_service" in trace._spans[0]["payload"]
+    # 宿主未暴露 HTTP 等待预算，不能用截图参数代替。
+    assert all(attempt["request_timeout_ms"] is None for attempt in attempts)
     assert any("[T2I诊断 v2]" in call.args[0] for call in log.debug.call_args_list)
     log.info.assert_not_called()
     if isinstance(response, Exception):

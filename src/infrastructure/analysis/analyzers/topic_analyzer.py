@@ -162,7 +162,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
                     max_topics=max_topics,
                     messages_text=messages_text,
                 )
-                logger.info("使用配置中的话题分析提示词")
+                logger.debug("使用配置中的话题分析提示词")
                 return prompt
             except Exception as e:
                 logger.warning(f"应用话题分析提示词失败: {e}")
@@ -321,10 +321,10 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
             logger.debug(f"提取到 {len(text_messages)} 条文本消息")
 
             if not text_messages:
-                logger.info("没有有效的文本消息，返回空结果")
+                logger.debug("没有有效的文本消息，返回空结果")
                 return [], TokenUsage()
 
-            logger.info(f"开始分析 {len(text_messages)} 条文本消息中的话题")
+            logger.debug(f"开始分析 {len(text_messages)} 条文本消息中的话题")
             logger.debug(f"文本消息类型: {type(text_messages)}")
             if text_messages:
                 logger.debug(f"第一条文本消息类型: {type(text_messages[0])}")

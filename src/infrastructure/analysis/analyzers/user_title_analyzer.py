@@ -70,7 +70,7 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
         if prompt_template:
             try:
                 prompt = render_template(prompt_template, users_text=users_text)
-                logger.info("使用配置中的用户称号分析提示词")
+                logger.debug("使用配置中的用户称号分析提示词")
                 return prompt
             except Exception as e:
                 logger.warning(f"应用用户称号分析提示词失败: {e}")
@@ -171,13 +171,13 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
 
             # 如果提供了top_users列表,只分析这些活跃用户
             if top_users:
-                logger.info(
+                logger.debug(
                     f"使用get_top_users筛选出的 {len(top_users)} 个活跃用户进行称号分析"
                 )
                 target_user_ids = {str(user["user_id"]) for user in top_users}
             else:
                 # 兼容旧逻辑:如果没有提供top_users,则使用所有消息数>=5的用户
-                logger.info("未提供活跃用户列表,使用消息数>=5的用户")
+                logger.debug("未提供活跃用户列表,使用消息数>=5的用户")
                 target_user_ids = {
                     user_id
                     for user_id, stats in user_analysis.items()
@@ -263,10 +263,12 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
             user_data = self.prepare_user_data(messages, user_activity, top_users)
 
             if not user_data["user_summaries"]:
-                logger.info("没有符合条件的用户，返回空结果")
+                logger.debug("没有符合条件的用户，返回空结果")
                 return [], TokenUsage()
 
-            logger.info(f"开始分析 {len(user_data['user_summaries'])} 个活跃用户的称号")
+            logger.debug(
+                f"开始分析 {len(user_data['user_summaries'])} 个活跃用户的称号"
+            )
             return await self.analyze(user_data, umo)
 
         except Exception as e:
