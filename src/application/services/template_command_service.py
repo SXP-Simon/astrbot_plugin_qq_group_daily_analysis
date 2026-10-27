@@ -102,6 +102,31 @@ class TemplateCommandService:
                 return candidate
         return None
 
+    def resolve_template_preview_source(self, template_name: str) -> str | None:
+        """返回本地预览原图；内置模板缺图时使用当前 CDN。
+
+        Args:
+            template_name: 模板目录名称。
+
+        Returns:
+            本地路径或内置预览 URL；自定义模板没有预览图时返回 None。
+        """
+        local = self.resolve_template_preview_path(template_name)
+        if local:
+            return local
+        from ...infrastructure.reporting.template_installer import (
+            builtin_template_names,
+        )
+
+        if template_name not in builtin_template_names():
+            return None
+        base = (
+            self.config_provider.get_template_assets_base_url()
+            if self.config_provider
+            else DEFAULT_ASSETS_CDN_URL
+        )
+        return f"{base}/{template_name}-demo.webp"
+
     def list_available_templates(self) -> list[str]:
         """获取本地所有可用模板名称列表（内置 + 用户自定义）。"""
         from ...infrastructure.reporting.template_installer import (
@@ -227,36 +252,18 @@ class TemplateCommandService:
             current_mark = " ✅" if template_name == current_template else ""
             num_label = self._format_index_label(index)
 
-            preview_image_path = self.resolve_template_preview_path(template_name)
-            if preview_image_path:
-                node_content: list[BaseMessageComponent] = [
-                    Plain(f"{num_label} {template_name}{current_mark}"),
-                    Image.fromFileSystem(preview_image_path),
-                ]
-            else:
-                from ...infrastructure.reporting.template_installer import (
-                    builtin_template_names,
+            source = self.resolve_template_preview_source(template_name)
+            node_content: list[BaseMessageComponent] = [
+                Plain(f"{num_label} {template_name}{current_mark}")
+            ]
+            if source:
+                node_content.append(
+                    Image.fromURL(source)
+                    if source.startswith(("http://", "https://"))
+                    else Image.fromFileSystem(source)
                 )
-
-                # 仅内置模板在本地 assets 缺失时尝试从官方 GitHub CDN 加载；
-                # 自定义模板若未提供本地预览图，避免拼接 404 的 CDN 链接
-                if template_name in builtin_template_names():
-                    assets_base_url = (
-                        self.config_provider.get_template_assets_base_url()
-                        if self.config_provider is not None
-                        else DEFAULT_ASSETS_CDN_URL
-                    )
-                    cdn_url = f"{assets_base_url}/{template_name}-demo.webp"
-                    node_content = [
-                        Plain(f"{num_label} {template_name}{current_mark}"),
-                        Image.fromURL(cdn_url),
-                    ]
-                else:
-                    node_content = [
-                        Plain(
-                            f"{num_label} {template_name}{current_mark}\n(未提供预览图)"
-                        )
-                    ]
+            else:
+                node_content.append(Plain("未提供预览图"))
 
             node_list.append(Node(uin=bot_id, name=template_name, content=node_content))
 
