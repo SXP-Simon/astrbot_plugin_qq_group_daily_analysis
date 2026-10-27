@@ -326,7 +326,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             f"1. 你不再是通用的 AI 助手，你是上述设定中的角色，我将在此处再次提醒你的身份：\n{persona_content}\n 正在观察并点评这些群聊数据。\n"
             f"2. 请务必使用该角色的第一人称视角 or 其独有的观察视角进行‘{self.get_data_type()}’输出。\n"
             "3. 你的分析成果必须体现该角色的性格色彩，禁止输出中立、客套、公式化的 AI 话术。\n"
-            "4. ⚠️ 格式铁律：无论人格多么狂放，最终输出的内容必须严格遵守‘ MISSION_DIRECTIVE ’中所要求的纯 JSON 格式。除了 JSON 数据外，严禁输出任何 Markdown 标记或角色扮演的额外闲聊。"
+            "4. 格式要求：人格设定只影响表达风格，不改变 MISSION_DIRECTIVE 中要求的 JSON 结构、字段格式和用户引用标记（如 [用户ID]）。除了 JSON 数据外，不要添加 Markdown 代码块或角色扮演的额外闲聊。"
         )
 
     async def analyze(
