@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from ...infrastructure.scheduler.auto_scheduler import AutoScheduler
     from ..services.template_command_service import TemplateCommandService
 
+from ...utils.logger import logger
 from ..services.analysis_application_service import DuplicateGroupTaskError
 
 
@@ -193,6 +194,13 @@ class SettingsCommandHandler:
         event.should_call_llm(True)
 
         available_templates = self.template_command_service.list_available_templates()
+        logger.debug(
+            "[模板预览] 设置处理器: platform_id=%s templates=%s router=%s context=%s",
+            platform_id,
+            len(available_templates),
+            bool(self.template_preview_router),
+            bool(self.context),
+        )
         if not available_templates:
             yield event.plain_result("❌ 未找到任何可用的报告模板")
             return
@@ -213,8 +221,21 @@ class SettingsCommandHandler:
                     yield result
                 return
 
+        if event.get_platform_name() in {"qq_official", "qq_official_webhook"}:
+            logger.warning(
+                "[模板预览] QQ 官方预览服务未处理请求，已阻止 Nodes 兼容回退；请检查路由及宿主上下文: platform_id=%s",
+                platform_id,
+            )
+            yield (
+                event.plain_result("QQ 模板预览组件未就绪，请重载插件后重试。")
+                .use_markdown(False)
+                .use_t2i(False)
+            )
+            return
+
         current_template = self.config_manager.get_report_template()
         bot_id = event.get_self_id()
+        logger.debug("[模板预览] 设置处理器使用兼容回退: output=Nodes")
         preview_nodes = self.template_command_service.build_template_preview_nodes(
             available_templates=available_templates,
             current_template=current_template,
