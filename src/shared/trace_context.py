@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import re
 import time
@@ -340,6 +341,9 @@ class TraceContext:
             yield span_record
             if span_record.get("status") in ("running", None):
                 span_record["status"] = "success"
+        except asyncio.CancelledError:
+            span_record["status"] = "aborted"
+            raise
         except Exception as exc:
             span_record["status"] = "failed"
             span_record["payload"]["error"] = str(exc)
@@ -363,7 +367,10 @@ class TraceContext:
             if "delta_memory_mb" not in p:
                 p["delta_memory_mb"] = span_record["delta_memory_mb"]
 
-            if self.status != "running" and _global_trace_store is not None:
+            # 外部取消可能已先落库终态；在 finish 读取该快照前保存本协程的取消收尾。
+            if _global_trace_store is not None and (
+                self.status != "running" or span_record["status"] == "aborted"
+            ):
                 try:
                     self.persist_snapshot()
                 except Exception:

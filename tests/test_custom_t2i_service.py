@@ -536,6 +536,74 @@ async def test_diagnostic_endpoint_excludes_userinfo_even_if_config_boundary_is_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("conflicting_finish", [False, True])
+async def test_webui_cancellation_persists_finished_render_round_before_terminal_reload(
+    rendering, service, monkeypatch, tmp_path, conflicting_finish
+):
+    """覆盖 WebUI 先落库终态、再取消协程、最后 finish 重读快照的完整顺序。"""
+    from src.application.services.task_lifecycle_service import ConcurrentTaskTransitionError, TaskLifecycleService
+    from src.domain.value_objects.task_event import TaskEvent
+    from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+    from src.infrastructure.webui.active_task_manager import ActiveTaskManager
+    from src.shared import trace_context
+
+    manager, generator, _ = rendering
+    endpoint, state, _, started = service
+    release = asyncio.Event()
+    state["release"] = release
+    manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [{"__template_key": "custom", "service_endpoint": endpoint}]
+    store = TraceSQLiteStore(tmp_path / "webui-cancel.db")
+    lifecycle = TaskLifecycleService(store)
+    active = ActiveTaskManager(lifecycle)
+    monkeypatch.setattr(trace_context, "_global_trace_store", store)
+    monkeypatch.setattr(trace_context, "_global_task_lifecycle_service", lifecycle)
+    monkeypatch.setattr(trace_context, "_global_active_task_manager", None)
+    trace = TraceContext(trace_id="webui-cancel-round", group_id="123")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+
+    async def run():
+        with trace:
+            try:
+                with trace.span("RENDER_REPORT"):
+                    await generator.generate_image_report(create_analysis_result(), "123", None)
+            except asyncio.CancelledError:
+                # 不依赖后续 finish 成功：取消收尾先保存，避免冲突分支重读旧轮次。
+                assert store.get_trace(trace.trace_id)["spans"][0]["payload"]["render_attempts"][0]["status"] == "cancelled"
+                if conflicting_finish:
+                    with pytest.raises(ConcurrentTaskTransitionError):
+                        trace.finish(event=TaskEvent.FAIL)
+                else:
+                    trace.finish(event=TaskEvent.CANCEL)
+                raise
+
+    task = asyncio.create_task(run())
+    await active.register_task(trace.trace_id, "123", asyncio_task=task)
+    try:
+        await asyncio.wait_for(started.wait(), 10)
+        assert await active.cancel_task(trace.trace_id)
+        terminal_time = store.get_trace(trace.trace_id)["completed_at"]
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 2)
+        saved = store.get_trace(trace.trace_id)
+        assert saved["status"] == "aborted"
+        assert saved["completed_at"] == terminal_time
+        assert "WebUI" in saved["error_message"]
+        span = saved["spans"][0]
+        assert span["status"] == "aborted"
+        assert span["duration_ms"] >= 0
+        rounds = span["payload"]["render_attempts"]
+        assert len(rounds) == 1
+        assert rounds[0]["status"] == "cancelled"
+        assert rounds[0]["duration_ms"] >= 0
+        assert trace._spans[0]["payload"]["render_attempts"] == rounds
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_dispatcher_reaches_custom_generator_without_host_callback(rendering):
     manager, generator, _ = rendering
     manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [
