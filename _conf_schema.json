@@ -594,7 +594,7 @@
                                     "在线字体（默认）",
                                     "使用已安装字体"
                                 ],
-                                "hint": "通常保持在线字体。自建 T2I 的字体下载经常超时，或已在截图服务中安装模板所需字体时，可尝试使用已安装字体。缺少字体时外观和换行可能变化；此设置不解决装饰图片加载失败，也不会安装字体。字体需安装在实际运行截图浏览器的机器或容器内。[安装方法和模板字体清单](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/blob/main/docs/T2I_FONTS.md)。仅作用于本轮图片截图，独立 HTML 报告仍使用在线字体。"
+                                "hint": "通常保持在线字体。自建 T2I 的字体下载经常超时，或已在截图服务中安装模板所需字体时，可尝试使用已安装字体。缺少字体时外观和换行可能变化；此设置不解决装饰图片加载失败，也不会安装字体。字体需安装在实际运行截图浏览器的机器或容器内。[安装方法和模板字体清单](https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/docs/T2I_FONTS.md)。仅作用于本轮图片截图，独立 HTML 报告仍使用在线字体。"
                             },
                             "environment": {
                                 "type": "string",
