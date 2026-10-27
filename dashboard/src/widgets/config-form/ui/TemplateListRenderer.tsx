@@ -226,6 +226,11 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
             const itemTemplateKey = findTemplateKey(item) || templateKeys[0] || "character";
             const tpl = findTemplateForItem(item);
             const subItems = tpl?.items || {};
+            // 旧条目可能缺少新字段，条件显示应和控件一样使用 schema 默认值。
+            const itemContext = {
+              ...Object.fromEntries(Object.entries(subItems).map(([key, field]) => [key, field.default])),
+              ...item,
+            };
 
             // 标题展示
             const displayName =
@@ -310,7 +315,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
 
                 {/* 条目内部各字段渲染 */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "10px 16px" }}>
-                  {Object.entries(subItems).filter(([, subField]) => isFieldVisible(subField, { item })).map(([subKey, subField]) => {
+                  {Object.entries(subItems).filter(([, subField]) => isFieldVisible(subField, { item: itemContext })).map(([subKey, subField]) => {
                     const isFullWidth =
                       subField.type === "template_list" ||
                       subField.type === "text" ||
