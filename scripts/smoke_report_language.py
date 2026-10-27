@@ -11,7 +11,7 @@
 
 用法：
   ../../.venv-render/bin/python scripts/smoke_report_language.py            # 渲染 + 静态检查
-  /home/AI-agent/dsweb/venv/bin/python scripts/smoke_report_language.py --with-shot  # 追加长图截图量尺寸
+  /home/AI-agent/dsweb/venv/bin/python scripts/smoke_report_language.py --with-shot  # 追加长图T2I量尺寸
 """
 
 from __future__ import annotations
@@ -311,13 +311,13 @@ def check_long_image_shot(out_dir: Path) -> None:
         ok = 900 <= box["w"] <= 1000 and 3000 <= box["h"] <= 9000
         check("长图尺寸: 宽约 940、高在 3000–9000 之间", ok, f"{box['w']}×{box['h']}")
     except Exception as exc:  # pragma: no cover - 环境相关
-        check("长图尺寸: 截图失败", False, f"{type(exc).__name__}: {exc}")
+        check("长图尺寸: T2I失败", False, f"{type(exc).__name__}: {exc}")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--with-shot", action="store_true", help="追加 Playwright 长图截图量尺寸"
+        "--with-shot", action="store_true", help="追加 Playwright 长图T2I量尺寸"
     )
     parser.add_argument(
         "--out", type=str, default=None, help="产物目录（默认临时目录）"
