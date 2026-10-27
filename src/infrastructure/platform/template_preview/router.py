@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from astrbot.api.message_components import Image, Plain
 
 from ....utils.logger import logger
+from ..command_prefix import get_command_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -63,6 +64,7 @@ class TemplatePreviewRouter:
         self._handlers: list[TemplatePreviewHandler] = handlers or []
         self.template_service = template_service
         self.image_cache = image_cache
+        self._context: Context | None = None
 
     def add_handler(self, handler: TemplatePreviewHandler) -> None:
         """注册一个平台处理器。"""
@@ -70,6 +72,7 @@ class TemplatePreviewRouter:
 
     async def ensure_handlers_registered(self, context: Context) -> None:
         """让处理器完成初始化（如注册回调）。"""
+        self._context = context
         for handler in self._handlers:
             res = handler.ensure_callback_handlers_registered(context)
             if inspect.isawaitable(res):
@@ -77,6 +80,7 @@ class TemplatePreviewRouter:
 
     async def unregister_handlers(self) -> None:
         """统一注销处理器资源。"""
+        self._context = None
         for handler in self._handlers:
             res = handler.unregister_callback_handlers()
             if inspect.isawaitable(res):
@@ -167,6 +171,7 @@ class TemplatePreviewRouter:
                 available_templates,
                 current.get_report_template() if current else "",
                 event.get_self_id(),
+                command_prefix=get_command_prefix(self._context, event),
             )
             if selected:
                 nodes.nodes = [

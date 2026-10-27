@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from PIL import Image
 
 from ....utils.logger import logger
+from ..command_prefix import get_command_prefix
 from .qq_error_diagnostics import describe_preview_error as _describe_preview_error
 
 if TYPE_CHECKING:
@@ -43,6 +44,7 @@ class QQOfficialTemplatePreviewHandler:
         self.config_manager = config_manager
         self.template_service = template_service
         self.image_cache = image_cache
+        self._context: Context | None = None
 
     @staticmethod
     def supports(event: AstrMessageEvent) -> bool:
@@ -50,10 +52,12 @@ class QQOfficialTemplatePreviewHandler:
         return event.get_platform_name() in {"qq_official", "qq_official_webhook"}
 
     def ensure_callback_handlers_registered(self, context: Context) -> None:
-        """指令按钮复用已有命令权限检查，无需注册回调。"""
+        """保存宿主上下文以读取会话前缀；权限仍由原命令检查。"""
+        self._context = context
 
     def unregister_callback_handlers(self) -> None:
-        """无独立回调资源需要注销。"""
+        """释放宿主上下文引用，无独立回调需要注销。"""
+        self._context = None
 
     async def handle_view_templates(
         self,
@@ -182,9 +186,10 @@ class QQOfficialTemplatePreviewHandler:
         )
         if not native_sent:
             host_calls += 1
+            prefix = get_command_prefix(self._context, event)
             plain = (
                 text
-                + f"\n查看：/查看模板 序号或名称\n使用此模板：/设置模板 {index + 1}"
+                + f"\n查看：{prefix}查看模板 序号或名称\n使用此模板：{prefix}设置模板 {index + 1}"
             )
             if not await self._send_host_preview(
                 event, event.plain_result(plain), "plain", selected
@@ -276,12 +281,13 @@ class QQOfficialTemplatePreviewHandler:
                 from botpy.http import Route
                 from botpy.types.message import KeyboardPayload
 
+                prefix = get_command_prefix(self._context, event)
                 buttons: list[Button] = []
                 for button_id, (label, command) in enumerate(
                     [
-                        ("上一张", f"/查看模板 {(index - 1) % total + 1}"),
-                        ("下一张", f"/查看模板 {(index + 1) % total + 1}"),
-                        ("使用此模板", f"/设置模板 {index + 1}"),
+                        ("上一张", f"{prefix}查看模板 {(index - 1) % total + 1}"),
+                        ("下一张", f"{prefix}查看模板 {(index + 1) % total + 1}"),
+                        ("使用此模板", f"{prefix}设置模板 {index + 1}"),
                     ]
                 ):
                     buttons.append(

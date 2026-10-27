@@ -13,9 +13,11 @@ from ....domain.repositories.bot_client_protocol import (
     TelegramClientProtocol,
 )
 from ....utils.logger import logger
+from ..command_prefix import get_command_prefix
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
+    from astrbot.api.star import Context
     from telegram import (
         CallbackQuery,
         InlineKeyboardButton,
@@ -93,6 +95,7 @@ class TelegramTemplatePreviewHandler:
         self.config_manager = config_manager
         self.template_service = template_service
         self.image_cache = image_cache
+        self._context: Context | None = None
         self._sessions: dict[str, _PreviewSession] = {}
         self._registered_platform_ids: set[str] = set()
         self._handlers: dict[str, tuple[TelegramApplicationProtocol, object]] = {}
@@ -110,8 +113,9 @@ class TelegramTemplatePreviewHandler:
     # 向后兼容旧调用名
     is_telegram_event = supports
 
-    async def ensure_callback_handlers_registered(self, context: object) -> None:
+    async def ensure_callback_handlers_registered(self, context: Context) -> None:
         """为所有 Telegram 平台注册按钮回调处理器。"""
+        self._context = context
         if not TELEGRAM_RUNTIME_AVAILABLE:
             return
         platform_manager = getattr(context, "platform_manager", None)
@@ -197,6 +201,7 @@ class TelegramTemplatePreviewHandler:
 
     async def unregister_callback_handlers(self) -> None:
         """卸载已注册的回调处理器（插件终止时调用）。"""
+        self._context = None
         if not TELEGRAM_RUNTIME_AVAILABLE:
             return
 
@@ -392,6 +397,7 @@ class TelegramTemplatePreviewHandler:
             return False, []
 
         results: list[MessageEventResult] = []
+        prefix = get_command_prefix(self._context, event)
 
         async def _append_fallback_results() -> None:
             current_template = (
@@ -407,7 +413,7 @@ class TelegramTemplatePreviewHandler:
 
 {template_list_str}
 
-💡 使用 /设置模板 [序号] 切换"""
+💡 使用 {prefix}设置模板 [序号] 切换"""
                 )
             )
 
@@ -460,11 +466,11 @@ class TelegramTemplatePreviewHandler:
         _, token, action = parts
         session = self._sessions.get(token)
         if not session:
-            await query.answer("预览会话已过期，请重新发送 /查看模板", show_alert=True)
+            await query.answer("预览会话已过期，请重新打开模板预览", show_alert=True)
             return
         if time.time() - session.created_at > self._SESSION_TTL_SECONDS:
             self._sessions.pop(token, None)
-            await query.answer("预览会话已过期，请重新发送 /查看模板", show_alert=True)
+            await query.answer("预览会话已过期，请重新打开模板预览", show_alert=True)
             return
 
         if not query.from_user:
@@ -481,7 +487,7 @@ class TelegramTemplatePreviewHandler:
         if query.message.message_id != session.message_id or str(
             query.message.chat_id
         ) != str(session.chat_id):
-            await query.answer("预览状态不一致，请重新发送 /查看模板", show_alert=True)
+            await query.answer("预览状态不一致，请重新打开模板预览", show_alert=True)
             return
 
         if action == "prev":

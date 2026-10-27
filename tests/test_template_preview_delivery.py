@@ -48,6 +48,7 @@ async def test_merged_forward_keeps_nodes_and_converts_images(
     service.build_template_preview_nodes.return_value = nodes
     service.parse_template_input.return_value = ("ATRI", None)
     event = SimpleNamespace(
+        unified_msg_origin="qq:GroupMessage:bound",
         get_self_id=lambda: "bot",
         get_platform_name=lambda: "aiocqhttp",
         chain_result=lambda chain: chain,
@@ -55,10 +56,16 @@ async def test_merged_forward_keeps_nodes_and_converts_images(
     handler = TemplatePreviewRouter(
         template_service=service, image_cache=PreviewImageCache(tmp_path / "cache")
     )
+    context = SimpleNamespace(get_config=Mock(return_value={"wake_prefix": ["!", "/"]}))
+    await handler.ensure_handlers_registered(context)
     handled, results = await handler.handle_view_templates(
         event, "qq", ["scrapbook", "ATRI"], selection
     )
     assert handled and results[0] == [nodes]
+    assert (
+        service.build_template_preview_nodes.call_args.kwargs["command_prefix"] == "!"
+    )
+    context.get_config.assert_called_once_with(umo=event.unified_msg_origin)
     assert len(nodes.nodes) == (2 if selection else 3)
     if selection:
         assert nodes.nodes[1].content[0] == "2. ATRI"
@@ -182,3 +189,23 @@ async def test_telegram_all_paths_send_cached_jpeg(tmp_path, monkeypatch, operat
         await handler._edit_preview_message(query, session)
     assert len(received) == 1 and received[0].startswith(b"\xff\xd8\xff")
     assert source.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["!", ""])
+async def test_telegram_fallback_usage_reads_current_session(prefix):
+    handler = TelegramTemplatePreviewHandler(Mock(), Mock())
+    context = SimpleNamespace(
+        get_config=Mock(return_value={"wake_prefix": [prefix, "/"]})
+    )
+    await handler.ensure_callback_handlers_registered(context)
+    handler.send_preview_message = AsyncMock(return_value=False)
+    handler.send_preview_image_fallback = AsyncMock(return_value=True)
+    event = SimpleNamespace(
+        unified_msg_origin="tg:GroupMessage:bound",
+        get_platform_name=lambda: "telegram",
+        plain_result=lambda text: text,
+    )
+    handled, results = await handler.handle_view_templates(event, "tg", ["scrapbook"])
+    assert handled and f"使用 {prefix}设置模板 [序号] 切换" in results[0]
+    context.get_config.assert_called_once_with(umo=event.unified_msg_origin)

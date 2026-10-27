@@ -29,6 +29,9 @@ class Result:
 
 @pytest.fixture
 def preview(monkeypatch):
+    # 先加载真实 SDK，避免临时传输桩影响后续异常类的导入。
+    import botpy.errors
+
     http = ModuleType("botpy.http")
     http.Route = lambda method, path, **params: SimpleNamespace(
         method=method, path=path, params=params
@@ -44,8 +47,12 @@ def preview(monkeypatch):
     service.resolve_template_preview_source.return_value = "demo.webp"
     cache = SimpleNamespace(get_jpeg=AsyncMock(return_value="/cache/demo.jpg"))
     handler = QQOfficialTemplatePreviewHandler(config, service, cache)
+    handler.ensure_callback_handlers_registered(
+        SimpleNamespace(get_config=Mock(return_value={"wake_prefix": ["/"]}))
+    )
     request = AsyncMock(return_value={"id": "reply"})
     event = SimpleNamespace(
+        unified_msg_origin="qq:GroupMessage:group",
         get_platform_name=lambda: "qq_official",
         get_sender_id=lambda: "requester",
         message_obj=SimpleNamespace(
@@ -550,3 +557,61 @@ async def test_image_preparation_failure_never_attempts_inline(inline_preview):
     )
     assert all(result.kind == "plain" for result in event.sent)
     assert "暂时无法获取" in event.sent[0].value
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "prefixes, expected",
+    [(["!", "/"], "!"), (["", "/"], ""), (["/", ""], "/"), (["分析 ", "!"], "分析 ")],
+)
+async def test_buttons_and_plain_fallback_share_session_prefix(
+    preview, prefixes, expected
+):
+    handler, event, request = preview
+    context = SimpleNamespace(get_config=Mock(return_value={"wake_prefix": prefixes}))
+    handler.ensure_callback_handlers_registered(context)
+    await handler.handle_view_templates(event, "qq", ["scrapbook", "ATRI"])
+    buttons = request.call_args.kwargs["json"]["keyboard"]["content"]["rows"][0][
+        "buttons"
+    ]
+    assert [button["action"]["data"] for button in buttons] == [
+        f"{expected}查看模板 2",
+        f"{expected}查看模板 2",
+        f"{expected}设置模板 1",
+    ]
+    assert all(
+        button["action"]["permission"]["specify_user_ids"] == ["requester"]
+        for button in buttons
+    )
+    context.get_config.assert_called_with(umo=event.unified_msg_origin)
+    request.side_effect = RuntimeError("没有权限")
+    event.sent.clear()
+    await handler.handle_view_templates(event, "qq", ["scrapbook", "ATRI"])
+    plain = next(result.value for result in event.sent if result.kind == "plain")
+    assert f"查看：{expected}查看模板 序号或名称" in plain
+    assert f"使用此模板：{expected}设置模板 1" in plain
+    handler.config_manager.set_report_template.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_buttons_refresh_prefix_for_each_bound_session(preview):
+    handler, event, request = preview
+    profiles = {
+        "qq:GroupMessage:group": {"wake_prefix": ["!"]},
+        "qq:GroupMessage:other": {"wake_prefix": [""]},
+    }
+    context = SimpleNamespace(get_config=Mock(side_effect=lambda *, umo: profiles[umo]))
+    handler.ensure_callback_handlers_registered(context)
+    for umo, prefix in [
+        ("qq:GroupMessage:group", "!"),
+        ("qq:GroupMessage:other", ""),
+        ("qq:GroupMessage:group", "#"),
+    ]:
+        event.unified_msg_origin = umo
+        profiles[umo]["wake_prefix"] = [prefix]
+        await handler.handle_view_templates(event, "qq", ["scrapbook"])
+        buttons = request.call_args.kwargs["json"]["keyboard"]["content"]["rows"][0][
+            "buttons"
+        ]
+        assert buttons[2]["action"]["data"] == f"{prefix}设置模板 1"
+    assert all(call.kwargs.get("umo") for call in context.get_config.call_args_list)
