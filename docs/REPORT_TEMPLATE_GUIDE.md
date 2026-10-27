@@ -424,3 +424,20 @@ python scripts/debug_render.py -t <模板名> -o debug_output.html [-m mbti|sbti
 - **位置数组，不是字典**：改造/新增选项时顺序必须与 `options` 严格对齐，否则标签会串位——
   `test_schema_uses_official_keys_only` 断言两者等长，前端单测里也有「顺序错位」用例。
 - 未配标签、标签为空、或整份缺失时回退显示原始值。
+
+
+## 字体加载方式
+
+自定义 T2I 图片截图会传入 `t2i_font_mode`：`network`（默认）或 `local`。独立 HTML 导出保持 `network`。用户操作、字体来源和安装方法见[字体安装指南](T2I_FONTS.md)。
+
+模板作者应为网络字体样式表、字体预连接和字体文件引用增加条件，同时保留 `font-family` 候选与必要的 `local()` 名称映射：
+
+```jinja2
+{% if t2i_font_mode|default('network') != 'local' %}
+<link href="{{ t2i_google_fonts_mirror }}/css2?family=Inter&display=swap" rel="stylesheet">
+{% endif %}
+```
+
+自定义 `@font-face` 中的远端 `url(...)` 同样需要处理；只含 `local(...)` 的本地字体映射可以保留。不要用无效地址模拟字体加载失败，不要删除装饰图片或其他无关资源。变量未提供时保持在线行为，便于离线调试脚本及旧调用方继续渲染。
+
+安装文件的内部字体名称可能不同于 CSS 使用名，应显式保留必要的别名映射；BlueArchive 和 ATRI 的内置模板提供了示例。需要截图前等待字体就绪时，应由 T2I 浏览器侧在有限时间内等待，模板不能替远程服务安装字体或控制它的请求超时。
