@@ -132,6 +132,8 @@ class ConfigRoutes:
                         for item in raw:
                             normalized = parse_rendering_strategies([item])[0]
                             projected_item = {**item, **normalized}
+                            if normalized["render_service"] != "custom":
+                                projected_item.pop("font_mode", None)
                             projected_item.pop("render_service", None)
                             # 自定义方案的空地址表示跟随资源环境，编辑与保存均保留此意图。
                             if normalized["render_service"] == "custom":
@@ -360,6 +362,10 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                                 strategy["request_timeout"] = normalized[
                                     "request_timeout"
                                 ]
+                            if "font_mode" in normalized:
+                                strategy["font_mode"] = normalized["font_mode"]
+                            else:
+                                strategy.pop("font_mode", None)
                             strategy.pop("render_service", None)
                         strategies[:] = [
                             item
