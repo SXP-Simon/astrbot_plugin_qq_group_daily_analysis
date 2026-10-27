@@ -44,6 +44,7 @@ from .profile_mappings import (
 )
 from .render_data_preparer import RenderDataPreparer, RenderTemplateContext
 from .render_diagnostics import (
+    RenderAttemptRecord,
     build_safe_report_path,
     diagnose_non_image_payload,
     resolve_t2i_viewport_options,
@@ -378,7 +379,7 @@ class ReportGenerator(IReportGenerator):
                         "configured_endpoint": "未设置",
                     }
                 )
-                renderer_info = host_renderer_info
+                renderer_info: RenderServiceInfo = host_renderer_info
                 last_error = "没有可用的渲染策略。"
                 deadline_exhausted = False
 
@@ -386,6 +387,10 @@ class ReportGenerator(IReportGenerator):
                     if deadline_exhausted or render_loop.time() >= render_deadline:
                         break
                     strategy_options = strategy.copy()
+                    strategy_name = strategy_options.pop(
+                        "strategy_name", f"方案 {attempt}"
+                    )
+                    strategy_priority = strategy_options.pop("strategy_priority", None)
                     environment = strategy_options.pop(
                         "resource_environment", active_environment
                     )
@@ -404,19 +409,43 @@ class ReportGenerator(IReportGenerator):
                     )
                     image_options: ScreenshotOptions = strategy_options
                     service_url = urlsplit(service_endpoint)
-                    renderer_info = (
-                        {
+                    renderer_info = host_renderer_info
+                    if render_service == "custom":
+                        renderer_info = {
                             "config_lookup": "本轮自定义 T2I 服务",
                             "configured_endpoint": f"{service_url.scheme}://{service_url.netloc}",
                         }
-                        if render_service == "custom"
-                        else host_renderer_info
-                    )
                     logger.debug(
                         "[T2I诊断 v2] 开始生成图片；"
                         f"配置读取：{renderer_info['config_lookup']}；"
                         f"配置地址：{renderer_info['configured_endpoint']}"
                     )
+                    viewport_description = "default"
+                    render_error = "渲染服务返回了空内容。"
+                    response_info: RenderAttemptRecord = {
+                        "return_type": "未返回",
+                        "render_service": renderer_info,
+                    }
+                    attempt_record: RenderAttemptRecord = {
+                        "attempt": attempt,
+                        "strategy_name": strategy_name,
+                        "priority": strategy_priority,
+                        "service_type": render_service,
+                        "font_mode": font_mode,
+                        "resource_environment": str(environment),
+                        "resource_urls": resources.copy()
+                        if resources is not None
+                        else None,
+                        "render_timeout_ms": image_options.get("timeout"),
+                        # 宿主负责自己的 HTTP 等待，不能把截图超时当成请求上限。
+                        "request_timeout_ms": request_timeout_ms
+                        if render_service == "custom"
+                        else None,
+                        "started_at": time.time(),
+                        "status": "running",
+                        "type": str(image_options.get("type", "jpeg")),
+                        **response_info,
+                    }
                     trace_ctx = TraceContext.current()
                     if trace_ctx:
                         for span in reversed(trace_ctx._spans):
@@ -424,16 +453,13 @@ class ReportGenerator(IReportGenerator):
                                 span.get("stage_name")
                                 == AnalysisStage.RENDER_REPORT.value
                             ):
-                                span.setdefault("payload", {})["render_service"] = (
-                                    renderer_info
-                                )
+                                payload = span.setdefault("payload", {})
+                                payload["render_service"] = renderer_info
+                                attempts = payload.setdefault("render_attempts", [])
+                                if isinstance(attempts, list):
+                                    # 请求开始即挂入原阶段，任务详情轮询可以看到正在等待的方案。
+                                    attempts.append(attempt_record)
                                 break
-                    viewport_description = "default"
-                    render_error = "渲染服务返回了空内容。"
-                    response_info: dict[str, object] = {
-                        "return_type": "未返回",
-                        "render_service": renderer_info,
-                    }
                     attempt_status = "failed"
                     attempt_start_ts = time.perf_counter()
                     attempt_timeout = asyncio.timeout_at(render_deadline)
@@ -471,6 +497,7 @@ class ReportGenerator(IReportGenerator):
                                 html_content, image_options
                             )
                         )
+                        attempt_record["viewport"] = viewport_description
 
                         if image_options.get("type") == "png":
                             image_options.pop("quality", None)
@@ -707,37 +734,15 @@ class ReportGenerator(IReportGenerator):
                         duration_ms = round(
                             (time.perf_counter() - attempt_start_ts) * 1000, 2
                         )
-                        trace_ctx = TraceContext.current()
-                        if trace_ctx:
-                            for span in reversed(trace_ctx._spans):
-                                if (
-                                    span.get("stage_name")
-                                    == AnalysisStage.RENDER_REPORT.value
-                                ):
-                                    payload = span.setdefault("payload", {})
-                                    attempts = payload.setdefault("render_attempts", [])
-                                    if isinstance(attempts, list):
-                                        attempts.append(
-                                            {
-                                                "attempt": attempt,
-                                                "type": str(
-                                                    image_options.get("type", "jpeg")
-                                                ),
-                                                "viewport": viewport_description,
-                                                "duration_ms": duration_ms,
-                                                "status": attempt_status,
-                                                "resource_environment": str(
-                                                    environment
-                                                ),
-                                                **(
-                                                    {"error": render_error}
-                                                    if attempt_status != "success"
-                                                    else {}
-                                                ),
-                                                **response_info,
-                                            }
-                                        )
-                                    break
+                        # 原地完成同一条记录，失败和取消也只保留一次。
+                        attempt_record.update(response_info)
+                        attempt_record.update(
+                            viewport=viewport_description,
+                            duration_ms=duration_ms,
+                            status=attempt_status,
+                        )
+                        if attempt_status != "success":
+                            attempt_record["error"] = render_error
 
                     last_error = render_error
                     logger.warning(

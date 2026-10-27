@@ -366,10 +366,13 @@ class TraceRoutes:
         """获取单个 Trace 的完整 Span 树与上下文指标"""
         try:
             trace = self.trace_store.get_trace(trace_id)
+            active_trace = TraceContext.get_active_trace(trace_id)
+            if trace and trace.get("status") == "running" and active_trace:
+                # 磁盘中已有启动快照时，仍需返回内存里的实时轮次；终态始终以仓储为准。
+                return json_response({"status": "ok", "data": active_trace.to_dict()})
             if trace:
                 return json_response({"status": "ok", "data": trace})
 
-            active_trace = TraceContext.get_active_trace(trace_id)
             task_info = None
             for t in self.active_task_manager.get_active_tasks():
                 if t.get("task_id") == trace_id:

@@ -293,6 +293,8 @@ async def test_host_and_custom_service_fallback_preserves_resources_and_records_
     )
     for options in (messages[0]["payload"]["options"], render.await_args.args[3]):
         assert not {
+            "strategy_name",
+            "strategy_priority",
             "render_service",
             "service_endpoint",
             "service_token",
@@ -306,6 +308,67 @@ async def test_host_and_custom_service_fallback_preserves_resources_and_records_
     assert attempts[0 if custom_first else 1]["render_service"][
         "configured_endpoint"
     ] == endpoint.removesuffix("/text2img")
+
+
+@pytest.mark.asyncio
+async def test_render_attempt_is_visible_while_waiting_and_survives_sqlite(
+    rendering, service, monkeypatch, tmp_path
+):
+    """同一轮从等待更新为成功，配置快照可落盘且不泄露服务凭据。"""
+    from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+
+    manager, generator, _ = rendering
+    endpoint, state, _, started = service
+    release = asyncio.Event()
+    state["release"] = release
+    manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [
+        {
+            **make_rendering_plan("Mainland"), "__template_key": "custom",
+            "name": "本地字体备用", "priority": 30, "font_mode": "local",
+            "service_endpoint": endpoint.removesuffix("/text2img") + "/private-key/text2img",
+            "service_token": "my-secret", "timeout": 12000, "request_timeout": 45000,
+        }
+    ]
+    trace = TraceContext(trace_id="live-render-round")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    with trace.span("RENDER_REPORT") as span:
+        task = asyncio.create_task(generator.generate_image_report(create_analysis_result(), "123", None))
+        try:
+            await asyncio.wait_for(started.wait(), 10)
+            attempts = span["payload"]["render_attempts"]
+            assert len(attempts) == 1
+            attempt = attempts[0]
+            assert attempt["status"] == "running"
+            assert attempt["strategy_name"] == "本地字体备用"
+            assert attempt["priority"] == 30
+            assert attempt["service_type"] == "custom"
+            assert attempt["font_mode"] == "local"
+            assert attempt["resource_urls"] == {
+                "cdn_base_url": "https://mainland.example",
+                "google_fonts": "https://fonts-mainland.example",
+                "gstatic": "https://static-mainland.example",
+            }
+            assert attempt["render_timeout_ms"] == 12000
+            assert attempt["request_timeout_ms"] == 45000
+            assert attempt["started_at"] > 0
+            assert "duration_ms" not in attempt
+            release.set()
+            assert (await asyncio.wait_for(task, 10))[0]
+            assert len(attempts) == 1 and attempts[0] is attempt
+            assert attempt["status"] == "success"
+            assert attempt["duration_ms"] >= 0
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+    store = TraceSQLiteStore(tmp_path / "render-trace.db")
+    store.save_trace(trace.to_dict())
+    saved = store.get_trace(trace.trace_id)
+    assert saved["spans"][0]["payload"]["render_attempts"] == attempts
+    serialized = json.dumps(saved)
+    assert "my-secret" not in serialized
+    assert "private-key" not in serialized
 
 
 @pytest.mark.asyncio
