@@ -14,7 +14,7 @@ FontMode = Literal["network", "local"]
 
 
 class ScreenshotOptions(TypedDict, total=False):
-    """插件交给宿主或自定义服务的截图选项，不包含地址和凭据。"""
+    """插件交给宿主或自定义服务的T2I选项，不包含地址和凭据。"""
 
     full_page: bool
     type: Literal["png", "jpeg"]
@@ -26,7 +26,7 @@ class ScreenshotOptions(TypedDict, total=False):
 
 
 class RenderingResourceConfig(TypedDict):
-    """单轮资源地址快照；与具体截图服务无关。"""
+    """单轮资源地址快照；与具体T2I服务无关。"""
 
     cdn_base_url: str
     google_fonts: str
@@ -48,7 +48,7 @@ DEFAULT_RENDERING_RESOURCES: dict[str, RenderingResourceConfig] = {
 
 
 class RenderingStrategyOptions(ScreenshotOptions, total=False):
-    """运行时方案，服务与资源元数据在调用截图接口前移除。"""
+    """运行时方案，服务与资源元数据在调用T2I接口前移除。"""
 
     resource_environment: Literal["Mainland", "Overseas"]
     resource_urls: RenderingResourceConfig

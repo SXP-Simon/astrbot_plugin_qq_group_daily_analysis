@@ -418,7 +418,7 @@ class ConfigManager:
         return parse_rendering_strategies(list(DEFAULT_RENDERING_STRATEGY_PRESETS))
 
     def get_t2i_rendering_strategies(self) -> list[RenderingStrategyOptions]:
-        """将方案转换为截图参数，资源环境由插件消费，不传给 T2I。"""
+        """将方案转换为T2I参数，资源环境由插件消费，不传给 T2I。"""
         group = self._get_group("t2i_rendering")
         return [
             {
