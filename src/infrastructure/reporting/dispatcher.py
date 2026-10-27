@@ -85,7 +85,7 @@ class ReportDispatcher:
         if isinstance(output_formats, str):
             output_formats = [output_formats]
 
-        logger.info(
+        logger.debug(
             f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {', '.join(output_formats)})"
         )
 
@@ -544,7 +544,7 @@ class ReportDispatcher:
         platform_id: str | None,
     ) -> bool:
         """分发文本报告"""
-        logger.info(f"[分发器] 正在向群组 {group_id} 分发文本报告")
+        logger.debug(f"[分发器] 正在向群组 {group_id} 分发文本报告")
         trace_ctx = TraceContext.current()
         if not self.report_generator:
             logger.error("[分发器] 报告生成器未初始化，无法生成文本报告。")
@@ -572,7 +572,7 @@ class ReportDispatcher:
             text_report = self.report_generator.generate_text_report(analysis_result)
         adapter = self.message_sender.bot_manager.get_adapter(platform_id)
         # 尝试通过适配器发送文本报告
-        logger.info(f"[分发器] 正在尝试通过适配器发送文本报告。群: {group_id}")
+        logger.debug(f"[分发器] 正在尝试通过适配器发送文本报告。群: {group_id}")
 
         with (
             trace_ctx.span(
