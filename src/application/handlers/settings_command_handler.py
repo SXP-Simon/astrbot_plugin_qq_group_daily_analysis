@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from ...infrastructure.scheduler.auto_scheduler import AutoScheduler
     from ..services.template_command_service import TemplateCommandService
 
+from ...infrastructure.platform.command_prefix import get_command_prefix
 from ...utils.logger import logger
 from ..services.analysis_application_service import DuplicateGroupTaskError
 
@@ -82,6 +83,7 @@ class SettingsCommandHandler:
         }
 
         if not format_input:
+            prefix = get_command_prefix(self.context, event)
             current = ", ".join(self.config_manager.get_output_format())
             format_list_str = "\n".join(
                 [
@@ -94,7 +96,7 @@ class SettingsCommandHandler:
 可用格式:
 {format_list_str}
 
-用法: /设置格式 [名称或序号] 如 /设置格式 image,html""")
+用法: {prefix}设置格式 [名称或序号] 如 {prefix}设置格式 image,html""")
             return
 
         target_format = None
@@ -147,6 +149,7 @@ class SettingsCommandHandler:
         available_templates = self.template_command_service.list_available_templates()
 
         if not template_input:
+            prefix = get_command_prefix(self.context, event)
             current_template = self.config_manager.get_report_template()
             template_list_str = "\n".join(
                 [f"【{i}】{t}" for i, t in enumerate(available_templates, start=1)]
@@ -156,8 +159,8 @@ class SettingsCommandHandler:
 可用模板:
 {template_list_str}
 
-用法: /设置模板 [模板名称或序号]
-💡 使用 /查看模板 查看预览图""")
+用法: {prefix}设置模板 [模板名称或序号]
+💡 使用 {prefix}查看模板 查看预览图""")
             return
 
         template_name, parse_error = self.template_command_service.parse_template_input(
@@ -240,6 +243,7 @@ class SettingsCommandHandler:
             available_templates=available_templates,
             current_template=current_template,
             bot_id=bot_id,
+            command_prefix=get_command_prefix(self.context, event),
         )
         yield event.chain_result([preview_nodes])
 
@@ -326,6 +330,7 @@ class SettingsCommandHandler:
             yield event.plain_result(f"✅ 过滤机器人消息: {status_text}")
             return
         else:  # status
+            prefix = get_command_prefix(self.context, event)
             check_target = (
                 event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
             )
@@ -366,7 +371,7 @@ class SettingsCommandHandler:
 
 💡 可用命令: enable, disable, status, reload, test, filter_bot, incremental_debug
 💡 支持的输出格式: image, text (图片包含活跃度可视化)
-💡 其他命令: /设置格式, /增量状态""")
+💡 其他命令: {prefix}设置格式, {prefix}增量状态""")
 
     async def handle_incremental_status(
         self, event: AstrMessageEvent, group_id: str
