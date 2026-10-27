@@ -2,6 +2,8 @@
 
 from unittest.mock import Mock
 
+import pytest
+
 from src.application.services.template_command_service import TemplateCommandService
 
 
@@ -30,3 +32,12 @@ def test_builtin_fallback_uses_configured_cdn_but_custom_does_not(
     )
     assert service.resolve_template_preview_source("my_custom_theme") is None
     config.get_template_assets_base_url.assert_called_once()
+
+
+@pytest.mark.parametrize("prefix", ["", "!", "/", "分析 "])
+def test_preview_list_uses_supplied_prefix(tmp_path, prefix):
+    service = TemplateCommandService(str(tmp_path))
+    nodes = service.build_template_preview_nodes(
+        [], "scrapbook", "bot", command_prefix=prefix
+    )
+    assert f"使用 {prefix}设置模板 [序号] 切换" in nodes.nodes[0].content[0].text

@@ -237,13 +237,24 @@ class TemplateCommandService:
         available_templates: list[str],
         current_template: str,
         bot_id: str,
+        command_prefix: str = "",
     ) -> Nodes:
-        """构建模板预览的合并消息节点。"""
+        """构建模板预览的合并消息节点。
+
+        Args:
+            available_templates: 可用模板名称列表。
+            current_template: 当前使用的模板名称。
+            bot_id: 合并消息展示的机器人标识。
+            command_prefix: 调用方按当前会话配置选定的激活前缀，允许为空。
+
+        Returns:
+            包含操作提示和预览图的合并消息。
+        """
         node_list: list[Node] = []
 
         header_content: list[BaseMessageComponent] = [
             Plain(
-                f"🎨 可用报告模板列表\n📌 当前使用: {current_template}\n💡 使用 /设置模板 [序号] 切换"
+                f"🎨 可用报告模板列表\n📌 当前使用: {current_template}\n💡 使用 {command_prefix}设置模板 [序号] 切换"
             )
         ]
         node_list.append(Node(uin=bot_id, name="模板预览", content=header_content))
