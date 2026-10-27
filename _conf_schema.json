@@ -582,6 +582,20 @@
                                 "default": "",
                                 "hint": "只有服务启用鉴权时才填写，会通过 Authorization: Bearer 发送。不要把 Token 放进服务地址。"
                             },
+                            "font_mode": {
+                                "type": "string",
+                                "description": "字体加载方式",
+                                "default": "network",
+                                "options": [
+                                    "network",
+                                    "local"
+                                ],
+                                "labels": [
+                                    "在线字体（默认）",
+                                    "使用已安装字体"
+                                ],
+                                "hint": "通常保持在线字体。自建 T2I 的字体下载经常超时，或已在截图服务中安装模板所需字体时，可尝试使用已安装字体。缺少字体时外观和换行可能变化；此设置不解决装饰图片加载失败，也不会安装字体。字体需安装在实际运行截图浏览器的机器或容器内。[安装方法和模板字体清单](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/blob/main/docs/T2I_FONTS.md)。仅作用于本轮图片截图，独立 HTML 报告仍使用在线字体。"
+                            },
                             "environment": {
                                 "type": "string",
                                 "description": "资源环境",
@@ -649,14 +663,18 @@
                                     "Google Fonts · https://fonts.googleapis.com",
                                     "loli 镜像 · https://fonts.loli.net",
                                     "自定义地址…"
-                                ]
+                                ],
+                                "condition": {
+                                    "font_mode": "network"
+                                }
                             },
                             "custom_google_fonts": {
                                 "type": "string",
                                 "description": "自定义Google Fonts 地址",
                                 "default": "",
                                 "condition": {
-                                    "google_fonts": "__custom__"
+                                    "google_fonts": "__custom__",
+                                    "font_mode": "network"
                                 },
                                 "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。"
                             },
@@ -676,14 +694,18 @@
                                     "Google Gstatic · https://fonts.gstatic.com",
                                     "loli 镜像 · https://gstatic.loli.net",
                                     "自定义地址…"
-                                ]
+                                ],
+                                "condition": {
+                                    "font_mode": "network"
+                                }
                             },
                             "custom_gstatic": {
                                 "type": "string",
                                 "description": "自定义字体文件地址（Gstatic）",
                                 "default": "",
                                 "condition": {
-                                    "gstatic": "__custom__"
+                                    "gstatic": "__custom__",
+                                    "font_mode": "network"
                                 },
                                 "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。"
                             },

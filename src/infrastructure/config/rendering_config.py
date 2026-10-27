@@ -10,6 +10,7 @@ from ...utils.cdn_utils import normalize_cdn_base_url
 CUSTOM_RESOURCE_OPTION = "__custom__"
 DEFAULT_CUSTOM_T2I_ENDPOINT = "http://127.0.0.1:8999/text2img"
 DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS = 40000
+FontMode = Literal["network", "local"]
 
 
 class ScreenshotOptions(TypedDict, total=False):
@@ -55,6 +56,7 @@ class RenderingStrategyOptions(ScreenshotOptions, total=False):
     service_endpoint: str
     service_token: str
     request_timeout: int
+    font_mode: FontMode
 
 
 RenderingTemplateMarker = TypedDict(
@@ -90,6 +92,7 @@ class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     device_scale: Literal["normal", "high", "ultra"]
     timeout: int
     request_timeout: NotRequired[int]
+    font_mode: NotRequired[FontMode]
 
 
 def normalize_t2i_endpoint(value: str) -> str:
@@ -284,5 +287,10 @@ def parse_rendering_strategies(
                     f"第 {index} 个渲染方案的请求等待上限必须是 1000 到 300000 的整数"
                 )
             plan["request_timeout"] = request_timeout
+        if render_service == "custom":
+            font_mode = item.get("font_mode", "network")
+            if font_mode not in ("network", "local"):
+                raise ValueError(f"第 {index} 个渲染方案请选择在线字体或已安装字体")
+            plan["font_mode"] = font_mode
         result.append(plan)
     return sorted(result, key=lambda strategy: strategy["priority"])

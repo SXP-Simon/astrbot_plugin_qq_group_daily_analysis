@@ -18,16 +18,17 @@ def test_native_resource_selectors_keep_custom_entry_without_legacy_schema_field
     for environment in ("mainland", "overseas"):
         for key in ("cdn_base_url", "google_fonts", "gstatic"):
             assert f"t2i_{environment}_{key}" not in group
-    for template in group["t2i_rendering_strategies"]["templates"].values():
+    for template_key, template in group["t2i_rendering_strategies"]["templates"].items():
         for key in ("cdn_base_url", "google_fonts", "gstatic"):
             field = template["items"][key]
             assert field["type"] == "string"
             assert field["default"] in field["options"]
             assert "__custom__" in field["options"]
             assert len(field["labels"]) == len(field["options"])
-            assert template["items"][f"custom_{key}"]["condition"] == {
-                key: "__custom__"
-            }
+            expected = {key: "__custom__"}
+            if template_key == "custom" and key != "cdn_base_url":
+                expected["font_mode"] = "network"
+            assert template["items"][f"custom_{key}"]["condition"] == expected
 
 
 def test_saved_custom_addresses_are_selectable_in_all_presets_without_duplicates():

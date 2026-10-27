@@ -128,7 +128,7 @@ class NativeConfigurationContract(unittest.TestCase):
         self.assertTrue(ConfigMigrator(manager).migrate_legacy_configs())
         reloaded = AstrBotConfig(config_path=str(self.path), schema=deepcopy(self.schema))
         original.pop("render_service")
-        self.assertEqual(reloaded["t2i_rendering"]["t2i_rendering_strategies"], [{**original, "__template_key": "custom", "request_timeout": 40000}])
+        self.assertEqual(reloaded["t2i_rendering"]["t2i_rendering_strategies"], [{**original, "__template_key": "custom", "request_timeout": 40000, "font_mode": "network"}])
 
     def test_native_custom_mode_and_webui_save_share_persisted_values_and_choices(self):
         manager = self.load(
@@ -200,6 +200,25 @@ class NativeConfigurationContract(unittest.TestCase):
         manager._migrator.run_all_migrations()
         self.assertEqual(len(manager.get_t2i_rendering_strategy_config()), 1)
 
+
+    def test_custom_font_mode_native_save_and_reload_keeps_addresses(self):
+        for mode in ("network", "local"):
+            with self.subTest(mode=mode):
+                manager = self.load({"t2i_rendering_strategies": [{"__template_key": "custom", "font_mode": mode, "google_fonts": "https://saved.example/fonts", "gstatic": "https://saved.example/files"}]})
+                manager._migrator.run_all_migrations()
+                manager.save_config()
+                manager.config = AstrBotConfig(config_path=str(self.path), schema=deepcopy(self.schema))
+                plan = manager.get_t2i_rendering_strategy_config()[0]
+                self.assertEqual(plan["font_mode"], mode)
+                self.assertEqual(plan["google_fonts"], "https://saved.example/fonts")
+                self.assertEqual(plan["gstatic"], "https://saved.example/files")
+                self.assertEqual(manager.get_t2i_rendering_strategies()[0]["font_mode"], mode)
+        templates = self.schema["t2i_rendering"]["items"]["t2i_rendering_strategies"]["templates"]
+        field = templates["custom"]["items"]["font_mode"]
+        self.assertEqual(field["default"], "network")
+        self.assertEqual(field["options"], ["network", "local"])
+        for kind in ("strategy", "mainland"):
+            self.assertNotIn("font_mode", templates[kind]["items"])
 
     def test_custom_wait_budget_saves_and_reloads_independently(self):
         manager = self.load({"t2i_rendering_strategies": [{"__template_key": "custom", "timeout": 20000, "request_timeout": 70000}]})

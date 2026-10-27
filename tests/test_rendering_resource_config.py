@@ -125,7 +125,7 @@ def test_old_custom_round_moves_to_custom_template_without_losing_configuration(
     migrator = ConfigMigrator(manager)
     assert migrator.migrate_legacy_configs()
     assert manager.config["t2i_rendering"]["t2i_rendering_strategies"] == [
-        {**{key: value for key, value in original.items() if key != "render_service"}, "__template_key": "custom", "request_timeout": 40000}
+        {**{key: value for key, value in original.items() if key != "render_service"}, "__template_key": "custom", "request_timeout": 40000, "font_mode": "network"}
     ]
     assert not migrator.migrate_legacy_configs()
     manager.save_config.assert_called_once()

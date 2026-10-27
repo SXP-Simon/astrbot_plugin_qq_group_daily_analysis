@@ -436,6 +436,7 @@ class ConfigManager:
                     "gstatic": item["gstatic"],
                 },
                 "render_service": item["render_service"],
+                "font_mode": item.get("font_mode", "network"),
                 "service_endpoint": item["service_endpoint"],
                 "service_token": item["service_token"],
                 "request_timeout": item.get(
