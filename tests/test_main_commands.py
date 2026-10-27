@@ -560,6 +560,18 @@ async def test_view_templates_router_handled(plugin):
     assert results[0]["text"] == "Telegram preview keyboard"
 
 
+@pytest.mark.asyncio
+async def test_view_templates_forwards_selection(plugin):
+    event = MockEvent(group_id="123456")
+    plugin.template_preview_router.handle_view_templates = AsyncMock(
+        return_value=(True, [])
+    )
+    assert [result async for result in plugin.view_templates(event, "2")] == []
+    assert plugin.template_preview_router.handle_view_templates.call_args.kwargs[
+        "template_input"
+    ] == "2"
+
+
 # ==============================================================================
 # 6. /分析设置 (analysis_settings) 单元测试
 # ==============================================================================
