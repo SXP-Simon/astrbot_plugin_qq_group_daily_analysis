@@ -74,6 +74,7 @@ export const renderingStrategySchema = z.object({
   name: z.string({ error: "方案名称必须是文字" }).default("渲染方案"),
   priority: z.number({ error: "优先级必须是数字" }).int("优先级必须是整数").min(0, "优先级不能小于 0").max(10000, "优先级不能大于 10000").default(10),
   environment: z.enum(["Mainland", "Overseas"], { error: "请选择内地或海外资源环境" }).optional(),
+  font_mode: z.enum(["network", "local"], { error: "请选择在线字体或已安装字体" }).optional(),
   cdn_base_url: z.union([cdnBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   google_fonts: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   gstatic: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
@@ -108,10 +109,10 @@ export const renderingStrategySchema = z.object({
   const service = value.render_service ?? (value.__template_key === "custom" ? "custom" as const : "astrbot" as const);
   const environment = value.environment ?? (value.__template_key === "mainland" ? "Mainland" as const : "Overseas" as const);
   // 旧调用方式只用于迁移，保存后由条目类型唯一决定服务。
-  const { render_service: _legacyService, ...plan } = value;
+  const { render_service: _legacyService, font_mode: _fontMode, ...plan } = value;
   return Object.assign(plan, {
     environment,
-    ...(service === "custom" ? { request_timeout: value.request_timeout ?? DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS } : {}),
+    ...(service === "custom" ? { request_timeout: value.request_timeout ?? DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS, font_mode: value.font_mode ?? "network" } : {}),
     service_endpoint: service === "custom" ? t2iEndpointSchema.parse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT) : value.service_endpoint ?? "",
     __template_key: service === "custom" ? "custom" : environment === "Mainland" ? "mainland" : "strategy",
   });
