@@ -24,7 +24,7 @@ def test_shared_cdn_contract_and_runtime_fallback(case):
         with pytest.raises(ValueError):
             normalize_cdn_base_url(value)
     manager = object.__new__(ConfigManager)
-    manager.config = {"t2i_rendering": {"t2i_cdn_base_url": value}}
+    manager.config = {"t2i_rendering": {"t2i_rendering_strategies": [{"cdn_base_url": value}]}}
     assert manager.get_t2i_cdn_base_url() == (expected or DEFAULT_CDN_HOST)
 
 
@@ -40,7 +40,7 @@ async def test_save_rejects_invalid_cdn_before_any_mutation(case):
         MagicMock(config_manager=manager), context=MagicMock(), auto_scheduler=scheduler
     )
     config = {
-        "t2i_rendering": {"t2i_cdn_base_url": case["input"], "future": [" unchanged "]},
+        "t2i_rendering": {"t2i_rendering_strategies": [{"cdn_base_url": case["input"]}], "future": [" unchanged "]},
         "future_group": {"list": [{"id": 1}, " files/unrelated.png ", "", None]},
     }
     expected_config = deepcopy(config)
@@ -55,14 +55,15 @@ async def test_save_rejects_invalid_cdn_before_any_mutation(case):
         scheduler.schedule_jobs.assert_not_called()
     else:
         assert status == 200
-        expected_config["t2i_rendering"]["t2i_cdn_base_url"] = case["normalized"]
-        assert manager.config == expected_config
+        assert manager.config["t2i_rendering"]["t2i_rendering_strategies"][0]["cdn_base_url"] == (case["normalized"] or DEFAULT_CDN_HOST)
+        assert manager.config["t2i_rendering"]["future"] == expected_config["t2i_rendering"]["future"]
+        assert manager.config["future_group"] == expected_config["future_group"]
         manager.save_config.assert_called_once()
         scheduler.schedule_jobs.assert_called_once()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("group", [None, [], "invalid", {"t2i_cdn_base_url": " " * 2049}])
+@pytest.mark.parametrize("group", [None, [], "invalid", {"t2i_rendering_strategies": [{"cdn_base_url": " " * 2049}]}])
 async def test_save_rejects_invalid_rendering_group(group):
     manager = MagicMock(config={})
     with patch("src.infrastructure.webui.routes.config_routes.request") as request:

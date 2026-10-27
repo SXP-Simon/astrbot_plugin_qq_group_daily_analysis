@@ -23,6 +23,11 @@ from astrbot.api.star import StarTools
 from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from ...utils.template_utils import upgrade_str_format_template
+from .rendering_config import (
+    CUSTOM_RESOURCE_OPTION,
+    DEFAULT_RENDERING_STRATEGY_PRESETS,
+    parse_rendering_strategies,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -30,6 +35,15 @@ if TYPE_CHECKING:
     from .config_manager import ConfigManager
 
 StarToolsType = type[StarTools]
+LEGACY_RENDERING_RESOURCE_KEYS = (
+    "t2i_cdn_base_url",
+    "t2i_mainland_cdn_base_url",
+    "t2i_mainland_google_fonts",
+    "t2i_mainland_gstatic",
+    "t2i_overseas_cdn_base_url",
+    "t2i_overseas_google_fonts",
+    "t2i_overseas_gstatic",
+)
 
 
 class ConfigMigrator:
@@ -48,29 +62,126 @@ class ConfigMigrator:
         """
         self.cm = config_manager
         self.star_tools: StarToolsType = star_tools or StarTools
+        self._upgrade_ready = False
+        self._migration_valid = True
 
     def run_all_migrations(self) -> None:
         """执行所有版本升级、数据结构迁移与结构保护检查。"""
-        self.migrate_legacy_configs()
+        previous = self.protect_upgrade_data(update_baseline=False)
+        if previous is None:
+            self._migration_valid = False
+            return
+        previous_config = previous.get("config")
+        if (
+            not isinstance(previous_config, dict)
+            and getattr(self.cm.config, "first_deploy", False) is not True
+        ):
+            logger.warning(
+                "未找到升级前的配置快照，旧自定义地址和参考图无法自动恢复，缺少的新配置将使用预设。"
+            )
+        self.migrate_legacy_configs(
+            previous_config if isinstance(previous_config, dict) else None
+        )
         self.upgrade_prompt_templates()
-        self.migrate_daily_comic_character_references()
+        self.migrate_daily_comic_character_references(
+            previous_config if isinstance(previous_config, dict) else None
+        )
         self.migrate_daily_comic_character_prompts()
         self.migrate_legacy_comic_storyboard_prompts()
-        self.protect_upgrade_data()
+        self._upgrade_ready = self._migration_valid
+        self.refresh_upgrade_protection()
 
-    def migrate_legacy_configs(self) -> bool:
+    def migrate_legacy_configs(self, previous_config: dict | None = None) -> bool:
         """升级旧版配置项的类型与数据结构，确保兼容新 Schema。
+
+        Args:
+            previous_config: 宿主清理旧键之前已记录的升级保护快照。
 
         Returns:
             bool: 是否发生了数据修改。
         """
         modified = False
+        self._migration_valid = True
 
         val = self.cm._get_group("basic").get("output_format")
         if isinstance(val, str):
             self.cm._ensure_group("basic")["output_format"] = [val]
             logger.info("output_format 已从旧版 string 自动迁移为 list")
             modified = True
+
+        group = self.cm._get_group("t2i_rendering")
+        previous_group = (previous_config or {}).get("t2i_rendering", {})
+        legacy = {
+            **(previous_group if isinstance(previous_group, dict) else {}),
+            **group,
+        }
+        strategies = group.get("t2i_rendering_strategies")
+        if strategies is None and group:
+            strategies = [dict(item) for item in DEFAULT_RENDERING_STRATEGY_PRESETS]
+        if isinstance(strategies, list):
+            try:
+                if not strategies:
+                    strategies = [
+                        dict(item) for item in DEFAULT_RENDERING_STRATEGY_PRESETS
+                    ]
+                # 先校验整组再修改，避免异常条目导致只迁移半份配置。
+                normalized = [
+                    parse_rendering_strategies([item], legacy_config=legacy)[0]
+                    for item in strategies
+                ]
+                if group.get("t2i_rendering_strategies") != strategies:
+                    group["t2i_rendering_strategies"] = strategies
+                    modified = True
+                for item, plan in zip(strategies, normalized, strict=True):
+                    # 旧版自定义服务改用独立条目，保持原资源环境和服务地址。
+                    for key in (
+                        "__template_key",
+                        "environment",
+                        "service_endpoint",
+                        "service_token",
+                    ):
+                        if item.get(key) != plan[key]:
+                            item[key] = plan[key]
+                            modified = True
+                    if (
+                        "request_timeout" in plan
+                        and item.get("request_timeout") != plan["request_timeout"]
+                    ):
+                        item["request_timeout"] = plan["request_timeout"]
+                        modified = True
+                    if "render_service" in item:
+                        del item["render_service"]
+                        modified = True
+                    if "font_mode" in plan:
+                        if item.get("font_mode") != plan["font_mode"]:
+                            item["font_mode"] = plan["font_mode"]
+                            modified = True
+                    elif "font_mode" in item:
+                        del item["font_mode"]
+                        modified = True
+                    for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                        if key not in item or item[key] == CUSTOM_RESOURCE_OPTION:
+                            if item.get(key) == CUSTOM_RESOURCE_OPTION:
+                                item[f"custom_{key}"] = plan[key]
+                            item[key] = plan[key]
+                            modified = True
+                ordered = [
+                    item
+                    for _plan, item in sorted(
+                        zip(normalized, strategies, strict=True),
+                        key=lambda pair: pair[0]["priority"],
+                    )
+                ]
+                if strategies != ordered:
+                    group["t2i_rendering_strategies"] = ordered
+                    modified = True
+                for key in LEGACY_RENDERING_RESOURCE_KEYS:
+                    if key in group:
+                        del group[key]
+                        modified = True
+            except ValueError:
+                self._migration_valid = False
+                logger.debug("渲染方案尚有无效字段，暂不迁移资源地址，请在配置页面修正")
 
         if modified:
             self.cm.save_config()
@@ -176,19 +287,31 @@ class ConfigMigrator:
 
     def _save_config(self) -> None:
         """安全触发配置保存。"""
-        if hasattr(self.cm, "config") and hasattr(self.cm.config, "save_config"):
-            self.cm.config.save_config()
-        elif hasattr(self.cm, "save_config"):
-            self.cm.save_config()
+        self.cm.save_config()
 
-    def migrate_daily_comic_character_references(self) -> None:
-        """将旧版全局参考图平滑迁移到角色方案模板列表。"""
+    def migrate_daily_comic_character_references(
+        self, previous_config: dict | None = None
+    ) -> None:
+        """从当前配置或保护快照迁移旧参考图，成功后移除旧键。
+
+        Args:
+            previous_config: 宿主清理配置前留存的旧配置快照。
+        """
         daily_comic = self.cm._get_group("daily_comic")
         characters = daily_comic.get("comic_characters")
         if isinstance(characters, list) and len(characters) > 0:
+            if "drawing_reference_image" in daily_comic:
+                del daily_comic["drawing_reference_image"]
+                self._save_config()
             return
 
-        old_references = daily_comic.get("drawing_reference_image")
+        previous_group = (previous_config or {}).get("daily_comic", {})
+        previous_references = (
+            previous_group.get("drawing_reference_image")
+            if isinstance(previous_group, dict)
+            else None
+        )
+        old_references = daily_comic.get("drawing_reference_image", previous_references)
         if isinstance(old_references, str):
             # 早期版本允许 URL 或任意本地路径，原生文件控件不能安全地继续使用它们。
             backup_data = {"drawing_reference_image": old_references}
@@ -196,11 +319,12 @@ class ConfigMigrator:
                 self.cm, "_write_comic_config_backup", self.write_comic_config_backup
             )
             if not backup_func(backup_data):
+                self._migration_valid = False
                 logger.warning(
                     "旧版漫画参考图备份失败，将保留原配置并在下次重载时重试。"
                 )
                 return
-            daily_comic["drawing_reference_image"] = []
+            daily_comic.pop("drawing_reference_image", None)
             self._save_config()
             logger.info(
                 "已备份并清除不受支持的旧版漫画参考图配置，请在 WebUI 重新选择图片。"
@@ -218,6 +342,9 @@ class ConfigMigrator:
         )
 
         if not references:
+            if "drawing_reference_image" in daily_comic:
+                del daily_comic["drawing_reference_image"]
+                self._save_config()
             return
 
         specific_persona_id = ""
@@ -231,6 +358,7 @@ class ConfigMigrator:
         )
         migrated_references = copy_func(references)
         if len(migrated_references) != len(references):
+            self._migration_valid = False
             logger.warning(
                 "旧版漫画参考图尚未完整迁移，将保留原配置并在下次重载时重试。"
             )
@@ -244,6 +372,7 @@ class ConfigMigrator:
             self.cm, "_write_comic_config_backup", self.write_comic_config_backup
         )
         if not backup_func(backup_data):
+            self._migration_valid = False
             logger.warning("旧版漫画参考图备份失败，将保留原配置并在下次重载时重试。")
             return
         daily_comic["comic_characters"] = [
@@ -256,7 +385,7 @@ class ConfigMigrator:
                 "storyboard_prompt": self.cm.get_comic_storyboard_prompt(),
             }
         ]
-        daily_comic["drawing_reference_image"] = []
+        daily_comic.pop("drawing_reference_image", None)
         self._save_config()
         logger.info(
             "已将旧版漫画参考图迁移到“默认角色方案”，原始配置已备份到插件数据目录。"
@@ -335,10 +464,16 @@ class ConfigMigrator:
             except Exception as exc:
                 logger.warning(f"自动迁移漫画分镜提示词失败: {exc}")
 
-    def protect_upgrade_data(self) -> None:
-        """在插件升级且配置结构发生变更时备份旧配置。"""
+    def protect_upgrade_data(self, *, update_baseline: bool = True) -> dict | None:
+        """归档旧快照，成功后允许更新基线。
+
+        Args:
+            update_baseline: 单独调用时更新基线；启动迁移前只归档。
+
+        Returns:
+            旧保护状态；归档失败时返回 None，保留原基线以便重试。
+        """
         plugin_root = self._get_plugin_root()
-        current_version = self.get_plugin_version(plugin_root)
         current_schema_fingerprint = self.get_schema_fingerprint(plugin_root)
         state_path = (
             self.star_tools.get_data_dir(PLUGIN_NAME) / "upgrade_protection_state.json"
@@ -346,8 +481,14 @@ class ConfigMigrator:
         previous_state = self.read_upgrade_protection_state(state_path)
         previous_version = str(previous_state.get("version", "")).strip()
 
+        if update_baseline and not self._migration_valid:
+            logger.warning(
+                "配置已保存，但旧配置迁移尚未完成，保护快照暂不替换；请在修正后重载插件。"
+            )
+            return previous_state
+
         if not previous_state:
-            logger.debug("升级保护基线已建立，后续配置结构变化时可备份本次快照。")
+            logger.debug("未找到升级保护基线，将在迁移完成后记录当前配置。")
 
         if previous_state.get(
             "schema_fingerprint"
@@ -361,14 +502,28 @@ class ConfigMigrator:
             )
             if not backup_func(previous_state["config"], previous_version):
                 logger.warning("插件旧配置备份失败，本次不会更新升级保护状态。")
-                return
+                return None
 
+        if update_baseline:
+            self._upgrade_ready = True
+            self.refresh_upgrade_protection()
+        return previous_state
+
+    def refresh_upgrade_protection(self) -> None:
+        """在迁移完成或正常保存后刷新已成功持久化的配置快照。"""
+        if not self._upgrade_ready:
+            return
+        plugin_root = self._get_plugin_root()
+        state_path = (
+            self.star_tools.get_data_dir(PLUGIN_NAME) / "upgrade_protection_state.json"
+        )
         config_data = dict(self.cm.config) if self.cm.config else {}
         self.save_upgrade_protection_state(
             state_path,
             {
-                "version": current_version,
-                "schema_fingerprint": current_schema_fingerprint,
+                "version": self.get_plugin_version(plugin_root),
+                "schema_fingerprint": self.get_schema_fingerprint(plugin_root),
+                "captured_at": datetime.now().isoformat(),
                 "config": config_data,
             },
         )
@@ -459,7 +614,7 @@ class ConfigMigrator:
 
     @staticmethod
     def read_upgrade_protection_state(state_path: Path) -> dict:
-        """读取上一次正常启动记录的升级保护状态。
+        """读取最近一次成功保存的升级保护快照。
 
         Args:
             state_path: 升级状态记录文件路径。
@@ -500,7 +655,7 @@ class ConfigMigrator:
         """保存旧版本配置快照，并最多保留二十份。
 
         Args:
-            config: 上一次正常加载时记录的插件配置快照。
+            config: 最近一次成功保存或完成启动迁移后的插件配置快照。
             version: 该配置快照对应的旧插件版本。
             star_tools: Star 工具类替身或模块。
 
@@ -533,7 +688,7 @@ class ConfigMigrator:
             for expired_backup in backups[:-20]:
                 expired_backup.unlink()
             logger.info(
-                "检测到插件配置结构变化，已备份上一次正常启动保存的配置快照："
+                "检测到插件配置结构变化，已备份旧配置快照："
                 f"旧版本={version}，文件={backup_path.name}，路径={backup_path.resolve()}，"
                 f"当前保留={min(len(backups), 20)} 份。"
             )
@@ -551,7 +706,7 @@ class ConfigMigrator:
         """保存旧版本配置快照。
 
         Args:
-            config: 上一次正常加载时记录的插件配置快照。
+            config: 最近一次成功保存或完成启动迁移后的插件配置快照。
             version: 该配置快照对应的旧插件版本。
             star_tools: Star 工具类替身或模块。
 

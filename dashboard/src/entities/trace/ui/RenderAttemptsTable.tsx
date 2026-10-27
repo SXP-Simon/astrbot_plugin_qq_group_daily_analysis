@@ -45,7 +45,11 @@ export const RenderAttemptsTable: React.FC<RenderAttemptsTableProps> = ({ attemp
       <div style={{ display: "flex", flexDirection: "column" }}>
         {attempts.map((att: Record<string, unknown>, i: number) => {
           const isSuccess = att.status === "success";
+          const isCancelled = att.status === "cancelled";
           const hasError = !isSuccess && Boolean(att.error);
+          const service = att.render_service;
+          const endpoint = service && typeof service === "object" && "configured_endpoint" in service
+            ? String(service.configured_endpoint || "") : "";
 
           return (
             <div
@@ -116,10 +120,11 @@ export const RenderAttemptsTable: React.FC<RenderAttemptsTableProps> = ({ attemp
                     }`,
                   }}
                 >
-                  {isSuccess ? "渲染成功" : "渲染失败"}
+                  {isSuccess ? "渲染成功" : isCancelled ? "已停止" : "渲染失败"}
                 </span>
               </div>
 
+              {endpoint && <div style={{ marginTop: 4, overflowWrap: "anywhere", color: isDark ? "#8b949e" : "#64748b" }}>服务：{endpoint}</div>}
               {hasError && (
                 <div
                   className="font-mono"

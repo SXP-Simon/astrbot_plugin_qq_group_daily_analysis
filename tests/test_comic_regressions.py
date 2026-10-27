@@ -254,6 +254,8 @@ def load_config_manager_class(plugin_data_dir: Path):
         if isinstance(node, ast.ClassDef) and node.name == "ConfigManager"
     )
     required_names = {
+        "refresh_rendering_schema_options",
+        "save_config",
         "__init__",
         "_get_group",
         "_get_plugin_root",
@@ -316,7 +318,10 @@ def load_config_manager_class(plugin_data_dir: Path):
         decorator_list=[],
     )
     isolated_module = ast.fix_missing_locations(
-        ast.Module(body=[isolated_class], type_ignores=[])
+        ast.Module(
+            body=[ast.parse("from __future__ import annotations").body[0], isolated_class],
+            type_ignores=[],
+        )
     )
     namespace = {
         "__name__": "src.infrastructure.config.config_manager",
@@ -336,6 +341,9 @@ def load_config_manager_class(plugin_data_dir: Path):
         "re": re,
         "shutil": shutil,
         "logger": Mock(),
+        "sync_rendering_schema_options": __import__(
+            "src.infrastructure.config.rendering_schema", fromlist=["sync_rendering_schema_options"]
+        ).sync_rendering_schema_options,
         "ConfigMigrator": __import__(
             "src.infrastructure.config.config_migrator",
             fromlist=["ConfigMigrator"],
@@ -449,7 +457,7 @@ def test_reference_image_migrates_old_config_and_uses_last_selected_file(
     )
     config_manager = config_manager_class(config)
 
-    assert config["daily_comic"]["drawing_reference_image"] == []
+    assert "drawing_reference_image" not in config["daily_comic"]
     config.save_config.assert_called_once()
     assert list((tmp_path / "config_backups").glob("*.json"))
 
@@ -467,7 +475,7 @@ def test_reference_image_migrates_old_config_and_uses_last_selected_file(
     character = config["daily_comic"]["comic_characters"][0]
     assert character["name"] == "默认角色方案"
     assert character["reference_images"][-1].endswith("selected.webp")
-    assert config["daily_comic"]["drawing_reference_image"] == []
+    assert "drawing_reference_image" not in config["daily_comic"]
     assert (tmp_path / character["reference_images"][-1]).read_bytes() == b"selected"
     assert config_manager.get_drawing_reference_image().endswith("selected.webp")
 
@@ -743,7 +751,7 @@ def test_t2i_rendering_strategies_explicitly_set_desktop_viewport():
 
     strategies = config_manager.get_t2i_rendering_strategies()
 
-    assert len(strategies) == 1
+    assert len(strategies) == 2
     assert all(strategy["viewport_width"] == 1360 for strategy in strategies)
     assert all(strategy["viewport_height"] == 900 for strategy in strategies)
 

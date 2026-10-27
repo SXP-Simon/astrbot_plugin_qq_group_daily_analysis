@@ -134,7 +134,10 @@ class ReportDispatcher:
             return False
 
         # 1. 检查渲染函数
-        if not self._html_render_func:
+        if not self._html_render_func and not any(
+            plan["render_service"] == "custom"
+            for plan in self.config_manager.get_t2i_rendering_strategy_config()
+        ):
             logger.warning(f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。")
             return await self._dispatch_text(group_id, analysis_result, platform_id)
 

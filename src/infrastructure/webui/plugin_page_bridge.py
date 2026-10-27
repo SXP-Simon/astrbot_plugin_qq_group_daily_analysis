@@ -279,6 +279,12 @@ class PluginPageWebUIBridge:
                 "Save and persist updated plugin configuration",
             ),
             (
+                f"/{PLUGIN_NAME}/config/test-custom-t2i",
+                self.config_routes.api_test_custom_t2i,
+                ["POST"],
+                "Test custom T2I with a fixed HTML page without saving configuration",
+            ),
+            (
                 f"/{PLUGIN_NAME}/config/test-template-cdn",
                 self.config_routes.api_test_template_cdn,
                 ["POST"],
@@ -338,6 +344,18 @@ class PluginPageWebUIBridge:
                 self.data_management_routes.api_clear_config_backups,
                 ["POST"],
                 "Clear historical automatic configuration backup files",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/config-backups",
+                self.data_management_routes.api_get_config_backups,
+                ["GET"],
+                "List configuration backups",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/config-backups/detail",
+                self.data_management_routes.api_get_config_backup,
+                ["GET"],
+                "Read a configuration backup",
             ),
             # 7. 增量批次与 Checkpoint 观测及 CRUD 管理
             (

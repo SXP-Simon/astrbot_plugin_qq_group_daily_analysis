@@ -5,9 +5,6 @@ import { AvailablePersona, AvailableProvider } from "../../entities/config/api/c
 export const mockPluginConfig: PluginConfigData = {
   config: {
     t2i_rendering: {
-      t2i_cdn_base_url: configSchema.t2i_rendering.items.t2i_cdn_base_url.default,
-      t2i_mainland_cdn_base_url: "https://cdn.jsdmirror.com",
-      t2i_overseas_cdn_base_url: "https://cdn.jsdelivr.net",
       t2i_rendering_strategies: configSchema.t2i_rendering.items.t2i_rendering_strategies.default,
     },
     general: {

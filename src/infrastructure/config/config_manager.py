@@ -16,20 +16,22 @@ from astrbot.api.star import StarTools
 
 from ...shared.constants import (
     DEFAULT_ATRI_ASSETS_CDN_URL,
-    DEFAULT_CDN_HOST,
     GITHUB_REPO_BRANCH,
     GITHUB_REPO_NAME,
     GITHUB_REPO_OWNER,
     PLUGIN_NAME,
 )
-from ...utils.cdn_utils import normalize_cdn_base_url
 from ...utils.logger import logger
 from .config_migrator import ConfigMigrator
 from .rendering_config import (
-    DEFAULT_RENDERING_STRATEGY,
+    DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS,
+    DEFAULT_RENDERING_STRATEGY_PRESETS,
+    RenderingResourceConfig,
     RenderingStrategyConfig,
+    RenderingStrategyOptions,
     parse_rendering_strategies,
 )
+from .rendering_schema import sync_rendering_schema_options
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -54,11 +56,20 @@ class ConfigManager:
     StarTools = StarTools
     config: AstrBotConfig
     _migrator: ConfigMigrator
+    _upgrade_tracking_active: bool = False
 
     def __init__(self, config: AstrBotConfig) -> None:
         self.config = config
+        self._upgrade_tracking_active = False
         self._migrator = ConfigMigrator(self, star_tools=StarTools)
         self._migrator.run_all_migrations()
+        self.refresh_rendering_schema_options()
+        self._upgrade_tracking_active = True
+
+    def refresh_rendering_schema_options(self) -> None:
+        """同步宿主内存中的资源选项，兼容不带 Schema 的离线配置桩。"""
+        schema: dict | None = getattr(self.config, "schema", None)
+        sync_rendering_schema_options(schema, self._get_group("t2i_rendering"))
 
     def _protect_upgrade_data(self) -> None:
         """在插件升级且配置结构发生变更时备份旧配置（委托 ConfigMigrator）。"""
@@ -286,7 +297,7 @@ class ConfigManager:
             try:
                 auto_group = self._ensure_group("auto_analysis")
                 auto_group["auto_analysis_time"] = val_list
-                self.config.save_config()
+                self.save_config()
                 logger.info(f"自动修复配置格式 auto_analysis_time: {val} -> {val_list}")
             except Exception as e:
                 logger.warning(f"修复配置格式失败: {e}")
@@ -367,7 +378,7 @@ class ConfigManager:
     def set_llm_hard_timeout(self, timeout_seconds: int) -> None:
         """设置 LLM 单次请求硬超时时间（秒）。"""
         self._ensure_group("llm")["llm_hard_timeout"] = max(0, int(timeout_seconds))
-        self.config.save_config()
+        self.save_config()
 
     def get_enable_streaming_llm_call(self) -> bool:
         """获取是否启用流式 LLM 调用"""
@@ -386,7 +397,7 @@ class ConfigManager:
             return 0.0
 
     def get_t2i_rendering_strategy_config(self) -> list[RenderingStrategyConfig]:
-        """获取按优先级排序的方案，未配置时使用默认海外方案。
+        """获取按优先级排序的方案，未配置时先用海外方案，失败后尝试内地方案。
 
         Args:
             无额外参数。
@@ -403,11 +414,11 @@ class ConfigManager:
             try:
                 return parse_rendering_strategies(raw)
             except ValueError as exc:
-                logger.warning(f"渲染方案配置无效，将使用默认海外方案: {exc}")
-        return [DEFAULT_RENDERING_STRATEGY.copy()]
+                logger.warning(f"渲染方案配置无效，将使用默认海外、内地方案: {exc}")
+        return parse_rendering_strategies(list(DEFAULT_RENDERING_STRATEGY_PRESETS))
 
-    def get_t2i_rendering_strategies(self) -> list[dict[str, object]]:
-        """将方案转换为截图参数，资源环境由插件消费，不传给 T2I。"""
+    def get_t2i_rendering_strategies(self) -> list[RenderingStrategyOptions]:
+        """将方案转换为T2I参数，资源环境由插件消费，不传给 T2I。"""
         group = self._get_group("t2i_rendering")
         return [
             {
@@ -419,6 +430,18 @@ class ConfigManager:
                 "viewport_width": max(1, int(group.get("t2i_viewport_width", 1440))),
                 "viewport_height": max(1, int(group.get("t2i_viewport_height", 900))),
                 "resource_environment": item["environment"],
+                "resource_urls": {
+                    "cdn_base_url": item["cdn_base_url"],
+                    "google_fonts": item["google_fonts"],
+                    "gstatic": item["gstatic"],
+                },
+                "render_service": item["render_service"],
+                "font_mode": item.get("font_mode", "network"),
+                "service_endpoint": item["service_endpoint"],
+                "service_token": item["service_token"],
+                "request_timeout": item.get(
+                    "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
+                ),
             }
             for item in self.get_t2i_rendering_strategy_config()
         ]
@@ -439,75 +462,73 @@ class ConfigManager:
             value = self._get_group("t2i_rendering").get("report_language", "auto")
         return value
 
-    def get_t2i_google_fonts_mirror(self, environment: str | None = None) -> str:
-        """选择指定资源环境的 Google Fonts 地址。
+    def get_t2i_resource_config(
+        self, environment: str | None = None
+    ) -> RenderingResourceConfig:
+        """读取首轮或指定旧环境对应的资源快照。
 
         Args:
-            environment: 本次方案的环境；省略时采用第一优先级方案。
+            environment: 兼容按环境查询的旧调用；省略时使用第一优先级方案。
 
         Returns:
-            对应环境的字体样式表根地址。
+            独立的 CDN、字体样式和字体文件地址。
         """
-        source = environment or self.get_t2i_font_source()
-        group = self._get_group("t2i_rendering")
-        if source == "Mainland":
-            return group.get("t2i_mainland_google_fonts", "https://fonts.loli.net")
-        return group.get("t2i_overseas_google_fonts", "https://fonts.googleapis.com")
+        strategies = self.get_t2i_rendering_strategy_config()
+        strategy = next(
+            (
+                item
+                for item in strategies
+                if environment is None or item["environment"] == environment
+            ),
+            None,
+        )
+        if strategy is None:
+            strategy = parse_rendering_strategies(
+                [{"environment": environment}],
+            )[0]
+        return {
+            "cdn_base_url": strategy["cdn_base_url"],
+            "google_fonts": strategy["google_fonts"],
+            "gstatic": strategy["gstatic"],
+        }
+
+    def get_t2i_google_fonts_mirror(self, environment: str | None = None) -> str:
+        """获取首轮或指定旧环境的字体样式地址。"""
+        return self.get_t2i_resource_config(environment)["google_fonts"]
 
     def get_t2i_gstatic_mirror(self, environment: str | None = None) -> str:
-        """选择指定资源环境的 Gstatic 地址。
-
-        Args:
-            environment: 本次方案的环境；省略时采用第一优先级方案。
-
-        Returns:
-            对应环境的字体静态资源根地址。
-        """
-        source = environment or self.get_t2i_font_source()
-        group = self._get_group("t2i_rendering")
-        if source == "Mainland":
-            return group.get("t2i_mainland_gstatic", "https://gstatic.loli.net")
-        return group.get("t2i_overseas_gstatic", "https://fonts.gstatic.com")
+        """获取首轮或指定旧环境的字体文件地址。"""
+        return self.get_t2i_resource_config(environment)["gstatic"]
 
     def get_t2i_cdn_base_url(self, environment: str | None = None) -> str:
-        """获取不带末尾斜杠的模板 CDN 根地址。
+        """获取首轮或指定旧环境的模板 CDN 地址。"""
+        return self.get_t2i_resource_config(environment)["cdn_base_url"]
 
-        Args:
-            environment: 本次资源环境；省略时采用第一优先级方案。
-
-        Returns:
-            HTTP(S) 根地址；空值或不符合根地址格式时使用默认 CDN。
-        """
-        group = self._get_group("t2i_rendering")
-        source = environment or self.get_t2i_font_source()
-        value = group.get(f"t2i_{source.lower()}_cdn_base_url")
-        if value is None or (isinstance(value, str) and not value.strip()):
-            value = group.get("t2i_cdn_base_url", "")
-        try:
-            return normalize_cdn_base_url(value if isinstance(value, str) else "")
-        except ValueError:
-            pass
-        return DEFAULT_CDN_HOST
-
-    def get_template_assets_base_url(self, environment: str | None = None) -> str:
+    def get_template_assets_base_url(
+        self, environment: str | None = None, *, cdn_base_url: str | None = None
+    ) -> str:
         """获取指定资源环境的仓库素材目录。
 
         Args:
             environment: 本次资源环境；省略时采用第一优先级方案。
+            cdn_base_url: 本轮已固定的资源地址，避免同环境的方案相互覆盖。
 
         Returns:
             可拼接主题目录或预览图文件名的素材 URL。
         """
         return (
-            f"{self.get_t2i_cdn_base_url(environment)}/gh/"
+            f"{cdn_base_url or self.get_t2i_cdn_base_url(environment)}/gh/"
             f"{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}@{GITHUB_REPO_BRANCH}/assets"
         )
 
-    def get_t2i_atri_font_mirror(self, environment: str | None = None) -> str:
+    def get_t2i_atri_font_mirror(
+        self, environment: str | None = None, *, cdn_base_url: str | None = None
+    ) -> str:
         """获取 ATRI 镜像，自定义地址优先于环境默认值。
 
         Args:
             environment: 本次资源环境；省略时采用第一优先级方案。
+            cdn_base_url: 本轮已固定的资源地址，避免同环境的方案相互覆盖。
 
         Returns:
             显式指定的 ATRI 镜像或对应环境中的素材目录。
@@ -517,7 +538,7 @@ class ConfigManager:
             mirror = mirror.strip().rstrip("/")
             if mirror and mirror != DEFAULT_ATRI_ASSETS_CDN_URL:
                 return mirror
-        return f"{self.get_template_assets_base_url(environment)}/ATRI"
+        return f"{self.get_template_assets_base_url(environment, cdn_base_url=cdn_base_url)}/ATRI"
 
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""
@@ -574,7 +595,7 @@ class ConfigManager:
     def set_filter_bot_messages(self, enabled: bool):
         """设置是否过滤机器人自己的消息。"""
         self._ensure_group("basic")["filter_bot_messages"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_html_output_dir(self) -> str:
         """获取HTML输出目录"""
@@ -594,7 +615,7 @@ class ConfigManager:
     def set_html_only_url(self, enabled: bool):
         """设置是否仅输出外链而不发送文件本体"""
         self._ensure_group("html")["html_only_url"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_html_filename_format(self) -> str:
         """获取HTML文件名格式"""
@@ -646,7 +667,7 @@ class ConfigManager:
         if "quality_analysis_prompts" not in prompts:
             prompts["quality_analysis_prompts"] = {}
         prompts["quality_analysis_prompts"]["quality_v2_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def _upgrade_config_item(
         self, group: str, key: str, setter_func: Callable[[str], None]
@@ -676,7 +697,7 @@ class ConfigManager:
         if "topic_analysis_prompts" not in prompts:
             prompts["topic_analysis_prompts"] = {}
         prompts["topic_analysis_prompts"]["topic_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_quality_summary_prompt(self, prompt: str):
         """设置聊天质量汇总分析提示词模板"""
@@ -684,7 +705,7 @@ class ConfigManager:
         if "quality_analysis_prompts" not in prompts:
             prompts["quality_analysis_prompts"] = {}
         prompts["quality_analysis_prompts"]["quality_summary_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_user_title_analysis_prompt(self, prompt: str):
         """设置用户称号分析提示词模板"""
@@ -692,7 +713,7 @@ class ConfigManager:
         if "user_title_analysis_prompts" not in prompts:
             prompts["user_title_analysis_prompts"] = {}
         prompts["user_title_analysis_prompts"]["user_title_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_golden_quote_analysis_prompt(self, prompt: str):
         """设置金句分析提示词模板"""
@@ -700,7 +721,7 @@ class ConfigManager:
         if "golden_quote_analysis_prompts" not in prompts:
             prompts["golden_quote_analysis_prompts"] = {}
         prompts["golden_quote_analysis_prompts"]["golden_quote_v2_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_comic_storyboard_prompt(self, prompt: str):
         """设置漫画场景分析提示词模板"""
@@ -708,7 +729,7 @@ class ConfigManager:
         if "comic_analysis_prompts" not in prompts:
             prompts["comic_analysis_prompts"] = {}
         prompts["comic_analysis_prompts"]["comic_storyboard_prompt"] = prompt
-        self.config.save_config()
+        self.save_config()
 
     def set_output_format(self, format_types: str | list[str]):
         """设置输出格式"""
@@ -721,17 +742,17 @@ class ConfigManager:
                 raise ValueError(f"无效格式: {f}。有效: image, text, html")
 
         self._ensure_group("basic")["output_format"] = format_types
-        self.config.save_config()
+        self.save_config()
 
     def set_group_list_mode(self, mode: str):
         """设置群组列表模式"""
         self._ensure_group("basic")["group_list_mode"] = mode
-        self.config.save_config()
+        self.save_config()
 
     def set_group_list(self, groups: list[str]):
         """设置群组列表"""
         self._ensure_group("basic")["group_list"] = groups
-        self.config.save_config()
+        self.save_config()
 
     def get_max_concurrent_tasks(self) -> int:
         """获取自动分析最大并发群数"""
@@ -752,12 +773,12 @@ class ConfigManager:
     def set_max_concurrent_tasks(self, count: int):
         """设置自动分析最大并发数"""
         self._ensure_group("performance")["max_concurrent_groups"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_max_messages(self, count: int):
         """设置最大消息数量"""
         self._ensure_group("basic")["max_messages"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_local_history_max_messages(self, count: int) -> None:
         """设置本地群消息历史缓存保留上限。
@@ -768,17 +789,17 @@ class ConfigManager:
         self._ensure_group("basic")["local_history_max_messages"] = max(
             10000, min(100000, int(count))
         )
-        self.config.save_config()
+        self.save_config()
 
     def set_analysis_days(self, days: int):
         """设置分析天数"""
         self._ensure_group("basic")["analysis_days"] = days
-        self.config.save_config()
+        self.save_config()
 
     def set_auto_analysis_time(self, time_val: str | list[str]):
         """设置自动分析时间点"""
         self._ensure_group("auto_analysis")["auto_analysis_time"] = time_val
-        self.config.save_config()
+        self.save_config()
 
     def is_auto_analysis_enabled(self) -> bool:
         """
@@ -809,7 +830,7 @@ class ConfigManager:
     def set_scheduled_group_list_mode(self, mode: str):
         """设置定时分析名单模式"""
         self._ensure_group("auto_analysis")["scheduled_group_list_mode"] = mode
-        self.config.save_config()
+        self.save_config()
 
     def get_scheduled_group_list(self) -> list[str]:
         """获取定时分析目标群列表"""
@@ -818,7 +839,7 @@ class ConfigManager:
     def set_scheduled_group_list(self, groups: list[str]):
         """设置定时分析目标群列表"""
         self._ensure_group("auto_analysis")["scheduled_group_list"] = groups
-        self.config.save_config()
+        self.save_config()
 
     def is_scheduled_group_allowed(self, group_umo_or_id: str) -> bool:
         """判断当前群是否允许参与定时分析。
@@ -870,51 +891,51 @@ class ConfigManager:
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""
         self._ensure_group("basic")["min_messages_threshold"] = threshold
-        self.config.save_config()
+        self.save_config()
 
     def set_topic_analysis_enabled(self, enabled: bool):
         """设置是否启用话题分析"""
         self._ensure_group("analysis_features")["topic_analysis_enabled"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def set_user_title_analysis_enabled(self, enabled: bool):
         """设置是否启用用户称号分析"""
         self._ensure_group("analysis_features")["user_title_analysis_enabled"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def set_golden_quote_analysis_enabled(self, enabled: bool):
         """设置是否启用金句分析"""
         self._ensure_group("analysis_features")["golden_quote_analysis_enabled"] = (
             enabled
         )
-        self.config.save_config()
+        self.save_config()
 
     def set_chat_quality_analysis_enabled(self, enabled: bool):
         """设置是否启用聊天质量分析"""
         self._ensure_group("analysis_features")["chat_quality_analysis_enabled"] = (
             enabled
         )
-        self.config.save_config()
+        self.save_config()
 
     def set_max_topics(self, count: int):
         """设置最大话题数量"""
         self._ensure_group("analysis_features")["max_topics"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_max_user_titles(self, count: int):
         """设置最大用户称号数量"""
         self._ensure_group("analysis_features")["max_user_titles"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_max_golden_quotes(self, count: int):
         """设置最大金句数量"""
         self._ensure_group("analysis_features")["max_golden_quotes"] = count
-        self.config.save_config()
+        self.save_config()
 
     def set_html_filename_format(self, format_str: str):
         """设置HTML文件名格式"""
         self._ensure_group("html")["html_filename_format"] = format_str
-        self.config.save_config()
+        self.save_config()
 
     def get_report_template(self) -> str:
         """获取报告模板名称"""
@@ -926,7 +947,7 @@ class ConfigManager:
     def set_report_template(self, template_name: str):
         """设置报告模板名称"""
         self._ensure_group("basic")["report_template"] = template_name
-        self.config.save_config()
+        self.save_config()
 
     def get_enable_user_card(self) -> bool:
         """获取是否使用用户群名片"""
@@ -939,7 +960,7 @@ class ConfigManager:
     def set_enable_analysis_reply(self, enabled: bool):
         """设置是否在群分析完成后发送文本回复"""
         self._ensure_group("basic")["enable_analysis_reply"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_show_report_caption(self) -> bool:
         """获取是否发送 \"📊 每日群聊分析报告已生成\" 前缀文字。"""
@@ -948,7 +969,7 @@ class ConfigManager:
     def set_show_report_caption(self, enabled: bool):
         """设置是否发送 \"📊 每日群聊分析报告已生成\" 前缀文字。"""
         self._ensure_group("basic")["show_report_caption"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_profile_display_mode(self) -> str:
         """获取人格标签展示模式。"""
@@ -1007,7 +1028,7 @@ class ConfigManager:
     def set_group_album_strict_mode(self, enabled: bool):
         """设置群相册上传严格模式"""
         self._ensure_group("qq_group_upload")["group_album_strict_mode"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     # ========== 增量分析配置 ==========
 
@@ -1068,7 +1089,7 @@ class ConfigManager:
     def set_incremental_report_immediately(self, enabled: bool):
         """设置增量分析是否立即发送报告"""
         self._ensure_group("incremental")["incremental_report_immediately"] = enabled
-        self.config.save_config()
+        self.save_config()
 
     def get_incremental_min_messages(self) -> int:
         """获取触发增量分析的最小消息数阈值"""
@@ -1287,11 +1308,7 @@ class ConfigManager:
             当前角色方案最后添加的参考图；未配置角色方案时兼容旧版字段。
         """
         character = self.get_selected_comic_character()
-        reference_images = (
-            character.get("reference_images", [])
-            if character
-            else self._get_group("daily_comic").get("drawing_reference_image", [])
-        )
+        reference_images = character.get("reference_images", []) if character else []
         if isinstance(reference_images, str):
             reference_images = [reference_images]
         if not isinstance(reference_images, list):
@@ -1308,11 +1325,7 @@ class ConfigManager:
             Relative image paths in their configured order.
         """
         character = self.get_selected_comic_character()
-        reference_images = (
-            character.get("reference_images", [])
-            if character
-            else self._get_group("daily_comic").get("drawing_reference_image", [])
-        )
+        reference_images = character.get("reference_images", []) if character else []
         if isinstance(reference_images, str):
             reference_images = [reference_images]
         if not isinstance(reference_images, list):
@@ -1459,7 +1472,21 @@ class ConfigManager:
             Exception: AstrBot 保存配置时发生的原始异常。
         """
         try:
+            strategies = self._get_group("t2i_rendering").get(
+                "t2i_rendering_strategies"
+            )
+            if isinstance(strategies, list):
+                try:
+                    parse_rendering_strategies(strategies)
+                except ValueError:
+                    # 其他设置仍可保存；无效方案保持原样，交给配置页修正。
+                    pass
+                else:
+                    strategies.sort(key=lambda item: item.get("priority", 10))
             self.config.save_config()
+            self.refresh_rendering_schema_options()
+            if self._upgrade_tracking_active:
+                self._migrator.protect_upgrade_data()
             logger.info("配置已保存")
         except Exception as e:
             logger.error(f"保存配置失败: {e}")

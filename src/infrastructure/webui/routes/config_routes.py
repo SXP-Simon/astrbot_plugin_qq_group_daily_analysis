@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import re
 import time
@@ -15,18 +16,28 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ....shared.constants import PLUGIN_NAME
-from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
-from ...config.rendering_config import parse_rendering_strategies
+from ...config.config_migrator import LEGACY_RENDERING_RESOURCE_KEYS
+from ...config.rendering_config import (
+    CUSTOM_RESOURCE_OPTION,
+    DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS,
+    DEFAULT_RENDERING_STRATEGY_PRESETS,
+    ScreenshotOptions,
+    parse_rendering_strategies,
+)
 from ...reporting.cdn_probe import probe_template_cdn
+from ...reporting.custom_t2i_client import render_custom_t2i
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from astrbot.api.star import Context
 
     from ....application.dto.webui_dto import (
         ConfigFileContentQueryDTO,
         ConfigSaveDTO,
+        CustomT2iProbeDTO,
     )
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
@@ -50,6 +61,24 @@ def _config_key_to_folder(key_path: str) -> str:
     """与 AstrBot 官方核心完全一致的 config_key 到存储目录转换规则（以 / 分隔）"""
     parts = [_sanitize_path_segment(part) for part in key_path.split(".") if part]
     return "/".join(parts) if parts else "_"
+
+
+def _config_revision(config: Mapping[str, object]) -> str:
+    """计算配置内容的只读版本，不将版本号写入用户配置。
+
+    Args:
+        config: 来自配置文件的 JSON 对象。
+
+    Returns:
+        配置内容稳定排序后的 SHA-256 摘要。
+
+    Raises:
+        TypeError: 配置包含不可序列化的数据。
+    """
+    content = json.dumps(
+        dict(config), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 class ConfigRoutes:
@@ -85,20 +114,40 @@ class ConfigRoutes:
                 )
             )
             config_dict = {}
+            revision = _config_revision(config_dict)
             if cfg_mgr:
+                cfg_mgr.refresh_rendering_schema_options()
                 config_dict = {str(k): v for k, v in cfg_mgr.config.items()}
+                revision = _config_revision(config_dict)
                 rendering = config_dict.get("t2i_rendering")
-                if isinstance(rendering, dict) and not rendering.get(
-                    "t2i_rendering_strategies"
-                ):
-                    strategies = cfg_mgr.get_t2i_rendering_strategy_config()
-                    config_dict["t2i_rendering"] = {
-                        **rendering,
-                        "t2i_rendering_strategies": [
-                            {"__template_key": "strategy", **item}
-                            for item in strategies
-                        ],
-                    }
+                if isinstance(rendering, dict):
+                    raw = rendering.get("t2i_rendering_strategies") or list(
+                        DEFAULT_RENDERING_STRATEGY_PRESETS
+                    )
+                    try:
+                        # 只补齐编辑视图，不写盘；保留顺序和扩展字段，迁移服务条目类型。
+                        projected = []
+                        if not isinstance(raw, list):
+                            raise ValueError("渲染方案必须是列表")
+                        for item in raw:
+                            normalized = parse_rendering_strategies([item])[0]
+                            projected_item = {**item, **normalized}
+                            if normalized["render_service"] != "custom":
+                                projected_item.pop("font_mode", None)
+                            projected_item.pop("render_service", None)
+                            # 自定义方案的空地址表示跟随资源环境，编辑与保存均保留此意图。
+                            if normalized["render_service"] == "custom":
+                                for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                                    if item.get(key) == "":
+                                        projected_item[key] = ""
+                            projected.append(projected_item)
+                        config_dict["t2i_rendering"] = {
+                            **rendering,
+                            "t2i_rendering_strategies": projected,
+                        }
+                    except ValueError:
+                        # 异常草稿原样交给编辑器，避免读取时吞掉用户配置。
+                        pass
 
             plugin_root = Path(__file__).resolve().parents[4]
             schema_file = plugin_root / "_conf_schema.json"
@@ -126,6 +175,7 @@ class ConfigRoutes:
                     "data": {
                         "config": config_dict,
                         "schema": schema_dict,
+                        "revision": revision,
                     },
                 }
             )
@@ -154,6 +204,79 @@ class ConfigRoutes:
             logger.error(f"模板 CDN 检测异常: {exc}", exc_info=True)
             return error_response("这次检测没能完成，请稍后再试。", status_code=500)
 
+    async def api_test_custom_t2i(self) -> WebApiResponse:
+        """用未保存的服务配置生成固定测试图，不写盘、不发送群消息。
+
+        Returns:
+            测试图片和耗时；配置无效返回 400，服务失败返回 502。
+        """
+        try:
+            body = await request.json()
+            if type(body) is not dict:
+                raise ValueError("请提供有效的 T2I 测试配置")
+            plan = parse_rendering_strategies(
+                [
+                    {
+                        "__template_key": "custom",
+                        **{
+                            key: body[key]
+                            for key in (
+                                "service_endpoint",
+                                "service_token",
+                                "timeout",
+                                "request_timeout",
+                            )
+                            if key in body
+                        },
+                    }
+                ]
+            )[0]
+        except (ValueError, TypeError):
+            return error_response(
+                "请检查服务地址、Token 和超时设置是否有效", status_code=400
+            )
+
+        started = time.perf_counter()
+        options: ScreenshotOptions = {
+            "type": "png",
+            "full_page": False,
+            "viewport_width": 480,
+            "viewport_height": 180,
+            "device_scale_factor_level": "normal",
+            "timeout": plan["timeout"],
+        }
+        # 不加载外链字体和图片，只验证接口、鉴权与基本T2I能力。
+        html = """<!doctype html><html><head><meta charset="UTF-8">
+<style>body{margin:0;padding:28px;background:#f0f5ff;color:#172554;
+font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
+<body><strong>T2I 渲染测试</strong><p>这是一张测试图片。</p>
+<p>HTML → PNG · 0123456789</p></body></html>"""
+        try:
+            image = await render_custom_t2i(
+                plan["service_endpoint"],
+                html,
+                options,
+                plan["service_token"],
+                request_timeout_ms=plan.get(
+                    "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
+                ),
+            )
+        except (ValueError, RuntimeError, TimeoutError) as exc:
+            return error_response(str(exc), status_code=502)
+        except Exception:
+            # 不记录未保存的地址、Token 或第三方异常正文。
+            return error_response(
+                "这次测试没能完成，请查看 T2I 服务日志后重试。", status_code=502
+            )
+        mime = "image/png" if image.startswith(b"\x89PNG") else "image/jpeg"
+        result: CustomT2iProbeDTO = {
+            "image_data_url": f"data:{mime};base64,{base64.b64encode(image).decode('ascii')}",
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+        }
+        return json_response(
+            {"status": "ok", "data": result}, headers={"Cache-Control": "no-store"}
+        )
+
     async def api_save_config(self) -> WebApiResponse:
         """保存并更新插件配置"""
         try:
@@ -166,6 +289,15 @@ class ConfigRoutes:
                 return error_response("缺少有效的 config 配置数据", status_code=400)
 
             save_dto: ConfigSaveDTO = {"config": new_config}
+            if "revision" in body:
+                revision = body["revision"]
+                if not isinstance(revision, str) or not re.fullmatch(
+                    r"[0-9a-f]{64}", revision
+                ):
+                    return error_response(
+                        "配置版本无效，请重新读取后再保存", status_code=400
+                    )
+                save_dto["revision"] = revision
 
             cfg_mgr = (
                 self.analysis_service.config_manager
@@ -180,6 +312,15 @@ class ConfigRoutes:
             if config_obj is None:
                 return error_response("配置管理器未初始化", status_code=500)
 
+            # 比较、更新和同步保存之间没有 await，避免两个页面同时覆盖旧快照。
+            if "revision" in save_dto and save_dto["revision"] != _config_revision(
+                config_obj
+            ):
+                return error_response(
+                    "配置已被其他页面修改，请重新读取后再保存。当前改动尚未保存。",
+                    status_code=409,
+                )
+
             if "t2i_rendering" in new_config:
                 rendering_config = new_config["t2i_rendering"]
                 if not isinstance(rendering_config, dict):
@@ -188,31 +329,59 @@ class ConfigRoutes:
                     )
                 if "t2i_rendering_strategies" in rendering_config:
                     try:
-                        parse_rendering_strategies(
-                            rendering_config["t2i_rendering_strategies"]
-                        )
+                        strategies = rendering_config["t2i_rendering_strategies"]
+                        if strategies == []:
+                            strategies = [
+                                dict(item)
+                                for item in DEFAULT_RENDERING_STRATEGY_PRESETS
+                            ]
+                            rendering_config["t2i_rendering_strategies"] = strategies
+                        if not isinstance(strategies, list):
+                            raise ValueError("渲染方案必须是列表")
+                        priorities: list[int] = []
+                        for strategy in strategies:
+                            normalized = parse_rendering_strategies([strategy])[0]
+                            priorities.append(normalized["priority"])
+                            for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                                if strategy.get(key) == CUSTOM_RESOURCE_OPTION:
+                                    strategy[f"custom_{key}"] = normalized[key]
+                                if (
+                                    normalized["render_service"] == "custom"
+                                    and strategy.get(key) == ""
+                                ):
+                                    continue
+                                strategy[key] = normalized[key]
+                            for key in (
+                                "__template_key",
+                                "environment",
+                                "service_endpoint",
+                                "service_token",
+                            ):
+                                strategy[key] = normalized[key]
+                            if "request_timeout" in normalized:
+                                strategy["request_timeout"] = normalized[
+                                    "request_timeout"
+                                ]
+                            if "font_mode" in normalized:
+                                strategy["font_mode"] = normalized["font_mode"]
+                            else:
+                                strategy.pop("font_mode", None)
+                            strategy.pop("render_service", None)
+                        strategies[:] = [
+                            item
+                            for _priority, item in sorted(
+                                zip(priorities, strategies, strict=True),
+                                key=lambda pair: pair[0],
+                            )
+                        ]
                     except ValueError as exc:
                         return error_response(str(exc), status_code=400)
-                for cdn_key in (
-                    "t2i_cdn_base_url",
-                    "t2i_mainland_cdn_base_url",
-                    "t2i_overseas_cdn_base_url",
-                ):
-                    if cdn_key not in rendering_config:
-                        continue
-                    cdn_value = rendering_config[cdn_key]
-                    if not isinstance(cdn_value, str) or len(cdn_value) > 2048:
-                        return error_response(
-                            "CDN 地址必须是长度不超过 2048 的字符串", status_code=400
-                        )
-                    try:
-                        rendering_config[cdn_key] = (
-                            normalize_cdn_base_url(cdn_value)
-                            if cdn_value.strip()
-                            else ""
-                        )
-                    except ValueError as exc:
-                        return error_response(str(exc), status_code=400)
+                for legacy_key in LEGACY_RENDERING_RESOURCE_KEYS:
+                    rendering_config.pop(legacy_key, None)
+
+            daily_comic_config = new_config.get("daily_comic")
+            if isinstance(daily_comic_config, dict):
+                daily_comic_config.pop("drawing_reference_image", None)
 
             auto_analysis_config = new_config.get("auto_analysis")
             if isinstance(auto_analysis_config, dict) and (
@@ -332,6 +501,8 @@ class ConfigRoutes:
             if cfg_mgr:
                 cfg_mgr.save_config()
 
+            saved_revision = _config_revision(config_obj)
+
             if self.auto_scheduler is not None and self.context is not None:
                 self.auto_scheduler.schedule_jobs(self.context)
                 if self.auto_scheduler.incremental_trigger is not None:
@@ -344,6 +515,7 @@ class ConfigRoutes:
                 {
                     "status": "ok",
                     "message": "配置已成功保存并持久化生效",
+                    "revision": saved_revision,
                     "data": dict(config_obj),
                 }
             )

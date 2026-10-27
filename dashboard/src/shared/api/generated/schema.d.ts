@@ -4,6 +4,41 @@
  */
 
 export interface paths {
+    "/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取插件配置、表单定义和内容版本 */
+        get: operations["getPluginConfig"];
+        put?: never;
+        /** 保存配置，带版本时拒绝覆盖过期快照 */
+        post: operations["savePluginConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/test-custom-t2i": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 用当前未保存的自定义 T2I 配置生成固定测试图片 */
+        post: operations["testCustomT2i"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config/test-template-cdn": {
         parameters: {
             query?: never;
@@ -259,6 +294,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugin-data/config-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configuration backups */
+        get: operations["getConfigBackups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/config-backups/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an original JSON configuration backup */
+        get: operations["getConfigBackup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -280,6 +349,20 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CustomT2iProbeRequest: {
+            /** @default http://127.0.0.1:8999/text2img */
+            service_endpoint: string;
+            /** @default  */
+            service_token: string;
+            /** @default 20000 */
+            timeout: number;
+            /** @default 40000 */
+            request_timeout: number;
+        };
+        CustomT2iProbe: {
+            image_data_url: string;
+            elapsed_ms: number;
+        };
         TemplateCdnProbeRequest: {
             base_url: string;
         };
@@ -495,6 +578,22 @@ export interface components {
             total: number;
             available_tags: components["schemas"]["AvailableTag"][];
         };
+        ConfigBackupInfo: {
+            filename: string;
+            size_bytes: number;
+            /** @enum {string} */
+            kind: "upgrade" | "comic_migration" | "other";
+            plugin_version: string | null;
+            saved_at: string | null;
+            error: string | null;
+        };
+        ConfigBackupDetail: {
+            backup: components["schemas"]["ConfigBackupInfo"];
+            content: components["schemas"]["BackupJsonValue"];
+        };
+        BackupJsonValue: string | number | boolean | null | components["schemas"]["BackupJsonValue"][] | {
+            [key: string]: components["schemas"]["BackupJsonValue"];
+        };
         SectionStats: {
             count: number;
             size_bytes: number;
@@ -623,6 +722,146 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getPluginConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 版本对应原始配置；表单中的默认方案可能经过补齐 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: {
+                            config: {
+                                [key: string]: unknown;
+                            };
+                            schema: {
+                                [key: string]: unknown;
+                            };
+                            revision: string;
+                        };
+                    };
+                };
+            };
+            /** @description 读取配置失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    savePluginConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    config: {
+                        [key: string]: unknown;
+                    };
+                    /** @description 可选，兼容旧调用方；WebUI 应传入最近读取或保存成功的版本 */
+                    revision?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 配置保存成功，返回新版本供后续保存使用 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        message?: string;
+                        data: {
+                            [key: string]: unknown;
+                        };
+                        revision: string;
+                    };
+                };
+            };
+            /** @description 配置或版本格式无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 配置已被其他页面或管理界面修改，须重新读取后保存 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 配置保存失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    testCustomT2i: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomT2iProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description 经校验的图片与耗时，不保存配置或报告 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: components["schemas"]["CustomT2iProbe"];
+                    };
+                };
+            };
+            /** @description 服务配置无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 服务连接、鉴权、超时或图片校验失败 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     testTemplateCdn: {
         parameters: {
             query?: never;
@@ -1031,6 +1270,70 @@ export interface operations {
                         data?: components["schemas"]["PluginDataOverview"];
                     };
                 };
+            };
+        };
+    };
+    getConfigBackups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status?: string;
+                        data?: {
+                            items: components["schemas"]["ConfigBackupInfo"][];
+                        };
+                    };
+                };
+            };
+        };
+    };
+    getConfigBackup: {
+        parameters: {
+            query: {
+                filename: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup JSON */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status?: string;
+                        data?: components["schemas"]["ConfigBackupDetail"];
+                    };
+                };
+            };
+            /** @description Invalid backup or filename */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Backup no longer exists */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

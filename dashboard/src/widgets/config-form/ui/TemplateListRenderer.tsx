@@ -19,12 +19,14 @@ import {
   SettingOutlined,
   DownOutlined,
 } from "@ant-design/icons";
+import { isFieldVisible } from "../../../entities/config/model/visibility";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
 import {
   AvailableProvider,
   AvailablePersona,
 } from "../../../entities/config/api/configApi";
 import { FieldRenderer } from "./FieldRenderer";
+import { CustomT2iProbe } from "../../../features/test-custom-t2i/ui/CustomT2iProbe";
 
 const { Text } = Typography;
 
@@ -224,6 +226,11 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
             const itemTemplateKey = findTemplateKey(item) || templateKeys[0] || "character";
             const tpl = findTemplateForItem(item);
             const subItems = tpl?.items || {};
+            // 旧条目可能缺少新字段，条件显示应和控件一样使用 schema 默认值。
+            const itemContext = {
+              ...Object.fromEntries(Object.entries(subItems).map(([key, field]) => [key, field.default])),
+              ...item,
+            };
 
             // 标题展示
             const displayName =
@@ -308,7 +315,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
 
                 {/* 条目内部各字段渲染 */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "10px 16px" }}>
-                  {Object.entries(subItems).map(([subKey, subField]) => {
+                  {Object.entries(subItems).filter(([, subField]) => isFieldVisible(subField, { item: itemContext })).map(([subKey, subField]) => {
                     const isFullWidth =
                       subField.type === "template_list" ||
                       subField.type === "text" ||
@@ -341,6 +348,14 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                     );
                   })}
                 </div>
+                {fieldKey === "t2i_rendering_strategies" && itemTemplateKey === "custom" && (
+                  <CustomT2iProbe input={{
+                    service_endpoint: item.service_endpoint,
+                    service_token: item.service_token,
+                    timeout: item.timeout,
+                    request_timeout: item.request_timeout,
+                  }} />
+                )}
               </Card>
             );
           })}
@@ -349,13 +364,13 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
 
       {/* 底部添加条目按钮 */}
       {templateKeys.length > 1 ? (
-        <Dropdown menu={{ items: menuItems }} placement="bottomLeft">
+        <Dropdown menu={{ items: menuItems }} placement="bottomLeft" trigger={["click"]}>
           <Button
             type="dashed"
             icon={<PlusOutlined />}
             style={{ width: "100%" }}
           >
-            添加配置项 <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
+            {fieldKey === "t2i_rendering_strategies" ? "添加渲染方案" : "添加配置项"} <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
           </Button>
         </Dropdown>
       ) : templateKeys.length === 1 ? (

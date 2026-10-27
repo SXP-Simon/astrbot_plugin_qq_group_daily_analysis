@@ -50,6 +50,7 @@ export interface SchemaGroupItem {
 export type PluginSchema = Record<string, SchemaGroupItem>;
 
 export interface PluginConfigData {
+  revision?: string;
   config: Record<string, Record<string, unknown>>;
   schema: PluginSchema;
 }

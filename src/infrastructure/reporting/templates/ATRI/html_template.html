@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ATRI 群聊日报 · {{ current_date }}</title>
     <style>
+        {% if t2i_font_mode|default('network') != 'local' %}
         @font-face {
             font-family: 'LXGW WenKai';
             src: url('{{ t2i_atri_font_mirror }}/file/1775130743963_1774880718993_LXGWWenKai-Regular.woff2') format('woff2');
@@ -23,6 +24,25 @@
             src: url('{{ t2i_atri_font_mirror }}/file/1775130738049_1774880717027_LXGWWenKaiMono-Regular.woff2') format('woff2');
             font-weight: 400;
         }
+
+        {% else %}
+        /* 使用字体内部名称匹配本地文件，保持 Medium 对应原模板的 600 字重。 */
+        @font-face {
+            font-family: 'LXGW WenKai';
+            src: local('LXGW WenKai'), local('LXGWWenKai-Regular');
+            font-weight: 400;
+        }
+        @font-face {
+            font-family: 'LXGW WenKai';
+            src: local('LXGW WenKai Medium'), local('LXGWWenKai-Medium');
+            font-weight: 600;
+        }
+        @font-face {
+            font-family: 'LXGW WenKai Mono';
+            src: local('LXGW WenKai Mono'), local('LXGWWenKaiMono-Regular');
+            font-weight: 400;
+        }
+        {% endif %}
 
         :root {
             --sky: #8fc5ff;

@@ -26,7 +26,7 @@ import {
   ExclamationCircleFilled,
 } from "@ant-design/icons";
 import { resolveOptionLabel } from "../../../entities/config/model/optionLabel";
-import { TEMPLATE_CDN_PRESETS } from "../../../entities/config/model/renderingConfig";
+import { CUSTOM_RESOURCE_OPTION, TEMPLATE_CDN_PRESETS } from "../../../entities/config/model/renderingConfig";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
 import {
   AvailableProvider,
@@ -169,15 +169,22 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
   // 渲染不同的表单控件
   const renderControl = () => {
-    if (["t2i_cdn_base_url", "t2i_mainland_cdn_base_url", "t2i_overseas_cdn_base_url"].includes(fieldKey)) {
+    if (fieldKey === "service_token") {
+      return <Input.Password aria-label={title} value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" />;
+    }
+    if (["cdn_base_url", "google_fonts", "gstatic"].includes(fieldKey)) {
       const currentValue = value === undefined
         ? typeof defaultValue === "string" ? defaultValue : ""
         : String(value);
+      const isCdn = fieldKey !== "google_fonts" && fieldKey !== "gstatic";
+      const options = fieldSchema.options?.map((option, index) => ({
+        value: String(option), label: fieldSchema.labels?.[index] || String(option),
+      })).filter((option) => option.value !== CUSTOM_RESOURCE_OPTION) || (isCdn ? TEMPLATE_CDN_PRESETS : []);
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <AutoComplete
             value={currentValue}
-            options={TEMPLATE_CDN_PRESETS}
+            options={options}
             onChange={onChange}
             status={error ? "error" : undefined}
           >
@@ -187,9 +194,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
               allowClear
             />
           </AutoComplete>
-          {currentValue.trim() || fieldKey === "t2i_cdn_base_url"
+          {isCdn && (currentValue.trim()
             ? <TemplateCdnProbe baseUrl={currentValue} />
-            : <Typography.Text type="secondary">先选择或填写地址，即可检测该环境的 CDN；留空沿用旧地址或默认地址。</Typography.Text>}
+            : <Typography.Text type="secondary">先选择或填写地址，即可检测 CDN；留空使用当前资源环境的预设。</Typography.Text>)}
         </div>
       );
     }
@@ -416,6 +423,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       const labels = fieldSchema.labels;
       return (
         <Select
+          aria-label={title}
           value={currentVal}
           onChange={(v) => onChange(v)}
           style={{ width: "100%" }}
@@ -508,6 +516,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
       return (
         <Select
+          aria-label={title}
           mode="multiple"
           allowClear
           style={{ width: "100%" }}
@@ -838,6 +847,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         value !== undefined ? String(value) : String(defaultValue ?? "");
       return (
         <Input
+          aria-label={title}
           value={currentVal}
           onChange={(e) => onChange(e.target.value)}
           placeholder={hint || `请输入 ${title}`}

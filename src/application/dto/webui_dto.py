@@ -7,7 +7,7 @@ Web 控制台请求与响应数据传输对象 (Rest DTOs)
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 # ============================================================================
 # 1. 任务控制与调度 DTO (Task Control & Scheduling)
@@ -386,14 +386,23 @@ class TemplateCdnProbeDTO(TypedDict):
     checks: list[TemplateCdnCheckDTO]
 
 
+class CustomT2iProbeDTO(TypedDict):
+    """固定 HTML 的真实 T2I 渲染结果，仅供当前页面预览。"""
+
+    image_data_url: str
+    elapsed_ms: float
+
+
 class ConfigSaveDTO(TypedDict):
     """保存插件配置请求数据传输对象。
 
     Attributes:
         config: 全量配置项字典。
+        revision: 可选的读取版本，用于拒绝过期快照。
     """
 
     config: dict[str, object]
+    revision: NotRequired[str]
 
 
 class ConfigFileUploadDTO(TypedDict, total=False):

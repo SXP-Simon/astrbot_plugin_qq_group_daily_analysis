@@ -16,7 +16,7 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from PIL import Image
 
@@ -26,11 +26,13 @@ from ...shared.constants import (
 )
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from ..config.rendering_config import DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
 from ..visualization.activity_charts import ActivityVisualizer
 from .avatar_service import (
     AvatarService,
 )
-from .html_renderer import describe_html_renderer
+from .custom_t2i_client import render_custom_t2i
+from .html_renderer import RenderServiceInfo, describe_html_renderer
 from .markdown_report_generator import (
     MarkdownReportGenerator,
 )
@@ -69,6 +71,11 @@ if TYPE_CHECKING:
 
     from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
+    from ..config.rendering_config import (
+        FontMode,
+        RenderingResourceConfig,
+        ScreenshotOptions,
+    )
 
 
 class ReportGenerator(IReportGenerator):
@@ -227,8 +234,8 @@ class ReportGenerator(IReportGenerator):
 
     @staticmethod
     def _resolve_t2i_viewport_options(
-        html_content: str, image_options: dict
-    ) -> tuple[dict, str]:
+        html_content: str, image_options: ScreenshotOptions
+    ) -> tuple[ScreenshotOptions, str]:
         """解析 T2I 渲染视口选项。"""
         return resolve_t2i_viewport_options(html_content, image_options)
 
@@ -314,6 +321,15 @@ class ReportGenerator(IReportGenerator):
             # 在首次异步准备前固定本次方案，避免保存配置后将旧 HTML 误认为新环境。
             render_strategies = self.config_manager.get_t2i_rendering_strategies()
             active_environment = self.config_manager.get_t2i_font_source()
+            active_resources = (
+                render_strategies[0].get("resource_urls") if render_strategies else None
+            )
+            active_font_mode = (
+                render_strategies[0].get("font_mode", "network")
+                if render_strategies
+                and render_strategies[0].get("render_service") == "custom"
+                else "network"
+            )
             render_payload = await self._prepare_render_data(
                 analysis_result,
                 template_theme=template_theme,
@@ -324,6 +340,8 @@ class ReportGenerator(IReportGenerator):
                 hide_user_names=hide_user_names,
                 allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                 environment=active_environment,
+                resources=active_resources,
+                font_mode=active_font_mode,
             )
 
             tpl_render_start_ts = time.perf_counter()
@@ -348,47 +366,84 @@ class ReportGenerator(IReportGenerator):
                 f"大小: {html_size_kb} KB ({len(html_content)} 字符)"
             )
 
-            if not callable(html_render_func):
-                logger.error("图片报告渲染失败：未提供可调用的 html_render_func")
-                return None, html_content
-
             async with self._render_semaphore:
                 render_loop = asyncio.get_running_loop()
                 render_deadline = render_loop.time() + _RENDER_TOTAL_TIMEOUT_SECONDS
                 logger.debug(f"[T2I] 已进入渲染队列 (群: {group_id})")
-                renderer_info = describe_html_renderer(html_render_func)
-                logger.debug(
-                    "[T2I诊断 v2] 开始生成图片；"
-                    f"配置读取：{renderer_info['config_lookup']}；"
-                    f"配置地址：{renderer_info['configured_endpoint']}"
+                host_renderer_info: RenderServiceInfo = (
+                    describe_html_renderer(html_render_func)
+                    if callable(html_render_func)
+                    else {
+                        "config_lookup": "未提供宿主渲染回调",
+                        "configured_endpoint": "未设置",
+                    }
                 )
-                trace_ctx = TraceContext.current()
-                if trace_ctx:
-                    for span in reversed(trace_ctx._spans):
-                        if span.get("stage_name") == AnalysisStage.RENDER_REPORT.value:
-                            span.setdefault("payload", {})["render_service"] = (
-                                renderer_info
-                            )
-                            break
+                renderer_info = host_renderer_info
                 last_error = "没有可用的渲染策略。"
+                deadline_exhausted = False
 
                 for attempt, strategy in enumerate(render_strategies, 1):
-                    if render_loop.time() >= render_deadline:
+                    if deadline_exhausted or render_loop.time() >= render_deadline:
                         break
-                    image_options = dict(strategy)
-                    environment = image_options.pop(
+                    strategy_options = strategy.copy()
+                    environment = strategy_options.pop(
                         "resource_environment", active_environment
                     )
+                    resources = strategy_options.pop("resource_urls", None)
+                    render_service = strategy_options.pop("render_service", "astrbot")
+                    configured_font_mode = strategy_options.pop("font_mode", "network")
+                    font_mode = (
+                        configured_font_mode
+                        if render_service == "custom"
+                        else "network"
+                    )
+                    service_endpoint = str(strategy_options.pop("service_endpoint", ""))
+                    service_token = str(strategy_options.pop("service_token", ""))
+                    request_timeout_ms = strategy_options.pop(
+                        "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
+                    )
+                    image_options: ScreenshotOptions = strategy_options
+                    service_url = urlsplit(service_endpoint)
+                    renderer_info = (
+                        {
+                            "config_lookup": "本轮自定义 T2I 服务",
+                            "configured_endpoint": f"{service_url.scheme}://{service_url.netloc}",
+                        }
+                        if render_service == "custom"
+                        else host_renderer_info
+                    )
+                    logger.debug(
+                        "[T2I诊断 v2] 开始生成图片；"
+                        f"配置读取：{renderer_info['config_lookup']}；"
+                        f"配置地址：{renderer_info['configured_endpoint']}"
+                    )
+                    trace_ctx = TraceContext.current()
+                    if trace_ctx:
+                        for span in reversed(trace_ctx._spans):
+                            if (
+                                span.get("stage_name")
+                                == AnalysisStage.RENDER_REPORT.value
+                            ):
+                                span.setdefault("payload", {})["render_service"] = (
+                                    renderer_info
+                                )
+                                break
                     viewport_description = "default"
                     render_error = "渲染服务返回了空内容。"
-                    response_info: dict[str, object] = {"return_type": "未返回"}
+                    response_info: dict[str, object] = {
+                        "return_type": "未返回",
+                        "render_service": renderer_info,
+                    }
+                    attempt_status = "failed"
                     attempt_start_ts = time.perf_counter()
+                    attempt_timeout = asyncio.timeout_at(render_deadline)
                     try:
                         if (
-                            isinstance(environment, str)
-                            and environment != active_environment
+                            environment != active_environment
+                            or resources != active_resources
+                            or font_mode != active_font_mode
                         ):
-                            async with asyncio.timeout_at(render_deadline):
+                            async with attempt_timeout:
                                 next_payload = await self._prepare_render_data(
                                     analysis_result,
                                     template_theme=template_theme,
@@ -399,6 +454,8 @@ class ReportGenerator(IReportGenerator):
                                     hide_user_names=hide_user_names,
                                     allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                                     environment=environment,
+                                    resources=resources,
+                                    font_mode=font_mode,
                                 )
                             next_html = self._render_prepared_html(
                                 "image_template.html", template_theme, next_payload
@@ -407,6 +464,8 @@ class ReportGenerator(IReportGenerator):
                                 raise ValueError("切换资源环境后模板返回空内容")
                             render_payload, html_content = next_payload, next_html
                             active_environment = environment
+                            active_resources = resources
+                            active_font_mode = font_mode
                         image_options, viewport_description = (
                             self._resolve_t2i_viewport_options(
                                 html_content, image_options
@@ -418,25 +477,41 @@ class ReportGenerator(IReportGenerator):
 
                         logger.debug(
                             "正在尝试第 "
-                            f"{attempt} 轮渲染策略: environment={environment}, type={image_options['type']}, "
-                            f"full_page={image_options['full_page']}, "
+                            f"{attempt} 轮渲染策略: environment={environment}, type={image_options.get('type', 'png')}, "
+                            f"full_page={image_options.get('full_page', True)}, "
                             f"viewport={viewport_description}, "
                             f"scale={image_options.get('device_scale_factor_level')}, "
                             f"timeout={image_options.get('timeout')}"
+                            + (
+                                f", request_timeout={request_timeout_ms}, font_mode={font_mode}"
+                                if render_service == "custom"
+                                else ""
+                            )
                         )
 
                         t2i_start_ts = time.perf_counter()
                         # 宿主或第三方包装器的运行时返回值仍需在接口边界检查。
-                        async with asyncio.timeout_at(render_deadline):
-                            image_data = cast(
-                                "object",
-                                await html_render_func(
+                        attempt_timeout = asyncio.timeout_at(render_deadline)
+                        async with attempt_timeout:
+                            if render_service == "custom":
+                                image_data = await render_custom_t2i(
+                                    service_endpoint,
                                     html_content,
-                                    {},
-                                    False,
                                     image_options,
-                                ),
-                            )
+                                    service_token,
+                                    request_timeout_ms=request_timeout_ms,
+                                )
+                            else:
+                                if not callable(html_render_func):
+                                    raise RuntimeError(
+                                        "未提供可调用的 AstrBot 渲染接口"
+                                    )
+                                image_data = cast(
+                                    "object",
+                                    await html_render_func(
+                                        html_content, {}, False, image_options
+                                    ),
+                                )
                         t2i_render_ms = round(
                             (time.perf_counter() - t2i_start_ts) * 1000, 2
                         )
@@ -500,6 +575,7 @@ class ReportGenerator(IReportGenerator):
                             is_valid = raw_sample.startswith((b"\xff\xd8", b"\x89PNG"))
 
                             if is_valid:
+                                attempt_status = "success"
                                 image_size = (
                                     len(image_data)
                                     if isinstance(image_data, bytes)
@@ -581,26 +657,6 @@ class ReportGenerator(IReportGenerator):
                                                     ),
                                                 }
                                             )
-                                            attempts = payload.setdefault(
-                                                "render_attempts", []
-                                            )
-                                            if isinstance(attempts, list):
-                                                attempts.append(
-                                                    {
-                                                        "attempt": attempt,
-                                                        "type": str(
-                                                            image_options.get(
-                                                                "type", "jpeg"
-                                                            )
-                                                        ),
-                                                        "viewport": viewport_description,
-                                                        "duration_ms": t2i_render_ms,
-                                                        "status": "success",
-                                                        "resource_environment": str(
-                                                            environment
-                                                        ),
-                                                    }
-                                                )
                                             break
 
                                 if isinstance(image_data, bytes):
@@ -619,6 +675,10 @@ class ReportGenerator(IReportGenerator):
                                 )
                                 return image_data, html_content
 
+                    except asyncio.CancelledError:
+                        attempt_status = "cancelled"
+                        render_error = "本轮图片渲染已停止。"
+                        raise
                     except Exception as e:
                         detail = summarize_render_error(str(e))
                         if not detail:
@@ -628,15 +688,13 @@ class ReportGenerator(IReportGenerator):
                                 else "未提供具体原因"
                             )
                         render_error = f"{type(e).__name__}：{detail}"
-                        if (
-                            isinstance(e, TimeoutError)
-                            and render_loop.time() >= render_deadline
-                        ):
+                        if isinstance(e, TimeoutError) and attempt_timeout.expired():
+                            deadline_exhausted = True
                             render_error = (
                                 f"本次图片渲染已达到总等待上限（{_RENDER_TOTAL_TIMEOUT_SECONDS:g} 秒），"
                                 "已停止后续方案。"
                             )
-                        elif isinstance(e, TimeoutError):
+                        elif isinstance(e, TimeoutError) and render_service != "custom":
                             render_error += (
                                 "\n排查建议：请先确认 AstrBot 能否连接 T2I 服务，并查看"
                                 "同一时间的服务日志。如果日志显示页面资源加载超时，"
@@ -645,41 +703,48 @@ class ReportGenerator(IReportGenerator):
                         # 堆栈留在调试日志中，任务详情仅展示简短原因。
                         logger.debug("图片渲染异常的调用堆栈", exc_info=True)
 
-                    duration_ms = round(
-                        (time.perf_counter() - attempt_start_ts) * 1000, 2
-                    )
+                    finally:
+                        duration_ms = round(
+                            (time.perf_counter() - attempt_start_ts) * 1000, 2
+                        )
+                        trace_ctx = TraceContext.current()
+                        if trace_ctx:
+                            for span in reversed(trace_ctx._spans):
+                                if (
+                                    span.get("stage_name")
+                                    == AnalysisStage.RENDER_REPORT.value
+                                ):
+                                    payload = span.setdefault("payload", {})
+                                    attempts = payload.setdefault("render_attempts", [])
+                                    if isinstance(attempts, list):
+                                        attempts.append(
+                                            {
+                                                "attempt": attempt,
+                                                "type": str(
+                                                    image_options.get("type", "jpeg")
+                                                ),
+                                                "viewport": viewport_description,
+                                                "duration_ms": duration_ms,
+                                                "status": attempt_status,
+                                                "resource_environment": str(
+                                                    environment
+                                                ),
+                                                **(
+                                                    {"error": render_error}
+                                                    if attempt_status != "success"
+                                                    else {}
+                                                ),
+                                                **response_info,
+                                            }
+                                        )
+                                    break
+
                     last_error = render_error
                     logger.warning(
                         f"第 {attempt} 次图片生成失败，耗时 {duration_ms / 1000:.1f} 秒："
                         f"{render_error}（返回类型：{response_info['return_type']}；"
                         f"返回大小：{response_info.get('returned_bytes', '未知')} 字节）"
                     )
-                    trace_ctx = TraceContext.current()
-                    if trace_ctx:
-                        for span in reversed(trace_ctx._spans):
-                            if (
-                                span.get("stage_name")
-                                == AnalysisStage.RENDER_REPORT.value
-                            ):
-                                payload = span.setdefault("payload", {})
-                                attempts = payload.setdefault("render_attempts", [])
-                                if isinstance(attempts, list):
-                                    attempts.append(
-                                        {
-                                            "attempt": attempt,
-                                            "type": str(
-                                                image_options.get("type", "jpeg")
-                                            ),
-                                            "viewport": viewport_description,
-                                            "duration_ms": duration_ms,
-                                            "status": "failed",
-                                            "resource_environment": str(environment),
-                                            "error": render_error,
-                                            **response_info,
-                                        }
-                                    )
-                                break
-
                 logger.error(
                     f"图片生成未成功，最后一次失败原因：{last_error}\n"
                     f"配置读取：{renderer_info['config_lookup']}；"
@@ -1059,6 +1124,8 @@ class ReportGenerator(IReportGenerator):
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
         environment: str | None = None,
+        resources: RenderingResourceConfig | None = None,
+        font_mode: FontMode = "network",
     ) -> RenderTemplateContext:
         """组装模板引擎所需的强类型上下文。
 
@@ -1072,6 +1139,8 @@ class ReportGenerator(IReportGenerator):
             hide_user_names: 是否隐藏用户名。
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID。
             environment: 本轮固定的资源环境，省略时采用第一优先级方案。
+            resources: 本轮固定的 CDN 和字体地址。
+            font_mode: 本轮图片T2I的字体加载方式。
 
         Returns:
             主模板使用的资源、统计数据与组件 HTML。
@@ -1089,6 +1158,8 @@ class ReportGenerator(IReportGenerator):
             hide_user_names=hide_user_names,
             allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             environment=environment,
+            resources=resources,
+            font_mode=font_mode,
         )
 
     async def _render_avatar_only_ids(

@@ -4,7 +4,7 @@ import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
-from test_rendering_strategies import rendering as rendering
+from test_rendering_strategies import make_rendering_plan, rendering as rendering
 from test_template_section_conditional_rendering import create_analysis_result
 
 from src.infrastructure.reporting import generators
@@ -32,10 +32,10 @@ async def test_config_change_during_preparation_only_affects_next_report(renderi
         await asyncio.wait_for(started.wait(), timeout=1)
         config = manager.config["t2i_rendering"]
         config["t2i_rendering_strategies"] = [
-            {"environment": "Overseas", "type": "jpeg", "timeout": 12345}
+            make_rendering_plan("Overseas", type="jpeg", timeout=12345)
         ]
-        config["t2i_mainland_cdn_base_url"] = "https://changed-mainland.example"
-        config["t2i_mainland_google_fonts"] = "https://changed-fonts.example"
+        config["t2i_rendering_strategies"][0]["cdn_base_url"] = "https://changed-overseas.example"
+        config["t2i_rendering_strategies"][0]["google_fonts"] = "https://changed-fonts.example"
         release.set()
         assert (await asyncio.wait_for(task, timeout=1))[0]
     finally:
@@ -51,7 +51,7 @@ async def test_config_change_during_preparation_only_affects_next_report(renderi
     assert options["type"] == "png"
     assert options["timeout"] == 20000
     await generator.generate_image_report(create_analysis_result(), "123", render)
-    assert "https://overseas.example/gh/" in render.await_args.args[0]
+    assert "https://changed-overseas.example/gh/" in render.await_args.args[0]
     assert render.await_args.args[3]["type"] == "jpeg"
     assert render.await_args.args[3]["timeout"] == 12345
 

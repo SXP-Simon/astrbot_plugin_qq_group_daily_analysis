@@ -7,7 +7,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>大肥鱼今日打工实录 · {{ current_date }}</title>
-    {% if t2i_font_source in ['Mainland', 'Overseas'] and t2i_google_fonts_mirror %}
+    {% if t2i_font_mode|default('network') != 'local' and t2i_font_source in ['Mainland', 'Overseas'] and t2i_google_fonts_mirror %}
     <link href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
     {% endif %}
     {% include 'shared_styles.html' %}

@@ -4,11 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <title>春节特供 · 群聊日报</title>
+    {% if t2i_font_mode|default('network') != 'local' %}
     <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
     <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <link
         href="{{ t2i_google_fonts_mirror }}/css2?family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&family=Noto+Serif+TC:wght@400;700&family=Noto+Serif+SC:wght@400;700&display=swap"
         rel="stylesheet">
+    {% endif %}
     <style>
         :root {
             --red-festive: #b71c1c;
