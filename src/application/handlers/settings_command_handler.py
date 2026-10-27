@@ -178,13 +178,14 @@ class SettingsCommandHandler:
         yield event.plain_result(f"✅ 报告模板已设置为: {template_name}")
 
     async def handle_view_templates(
-        self, event: AstrMessageEvent, platform_id: str
+        self, event: AstrMessageEvent, platform_id: str, template_input: str = ""
     ) -> AsyncGenerator[MessageEventResult]:
         """处理 /查看模板 命令。
 
         Args:
             event: AstrBot 消息事件对象。
             platform_id: 当前平台标识。
+            template_input: 可选的模板名称或序号。
 
         Returns:
             AsyncGenerator[MessageEventResult, None]: 结果消息生成器。
@@ -205,6 +206,7 @@ class SettingsCommandHandler:
                 event=event,
                 platform_id=platform_id,
                 available_templates=available_templates,
+                template_input=template_input,
             )
             if handled:
                 for result in handler_results:
