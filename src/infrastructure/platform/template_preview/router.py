@@ -101,6 +101,12 @@ class TemplatePreviewRouter:
             (handled, results) 元组。
         """
         selected = ""
+        logger.debug(
+            "[模板预览] 路由入口: platform_id=%s handlers=%s has_selection=%s",
+            platform_id,
+            [type(handler).__name__ for handler in self._handlers],
+            bool(template_input),
+        )
         if template_input and self.template_service:
             selected, error = self.template_service.parse_template_input(
                 template_input, available_templates
@@ -115,7 +121,13 @@ class TemplatePreviewRouter:
                 ]
             selected = selected or ""
         for handler in self._handlers:
-            if not handler.supports(event):
+            supported = handler.supports(event)
+            logger.debug(
+                "[模板预览] 路由匹配: handler=%s supported=%s",
+                type(handler).__name__,
+                supported,
+            )
+            if not supported:
                 continue
 
             res = handler.handle_view_templates(
@@ -129,9 +141,27 @@ class TemplatePreviewRouter:
             else:
                 handled, results = res
 
+            logger.debug(
+                "[模板预览] 平台处理完成: handler=%s handled=%s pending_results=%s",
+                type(handler).__name__,
+                handled,
+                len(results),
+            )
             return bool(handled), list(results)
 
+        if event.get_platform_name() in {"qq_official", "qq_official_webhook"}:
+            logger.warning(
+                "[模板预览] QQ 官方预览路由未命中，已阻止发送不支持的 Nodes；请检查插件是否完整更新并重载: platform_id=%s",
+                platform_id,
+            )
+            return True, [
+                event.plain_result("QQ 模板预览组件未就绪，请重载插件后重试。")
+                .use_markdown(False)
+                .use_t2i(False)
+            ]
+
         if self.template_service and self.image_cache:
+            logger.debug("[模板预览] 无平台专用处理器命中，使用通用预览: output=Nodes")
             current = self.template_service.config_provider
             nodes = self.template_service.build_template_preview_nodes(
                 available_templates,
@@ -154,7 +184,9 @@ class TemplatePreviewRouter:
                         node.content[index] = Image.fromFileSystem(path)
                     except Exception as exc:
                         failures += 1
-                        logger.debug("模板预览图片准备失败: %s", exc)
+                        logger.debug(
+                            "模板预览图片准备失败: error_type=%s", type(exc).__name__
+                        )
                         node.content[index] = Plain(
                             "预览图暂时不可用，可稍后重试或在 WebUI 查看。"
                         )
@@ -163,4 +195,5 @@ class TemplatePreviewRouter:
                     "本次模板预览有 %s 张图片无法准备，已保留模板文字。", failures
                 )
             return True, [event.chain_result([nodes])]
+        logger.debug("[模板预览] 路由未处理: 缺少通用预览服务或图片缓存")
         return False, []

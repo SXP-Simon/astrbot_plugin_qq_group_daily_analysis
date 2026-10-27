@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import secrets
+import time
 from typing import TYPE_CHECKING
+
+import aiohttp
 
 from ....utils.logger import logger
 
@@ -16,6 +19,39 @@ if TYPE_CHECKING:
     from ....application.services.template_command_service import TemplateCommandService
     from ...config.config_manager import ConfigManager
     from .image_cache import PreviewImageCache
+
+
+def _describe_preview_error(exc: Exception) -> str:
+    """仅描述错误类别和可公开的状态，不回显 SDK 正文中的敏感地址。
+
+    Args:
+        exc: 原生消息、图片准备或宿主发送阶段的异常。
+
+    Returns:
+        不含请求正文、Token 或完整资源地址的排障说明。
+    """
+    name = type(exc).__name__
+    if isinstance(exc, aiohttp.ClientResponseError):
+        return f"{name}: HTTP {exc.status}"
+    if isinstance(exc, aiohttp.ClientConnectionError):
+        return f"{name}: 无法连接，请检查网络或代理"
+    if isinstance(exc, TimeoutError):
+        return f"{name}: 请求超时"
+    reasons = {
+        "AuthenticationFailedError": "QQ 接口鉴权失败，请检查机器人连接状态",
+        "ForbiddenError": "QQ 接口拒绝访问，请检查消息及按钮权限",
+        "SequenceNumberError": "QQ 接口限流或消息序号冲突",
+        "ServerError": "QQ 接口返回错误，请结合宿主日志检查服务状态",
+        "NotFoundError": "QQ 接口或目标会话不存在",
+        "MethodNotAllowedError": "QQ 接口不支持此发送方式",
+        "ImportError": "当前 SDK 缺少原生消息能力",
+        "AttributeError": "当前客户端缺少所需 SDK 接口",
+        "FileNotFoundError": "本地预览图或缓存文件不存在",
+        "PermissionError": "没有本地文件读写权限",
+        "UnidentifiedImageError": "预览内容不是可识别的图片",
+        "ValueError": "图片格式、大小或像素未通过校验",
+    }
+    return f"{name}: {reasons.get(name, '调用异常，请结合当前阶段排查')}"
 
 
 class QQOfficialTemplatePreviewHandler:
@@ -58,7 +94,7 @@ class QQOfficialTemplatePreviewHandler:
             template_name: 指定要查看的模板；留空时查看当前模板。
 
         Returns:
-            已处理标记，以及交给宿主发送的普通回复。
+            已处理标记，以及尚未发送的回复；正常预览在此等待发送完成。
         """
         if not self.supports(event):
             return False, []
@@ -71,6 +107,14 @@ class QQOfficialTemplatePreviewHandler:
         if selected not in available_templates:
             selected = available_templates[0]
         index = available_templates.index(selected)
+        message_id = str(event.message_obj.message_id or "")
+        logger.debug(
+            "[模板预览] QQ 官方处理器: platform=%s platform_id=%s message_id=%s template=%s",
+            event.get_platform_name(),
+            platform_id,
+            message_id,
+            selected,
+        )
         lines = [
             f"{i}. {name}{' ✓' if name == current else ''}"
             for i, name in enumerate(available_templates, 1)
@@ -86,7 +130,7 @@ class QQOfficialTemplatePreviewHandler:
         markdown_sent = False
         # 宿主 SDK 边界兼容：旧版或没有 Markdown/按钮权限时回退普通消息。
         bot: Client | None = getattr(event, "bot", None)
-        message_id = str(event.message_obj.message_id or "")
+        native_error = "缺少机器人客户端" if bot is None else "缺少被动回复消息 ID"
         if bot is not None and message_id:
             try:
                 from botpy.http import Route
@@ -158,6 +202,7 @@ class QQOfficialTemplatePreviewHandler:
                         openid=event.get_sender_id(),
                     )
                 for with_buttons in (True, False):
+                    mode = "Markdown+按钮" if with_buttons else "Markdown"
                     payload: dict[str, object] = {
                         "markdown": markdown,
                         "msg_id": message_id,
@@ -169,30 +214,104 @@ class QQOfficialTemplatePreviewHandler:
                     try:
                         # 旧版 botpy 对 keyboard 的类型声明不完整；复用其鉴权传输，
                         # 按官方协议传递 content.rows，而不依赖过时的 SDK 参数签名。
+                        started = time.monotonic()
+                        logger.debug(
+                            "[模板预览] QQ 原生发送开始: mode=%s message_id=%s",
+                            mode,
+                            message_id,
+                        )
                         reply: object = await bot.api._http.request(route, json=payload)
                         if reply is not None:
                             markdown_sent = True
+                            logger.debug(
+                                "[模板预览] QQ 原生接口返回成功: mode=%s message_id=%s elapsed_ms=%s",
+                                mode,
+                                message_id,
+                                round((time.monotonic() - started) * 1000),
+                            )
+                            if not with_buttons:
+                                logger.warning(
+                                    "[模板预览] QQ 按钮消息不可用，已使用仅 Markdown: message_id=%s reason=%s",
+                                    message_id,
+                                    native_error,
+                                )
                             break
+                        native_error = "QQ 接口未返回结果"
+                        logger.debug(
+                            "[模板预览] QQ 原生发送未返回结果: mode=%s message_id=%s",
+                            mode,
+                            message_id,
+                        )
                     except Exception as exc:
-                        logger.debug("QQ 官方模板预览原生消息不可用: %s", exc)
+                        native_error = _describe_preview_error(exc)
+                        logger.debug(
+                            "[模板预览] QQ 原生发送失败: mode=%s message_id=%s reason=%s",
+                            mode,
+                            message_id,
+                            native_error,
+                        )
                     sequence += 1
             except (ImportError, AttributeError) as exc:
-                logger.debug("QQ 官方模板预览使用普通消息: %s", exc)
+                native_error = _describe_preview_error(exc)
         if not markdown_sent:
+            logger.warning(
+                "[模板预览] QQ 原生预览不可用，将使用普通文字和图片: message_id=%s reason=%s",
+                message_id,
+                native_error,
+            )
             results.append(event.plain_result(text))
         source = self.template_service.resolve_template_preview_source(selected)
+        image_reply: MessageEventResult | None = None
         if source:
             try:
                 path = await self.image_cache.get_jpeg(source)
-                results.append(event.image_result(path))
+                image_reply = event.image_result(path)
+                results.append(image_reply)
             except Exception as exc:
-                logger.warning("QQ 官方模板预览图片准备失败: %s", exc)
+                logger.warning(
+                    "[模板预览] QQ 图片准备失败: message_id=%s template=%s reason=%s",
+                    message_id,
+                    selected,
+                    _describe_preview_error(exc),
+                )
                 results.append(
                     event.plain_result("这张预览图暂时无法获取，模板仍可正常选择。")
                 )
         else:
+            logger.debug("[模板预览] QQ 当前模板没有预览图: template=%s", selected)
             results.append(event.plain_result("这个自定义模板没有附带预览图。"))
+        failures = 0
         for result in results:
             # 明确禁止宿主再次把回退文字当成 Markdown 或自动转图。
             result.use_markdown(False).use_t2i(False)
-        return True, results
+            kind = "image" if result is image_reply else "plain"
+            logger.debug(
+                "[模板预览] QQ 宿主发送开始: kind=%s message_id=%s",
+                kind,
+                message_id,
+            )
+            try:
+                # 此处等待宿主调用，以捕获图片上传和发送异常；返回回复不代表已发送。
+                await event.send(result)
+                logger.debug(
+                    "[模板预览] QQ 宿主发送调用完成（非送达回执）: kind=%s message_id=%s",
+                    kind,
+                    message_id,
+                )
+            except Exception as exc:
+                failures += 1
+                logger.warning(
+                    "[模板预览] QQ 发送失败: kind=%s message_id=%s template=%s reason=%s",
+                    kind,
+                    message_id,
+                    selected,
+                    _describe_preview_error(exc),
+                )
+        logger.debug(
+            "[模板预览] QQ 预览结束: message_id=%s native_sent=%s host_calls=%s failures=%s",
+            message_id,
+            markdown_sent,
+            len(results),
+            failures,
+        )
+        return True, []

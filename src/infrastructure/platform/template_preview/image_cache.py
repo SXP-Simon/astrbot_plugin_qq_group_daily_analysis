@@ -14,6 +14,8 @@ from uuid import uuid4
 import aiohttp
 from PIL import Image, ImageOps
 
+from ....utils.logger import logger
+
 
 class PreviewImageCache:
     """复用发送用 JPEG，不改动仓库里的 WebP 原图。"""
@@ -43,6 +45,10 @@ class PreviewImageCache:
         """
         parts = urlsplit(source)
         remote = parts.scheme in {"http", "https"}
+        started = time.monotonic()
+        logger.debug(
+            "[模板预览] 图片准备: source_type=%s", "HTTP" if remote else "local"
+        )
         local: Path | None = None
         if remote:
             identity = source
@@ -79,7 +85,9 @@ class PreviewImageCache:
                     or time.time() - target.stat().st_mtime < self.REMOTE_TTL_SECONDS
                 )
             ):
+                logger.debug("[模板预览] JPEG 缓存命中: key=%s", key[:12])
                 return str(target.resolve())
+            logger.debug("[模板预览] JPEG 缓存需生成或刷新: key=%s", key[:12])
             if remote:
                 async with (
                     aiohttp.ClientSession(
@@ -87,6 +95,11 @@ class PreviewImageCache:
                     ) as session,
                     session.get(source) as response,
                 ):
+                    logger.debug(
+                        "[模板预览] 图片 HTTP 响应: key=%s status=%s",
+                        key[:12],
+                        response.status,
+                    )
                     response.raise_for_status()
                     data = bytearray()
                     async for chunk in response.content.iter_chunked(64 * 1024):
@@ -98,6 +111,12 @@ class PreviewImageCache:
                 assert local is not None
                 raw = await asyncio.to_thread(local.read_bytes)
             await asyncio.to_thread(self._write_jpeg, raw, target)
+            logger.debug(
+                "[模板预览] JPEG 准备完成: key=%s source_bytes=%s elapsed_ms=%s",
+                key[:12],
+                len(raw),
+                round((time.monotonic() - started) * 1000),
+            )
             return str(target.resolve())
 
     def _write_jpeg(self, raw: bytes, target: Path) -> None:

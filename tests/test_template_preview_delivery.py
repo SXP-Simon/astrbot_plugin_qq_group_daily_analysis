@@ -47,7 +47,11 @@ async def test_merged_forward_keeps_nodes_and_converts_images(
     service.config_provider.get_report_template.return_value = "scrapbook"
     service.build_template_preview_nodes.return_value = nodes
     service.parse_template_input.return_value = ("ATRI", None)
-    event = SimpleNamespace(get_self_id=lambda: "bot", chain_result=lambda chain: chain)
+    event = SimpleNamespace(
+        get_self_id=lambda: "bot",
+        get_platform_name=lambda: "aiocqhttp",
+        chain_result=lambda chain: chain,
+    )
     handler = TemplatePreviewRouter(
         template_service=service, image_cache=PreviewImageCache(tmp_path / "cache")
     )
@@ -78,7 +82,11 @@ async def test_failed_images_keep_text_and_one_warning(monkeypatch):
     service.build_template_preview_nodes.return_value = nodes
     cache = SimpleNamespace(get_jpeg=AsyncMock(side_effect=ValueError("读取失败")))
     handler = TemplatePreviewRouter(template_service=service, image_cache=cache)
-    event = SimpleNamespace(get_self_id=lambda: "bot", chain_result=lambda chain: chain)
+    event = SimpleNamespace(
+        get_self_id=lambda: "bot",
+        get_platform_name=lambda: "aiocqhttp",
+        chain_result=lambda chain: chain,
+    )
     assert (await handler.handle_view_templates(event, "qq", ["scrapbook"]))[0]
     assert nodes.nodes[0].content[0] == "template"
     assert all(
@@ -103,6 +111,33 @@ async def test_unknown_selection_does_not_download():
     )
     cache.get_jpeg.assert_not_called()
     service.build_template_preview_nodes.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", ["qq_official", "qq_official_webhook"])
+async def test_missing_qq_handler_warns_and_never_builds_nodes(caplog, platform):
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="astrbot-test")
+    service = Mock()
+    result = Mock()
+    result.use_markdown.return_value = result
+    result.use_t2i.return_value = result
+    event = SimpleNamespace(
+        get_platform_name=lambda: platform, plain_result=Mock(return_value=result)
+    )
+    handler = TemplatePreviewRouter(template_service=service, image_cache=Mock())
+    assert await handler.handle_view_templates(event, "qq", ["scrapbook"]) == (
+        True,
+        [result],
+    )
+    service.build_template_preview_nodes.assert_not_called()
+    assert any(
+        record.levelno == logging.WARNING and "路由未命中" in record.getMessage()
+        for record in caplog.records
+    )
+    result.use_markdown.assert_called_once_with(False)
+    result.use_t2i.assert_called_once_with(False)
 
 
 @pytest.mark.asyncio

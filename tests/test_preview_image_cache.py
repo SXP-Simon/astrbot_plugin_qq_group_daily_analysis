@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import logging
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -159,3 +160,41 @@ async def test_windows_file_uri_decoding_without_deprecated_module(
     )
     await cache.get_jpeg(uri)
     assert seen == [expected]
+
+
+@pytest.mark.asyncio
+async def test_cache_diagnostics_show_progress_without_resource_credentials(
+    tmp_path, caplog
+):
+    caplog.set_level(logging.DEBUG, logger="astrbot-test")
+    raw = BytesIO()
+    Image.new("RGB", (10, 10), "red").save(raw, format="PNG")
+
+    async def handler(_request):
+        return web.Response(body=raw.getvalue(), content_type="image/png")
+
+    app = web.Application()
+    app.router.add_get("/private-path", handler)
+    cache = PreviewImageCache(tmp_path / "cache")
+    async with TestServer(app) as server:
+        source = str(server.make_url("/private-path?token=private-token")).replace(
+            "http://", "http://secret-user:secret-password@"
+        )
+        await cache.get_jpeg(source)
+        await cache.get_jpeg(source)
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    for expected in [
+        "source_type=HTTP",
+        "status=200",
+        "JPEG 准备完成",
+        "JPEG 缓存命中",
+    ]:
+        assert expected in messages
+    for sensitive in [
+        "private-path",
+        "private-token",
+        "secret-user",
+        "secret-password",
+    ]:
+        assert sensitive not in messages
+    assert not [record for record in caplog.records if record.levelno == logging.INFO]
