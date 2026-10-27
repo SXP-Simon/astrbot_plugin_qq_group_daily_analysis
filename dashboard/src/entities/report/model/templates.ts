@@ -124,7 +124,7 @@ export const GITHUB_REPO_NAME = "astrbot_plugin_qq_group_daily_analysis";
 export const GITHUB_REPO_BRANCH = "main";
 export function getTemplateCdnUrl(templateKey: string, cdnBaseUrl: string | null): string | undefined {
   if (cdnBaseUrl === null) return undefined;
-  return `${cdnBaseUrl}/gh/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}@${GITHUB_REPO_BRANCH}/assets/${templateKey}-demo.jpg`;
+  return `${cdnBaseUrl}/gh/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}@${GITHUB_REPO_BRANCH}/assets/${templateKey}-demo.webp`;
 }
 
 export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [
