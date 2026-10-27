@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 from urllib.parse import urlsplit
 
-import aiohttp
 from PIL import Image
 
 from ....utils.logger import logger
+from .qq_error_diagnostics import describe_preview_error as _describe_preview_error
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -29,39 +29,6 @@ class _PreviewMarkdown(TypedDict, total=False):
 
     content: str
     force_verify_image_resource: bool
-
-
-def _describe_preview_error(exc: Exception) -> str:
-    """仅描述错误类别和可公开的状态，不回显 SDK 正文中的敏感地址。
-
-    Args:
-        exc: 原生消息、图片准备或宿主发送阶段的异常。
-
-    Returns:
-        不含请求正文、Token 或完整资源地址的排障说明。
-    """
-    name = type(exc).__name__
-    if isinstance(exc, aiohttp.ClientResponseError):
-        return f"{name}: HTTP {exc.status}"
-    if isinstance(exc, aiohttp.ClientConnectionError):
-        return f"{name}: 无法连接，请检查网络或代理"
-    if isinstance(exc, TimeoutError):
-        return f"{name}: 请求超时"
-    reasons = {
-        "AuthenticationFailedError": "QQ 接口鉴权失败，请检查机器人连接状态",
-        "ForbiddenError": "QQ 接口拒绝访问，请检查消息及按钮权限",
-        "SequenceNumberError": "QQ 接口限流或消息序号冲突",
-        "ServerError": "QQ 接口返回错误，请结合宿主日志检查服务状态",
-        "NotFoundError": "QQ 接口或目标会话不存在",
-        "MethodNotAllowedError": "QQ 接口不支持此发送方式",
-        "ImportError": "当前 SDK 缺少原生消息能力",
-        "AttributeError": "当前客户端缺少所需 SDK 接口",
-        "FileNotFoundError": "本地预览图或缓存文件不存在",
-        "PermissionError": "没有本地文件读写权限",
-        "UnidentifiedImageError": "预览内容不是可识别的图片",
-        "ValueError": "图片格式、大小或像素未通过校验",
-    }
-    return f"{name}: {reasons.get(name, '调用异常，请结合当前阶段排查')}"
 
 
 class QQOfficialTemplatePreviewHandler:

@@ -292,6 +292,47 @@ async def test_permission_rejection_has_actionable_warning_without_sdk_body(
 
 
 @pytest.mark.asyncio
+async def test_sdk_reason_reaches_plugin_buffer_without_sdk_logging(
+    preview, monkeypatch, caplog
+):
+    from botpy.errors import ServerError
+
+    from src.infrastructure.logging.plugin_log_buffer import PluginLogBuffer
+    from src.utils import logger as logger_module
+
+    caplog.set_level(logging.INFO, logger="test.qq_error_host")
+    buffer = PluginLogBuffer()
+    monkeypatch.setattr(logger_module, "global_log_buffer", buffer)
+    monkeypatch.setattr(
+        logger_module, "astrbot_logger", logging.getLogger("test.qq_error_host")
+    )
+    sdk_logger = logging.getLogger("botpy")
+    sdk_state = (sdk_logger.level, sdk_logger.propagate, list(sdk_logger.handlers))
+    handler, event, request = preview
+    request.side_effect = ServerError(
+        msg="markdown image check failed at https://user:pass@example.test/private-file?token=private-token"
+    )
+    await handler.handle_view_templates(event, "qq", ["scrapbook"])
+    items, _ = buffer.query(limit=100)
+    warnings = [item["message"] for item in items if item["level"] == "WARNING"]
+    assert any("markdown image check failed" in message for message in warnings)
+    assert any(
+        item["level"] == "DEBUG" and "QQ 原生发送失败" in item["message"]
+        for item in items
+    )
+    assert not any(item["level"] == "INFO" for item in items)
+    messages = "\n".join(item["message"] for item in items)
+    for sensitive in ["user:pass", "private-file", "private-token"]:
+        assert sensitive not in messages
+    assert (
+        sdk_logger.level,
+        sdk_logger.propagate,
+        list(sdk_logger.handlers),
+    ) == sdk_state
+    assert [result.kind for result in event.sent] == ["image", "plain"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("native_fails", [False, True])
 async def test_settings_to_real_qq_router_awaits_cached_image(
     preview, tmp_path, caplog, native_fails
