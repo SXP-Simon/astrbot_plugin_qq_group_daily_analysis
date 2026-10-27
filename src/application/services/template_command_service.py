@@ -70,7 +70,7 @@ class TemplateCommandService:
         1. 自定义模板目录内随模板打包的预览图
            （custom_t2i_templates/reporting_templates/<模板名>/ 下的
            preview.jpg/png 或 demo.jpg/png）；
-        2. 插件仓库 assets/<模板名>-demo.jpg（本地）；
+        2. 插件仓库 assets/<模板名>-demo.webp（本地，兼容 JPG）；
         3. 无本地文件时返回 None，由调用方回退仓库图库链接。
         """
         from ...infrastructure.reporting.template_installer import (
@@ -94,7 +94,8 @@ class TemplateCommandService:
                 return str(candidate)
 
         candidate_paths = [
-            os.path.join(self.plugin_root, "assets", f"{template_name}-demo.jpg"),
+            str(Path(self.plugin_root) / "assets" / f"{template_name}-demo{suffix}")
+            for suffix in (".webp", ".jpg")
         ]
         for candidate in candidate_paths:
             if os.path.exists(candidate):
@@ -245,7 +246,7 @@ class TemplateCommandService:
                         if self.config_provider is not None
                         else DEFAULT_ASSETS_CDN_URL
                     )
-                    cdn_url = f"{assets_base_url}/{template_name}-demo.jpg"
+                    cdn_url = f"{assets_base_url}/{template_name}-demo.webp"
                     node_content = [
                         Plain(f"{num_label} {template_name}{current_mark}"),
                         Image.fromURL(cdn_url),

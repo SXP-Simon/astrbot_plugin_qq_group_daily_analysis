@@ -555,6 +555,31 @@ def test_resolve_template_preview_path_prefers_template_dir(tmp_path, monkeypatc
     assert resolved is not None and resolved.endswith("preview.png")
 
 
+def test_resolve_builtin_preview_prefers_webp_and_keeps_jpg_fallback(
+    tmp_path, monkeypatch
+):
+    """仓库预览优先使用 WebP，旧版 JPG 仍可作为本地回退。"""
+    from src.application.services.template_command_service import TemplateCommandService
+    from src.infrastructure.reporting import template_installer
+
+    monkeypatch.setattr(
+        template_installer, "default_template_store_dir", lambda: tmp_path / "custom"
+    )
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    jpg = assets / "scrapbook-demo.jpg"
+    jpg.write_bytes(b"jpg")
+    webp = assets / "scrapbook-demo.webp"
+    webp.write_bytes(b"webp")
+    service = TemplateCommandService(str(tmp_path))
+
+    assert service.resolve_template_preview_path("scrapbook") == str(webp)
+    webp.unlink()
+    assert service.resolve_template_preview_path("scrapbook") == str(jpg)
+    jpg.unlink()
+    assert service.resolve_template_preview_path("scrapbook") is None
+
+
 def test_available_templates_can_uninstall_flag(tmp_path):
     """模板列表的 can_uninstall 仅对带安装标记的自定义目录为真。"""
     from unittest.mock import MagicMock

@@ -136,5 +136,5 @@ def test_preview_fallback_reads_current_cdn_configuration(
             config_manager.config = {"t2i_rendering": {"t2i_rendering_strategies": [{"cdn_base_url": host}]}}
             service.build_template_preview_nodes(["HatsuneMiku"], "HatsuneMiku", "123")
             from_url.assert_called_with(
-                config_manager.get_template_assets_base_url() + "/HatsuneMiku-demo.jpg"
+                config_manager.get_template_assets_base_url() + "/HatsuneMiku-demo.webp"
             )
