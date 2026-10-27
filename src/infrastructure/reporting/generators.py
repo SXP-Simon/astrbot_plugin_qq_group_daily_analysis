@@ -411,9 +411,14 @@ class ReportGenerator(IReportGenerator):
                     service_url = urlsplit(service_endpoint)
                     renderer_info = host_renderer_info
                     if render_service == "custom":
+                        service_host = service_url.hostname or ""
+                        if ":" in service_host:
+                            service_host = f"[{service_host}]"
+                        if service_url.port is not None:
+                            service_host += f":{service_url.port}"
                         renderer_info = {
                             "config_lookup": "本轮自定义 T2I 服务",
-                            "configured_endpoint": f"{service_url.scheme}://{service_url.netloc}",
+                            "configured_endpoint": f"{service_url.scheme}://{service_host}",
                         }
                     logger.debug(
                         "[T2I诊断 v2] 开始生成图片；"

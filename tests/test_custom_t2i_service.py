@@ -514,6 +514,28 @@ async def test_custom_path_is_used_but_not_recorded_in_trace(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint,origin", [
+    ("https://private-user:private-password@renderer.example:8443/private-key/text2img", "https://renderer.example:8443"),
+    ("http://private-user:private-password@[::1]:8999/private-key/text2img", "http://[::1]:8999"),
+])
+async def test_diagnostic_endpoint_excludes_userinfo_even_if_config_boundary_is_bypassed(
+    rendering, monkeypatch, endpoint, origin
+):
+    """配置已拒绝账号密码，诊断入口仍不信任绕过校验的运行时地址。"""
+    from src.infrastructure.reporting import generators
+
+    manager, generator, png = rendering
+    monkeypatch.setattr(manager, "get_t2i_rendering_strategies", lambda: [{"render_service": "custom", "service_endpoint": endpoint}])
+    monkeypatch.setattr(generators, "render_custom_t2i", AsyncMock(return_value=png))
+    trace = TraceContext(trace_id="diagnostic-userinfo")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    with trace.span("RENDER_REPORT") as span:
+        assert (await generator.generate_image_report(create_analysis_result(), "123", None))[0]
+    assert span["payload"]["render_attempts"][0]["render_service"]["configured_endpoint"] == origin
+    assert "private-" not in json.dumps(span)
+
+
+@pytest.mark.asyncio
 async def test_dispatcher_reaches_custom_generator_without_host_callback(rendering):
     manager, generator, _ = rendering
     manager.config["t2i_rendering"]["t2i_rendering_strategies"] = [
