@@ -49,7 +49,6 @@ __all__ = [
 ]
 
 _circuit_breakers: dict[str, CircuitBreaker] = {}
-_LLM_LIMITER_INFO_SECONDS = 1.0
 _LLM_LIMITER_WARN_SECONDS = 15.0
 _LLM_REQUEST_WARN_SECONDS = 120.0
 _LLM_REQUEST_STACK_DUMP_SECONDS = 120.0
@@ -294,13 +293,14 @@ async def _try_get_provider_id_by_id(
         return None
 
     provider_id = provider_id.strip()
-    logger.info(f"尝试使用{description}: {provider_id}")
+    logger.debug(f"尝试使用{description}: {provider_id}")
     try:
         # 验证 Provider 是否存在
         provider = context.get_provider_by_id(provider_id=provider_id)
         if provider:
-            logger.info(f"✓ 使用{description}: {provider_id}")
+            logger.debug(f"✓ 使用{description}: {provider_id}")
             return provider_id
+        logger.warning(f"未找到{description} '{provider_id}'，将尝试其他 Provider")
     except Exception as e:
         logger.warning(f"无法找到{description} '{provider_id}': {e}")
     return None
@@ -323,7 +323,7 @@ async def _try_get_session_provider_id(context: Context, umo: str | None) -> str
         # 使用新 API 获取当前会话的 Provider ID
         provider_id = await context.get_current_chat_provider_id(umo=umo)
         if provider_id:
-            logger.info(f"✓ 使用当前会话的 Provider: {provider_id}")
+            logger.debug(f"✓ 使用当前会话的 Provider: {provider_id}")
             return provider_id
     except Exception as e:
         logger.warning(f"无法获取会话 Provider ID: {e}")
@@ -347,7 +347,7 @@ async def _try_get_first_available_provider_id(context: Context) -> str | None:
             try:
                 meta = provider.meta()
                 provider_id = meta.id
-                logger.info(f"✓ 使用第一个可用 Provider: {provider_id}")
+                logger.debug(f"✓ 使用第一个可用 Provider: {provider_id}")
                 return provider_id
             except Exception:
                 logger.warning("第一个 Provider 无法获取 ID")
@@ -383,7 +383,7 @@ async def get_provider_id_with_fallback(
     try:
         # 输出Provider选择开始日志
         task_desc = provider_id_key if provider_id_key else "默认任务"
-        logger.info(f"[Provider 选择] 开始为 {task_desc} 选择 Provider...")
+        logger.debug(f"[Provider 选择] 开始为 {task_desc} 选择 Provider...")
 
         # 定义回退策略列表
         strategies = []
@@ -443,13 +443,13 @@ async def get_provider_id_with_fallback(
         strategy_names.append("4. 第一个可用 Provider")
 
         # 输出回退策略列表
-        logger.info(f"[Provider 选择] 回退策略顺序：{' -> '.join(strategy_names)}")
+        logger.debug(f"[Provider 选择] 回退策略顺序：{' -> '.join(strategy_names)}")
 
         # 依次尝试每个策略
         for idx, strategy in enumerate(strategies):
             provider_id = await strategy()
             if provider_id:
-                logger.info(
+                logger.debug(
                     f"[Provider 选择] ✓ 成功！使用策略 #{idx + 1}，Provider ID: {provider_id}"
                 )
                 return provider_id
@@ -524,6 +524,9 @@ async def call_provider_with_retry(
         logger.error("无可用 Provider，无法调用 llm_generate")
         return None
 
+    # 只合并本次调用的请求摘要，不缓存 Provider 选择或改变重试流程。
+    announced_provider_ids: set[str] = set()
+
     # 2. 核心请求执行闭包
     async def _execute_llm_request(
         pid: str,
@@ -567,12 +570,7 @@ async def call_provider_with_retry(
                     )
 
             waited_seconds = time.monotonic() - wait_started_at
-            log_method = (
-                logger.info
-                if waited_seconds >= _LLM_LIMITER_INFO_SECONDS
-                else logger.debug
-            )
-            log_method(
+            logger.debug(
                 f"[LLM 限流观测] 已取得全局 Provider 槽位: "
                 f"group={observation_group}, stage={observation_stage}, "
                 f"area={observation_area}, attempt={attempt_num}, "
@@ -608,7 +606,7 @@ async def call_provider_with_retry(
                         "未检测到 Provider timeout 配置)"
                     )
 
-                logger.info(
+                logger.debug(
                     f"[LLM 超时配置] 本次请求硬超时上限: {effective_timeout:.1f}s | "
                     f"来源: {timeout_source} | provider={pid}, group={observation_group}, "
                     f"stage={observation_stage}, area={observation_area}, attempt={attempt_num}"
@@ -645,7 +643,16 @@ async def call_provider_with_retry(
                     if enable_streaming_llm_call
                     else "context.llm_generate"
                 )
-                logger.info(
+                request_log = logger.debug
+                if pid not in announced_provider_ids:
+                    request_log = logger.warning if is_fallback_request else logger.info
+                    announced_provider_ids.add(pid)
+                request_log(
+                    f"[LLM 请求] {observation_area} | Provider: {pid} | "
+                    f"模型: {actual_model}"
+                    + (" | 已切换备用 Provider" if is_fallback_request else "")
+                )
+                logger.debug(
                     f"[LLM 调用观测] 开始 Provider 请求: "
                     f"group={observation_group}, stage={observation_stage}, "
                     f"area={observation_area}, attempt={attempt_num}, "
@@ -759,7 +766,7 @@ async def call_provider_with_retry(
                         request_task.cancel()
                     raise
 
-                logger.info(
+                logger.debug(
                     f"[LLM 调用观测] Provider 请求完成: "
                     f"group={observation_group}, stage={observation_stage}, "
                     f"area={observation_area}, attempt={attempt_num}, "
@@ -853,7 +860,7 @@ async def call_provider_with_retry(
         previous_pid = current_pid
 
         prefix = "[降级补偿] " if is_fallback else "[LLM 调用] "
-        logger.info(
+        logger.debug(
             f"{prefix}尝试 #{attempt_num} | Provider ID: {current_pid} | "
             f"stage={observation_stage} | area={observation_area} | "
             f"prompt长度={len(prompt) if prompt else 0}字符"

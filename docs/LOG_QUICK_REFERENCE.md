@@ -6,6 +6,10 @@
 
 ## 🔍 日志查看入口（三种方式）
 
+日常 INFO 保留分析请求的类型、Provider、模型和结果，以及报告发送结果。Provider 选择过程、提示词构建、普通重试及调用参数放在 DEBUG；实际请求失败、备用切换、超时和长时间阻塞保留警告或错误。
+
+AstrBot 日志页面的等级筛选只影响页面显示；宿主后端的日志等级会过滤实际输出。插件在交给宿主前已将日志写入自己的内存缓冲，因此宿主不输出 DEBUG 时，插件 WebUI 仍可查看这些细节。缓冲最多保留 2,000 条，旧记录会被淘汰，不是永久日志归档。
+
 ### 1️⃣ 插件 WebUI 控制台（最直观，推荐）
 
 访问 AstrBot WebUI 插件专属控制台：
@@ -84,7 +88,7 @@ grep "c478a610" data/logs/astrbot.log
 │     astrbot.api.logger (宿主通道)    │  │ PluginLogBuffer (插件环形队列)│
 │                                      │  │                               │
 │  - 控制台格式化与标准输出 (stdout)   │  │  - 纯 Python 内存环形缓冲区    │
-│  - 宿主主日志文件写入 (data/logs/)   │  │  - maxlen=500 自动 FIFO 淘汰   │
+│  - 宿主主日志文件写入 (data/logs/)   │  │  - maxlen=2000 自动 FIFO 淘汰   │
 │  - AstrBot 全局 Dashboard 日志广播   │  │  - 订阅者队列 (Subscriber)     │
 └──────────────────────────────────────┘  └───────────────┬───────────────┘
                                                           │
@@ -151,7 +155,7 @@ with TraceContext("task-1001"):
 1. **零内置 logging 依赖**：
    - 彻底废弃早期设计中的 `logging.Filter` 与 `logging.Handler` 继承，插件运行时 100% 仅依赖 `astrbot.api.logger`，完全符合 AstrBot 市场安全审查。
 2. **有界内存与零内存泄露**：
-   - `PluginLogBuffer` 严格限定最大容量（默认 500 条），新日志推入时超限记录自动从队首逐出，绝不占用多余内存。
+   - `PluginLogBuffer` 严格限定最大容量（默认 2,000 条），新日志推入时超限记录自动从队首逐出，绝不占用多余内存。
 3. **鉴权日志去重缓存 (FIFO)**：
    - `BotManager` 鉴权针对高频消息判定采用 LRU/FIFO 去重，同一群组与规则仅在状态变更或首次判定时记录 1 次 DEBUG 日志，杜绝高并发消息刷屏。
 
