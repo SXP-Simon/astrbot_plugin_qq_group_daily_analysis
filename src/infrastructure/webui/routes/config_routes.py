@@ -245,7 +245,7 @@ class ConfigRoutes:
             "device_scale_factor_level": "normal",
             "timeout": plan["timeout"],
         }
-        # 不加载外链字体和图片，只验证接口、鉴权与基本截图能力。
+        # 不加载外链字体和图片，只验证接口、鉴权与基本T2I能力。
         html = """<!doctype html><html><head><meta charset="UTF-8">
 <style>body{margin:0;padding:28px;background:#f0f5ff;color:#172554;
 font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
