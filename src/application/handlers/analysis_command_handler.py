@@ -221,7 +221,7 @@ class AnalysisCommandHandler:
             trace_id = TraceContext.generate(
                 prefix="manual", group_name=group_name or group_id
             )
-            trace = TraceContext.set(
+            trace = await TraceContext.set_async(
                 trace_id=trace_id,
                 group_id=group_id,
                 group_name=group_name,
@@ -277,7 +277,8 @@ class AnalysisCommandHandler:
                         if result.get("error")
                         else f"Analysis skipped/failed: {reason}"
                     )
-                    trace.finish(
+                    await asyncio.to_thread(
+                        trace.finish,
                         event=TaskEvent.FAIL,
                         error_message=err_msg,
                     )
@@ -318,7 +319,7 @@ class AnalysisCommandHandler:
                 raise AnalysisStoppedError
 
             if trace and trace.status == "running":
-                trace.finish(event=TaskEvent.SUCCEED)
+                (await asyncio.to_thread(trace.finish, event=TaskEvent.SUCCEED))
 
         except AnalysisStoppedError:
             if stop_watcher is not None:
@@ -328,22 +329,28 @@ class AnalysisCommandHandler:
             return
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
-                trace.finish(
-                    event=TaskEvent.ABORT, error_message="Task already running in group"
+                await asyncio.to_thread(
+                    trace.finish,
+                    event=TaskEvent.ABORT,
+                    error_message="Task already running in group",
                 )
             yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
         except asyncio.CancelledError:
             if trace and trace.status == "running":
                 try:
-                    trace.finish(
-                        event=TaskEvent.ABORT, error_message="Task cancelled by system"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.ABORT,
+                        error_message="Task cancelled by system",
                     )
                 except RuntimeError as transition_error:
                     logger.info(f"取消收尾时任务已由并发事件收敛: {transition_error}")
             logger.info("群分析任务被取消 (插件重载或卸载)")
         except Exception as e:
             if trace and trace.status == "running":
-                trace.finish(event=TaskEvent.FAIL, error_message=str(e))
+                await asyncio.to_thread(
+                    trace.finish, event=TaskEvent.FAIL, error_message=str(e)
+                )
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
                 f"❌ 分析失败: {e!s}。请检查网络连接和LLM配置，或联系管理员"
@@ -455,7 +462,8 @@ class AnalysisCommandHandler:
         """
         if trace is not None and trace.status == "running":
             try:
-                trace.finish(
+                await asyncio.to_thread(
+                    trace.finish,
                     event=TaskEvent.CANCEL,
                     error_message="用户通过 stop 中止了本次分析",
                 )
@@ -547,8 +555,8 @@ class AnalysisCommandHandler:
             html_render = bind_group_html_renderer(
                 self.html_render, group_id, platform_id
             )
-            with (
-                trace.span(
+            async with (
+                trace.span_async(
                     "RENDER_REPORT",
                     {"format": "image", "template": template_theme},
                 )
@@ -582,11 +590,18 @@ class AnalysisCommandHandler:
                 cur_tid = trace.trace_id if trace else None
                 if callable(save_history):
                     try:
-                        save_history(image_url, group_id, trace_id=cur_tid)
+                        await asyncio.to_thread(
+                            save_history, image_url, group_id, trace_id=cur_tid
+                        )
                     except TypeError:
-                        save_history(image_url, group_id)
+                        await asyncio.to_thread(save_history, image_url, group_id)
                 else:
-                    self._save_report_to_history(image_url, group_id, trace_id=cur_tid)
+                    await asyncio.to_thread(
+                        self._save_report_to_history,
+                        image_url,
+                        group_id,
+                        trace_id=cur_tid,
+                    )
 
                 caption = (
                     TraceContext.make_report_caption()
@@ -612,8 +627,8 @@ class AnalysisCommandHandler:
 
         if output_format == "html":
             cur_trace_id = trace.trace_id if trace else None
-            with (
-                trace.span(
+            async with (
+                trace.span_async(
                     "RENDER_REPORT",
                     {"format": "html", "template": template_theme},
                 )
@@ -798,13 +813,10 @@ class AnalysisCommandHandler:
                             "created_at": time.time(),
                         }
                     )
-                from ...shared.trace_context import _global_trace_store
-
-                if _global_trace_store is not None:
-                    try:
-                        _global_trace_store.save_trace(cur_trace.to_dict())
-                    except Exception:
-                        pass
+                try:
+                    cur_trace.persist_snapshot()
+                except Exception as e:
+                    logger.warning(f"保存报告追踪快照失败: {e}")
             return dest
         except Exception as e:
             logger.warning(f"保存历史报告副本失败: {e}")

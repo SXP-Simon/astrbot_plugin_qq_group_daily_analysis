@@ -191,7 +191,7 @@ class ComicCommandHandler:
             trace_id = TraceContext.generate(
                 prefix="comic", group_name=group_name or group_id
             )
-            trace = TraceContext.set(
+            trace = await TraceContext.set_async(
                 trace_id=trace_id,
                 group_id=group_id,
                 group_name=group_name or group_id,
@@ -217,7 +217,8 @@ class ComicCommandHandler:
             if not result.get("success"):
                 reason = result.get("reason")
                 if trace and trace.status == "running":
-                    trace.finish(
+                    await asyncio.to_thread(
+                        trace.finish,
                         event=TaskEvent.FAIL,
                         error_message=f"提取漫画话题失败: {reason}",
                     )
@@ -245,23 +246,28 @@ class ComicCommandHandler:
                 yield event.plain_result("✅ 漫画生成任务已启动，完成后会发送到群里")
             elif status == "duplicate":
                 if trace and trace.status == "running":
-                    trace.finish(
-                        event=TaskEvent.WARN, error_message="该群已有漫画任务正在执行"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.WARN,
+                        error_message="该群已有漫画任务正在执行",
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("🎨 该群已有漫画任务正在执行，请稍后再试哦~")
             elif status == "blocked":
                 if trace and trace.status == "running":
-                    trace.finish(
-                        event=TaskEvent.WARN, error_message="此群未启用漫画生成功能"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.WARN,
+                        error_message="此群未启用漫画生成功能",
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("❌ 此群未启用漫画生成功能")
             elif status == "no_topics":
                 if trace and trace.status == "running":
-                    trace.finish(
+                    await asyncio.to_thread(
+                        trace.finish,
                         event=TaskEvent.WARN,
                         error_message="未提取到可用于生成漫画的话题",
                     )
@@ -270,8 +276,10 @@ class ComicCommandHandler:
                 yield event.plain_result("❌ 未提取到可用于生成漫画的话题")
             else:
                 if trace and trace.status == "running":
-                    trace.finish(
-                        event=TaskEvent.FAIL, error_message="漫画生成任务未启动"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.FAIL,
+                        error_message="漫画生成任务未启动",
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
@@ -279,8 +287,10 @@ class ComicCommandHandler:
 
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
-                trace.finish(
-                    event=TaskEvent.FAIL, error_message="该群的漫画话题提取任务正在执行"
+                await asyncio.to_thread(
+                    trace.finish,
+                    event=TaskEvent.FAIL,
+                    error_message="该群的漫画话题提取任务正在执行",
                 )
             if trace_id and self.active_task_manager:
                 await self.active_task_manager.finish_task(trace_id)
@@ -288,8 +298,10 @@ class ComicCommandHandler:
         except asyncio.CancelledError:
             if trace and trace.status == "running":
                 try:
-                    trace.finish(
-                        event=TaskEvent.ABORT, error_message="Task cancelled by system"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.ABORT,
+                        error_message="Task cancelled by system",
                     )
                 except RuntimeError as transition_error:
                     logger.info(f"取消收尾时任务已由并发事件收敛: {transition_error}")
@@ -298,7 +310,9 @@ class ComicCommandHandler:
             logger.info("手动漫画任务被取消（插件正在关闭或重载）")
         except Exception as e:
             if trace and trace.status == "running":
-                trace.finish(event=TaskEvent.FAIL, error_message=str(e))
+                await asyncio.to_thread(
+                    trace.finish, event=TaskEvent.FAIL, error_message=str(e)
+                )
             if trace_id and self.active_task_manager:
                 await self.active_task_manager.finish_task(trace_id)
             logger.error(f"手动漫画生成失败: {e}", exc_info=True)

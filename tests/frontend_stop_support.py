@@ -269,14 +269,14 @@ def _spy_trace(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     from src.shared.trace_context import TraceContext
 
     captured: dict[str, object] = {}
-    original_set = TraceContext.set.__func__
+    original_set = TraceContext.set_async.__func__
 
-    def spy_set(cls: type[TraceContext], **kwargs: object) -> TraceContext:
-        trace = original_set(cls, **kwargs)
+    async def spy_set(cls: type[TraceContext], **kwargs: object) -> TraceContext:
+        trace = await original_set(cls, **kwargs)
         captured["trace"] = trace
         return trace
 
-    monkeypatch.setattr(TraceContext, "set", classmethod(spy_set))
+    monkeypatch.setattr(TraceContext, "set_async", classmethod(spy_set))
     return captured
 
 
