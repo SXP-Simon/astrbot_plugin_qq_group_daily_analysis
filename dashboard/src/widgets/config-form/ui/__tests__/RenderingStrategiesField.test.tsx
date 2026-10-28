@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import schema from "../../../../../../_conf_schema.json";
 import { renderingRuntimeSchema } from "../../../../entities/config/model/renderingConfig";
 import { FieldRenderer } from "../FieldRenderer";
-import { testCustomT2i } from "../../../../entities/config/api/configApi";
+import { testT2i } from "../../../../entities/config/api/configApi";
 
 vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
-vi.mock("../../../../entities/config/api/configApi", () => ({ testCustomT2i: vi.fn() }));
+vi.mock("../../../../entities/config/api/configApi", () => ({ testT2i: vi.fn() }));
+vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchDistinctGroups: vi.fn().mockResolvedValue([]) }));
 
 // 从真实 schema 构造已有条目，编辑与请求用例无需重复走添加流程。
 const templateDefaults: Record<string, Record<string, unknown>> = Object.fromEntries(
@@ -39,21 +40,23 @@ function StrategiesField({ initialValue = [] }: { initialValue?: unknown }) {
 it("从真实预设添加海外和内地方案，保留各自默认值", async () => {
   render(<StrategiesField />);
   fireEvent.click(screen.getByRole("button", { name: /添加渲染方案/ }));
-  fireEvent.click(await screen.findByText("海外方案", { exact: true }, { timeout: 5000 }));
+  const overseas = await screen.findByText("海外方案", { exact: true }, { timeout: 5000 });
+  await act(async () => fireEvent.click(overseas));
   expect(screen.queryByLabelText("渲染服务")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("自定义 T2I 服务地址")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "测试渲染" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "测试渲染" })).toBeInTheDocument();
   expect(screen.queryByLabelText("资源环境")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /添加渲染方案/ }));
-  fireEvent.click(await screen.findByText("内地方案", { exact: true }, { timeout: 5000 }));
+  const mainland = await screen.findByText("内地方案", { exact: true }, { timeout: 5000 });
+  await act(async () => fireEvent.click(mainland));
   expect(JSON.parse(screen.getByTestId("strategies").textContent || "[]")).toMatchObject([
     { __template_key: "strategy", priority: 10, environment: "Overseas", google_fonts: "https://fonts.googleapis.com", timeout: 20000 },
     { __template_key: "mainland", priority: 20, environment: "Mainland", google_fonts: "https://fonts.loli.net" },
   ]);
 }, 20000);
 
-it("已有方案独立编辑资源，并按优先级更新预览", () => {
-  render(<StrategiesField initialValue={[templateDefaults.strategy, templateDefaults.mainland]} />);
+it("已有方案独立编辑资源，并按优先级更新预览", async () => {
+  await act(async () => render(<StrategiesField initialValue={[templateDefaults.strategy, templateDefaults.mainland]} />));
   fireEvent.change(screen.getAllByLabelText("模板资源 CDN", { selector: "input" })[0], { target: { value: " https://first.example/ " } });
   expect(screen.getByTestId("preview")).toHaveTextContent("https://first.example");
   fireEvent.change(screen.getAllByRole("spinbutton", { hidden: true })[0], { target: { value: "30" } });
@@ -98,11 +101,12 @@ it("自定义方案独立编辑等待上限、凭据、字体和资源环境", (
 
 it("测试渲染读取当前未保存条目的值，并显示返回图片", async () => {
   const draft = { ...templateDefaults.custom, service_endpoint: "http://draft.example/text2img", service_token: "old-token", timeout: 12000, request_timeout: 70000 };
-  vi.mocked(testCustomT2i).mockResolvedValue({ image_data_url: "data:image/png;base64,aGVsbG8=", elapsed_ms: 100 });
+  vi.mocked(testT2i).mockResolvedValue({ image_data_url: "data:image/png;base64,aGVsbG8=", elapsed_ms: 100 });
   render(<StrategiesField initialValue={[draft]} />);
   fireEvent.change(screen.getByLabelText("服务 Token（可选）"), { target: { value: "my-secret" } });
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
-  expect(testCustomT2i).toHaveBeenCalledWith({
+  expect(testT2i).toHaveBeenCalledWith({
+    render_service: "custom",
     service_endpoint: "http://draft.example/text2img", service_token: "my-secret", timeout: 12000, request_timeout: 70000,
   });
   expect(await screen.findByAltText("T2I 测试图片")).toBeInTheDocument();

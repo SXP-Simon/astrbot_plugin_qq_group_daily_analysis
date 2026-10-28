@@ -23,7 +23,7 @@ export interface MockHandlerResponse<T = unknown> {
 }
 
 export const mockHandlers = {
-  "POST config/test-custom-t2i": () => ({
+  "POST config/test-t2i": () => ({
     status: "error",
     message: "演示模式不进行真实渲染，请连接 AstrBot 插件后再试。",
   }),
