@@ -1,5 +1,9 @@
 {
   "valid": [
+    ["http://goofy_lewin:8999/text2img", "http://goofy_lewin:8999/text2img"],
+    [" http://t2i_service:8999/ ", "http://t2i_service:8999/text2img"],
+    ["http://t2i_service.internal:8999/proxy/text2img/generate/", "http://t2i_service.internal:8999/proxy/text2img"],
+    ["http://t2i-service_1:8999", "http://t2i-service_1:8999/text2img"],
     [" http://127.0.0.1:8999/ ", "http://127.0.0.1:8999/text2img"],
     ["http://localhost:8999/text2img///", "http://localhost:8999/text2img"],
     ["https://render.example/api/text2img/generate/", "https://render.example/api/text2img"],

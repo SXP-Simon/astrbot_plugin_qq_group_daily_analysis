@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import socket
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
@@ -25,6 +26,25 @@ from src.shared.trace_context import TraceContext
 CASES = json.loads(
     (Path(__file__).parent / "data/t2i_endpoints.json").read_text(encoding="utf-8")
 )
+
+
+@pytest.mark.asyncio
+async def test_real_http_accepts_container_name_with_underscore(service, monkeypatch):
+    endpoint, state, messages, _ = service
+    original_resolve = socket.getaddrinfo
+    resolved = []
+
+    def resolve(host, *args, **kwargs):
+        if host in ("goofy_lewin", b"goofy_lewin"):
+            resolved.append(host)
+            host = "127.0.0.1"
+        return original_resolve(host, *args, **kwargs)
+
+    # 保留真实 HTTP 请求，仅用本机服务模拟容器 DNS 的解析结果。
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    address = endpoint.replace("127.0.0.1", "goofy_lewin")
+    assert await render_custom_t2i(address, "<p>container</p>", {}) == state["body"]
+    assert resolved and len(messages) == 1
 
 
 @pytest.mark.parametrize(

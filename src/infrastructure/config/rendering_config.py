@@ -1,5 +1,6 @@
 """可扩展图片渲染方案的配置契约与边界校验。"""
 
+import re
 from collections.abc import Mapping
 from typing import Literal, NotRequired, TypedDict
 from urllib.parse import urlsplit
@@ -121,7 +122,21 @@ def normalize_t2i_endpoint(value: str) -> str:
         raise ValueError(error)
     try:
         parsed = urlsplit(value)
-        origin = normalize_cdn_base_url(f"{parsed.scheme}://{parsed.netloc}")
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        # 服务可以使用 Docker 内网名称，不能套用公网 CDN 的域名限制。
+        if (
+            parsed.scheme not in ("http", "https")
+            or not re.fullmatch(
+                r"(?:[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?)"
+                r"(?:\.[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?)*\.?"
+                r"(?::[0-9]{1,5})?|\[[a-f0-9:]+\](?::[0-9]{1,5})?",
+                parsed.netloc,
+                flags=re.IGNORECASE | re.ASCII,
+            )
+            or not parsed.hostname
+            or (parsed.port is not None and not 1 <= parsed.port <= 65535)
+        ):
+            raise ValueError(error)
     except ValueError as exc:
         raise ValueError(error) from exc
     path = parsed.path.rstrip("/")
