@@ -1,12 +1,9 @@
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { ActiveTask } from "../model/types";
+import type { components } from "../../../shared/api/generated/schema";
+import { z } from "zod";
 
-export interface ConnectedPlatform {
-  id: string;
-  name: string;
-  type: string;
-  label: string;
-}
+export type ConnectedPlatform = components["schemas"]["ConnectedPlatform"];
 
 export async function fetchActiveTasks(): Promise<ActiveTask[]> {
   const res = await apiGet<ActiveTask[]>("tasks/active");
@@ -28,10 +25,12 @@ export async function cancelActiveTask(taskId: string): Promise<boolean> {
 }
 
 export async function fetchConnectedPlatforms(): Promise<ConnectedPlatform[]> {
-  const res = await apiGet<ConnectedPlatform[]>("platforms");
-  const data = extractData<ConnectedPlatform[]>(res);
-  if (Array.isArray(data)) return data;
-  return [];
+  const res = await apiGet<unknown>("platforms");
+  const parsed = z.array(z.object({
+    id: z.string().min(1), type: z.string(), display_name: z.string(), label: z.string().min(1),
+  })).safeParse(extractData<unknown>(res));
+  if (!parsed.success) throw new Error("平台列表格式不正确，请刷新页面后重试。");
+  return parsed.data;
 }
 
 export interface TriggerTaskResult {
