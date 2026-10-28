@@ -22,7 +22,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/config/test-custom-t2i": {
+    "/config/test-t2i": {
         parameters: {
             query?: never;
             header?: never;
@@ -31,8 +31,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 用当前未保存的自定义 T2I 配置生成固定测试图片 */
-        post: operations["testCustomT2i"];
+        /** 按当前渲染方案测试 AstrBot 或自定义 T2I，不生成分析报告 */
+        post: operations["testT2i"];
         delete?: never;
         options?: never;
         head?: never;
@@ -349,17 +349,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        CustomT2iProbeRequest: {
-            /** @default http://127.0.0.1:8999/text2img */
-            service_endpoint: string;
-            /** @default  */
-            service_token: string;
+        T2iProbeRequest: {
+            /**
+             * @default custom
+             * @enum {string}
+             */
+            render_service: "astrbot" | "custom";
+            group_id?: string;
+            platform_id?: string;
+            /** @description 自定义方案的服务地址，省略时使用 http://127.0.0.1:8999/text2img */
+            service_endpoint?: string;
+            service_token?: string;
             /** @default 20000 */
             timeout: number;
-            /** @default 40000 */
-            request_timeout: number;
+            /** @description 自定义方案的请求等待上限，省略时为 40000 毫秒 */
+            request_timeout?: number;
         };
-        CustomT2iProbe: {
+        T2iProbe: {
             image_data_url: string;
             elapsed_ms: number;
         };
@@ -820,7 +826,7 @@ export interface operations {
             };
         };
     };
-    testCustomT2i: {
+    testT2i: {
         parameters: {
             query?: never;
             header?: never;
@@ -829,7 +835,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CustomT2iProbeRequest"];
+                "application/json": components["schemas"]["T2iProbeRequest"];
             };
         };
         responses: {
@@ -842,7 +848,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         status: "ok";
-                        data: components["schemas"]["CustomT2iProbe"];
+                        data: components["schemas"]["T2iProbe"];
                     };
                 };
             };
@@ -855,6 +861,13 @@ export interface operations {
             };
             /** @description 服务连接、鉴权、超时或图片校验失败 */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AstrBot 渲染接口尚未就绪 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

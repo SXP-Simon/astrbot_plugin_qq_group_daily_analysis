@@ -123,16 +123,16 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                 },
             },
-            "/config/test-custom-t2i": {
+            "/config/test-t2i": {
                 "post": {
-                    "summary": "用当前未保存的自定义 T2I 配置生成固定测试图片",
-                    "operationId": "testCustomT2i",
+                    "summary": "按当前渲染方案测试 AstrBot 或自定义 T2I，不生成分析报告",
+                    "operationId": "testT2i",
                     "requestBody": {
                         "required": True,
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/CustomT2iProbeRequest"
+                                    "$ref": "#/components/schemas/T2iProbeRequest"
                                 }
                             }
                         },
@@ -147,7 +147,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                                         "properties": {
                                             "status": {"type": "string", "const": "ok"},
                                             "data": {
-                                                "$ref": "#/components/schemas/CustomT2iProbe"
+                                                "$ref": "#/components/schemas/T2iProbe"
                                             },
                                         },
                                         "required": ["status", "data"],
@@ -157,6 +157,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                         },
                         "400": {"description": "服务配置无效"},
                         "502": {"description": "服务连接、鉴权、超时或图片校验失败"},
+                        "503": {"description": "AstrBot 渲染接口尚未就绪"},
                     },
                 },
             },
@@ -766,18 +767,24 @@ def generate_openapi_spec() -> dict[str, Any]:
         },
         "components": {
             "schemas": {
-                "CustomT2iProbeRequest": {
+                "T2iProbeRequest": {
                     "type": "object",
                     "properties": {
+                        "render_service": {
+                            "type": "string",
+                            "enum": ["astrbot", "custom"],
+                            "default": "custom",
+                        },
+                        "group_id": {"type": "string", "maxLength": 256},
+                        "platform_id": {"type": "string", "maxLength": 256},
                         "service_endpoint": {
                             "type": "string",
                             "maxLength": 2048,
-                            "default": "http://127.0.0.1:8999/text2img",
+                            "description": "自定义方案的服务地址，省略时使用 http://127.0.0.1:8999/text2img",
                         },
                         "service_token": {
                             "type": "string",
                             "maxLength": 4096,
-                            "default": "",
                             "writeOnly": True,
                         },
                         "timeout": {
@@ -790,11 +797,11 @@ def generate_openapi_spec() -> dict[str, Any]:
                             "type": "integer",
                             "minimum": 1000,
                             "maximum": 300000,
-                            "default": 40000,
+                            "description": "自定义方案的请求等待上限，省略时为 40000 毫秒",
                         },
                     },
                 },
-                "CustomT2iProbe": {
+                "T2iProbe": {
                     "type": "object",
                     "properties": {
                         "image_data_url": {

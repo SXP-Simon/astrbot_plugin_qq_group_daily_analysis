@@ -26,7 +26,8 @@ from ...config.rendering_config import (
     parse_rendering_strategies,
 )
 from ...reporting.cdn_probe import probe_template_cdn
-from ...reporting.custom_t2i_client import render_custom_t2i
+from ...reporting.custom_t2i_client import render_custom_t2i, validate_t2i_image
+from ...reporting.html_renderer import bind_group_html_renderer
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     from ....application.dto.webui_dto import (
         ConfigFileContentQueryDTO,
         ConfigSaveDTO,
-        CustomT2iProbeDTO,
+        T2iProbeDTO,
     )
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
@@ -204,8 +205,8 @@ class ConfigRoutes:
             logger.error(f"模板 CDN 检测异常: {exc}", exc_info=True)
             return error_response("这次检测没能完成，请稍后再试。", status_code=500)
 
-    async def api_test_custom_t2i(self) -> WebApiResponse:
-        """用未保存的服务配置生成固定测试图，不写盘、不发送群消息。
+    async def api_test_t2i(self) -> WebApiResponse:
+        """按当前方案生成固定测试图，不保存配置或报告，不发送群消息。
 
         Returns:
             测试图片和耗时；配置无效返回 400，服务失败返回 502。
@@ -214,10 +215,23 @@ class ConfigRoutes:
             body = await request.json()
             if type(body) is not dict:
                 raise ValueError("请提供有效的 T2I 测试配置")
+            service = body.get("render_service", "custom")
+            if service not in ("astrbot", "custom"):
+                raise ValueError("请选择有效的渲染服务")
+            group_id = body.get("group_id", "")
+            platform_id = body.get("platform_id", "")
+            if not isinstance(group_id, str) or not isinstance(platform_id, str):
+                raise ValueError("请选择有效的群聊和平台")
+            if any(
+                len(value) > 256
+                or any(char.isspace() or not char.isprintable() for char in value)
+                for value in (group_id, platform_id)
+            ) or bool(group_id) != bool(platform_id):
+                raise ValueError("请选择完整的群聊和平台")
             plan = parse_rendering_strategies(
                 [
                     {
-                        "__template_key": "custom",
+                        "render_service": service,
                         **{
                             key: body[key]
                             for key in (
@@ -233,7 +247,7 @@ class ConfigRoutes:
             )[0]
         except (ValueError, TypeError):
             return error_response(
-                "请检查服务地址、Token 和超时设置是否有效", status_code=400
+                "请检查渲染服务、地址、Token、超时和测试群聊是否有效", status_code=400
             )
 
         started = time.perf_counter()
@@ -252,24 +266,64 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
 <body><strong>T2I 渲染测试</strong><p>这是一张测试图片。</p>
 <p>HTML → PNG · 0123456789</p></body></html>"""
         try:
-            image = await render_custom_t2i(
-                plan["service_endpoint"],
-                html,
-                options,
-                plan["service_token"],
-                request_timeout_ms=plan.get(
-                    "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
-                ),
-            )
+            if service == "custom":
+                image = await render_custom_t2i(
+                    plan["service_endpoint"],
+                    html,
+                    options,
+                    plan["service_token"],
+                    request_timeout_ms=plan.get(
+                        "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
+                    ),
+                )
+            else:
+                render_func = (
+                    self.analysis_service.html_render if self.analysis_service else None
+                )
+                if not callable(render_func):
+                    return error_response(
+                        "AstrBot 渲染接口尚未就绪，请稍后重试。", status_code=503
+                    )
+                render_func = bind_group_html_renderer(
+                    render_func, group_id, platform_id
+                )
+                assert render_func is not None
+                # 沿用正式报告的宿主回调和五分钟总上限，兼容旧版无 umo 的接口。
+                async with asyncio.timeout(300):
+                    output: object = await render_func(html, {}, False, options)
+                    if isinstance(output, bytes):
+                        image = output
+                    elif isinstance(output, str) and output:
+                        path = Path(output)
+                        if not path.is_file():
+                            raise ValueError("AstrBot 返回了图片路径，但文件不存在。")
+                        if path.stat().st_size > 32 * 1024 * 1024:
+                            raise ValueError("测试图片超过 32 MiB，未读取图片内容。")
+                        image = await asyncio.to_thread(path.read_bytes)
+                    else:
+                        raise ValueError(
+                            "AstrBot 没有返回可用的测试图片，请查看 AstrBot 和 T2I 服务日志。"
+                        )
+                    if len(image) > 32 * 1024 * 1024:
+                        raise ValueError("测试图片超过 32 MiB，未展示图片内容。")
+                    await asyncio.to_thread(validate_t2i_image, image)
         except (ValueError, RuntimeError, TimeoutError) as exc:
-            return error_response(str(exc), status_code=502)
+            # 宿主和第三方包装器的异常可能含服务地址或凭据，不直接回显。
+            message = (
+                str(exc)
+                if service == "custom"
+                else (
+                    "AstrBot 没有返回可用的测试图片，请查看 AstrBot 和 T2I 服务日志。"
+                )
+            )
+            return error_response(message, status_code=502)
         except Exception:
             # 不记录未保存的地址、Token 或第三方异常正文。
             return error_response(
                 "这次测试没能完成，请查看 T2I 服务日志后重试。", status_code=502
             )
         mime = "image/png" if image.startswith(b"\x89PNG") else "image/jpeg"
-        result: CustomT2iProbeDTO = {
+        result: T2iProbeDTO = {
             "image_data_url": f"data:{mime};base64,{base64.b64encode(image).decode('ascii')}",
             "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
         }
