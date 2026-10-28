@@ -329,7 +329,7 @@ export const App: React.FC = () => {
         />
 
         {/* 独立开发调试浮动工具栏 (Dev Only) */}
-        <DevToolbar />
+        {import.meta.env.DEV && <DevToolbar />}
       </div>
     </ConfigProvider>
   );

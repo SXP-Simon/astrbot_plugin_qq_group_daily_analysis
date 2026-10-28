@@ -26,7 +26,7 @@ import {
   AvailablePersona,
 } from "../../../entities/config/api/configApi";
 import { FieldRenderer } from "./FieldRenderer";
-import { CustomT2iProbe } from "../../../features/test-custom-t2i/ui/CustomT2iProbe";
+import { T2iProbe } from "../../../features/test-t2i/ui/T2iProbe";
 
 const { Text } = Typography;
 
@@ -348,8 +348,9 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                     );
                   })}
                 </div>
-                {fieldKey === "t2i_rendering_strategies" && itemTemplateKey === "custom" && (
-                  <CustomT2iProbe input={{
+                {fieldKey === "t2i_rendering_strategies" && (
+                  <T2iProbe input={{
+                    render_service: itemTemplateKey === "custom" ? "custom" : "astrbot",
                     service_endpoint: item.service_endpoint,
                     service_token: item.service_token,
                     timeout: item.timeout,

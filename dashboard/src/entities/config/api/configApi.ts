@@ -4,11 +4,11 @@ import { cdnBaseUrlSchema } from "../model/renderingConfig";
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { PluginConfigData } from "../model/types";
 import {
-  customT2iProbeRequestSchema,
-  customT2iProbeSchema,
-  type CustomT2iProbe,
-  type CustomT2iProbeInput,
-} from "../model/customT2iProbe";
+  t2iProbeRequestSchema,
+  t2iProbeSchema,
+  type T2iProbe,
+  type T2iProbeInput,
+} from "../model/t2iProbe";
 import {
   templateCdnProbeSchema,
   type TemplateCdnProbe,
@@ -30,10 +30,10 @@ export async function testTemplateCdn(baseUrl: string): Promise<TemplateCdnProbe
     ? errorMessage : "没有收到检测结果，请刷新页面后重试。");
 }
 
-export async function testCustomT2i(input: CustomT2iProbeInput): Promise<CustomT2iProbe> {
-  const parsed = customT2iProbeRequestSchema.safeParse({ ...input, __template_key: "custom" });
+export async function testT2i(input: T2iProbeInput): Promise<T2iProbe> {
+  const parsed = t2iProbeRequestSchema.safeParse({ ...input, __template_key: input.render_service === "astrbot" ? "strategy" : "custom" });
   if (!parsed.success) throw new Error(parsed.error.issues[0].message);
-  const response = await apiPost<unknown>("config/test-custom-t2i", parsed.data);
+  const response = await apiPost<unknown>("config/test-t2i", parsed.data);
   // 宿主和插件都可能返回错误信封，不能把外层 ok 当成渲染成功。
   for (const layer of [response, response?.data]) {
     const envelope = z.object({ status: z.string().optional(), code: z.number().optional(), message: z.string().optional() }).safeParse(layer);
@@ -43,7 +43,7 @@ export async function testCustomT2i(input: CustomT2iProbeInput): Promise<CustomT
     }
   }
   const data = extractData<unknown>(response);
-  const result = customT2iProbeSchema.safeParse(data);
+  const result = t2iProbeSchema.safeParse(data);
   if (result.success) return result.data;
   const message = data && typeof data === "object" && "message" in data
     ? data.message : response?.message;

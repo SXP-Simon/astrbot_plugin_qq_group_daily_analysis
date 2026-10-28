@@ -1,5 +1,6 @@
 import { apiGet, extractData } from "../../../shared/api/bridge";
-import { GroupItem } from "../model/types";
+import { z } from "zod";
+import { groupItemSchema, type GroupItem } from "../model/types";
 
 let cachedGroups: GroupItem[] | null = null;
 
@@ -12,10 +13,18 @@ export async function fetchDistinctGroups(forceRefresh = false): Promise<GroupIt
     return cachedGroups;
   }
 
-  const res = await apiGet<GroupItem[]>("groups");
-  const data = extractData<GroupItem[]>(res);
-  const list: GroupItem[] = Array.isArray(data) ? data : [];
+  const res = await apiGet<unknown>("groups");
+  const parsed = z.array(groupItemSchema).safeParse(extractData<unknown>(res));
+  if (!parsed.success) throw new Error("群列表格式不正确，请刷新页面或检查插件版本。");
+  const list = parsed.data;
 
   cachedGroups = list;
   return list;
+}
+
+export async function fetchGroupSessions(): Promise<GroupItem[]> {
+  const res = await apiGet<unknown>("groups", { by_session: true });
+  const parsed = z.array(groupItemSchema).safeParse(extractData<unknown>(res));
+  if (!parsed.success) throw new Error("群列表格式不正确，请刷新页面或检查插件版本。");
+  return parsed.data;
 }

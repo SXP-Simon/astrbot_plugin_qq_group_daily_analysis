@@ -59,7 +59,13 @@ export const t2iEndpointSchema = z.string({ error: "服务地址必须是文字"
     const value = raw.trim().replace(/\/+$/, "");
     const match = /^(https?):\/\/([^/]+)(\/.*)?$/i.exec(value);
     const origin = match ? `${match[1].toLowerCase()}://${match[2]}` : "";
-    if (!match || /[\s\p{C}?#\\]/u.test(value) || !cdnBaseUrlSchema.safeParse(origin).success) {
+    // Docker 服务名允许下划线；CDN 和字体地址仍使用各自的校验规则。
+    const host = /^https?:\/\/((?:[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?)(?:\.[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?)*\.?|\[[a-f0-9:]+\])(?::([0-9]{1,5}))?$/i.exec(origin);
+    let validHost = Boolean(host && (!host[2] || (Number(host[2]) >= 1 && Number(host[2]) <= 65535)));
+    if (host?.[1].startsWith("[")) {
+      try { new URL(origin); } catch { validHost = false; }
+    }
+    if (!match || /[\s\p{C}?#\\]/u.test(value) || !validHost) {
       ctx.addIssue({ code: "custom", message: "请填写完整的 T2I 服务地址，例如 http://127.0.0.1:8999/text2img，不要带账号密码、查询参数或 # 片段" });
       return z.NEVER;
     }

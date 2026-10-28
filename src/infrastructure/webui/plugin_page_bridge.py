@@ -279,10 +279,10 @@ class PluginPageWebUIBridge:
                 "Save and persist updated plugin configuration",
             ),
             (
-                f"/{PLUGIN_NAME}/config/test-custom-t2i",
-                self.config_routes.api_test_custom_t2i,
+                f"/{PLUGIN_NAME}/config/test-t2i",
+                self.config_routes.api_test_t2i,
                 ["POST"],
-                "Test custom T2I with a fixed HTML page without saving configuration",
+                "Test AstrBot or custom T2I with a fixed HTML page without saving configuration",
             ),
             (
                 f"/{PLUGIN_NAME}/config/test-template-cdn",

@@ -62,9 +62,9 @@ def bridge_setup(temp_db: Path, tmp_path: Path):
 def test_custom_t2i_probe_is_registered_on_plugin_bridge(bridge_setup):
     bridge = bridge_setup.bridge
     bridge.register_routes()
-    registrations = [call.args for call in bridge_setup.context.register_web_api.call_args_list if call.args[0].endswith("/config/test-custom-t2i")]
+    registrations = [call.args for call in bridge_setup.context.register_web_api.call_args_list if call.args[0].endswith("/config/test-t2i")]
     assert len(registrations) == 1
-    assert registrations[0][1] == bridge.config_routes.api_test_custom_t2i
+    assert registrations[0][1] == bridge.config_routes.api_test_t2i
     assert registrations[0][2] == ["POST"]
 
 
