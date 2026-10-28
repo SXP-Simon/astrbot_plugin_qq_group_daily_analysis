@@ -912,13 +912,10 @@ class ReportGenerator(IReportGenerator):
                             "created_at": time.time(),
                         }
                     )
-                from ...shared.trace_context import _global_trace_store
-
-                if _global_trace_store is not None:
-                    try:
-                        _global_trace_store.save_trace(trace_ctx.to_dict())
-                    except Exception:
-                        pass
+                try:
+                    await trace_ctx.persist_snapshot_async()
+                except Exception as e:
+                    logger.warning(f"保存报告追踪快照失败: {e}")
 
             return str(html_path.absolute()), None
 
