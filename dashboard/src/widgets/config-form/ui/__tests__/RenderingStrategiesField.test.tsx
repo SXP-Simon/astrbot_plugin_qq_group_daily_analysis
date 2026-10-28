@@ -8,7 +8,7 @@ import { testT2i } from "../../../../entities/config/api/configApi";
 
 vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 vi.mock("../../../../entities/config/api/configApi", () => ({ testT2i: vi.fn() }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchDistinctGroups: vi.fn().mockResolvedValue([]) }));
+vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn().mockResolvedValue([]) }));
 
 // 从真实 schema 构造已有条目，编辑与请求用例无需重复走添加流程。
 const templateDefaults: Record<string, Record<string, unknown>> = Object.fromEntries(
