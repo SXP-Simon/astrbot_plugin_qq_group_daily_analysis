@@ -200,7 +200,7 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
             )
 
     class FakeHistoryManager:
-        async def save_analysis(self, group_id, analysis_result):
+        async def save_analysis(self, group_id, analysis_result, date_str=None):
             return None
 
     service = AnalysisApplicationService(
@@ -451,7 +451,7 @@ def test_daily_analysis_aborts_when_all_enabled_llm_tasks_fail():
             return [], [], [], TokenUsage(), None
 
     class FakeHistoryManager:
-        async def save_analysis(self, group_id, analysis_result):
+        async def save_analysis(self, group_id, analysis_result, date_str=None):
             return None
 
     service = AnalysisApplicationService(
@@ -586,7 +586,7 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
             )
 
     class FakeHistoryManager:
-        async def save_analysis(self, group_id, analysis_result):
+        async def save_analysis(self, group_id, analysis_result, date_str=None):
             return None
 
     service = AnalysisApplicationService(
@@ -711,7 +711,7 @@ def test_daily_analysis_succeeds_when_all_llm_disabled():
             return [], [], [], TokenUsage(), None
 
     class FakeHistoryManager:
-        async def save_analysis(self, group_id, analysis_result):
+        async def save_analysis(self, group_id, analysis_result, date_str=None):
             return None
 
     service = AnalysisApplicationService(
