@@ -327,7 +327,7 @@ class DataManagementRoutes:
                 tracked.update(await store.get_tracked_groups())
 
             if self.trace_store:
-                for g in self.trace_store.get_distinct_groups():
+                for g in await asyncio.to_thread(self.trace_store.get_distinct_groups):
                     gid = str(g.get("group_id", "")).strip()
                     if gid:
                         tracked.add(gid)
@@ -536,7 +536,8 @@ class DataManagementRoutes:
                     "CheckpointStore not initialized", status_code=503
                 )
 
-            items, total = store.list_all_checkpoints(
+            items, total = await asyncio.to_thread(
+                store.list_all_checkpoints,
                 limit=query_dto.get("limit", 50),
                 offset=query_dto.get("offset", 0),
                 group_id=query_dto.get("group_id"),
@@ -559,7 +560,9 @@ class DataManagementRoutes:
                 return error_response(
                     "CheckpointStore not initialized", status_code=503
                 )
-            groups = store.get_distinct_checkpoint_groups()
+            groups = await asyncio.to_thread(
+                store.get_distinct_checkpoint_groups,
+            )
             return json_response({"status": "ok", "data": {"groups": groups}})
         except Exception as e:
             logger.error(f"获取 Checkpoint 群号列表异常: {e}", exc_info=True)
@@ -603,7 +606,8 @@ class DataManagementRoutes:
                     "CheckpointStore not initialized", status_code=503
                 )
 
-            detail = store.get_checkpoint_detail(
+            detail = await asyncio.to_thread(
+                store.get_checkpoint_detail,
                 query_dto["group_id"],
                 query_dto["date_str"],
                 query_dto["stage_name"],
@@ -658,14 +662,19 @@ class DataManagementRoutes:
                 )
 
             if delete_dto.get("stage_name"):
-                deleted = store.delete_checkpoint(
+                deleted = await asyncio.to_thread(
+                    store.delete_checkpoint,
                     delete_dto["group_id"],
                     delete_dto["date_str"],
                     delete_dto["stage_name"],
                     trace_id=delete_dto["trace_id"],
                 )
             else:
-                store.clear_checkpoints(delete_dto["group_id"], delete_dto["date_str"])
+                await asyncio.to_thread(
+                    store.clear_checkpoints,
+                    delete_dto["group_id"],
+                    delete_dto["date_str"],
+                )
                 deleted = True
 
             return json_response(

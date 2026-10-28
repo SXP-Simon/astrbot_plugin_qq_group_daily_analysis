@@ -5,6 +5,7 @@ WebUI 报告产物管理路由 (Report Routes)
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import re
 from pathlib import Path
@@ -94,7 +95,7 @@ class ReportRoutes:
                     "group_name": str(g.get("group_name", "")),
                     "platform": str(g.get("platform", "")),
                 }
-                for g in self.trace_store.get_distinct_groups()
+                for g in (await asyncio.to_thread(self.trace_store.get_distinct_groups))
             }
             candidate_dirs: list[Path] = []
             if self.report_output_dir and self.report_output_dir.exists():
@@ -124,10 +125,13 @@ class ReportRoutes:
             total_count = 0
             db_artifacts: list[dict[str, object]] = []
             try:
-                total_count = self.trace_store.count_report_artifacts(
-                    group_id=query_group_id, search=query_search
+                total_count = await asyncio.to_thread(
+                    self.trace_store.count_report_artifacts,
+                    group_id=query_group_id,
+                    search=query_search,
                 )
-                db_artifacts = self.trace_store.query_report_artifacts(
+                db_artifacts = await asyncio.to_thread(
+                    self.trace_store.query_report_artifacts,
                     group_id=query_group_id,
                     search=query_search,
                     limit=query_limit,
@@ -220,7 +224,9 @@ class ReportRoutes:
 
                 report_trace_map: dict[str, str] = {}
                 try:
-                    report_trace_map = self.trace_store.get_report_trace_map()
+                    report_trace_map = await asyncio.to_thread(
+                        self.trace_store.get_report_trace_map
+                    )
                 except Exception:
                     pass
 
@@ -317,7 +323,8 @@ class ReportRoutes:
                         # 自愈补录入数据库，使后续查询永久走索引
                         try:
                             fmt = "html" if is_html else "image"
-                            self.trace_store.register_report_artifact(
+                            await asyncio.to_thread(
+                                self.trace_store.register_report_artifact,
                                 filename=file_path.name,
                                 group_id=group_id,
                                 file_format=fmt,
@@ -485,7 +492,9 @@ class ReportRoutes:
 
         if not trace_id and self.trace_store:
             try:
-                items, _ = self.trace_store.list_traces(group_id=group_id, limit=5)
+                items, _ = await asyncio.to_thread(
+                    self.trace_store.list_traces, group_id=group_id, limit=5
+                )
                 if items:
                     trace_id = str(items[0].get("trace_id", ""))
             except Exception:

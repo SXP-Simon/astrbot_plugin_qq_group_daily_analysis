@@ -5,6 +5,7 @@ WebUI 链路观测与指标路由 (Trace & Metrics Routes)
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, TypedDict
@@ -126,7 +127,8 @@ class TraceRoutes:
                 "sort_order": sort_order,
             }
 
-            items, total = self.trace_store.list_traces(
+            items, total = await asyncio.to_thread(
+                self.trace_store.list_traces,
                 limit=query_dto.get("limit", 20),
                 offset=query_dto.get("offset", 0),
                 group_id=query_dto.get("group_id"),
@@ -148,8 +150,9 @@ class TraceRoutes:
     async def api_get_distinct_groups(self) -> WebApiResponse:
         """获取所有有历史分析记录的群组列表（用于下拉快速筛选）"""
         try:
-            groups = self.trace_store.get_distinct_groups(
-                by_session=request.query.get("by_session") == "true"
+            groups = await asyncio.to_thread(
+                self.trace_store.get_distinct_groups,
+                by_session=request.query.get("by_session") == "true",
             )
             return json_response({"status": "ok", "data": groups})
         except Exception as e:
@@ -367,14 +370,16 @@ class TraceRoutes:
     async def api_get_trace_detail(self, trace_id: str) -> WebApiResponse:
         """获取单个 Trace 的完整 Span 树与上下文指标"""
         try:
-            trace = self.trace_store.get_trace(trace_id)
+            trace = await asyncio.to_thread(self.trace_store.get_trace, trace_id)
             active_trace = TraceContext.get_active_trace(trace_id)
             if trace and trace.get("status") == "running" and active_trace:
                 # 磁盘中已有启动快照时，仍需返回内存里的实时轮次；终态始终以仓储为准。
                 return json_response({"status": "ok", "data": active_trace.to_dict()})
             if trace and trace.get("status") == "running" and active_trace is None:
                 # 查询内存期间任务可能已结束，重新确认仓储，避免返回旧的运行状态。
-                trace = self.trace_store.get_trace(trace_id) or trace
+                trace = (
+                    await asyncio.to_thread(self.trace_store.get_trace, trace_id)
+                ) or trace
             if trace:
                 return json_response({"status": "ok", "data": trace})
 
@@ -460,7 +465,7 @@ class TraceRoutes:
     async def api_get_metrics_summary(self) -> WebApiResponse:
         """获取顶部 KPI 与 Token 统计概览"""
         try:
-            summary = self.trace_store.get_metrics_summary()
+            summary = await asyncio.to_thread(self.trace_store.get_metrics_summary)
             return json_response({"status": "ok", "data": summary})
         except Exception as e:
             logger.error(f"获取指标概览异常: {e}", exc_info=True)
@@ -487,7 +492,8 @@ class TraceRoutes:
                 "range_count": range_count,
             }
 
-            trends_data = self.trace_store.get_analytics_trends(
+            trends_data = await asyncio.to_thread(
+                self.trace_store.get_analytics_trends,
                 granularity=trends_query.get("granularity", "day"),
                 range_count=trends_query.get("range_count", 14),
             )

@@ -173,13 +173,14 @@ class ActiveTaskManager:
             active_trace = TraceContext.get_active_trace(task_id)
             if active_trace and active_trace.status == TaskStatus.RUNNING.value:
                 try:
-                    active_trace.persist_snapshot()
+                    (await active_trace.persist_snapshot_async())
                 except Exception as e:
                     logger.warning(f"取消任务 {task_id} 前保存 Trace 快照失败: {e}")
 
             if self.lifecycle_service:
                 try:
-                    self.lifecycle_service.transition(
+                    await asyncio.to_thread(
+                        self.lifecycle_service.transition,
                         task_id,
                         TaskEvent.CANCEL,
                         error_message="由 WebUI 手动取消任务",
@@ -292,14 +293,15 @@ class ActiveTaskManager:
                     active_trace = TraceContext.get_active_trace(info.task_id)
                     if active_trace and active_trace.status == TaskStatus.RUNNING.value:
                         try:
-                            active_trace.persist_snapshot()
+                            (await active_trace.persist_snapshot_async())
                         except Exception as e:
                             logger.warning(
                                 f"超时回收任务 {info.task_id} 前保存 Trace 快照失败: {e}"
                             )
                     if self.lifecycle_service:
                         try:
-                            self.lifecycle_service.transition(
+                            await asyncio.to_thread(
+                                self.lifecycle_service.transition,
                                 info.task_id,
                                 TaskEvent.TIMEOUT,
                                 error_stage=info.current_stage,
