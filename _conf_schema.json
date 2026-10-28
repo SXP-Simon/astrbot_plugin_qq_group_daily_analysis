@@ -219,7 +219,7 @@
     "t2i_rendering": {
         "description": "图片渲染策略",
         "type": "object",
-        "hint": "添加方案并设置优先级，数值越小越先尝试。每轮可分别配置模板资源、字体地址和T2I服务，失败后尝试下一轮。HTML 报告与模板预览使用第一优先级方案的资源。",
+        "hint": "每轮可单独设置资源地址和图片服务。HTML 报告与模板预览使用优先级最高的方案。",
         "items": {
             "t2i_rendering_strategies": {
                 "type": "template_list",
@@ -246,7 +246,7 @@
                         "timeout": 20000
                     }
                 ],
-                "hint": "添加内地、海外或自定义 T2I 方案，按优先级依次尝试。内地和海外方案跟随 AstrBot；自定义方案填写自己的T2I服务地址。初始包含海外（优先级 10）和内地（优先级 20）两项，清空后恢复这两项。保存后按优先级排列，同优先级保持原顺序。所有轮次共用 5 分钟总等待上限；图片已生成但缺少个别素材时，不会自动进入下一轮。",
+                "hint": "按优先级尝试，数值越小越先；相同优先级按列表顺序。海外和内地方案使用 AstrBot 的图片服务，自定义方案使用填写的服务地址。所有方案最多等待 5 分钟；图片生成后缺少素材不会自动重试。清空列表会恢复默认方案。",
                 "templates": {
                     "strategy": {
                         "name": "海外方案",
@@ -283,7 +283,7 @@
                                 "type": "string",
                                 "description": "模板资源 CDN",
                                 "default": "https://cdn.jsdmirror.com",
-                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。地址需支持 /gh/、/npm/，例如 https://fastly.jsdelivr.net/。请从T2I服务所在网络测试速度和可达性；插件 WebUI 的检测按钮只检查机器人服务器。留空使用插件默认 CDN，自定义图片地址不变。原生配置页可选择预设或“自定义地址…”，插件 WebUI 可直接输入新地址。",
+                                "hint": "用于模板素材和内置人格图片，需支持 /gh/ 和 /npm/，例如 https://fastly.jsdelivr.net/。自定义图片地址不受影响。请先测试 T2I 服务所在网络的速度和可达性；检测按钮测试的是机器人所在服务器。留空使用默认地址。",
                                 "options": [
                                     "https://cdn.jsdmirror.com",
                                     "https://cdn.jsdmirror.cn",
@@ -318,7 +318,7 @@
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "https://fonts.googleapis.com",
-                                "hint": "本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
+                                "hint": "Google 字体样式表地址，建议与下方字体文件地址使用同一镜像。可选预设或自定义地址，请勿填写 T2I 服务地址。",
                                 "options": [
                                     "https://fonts.googleapis.com",
                                     "https://fonts.loli.net",
@@ -343,7 +343,7 @@
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "https://fonts.gstatic.com",
-                                "hint": "本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
+                                "hint": "字体文件地址，建议与上方样式表使用同一镜像。可选预设或自定义地址，请勿填写 T2I 服务地址。",
                                 "options": [
                                     "https://fonts.gstatic.com",
                                     "https://gstatic.loli.net",
@@ -436,7 +436,7 @@
                                 "type": "string",
                                 "description": "模板资源 CDN",
                                 "default": "https://cdn.jsdmirror.com",
-                                "hint": "用于本轮模板素材、内置人格图片和 npm 资源。地址需支持 /gh/、/npm/，例如 https://fastly.jsdelivr.net/。请从T2I服务所在网络测试速度和可达性；插件 WebUI 的检测按钮只检查机器人服务器。留空使用插件默认 CDN，自定义图片地址不变。原生配置页可选择预设或“自定义地址…”，插件 WebUI 可直接输入新地址。",
+                                "hint": "用于模板素材和内置人格图片，需支持 /gh/ 和 /npm/，例如 https://fastly.jsdelivr.net/。自定义图片地址不受影响。请先测试 T2I 服务所在网络的速度和可达性；检测按钮测试的是机器人所在服务器。留空使用默认地址。",
                                 "options": [
                                     "https://cdn.jsdmirror.com",
                                     "https://cdn.jsdmirror.cn",
@@ -471,7 +471,7 @@
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "https://fonts.loli.net",
-                                "hint": "本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
+                                "hint": "Google 字体样式表地址，建议与下方字体文件地址使用同一镜像。可选预设或自定义地址，请勿填写 T2I 服务地址。",
                                 "options": [
                                     "https://fonts.googleapis.com",
                                     "https://fonts.loli.net",
@@ -496,7 +496,7 @@
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "https://gstatic.loli.net",
-                                "hint": "本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
+                                "hint": "字体文件地址，建议与上方样式表使用同一镜像。可选预设或自定义地址，请勿填写 T2I 服务地址。",
                                 "options": [
                                     "https://fonts.gstatic.com",
                                     "https://gstatic.loli.net",
@@ -574,7 +574,7 @@
                                 "type": "string",
                                 "description": "自定义 T2I 服务地址",
                                 "default": "http://127.0.0.1:8999/text2img",
-                                "hint": "默认连接本地 8999 端口，也可填写远程域名、IP 或带前缀的接口地址。AstrBot 在容器中时，127.0.0.1 指向该容器；其他容器或宿主机上的服务需改填对应地址。此方案直接连接服务，不读取 AstrBot 地址，也不使用环境代理。HTTP 适用于可信本机或内网，跨网络建议使用 HTTPS。"
+                                "hint": "填写 T2I 服务地址。容器中的 127.0.0.1 指向容器自身，其他容器需填写可互通的地址。本方案直连服务，不使用环境代理。"
                             },
                             "service_token": {
                                 "type": "string",
@@ -614,7 +614,7 @@
                                 "type": "string",
                                 "description": "模板资源 CDN",
                                 "default": "",
-                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。用于本轮模板素材、内置人格图片和 npm 资源。地址需支持 /gh/、/npm/，例如 https://fastly.jsdelivr.net/。请从T2I服务所在网络测试速度和可达性；插件 WebUI 的检测按钮只检查机器人服务器。留空使用插件默认 CDN，自定义图片地址不变。原生配置页可选择预设或“自定义地址…”，插件 WebUI 可直接输入新地址。",
+                                "hint": "留空使用所选资源环境的默认地址。用于模板素材和内置人格图片，需支持 /gh/ 和 /npm/，例如 https://fastly.jsdelivr.net/。自定义图片地址不受影响。请先测试 T2I 服务所在网络的速度和可达性；检测按钮测试的是机器人所在服务器。",
                                 "options": [
                                     "",
                                     "https://cdn.jsdmirror.com",
@@ -651,7 +651,7 @@
                                 "type": "string",
                                 "description": "Google Fonts 地址",
                                 "default": "",
-                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。本轮 Google 字体样式表地址。请选择预设或“自定义地址…”，建议和下方字体文件地址使用配套镜像。插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
+                                "hint": "留空使用所选资源环境的默认地址。Google 字体样式表地址，建议与下方字体文件地址使用同一镜像。可选预设或自定义地址，请勿填写 T2I 服务地址。",
                                 "options": [
                                     "",
                                     "https://fonts.googleapis.com",
@@ -682,7 +682,7 @@
                                 "type": "string",
                                 "description": "字体文件地址（Gstatic）",
                                 "default": "",
-                                "hint": "留空时跟随上方资源环境预设，填写后使用自己的地址。本轮字体文件地址，建议与上方样式表使用配套镜像。请选择预设或“自定义地址…”；插件 WebUI 可直接输入新地址。自定义时填写字体资源地址，不是 T2I 生成图片的接口地址。",
+                                "hint": "留空使用所选资源环境的默认地址。字体文件地址，建议与上方样式表使用同一镜像。可选预设或自定义地址，请勿填写 T2I 服务地址。",
                                 "options": [
                                     "",
                                     "https://fonts.gstatic.com",
