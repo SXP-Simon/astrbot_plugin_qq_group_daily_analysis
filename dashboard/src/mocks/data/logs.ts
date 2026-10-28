@@ -96,8 +96,8 @@ export const mockPluginLogs: PluginLogItem[] = [
     level: "INFO",
     logger_name: "astrbot_plugin_qq_group_daily_analysis.render",
     tag: "Render",
-    message: "Rendering HTML template [spring_card] with Playwright (viewport: 1080x2840, dpr: 2.0)",
-    raw: "[00:00:16] [INFO] [Render] Rendering HTML poster template [spring_card]...",
+    message: "Rendering HTML template [HatsuneMiku] with Playwright (viewport: 1080x2840, dpr: 2.0)",
+    raw: "[00:00:16] [INFO] [Render] Rendering HTML poster template [HatsuneMiku]...",
     trace_id: "trace-20260926-001",
     stage: "report_rendering",
   },
@@ -232,3 +232,11 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
     raw: "[00:59:00] [CRITICAL] [Resilience] SQLite database lock conflict detected after 5 retries.",
   },
 ];
+
+// 与后端日志的秒级时间戳和日期格式保持一致。
+for (const entry of mockPluginLogs) {
+  const date = new Date(entry.timestamp);
+  entry.timestamp /= 1000;
+  entry.time_str = `${date.toLocaleString("sv-SE")}.${String(date.getMilliseconds()).padStart(3, "0")}`;
+  if (entry.raw) entry.raw = entry.raw.replace(/^\[\d{2}:\d{2}:\d{2}\]/, `[${entry.time_str}]`);
+}

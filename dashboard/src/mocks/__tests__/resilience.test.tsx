@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { TraceSummaryCard } from "../../widgets/trace-drawer/ui/TraceSummaryCard";
 import { TraceDrawer } from "../../widgets/trace-drawer/TraceDrawer";
 import { ActiveTaskBoard } from "../../widgets/active-task-board/ActiveTaskBoard";
@@ -11,6 +11,23 @@ import { mockPluginLogs } from "../data/logs";
 describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Stress Tests)", () => {
   const dummyPreview = vi.fn();
   const dummyDownload = vi.fn();
+
+  it("示例任务展开后显示完整阶段指标、模型调用和两轮渲染", async () => {
+    render(<TraceDrawer open traceId="trace-20260926-001" onClose={vi.fn()} />);
+    expect(await screen.findByText("消息处理与模型消耗")).toBeInTheDocument();
+    expect(screen.getByText(/1,210 条 \(79%\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("消息清洗过滤"));
+    expect(screen.getByText("过滤噪音:")).toBeInTheDocument();
+    expect(screen.getByText("330 条")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("基础统计分析"));
+    expect(screen.getByText("发言人数:")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("大模型分析"));
+    expect(screen.getByText("大模型调用与重试链路")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("报告长图渲染与生成"));
+    expect(screen.getByText("图片渲染过程")).toBeInTheDocument();
+    expect(screen.getByText("共 2 轮策略")).toBeInTheDocument();
+    expect(screen.getByText(/请求等待上限/)).toBeInTheDocument();
+  });
 
   it("稠密重载场景：长文本群名、多产物平铺、超大 Token 与消耗应稳定渲染且不溢出崩溃", () => {
     const denseTrace = mockTraces.find((t) => t.trace_id === "trace-20260926-002-dense");

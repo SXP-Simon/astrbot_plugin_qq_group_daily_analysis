@@ -70,8 +70,16 @@ export const mockHandlers = {
   },
   "GET traces/:traceId": (params?: Record<string, unknown>, pathParams?: Record<string, string>) => {
     const traceId = pathParams?.traceId || (params?.traceId as string);
-    const item = mockTraces.find((t) => t.trace_id === traceId) || mockTraces[0];
-    return { status: "ok", data: item };
+    const item = mockTraces.find((t) => t.trace_id === traceId);
+    if (item) return { status: "ok", data: item };
+    const task = mockActiveTasks.find((t) => t.task_id === traceId);
+    if (task) return { status: "ok", data: {
+      trace_id: task.task_id, group_id: task.group_id, group_name: task.group_name,
+      platform: task.platform, trigger_type: task.trigger_type, status: "running",
+      current_stage: task.current_stage, started_at: task.started_at, duration_ms: task.duration_s * 1000,
+      spans: [],
+    } };
+    return { status: "error", data: null, message: "未找到任务记录" };
   },
   "GET traces/:traceId/logs": (params?: Record<string, unknown>, pathParams?: Record<string, string>) => {
     const traceId = pathParams?.traceId || (params?.traceId as string);

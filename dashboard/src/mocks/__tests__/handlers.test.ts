@@ -20,6 +20,8 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
 
   it("日志分类使用后端的 key 和 label，且可以筛选", () => {
     const logs = mockHandlers["GET logs"]();
+    expect(logs.data.items[0].timestamp).toBeLessThan(100000000000);
+    expect(logs.data.items[0].time_str).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/);
     const tag = logs.data.available_tags.find((item) => item.key === "LLM");
     expect(tag).toEqual({ key: "LLM", label: "大模型调用" });
     const filtered = mockHandlers["GET logs"]({ tag: "LLM" });
@@ -58,11 +60,39 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
     expect(filteredRes.data.items.every((t) => t.status === "failed")).toBe(true);
   });
 
+  it("任务详情使用真实阶段、秒级时间戳和消息留存比例", () => {
+    for (const trace of mockTraces) {
+      expect(trace.started_at).toBeLessThan(100000000000);
+      for (const span of trace.spans || []) expect(span.started_at).toBeLessThan(100000000000);
+      if (trace.context_metrics && trace.context_metrics.raw_message_count > 0) {
+        expect(trace.context_metrics.compression_ratio).toBeCloseTo(
+          trace.context_metrics.cleaned_message_count / trace.context_metrics.raw_message_count, 4,
+        );
+      }
+    }
+    const detail = mockHandlers["GET traces/:traceId"](undefined, { traceId: "trace-20260926-001" }).data;
+    expect(detail?.spans?.map((span) => span.stage_name)).toEqual([
+      "FETCH_MESSAGES", "CLEAN_MESSAGES", "STATS_ANALYSIS", "LLM_ANALYSIS", "SAVE_SUMMARY", "RENDER_REPORT", "DISPATCH_REPORT",
+    ]);
+    expect(detail?.spans?.find((span) => span.stage_name === "RENDER_REPORT")?.payload?.render_attempts).toHaveLength(2);
+    expect(detail?.spans?.every((span) => span.status === "success" && typeof span.end_memory_mb === "number")).toBe(true);
+  });
+
+  it("运行中任务的时间和详情对应同一会话", () => {
+    const tasks = mockHandlers["GET tasks/active"]().data;
+    for (const task of tasks) {
+      expect(task.started_at).toBeLessThan(100000000000);
+      const detail = mockHandlers["GET traces/:traceId"](undefined, { traceId: task.task_id }).data;
+      expect(detail).toMatchObject({ trace_id: task.task_id, group_id: task.group_id, status: "running", current_stage: task.current_stage });
+    }
+    expect(mockHandlers["GET traces/:traceId"](undefined, { traceId: "missing" }).data).toBeNull();
+  });
+
   it("应当支持带动态参数的链路详情查询", () => {
     const res = mockHandlers["GET traces/:traceId"](undefined, { traceId: "trace-20260926-001" });
     expect(res.status).toBe("ok");
-    expect(res.data.trace_id).toBe("trace-20260926-001");
-    expect(Array.isArray(res.data.spans)).toBe(true);
+    expect(res.data?.trace_id).toBe("trace-20260926-001");
+    expect(Array.isArray(res.data?.spans)).toBe(true);
   });
 
   it("提供 3 套覆盖完整业务场景的高保真 Golden Mocks (正常分析/超时中断/多模态漫画)", () => {
@@ -81,7 +111,7 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
   it("应当支持手动触发分析任务并返回排队 Trace ID", () => {
     const res = mockHandlers["POST tasks/trigger"]();
     expect(res.status).toBe("ok");
-    expect(res.data.trace_id).toBeDefined();
+    expect(res.data?.trace_id).toBeDefined();
   });
 
   it("应当返回可用的海报视觉主题模板列表", () => {
