@@ -10,6 +10,7 @@ import base64
 from typing import TYPE_CHECKING
 
 from ....utils.logger import logger
+from ...reporting.generators import ReportGenerator
 from ...reporting.template_installer import (
     MAX_ZIP_B64_SIZE,
     TemplateInstallError,
@@ -55,8 +56,10 @@ class TemplateRoutes:
         """获取当前可用的 HTMLTemplates 实例。"""
         if self.report_dispatcher and self.report_dispatcher.report_generator:
             return self.report_dispatcher.report_generator.html_templates
-        if self.analysis_service and self.analysis_service.report_generator:
-            return self.analysis_service.report_generator.html_templates
+        if self.analysis_service:
+            generator = self.analysis_service.report_generator
+            if isinstance(generator, ReportGenerator):
+                return generator.html_templates
         return None
 
     async def api_get_report_templates(self) -> WebApiResponse:
