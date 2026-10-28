@@ -7,12 +7,15 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...domain.repositories.persistence_repository import ICheckpointStore
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from ...domain.value_objects.analysis_results import (
         CheckpointDetailPayload,
         CheckpointSummaryPayload,
@@ -27,11 +30,17 @@ class CheckpointStore(ICheckpointStore):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
-    def _get_connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def _get_connection(self) -> Generator[sqlite3.Connection]:
+        """在当前调用线程管理连接和事务，确保异常回滚且及时释放句柄。"""
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL;")
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._get_connection() as conn:

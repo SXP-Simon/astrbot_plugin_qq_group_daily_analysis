@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
@@ -17,6 +18,8 @@ from ...domain.value_objects.task_status import TaskStatus
 from ...shared.constants import PROCESS_BOOT_ID, PROCESS_PID, AnalysisStage
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from ...shared.trace_context import TraceContextSnapshot
 
 
@@ -36,13 +39,18 @@ class TraceSQLiteStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
-    def _get_connection(self) -> sqlite3.Connection:
-        """获取启用了 WAL 模式和外键支持的数据库连接"""
+    @contextmanager
+    def _get_connection(self) -> Generator[sqlite3.Connection]:
+        """在调用线程创建、提交并关闭数据库连接，异常时回滚事务。"""
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA foreign_keys=ON;")
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         """初始化数据库表结构与索引"""
