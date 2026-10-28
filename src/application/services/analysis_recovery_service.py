@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import datetime as dt
-import time as time_mod
-from collections.abc import Awaitable, Callable, Mapping
+import re
+import shutil
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,6 +29,8 @@ from .analysis_serializer import AnalysisResultSerializer
 from .pipeline_context import PipelineContext
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from ...domain.repositories.analysis_repository import IAnalysisProvider
     from ...domain.repositories.persistence_repository import ICheckpointStore
     from ...domain.repositories.report_repository import IReportGenerator
@@ -108,175 +112,106 @@ class AnalysisRecoveryService:
         Returns:
             包含渲染结果与生成文件路径的字典。
         """
+        if render_format not in {"image", "html"}:
+            return {"success": False, "reason": "不支持的报告格式"}
         analysis_result: AnalysisResultPayload | None = None
+        from_checkpoint = False
         if self.history_manager:
             try:
                 hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if isinstance(hist_data, dict):
-                    analysis_result = (
-                        hist_data  # type: ignore[assignment]
-                        if "statistics" in hist_data
-                        and isinstance(hist_data["statistics"], GroupStatistics)
-                        else AnalysisResultSerializer.deserialize(hist_data)
-                    )
+                # 旧 KV 记录只有摘要，不能作为可恢复的完整分析产物。
+                if isinstance(hist_data, dict) and isinstance(
+                    hist_data.get("statistics"), (dict, GroupStatistics)
+                ):
+                    analysis_result = AnalysisResultSerializer.deserialize(hist_data)
             except Exception as e:
                 logger.debug(f"从 HistoryManager 获取分析记录异常: {e}")
 
         if not analysis_result and self.checkpoint_store:
-            cached_data = self.checkpoint_store.get_checkpoint(
-                group_id, date_str, "LLM_ANALYSIS", trace_id=trace_id or ""
+            cached_data = await asyncio.to_thread(
+                self.checkpoint_store.get_checkpoint,
+                group_id,
+                date_str,
+                "LLM_ANALYSIS",
+                trace_id=trace_id or "",
             )
-            if isinstance(cached_data, dict):
+            if isinstance(cached_data, dict) and isinstance(
+                cached_data.get("statistics"), (dict, GroupStatistics)
+            ):
                 analysis_result = AnalysisResultSerializer.deserialize(cached_data)
+                from_checkpoint = True
 
         if not analysis_result:
             return {
                 "success": False,
-                "reason": f"未找到群 {group_id} 在 {date_str} 的分析产物记录",
+                "reason": f"未找到群 {group_id} 在 {date_str} 的完整分析产物记录",
             }
 
         reports_dir = StarTools.get_data_dir(PLUGIN_NAME) / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
+        # 所有外部标识只参与文件名，不能改变报告目录。
+        components = [group_id, trace_id or "", template_name]
+        safe_group, safe_trace, safe_template = [
+            re.sub(r'[\s/\\:*?"<>|\x00-\x1f]', "_", value)[:64] for value in components
+        ]
         ts_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        if render_format == "html":
-            filename = (
-                f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.html"
-                if trace_id
-                else f"report_{group_id}_{ts_str}_{template_name}.html"
-            )
-            dest = reports_dir / filename
-            html_path, _ = await self.report_generator.generate_html_report(
-                analysis_result=analysis_result,
-                group_id=group_id,
-                template_theme=template_name,
-                custom_filename=filename,
-                trace_id=trace_id,
-            )
-            if not html_path or not Path(html_path).exists():
-                prep_func = getattr(self.report_generator, "_prepare_render_data", None)
-                if callable(prep_func):
-                    prep_res = prep_func(analysis_result)
-                    render_data = (
-                        await prep_res if asyncio.iscoroutine(prep_res) else prep_res
-                    )
-                else:
-                    render_data = analysis_result
-                html_tpls = self.report_generator.html_templates
-                if html_tpls and hasattr(html_tpls, "render_template"):
-                    render_kwargs: dict[str, object] = (
-                        dict(render_data) if isinstance(render_data, Mapping) else {}
-                    )
-                    html_content = html_tpls.render_template(
-                        "html_template.html",
-                        template_theme=template_name,
-                        **render_kwargs,
-                    )
-                    dest.write_text(html_content, encoding="utf-8")
-
-            if trace_id:
-                from ...shared.trace_context import _global_trace_store
-
-                if _global_trace_store is not None:
-                    try:
-                        trace_data = _global_trace_store.get_trace(trace_id)
-                        if trace_data:
-                            extra = trace_data.get("extra")
-                            if isinstance(extra, dict):
-                                rfiles = extra.setdefault("report_files", [])
-                                if isinstance(rfiles, list) and not any(
-                                    isinstance(rf, dict)
-                                    and rf.get("filename") == filename
-                                    for rf in rfiles
-                                ):
-                                    rfiles.append(
-                                        {
-                                            "filename": filename,
-                                            "path": str(dest.resolve()),
-                                            "format": "html",
-                                            "template": template_name,
-                                            "size_bytes": dest.stat().st_size
-                                            if dest.exists()
-                                            else 0,
-                                            "created_at": time_mod.time(),
-                                        }
-                                    )
-                                trace_data["extra"] = extra
-                                _global_trace_store.save_trace(trace_data)
-                    except Exception:
-                        pass
-
-            return {
-                "success": True,
-                "filename": filename,
-                "report_path": str(dest),
-                "is_html": True,
-                "from_checkpoint": True,
-                "trace_id": trace_id,
-            }
-        image_res = await self.report_generator.generate_image_report(
-            analysis_result=analysis_result,
-            group_id=group_id,
-            html_render_func=bind_group_html_renderer(
-                self.html_render, group_id, platform_id
-            ),
-            template_theme=template_name,
-        )
-        image_url = image_res[0]
-        filename = (
-            f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.jpg"
-            if trace_id
-            else f"report_{group_id}_{ts_str}_{template_name}.jpg"
-        )
+        suffix = "html" if render_format == "html" else "jpg"
+        trace_suffix = f"_{safe_trace}" if safe_trace else ""
+        filename = f"report_{safe_group}_{ts_str}{trace_suffix}_{safe_template}_{uuid.uuid4().hex[:8]}.{suffix}"
         dest = reports_dir / filename
-        if image_url and Path(image_url).exists():
-            import shutil
+        image_url: str | None = None
+        try:
+            await asyncio.to_thread(reports_dir.mkdir, parents=True, exist_ok=True)
+            if render_format == "html":
+                html_path, _ = await self.report_generator.generate_html_report(
+                    analysis_result=analysis_result,
+                    group_id=group_id,
+                    template_theme=template_name,
+                    custom_filename=filename,
+                    trace_id=trace_id,
+                )
+                if not html_path or not Path(html_path).is_file():
+                    return {
+                        "success": False,
+                        "reason": "HTML 报告生成失败，未产生可用文件",
+                    }
+                source = Path(html_path)
+                if source.resolve() != dest.resolve():
+                    await asyncio.to_thread(shutil.copy2, source, dest)
+            else:
+                image_url, _ = await self.report_generator.generate_image_report(
+                    analysis_result=analysis_result,
+                    group_id=group_id,
+                    html_render_func=bind_group_html_renderer(
+                        self.html_render, group_id, platform_id
+                    ),
+                    template_theme=template_name,
+                )
+                if image_url and image_url.startswith("base64://"):
+                    data = base64.b64decode(image_url[9:], validate=True)
+                    await asyncio.to_thread(dest.write_bytes, data)
+                elif image_url and Path(image_url).is_file():
+                    await asyncio.to_thread(shutil.copy2, image_url, dest)
+                else:
+                    return {
+                        "success": False,
+                        "reason": "图片报告生成失败，未产生可用文件",
+                    }
+            if not dest.is_file() or dest.stat().st_size == 0:
+                return {"success": False, "reason": "报告生成失败，产物内容为空"}
+        except Exception as e:
+            logger.warning(f"重新渲染报告失败: {e}")
+            return {"success": False, "reason": f"重新渲染报告失败: {e}"}
 
-            shutil.copy2(image_url, dest)
-        elif image_url and image_url.startswith("base64://"):
-            import base64
-
-            data = base64.b64decode(image_url[9:])
-            dest.write_bytes(data)
-
-        if trace_id:
-            from ...shared.trace_context import _global_trace_store
-
-            if _global_trace_store is not None:
-                try:
-                    trace_data = _global_trace_store.get_trace(trace_id)
-                    if trace_data:
-                        extra = trace_data.get("extra")
-                        if isinstance(extra, dict):
-                            rfiles = extra.setdefault("report_files", [])
-                            if isinstance(rfiles, list) and not any(
-                                isinstance(rf, dict) and rf.get("filename") == filename
-                                for rf in rfiles
-                            ):
-                                rfiles.append(
-                                    {
-                                        "filename": filename,
-                                        "path": str(dest.resolve()),
-                                        "format": "image",
-                                        "template": template_name,
-                                        "size_bytes": dest.stat().st_size
-                                        if dest.exists()
-                                        else 0,
-                                        "created_at": time_mod.time(),
-                                    }
-                                )
-                            trace_data["extra"] = extra
-                            _global_trace_store.save_trace(trace_data)
-                except Exception:
-                    pass
-
+        await TraceContext.register_report(
+            dest, group_id, render_format, trace_id or ""
+        )
         return {
             "success": True,
             "filename": filename,
             "report_path": str(dest),
             "image_url": image_url,
-            "is_html": False,
-            "from_checkpoint": True,
+            "is_html": render_format == "html",
+            "from_checkpoint": from_checkpoint,
             "trace_id": trace_id,
         }
 
