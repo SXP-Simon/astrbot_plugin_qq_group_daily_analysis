@@ -297,7 +297,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                         path = Path(output)
                         if not path.is_file():
                             return error_response(
-                                "AstrBot 返回的图片文件不存在，请查看 AstrBot 和图片服务日志。",
+                                "AstrBot 返回的图片文件不存在，请查看 AstrBot 和 T2I 服务日志。",
                                 status_code=502,
                             )
                         if path.stat().st_size > 32 * 1024 * 1024:
@@ -307,7 +307,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                         image = await asyncio.to_thread(path.read_bytes)
                     else:
                         return error_response(
-                            "AstrBot 没有返回图片，请检查图片服务并查看 AstrBot 日志。",
+                            "AstrBot 没有返回图片，请检查T2I 服务并查看 AstrBot 日志。",
                             status_code=502,
                         )
                     if len(image) > 32 * 1024 * 1024:
@@ -318,14 +318,14 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                         await asyncio.to_thread(validate_t2i_image, image)
                     except ValueError:
                         return error_response(
-                            "AstrBot 返回的内容不是有效图片，请查看 AstrBot 和图片服务日志。",
+                            "AstrBot 返回的内容不是有效图片，请查看 AstrBot 和T2I 服务日志。",
                             status_code=502,
                         )
         except TimeoutError as exc:
             message = (
                 str(exc)
                 if service == "custom"
-                else "图片服务响应超时，请检查服务状态和网络，并查看 AstrBot 日志。"
+                else "T2I 服务响应超时，请检查服务状态和网络，并查看 AstrBot 日志。"
             )
             return error_response(message, status_code=502)
         except (ValueError, RuntimeError) as exc:
