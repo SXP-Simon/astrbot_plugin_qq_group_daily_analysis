@@ -281,49 +281,65 @@ class ActiveTaskManager:
                 timed_out_tasks: list[ActiveTaskInfo] = []
 
                 async with self._lock:
-                    for task_id, info in list(self._tasks.items()):
+                    for info in list(self._tasks.values()):
                         if now - info.last_heartbeat > timeout_seconds:
                             timed_out_tasks.append(info)
-                            self._tasks.pop(task_id, None)
 
                 for info in timed_out_tasks:
-                    logger.warning(
-                        f"[TaskReaper] 任务 {info.task_id} (群 {info.group_id}) 超过 {timeout_seconds}s 未更新心跳，强制回收清理"
+                    # 停止扫描器时先完成当前任务的 CAS 与取消收尾。
+                    cleanup = asyncio.create_task(
+                        self._reap_task(info, timeout_seconds)
                     )
-                    active_trace = TraceContext.get_active_trace(info.task_id)
-                    if active_trace and active_trace.status == TaskStatus.RUNNING.value:
-                        try:
-                            (await active_trace.persist_snapshot_async())
-                        except Exception as e:
-                            logger.warning(
-                                f"超时回收任务 {info.task_id} 前保存 Trace 快照失败: {e}"
-                            )
-                    if self.lifecycle_service:
-                        try:
-                            await asyncio.to_thread(
-                                self.lifecycle_service.transition,
-                                info.task_id,
-                                TaskEvent.TIMEOUT,
-                                error_stage=info.current_stage,
-                                error_message=f"任务超过 {timeout_seconds} 秒未更新心跳，已回收",
-                            )
-                        except KeyError as e:
-                            logger.warning(
-                                f"Reaper 找不到任务 {info.task_id} 的追踪记录: {e}"
-                            )
-                        except Exception as e:
-                            logger.info(f"Reaper 未改变任务 {info.task_id} 的终态: {e}")
-
-                    if info.asyncio_task and not info.asyncio_task.done():
-                        info.asyncio_task.cancel()
-
-                    await self._broadcast_event(
-                        {
-                            "event": "task_timed_out",
-                            "data": {"task_id": info.task_id},
-                        }
-                    )
+                    try:
+                        await asyncio.shield(cleanup)
+                    except asyncio.CancelledError:
+                        await cleanup
+                        raise
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"[TaskReaper] 巡检异常: {e}", exc_info=True)
+
+    async def _reap_task(self, info: ActiveTaskInfo, timeout_seconds: int) -> None:
+        """完成单个超时任务的快照、状态跃迁和运行协程回收。
+
+        Args:
+            info: 扫描到的超时任务。
+            timeout_seconds: 当前任务心跳超时阈值。
+        """
+        logger.warning(
+            f"[TaskReaper] 任务 {info.task_id} (群 {info.group_id}) 超过 {timeout_seconds}s 未更新心跳，强制回收清理"
+        )
+        active_trace = TraceContext.get_active_trace(info.task_id)
+        if active_trace and active_trace.status == TaskStatus.RUNNING.value:
+            try:
+                await active_trace.persist_snapshot_async()
+            except Exception as e:
+                logger.warning(
+                    f"超时回收任务 {info.task_id} 前保存 Trace 快照失败: {e}"
+                )
+        if self.lifecycle_service:
+            try:
+                await asyncio.to_thread(
+                    self.lifecycle_service.transition,
+                    info.task_id,
+                    TaskEvent.TIMEOUT,
+                    error_stage=info.current_stage,
+                    error_message=f"任务超过 {timeout_seconds} 秒未更新心跳，已回收",
+                )
+            except KeyError as e:
+                logger.warning(f"Reaper 找不到任务 {info.task_id} 的追踪记录: {e}")
+            except Exception as e:
+                logger.info(f"Reaper 未改变任务 {info.task_id} 的终态: {e}")
+
+        if info.asyncio_task and not info.asyncio_task.done():
+            info.asyncio_task.cancel()
+        async with self._lock:
+            self._tasks.pop(info.task_id, None)
+
+        await self._broadcast_event(
+            {
+                "event": "task_timed_out",
+                "data": {"task_id": info.task_id},
+            }
+        )

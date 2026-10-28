@@ -42,7 +42,7 @@ async def test_reaper_cancels_task_even_when_another_event_already_finished_trac
     )
     manager._tasks["finished_but_active"].last_heartbeat = time.time() - 200
     manager.start_reaper(interval_seconds=0.01, timeout_seconds=180)
-    await asyncio.sleep(0.05)
+    await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 3)
     manager.stop_reaper()
     if manager._reaper_task:
         await asyncio.gather(manager._reaper_task, return_exceptions=True)
@@ -92,7 +92,7 @@ async def test_timeout_event_closes_open_span_and_rejects_late_cancel(
             )
             manager._tasks["timeout_cancel_race"].last_heartbeat = time.time() - 200
             manager.start_reaper(interval_seconds=0.01, timeout_seconds=180)
-            await asyncio.sleep(0.05)
+            await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 3)
             manager.stop_reaper()
             if manager._reaper_task:
                 await asyncio.gather(manager._reaper_task, return_exceptions=True)
@@ -115,3 +115,41 @@ async def test_timeout_event_closes_open_span_and_rejects_late_cancel(
         TraceContext.set_active_task_manager(None)
         TraceContext.set_global_lifecycle_service(None)
         TraceContext.set_global_store(None)
+
+
+@pytest.mark.asyncio
+async def test_stopping_reaper_finishes_inflight_timeout(tmp_path):
+    import threading
+
+    store = TraceSQLiteStore(tmp_path / "stopping-reaper.db")
+    store.save_trace({"trace_id": "stopping", "group_id": "123", "status": "running"})
+    started, release = threading.Event(), threading.Event()
+
+    class DelayedLifecycle(TaskLifecycleService):
+        def transition(self, *args, **kwargs):
+            started.set()
+            assert release.wait(3)
+            return super().transition(*args, **kwargs)
+
+    manager = ActiveTaskManager(lifecycle_service=DelayedLifecycle(store))
+    job = asyncio.create_task(asyncio.sleep(100))
+    await manager.register_task(task_id="stopping", group_id="123", asyncio_task=job)
+    manager._tasks["stopping"].last_heartbeat = time.time() - 200
+    manager.start_reaper(interval_seconds=0.001, timeout_seconds=180)
+    try:
+        assert await asyncio.to_thread(started.wait, 2)
+        manager.stop_reaper()
+        await asyncio.sleep(0)
+        assert not job.done()
+        release.set()
+        await asyncio.wait_for(manager._reaper_task, 3)
+        await asyncio.gather(job, return_exceptions=True)
+        assert job.cancelled()
+        assert not manager.get_active_tasks()
+        assert store.get_trace("stopping")["status"] == "failed"
+    finally:
+        release.set()
+        manager.stop_reaper()
+        if not job.done():
+            job.cancel()
+        await asyncio.gather(job, return_exceptions=True)
