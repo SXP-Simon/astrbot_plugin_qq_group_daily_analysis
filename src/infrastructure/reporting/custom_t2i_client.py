@@ -18,7 +18,7 @@ _MAX_RESPONSE_BYTES = 32 * 1024 * 1024
 _ERROR_SAMPLE_BYTES = 4096
 
 
-def _validate_image(content: bytes) -> None:
+def validate_t2i_image(content: bytes) -> None:
     """在线程中验证图片完整性和解码，避免阻塞事件循环。
 
     Args:
@@ -48,7 +48,7 @@ def _validate_image(content: bytes) -> None:
         Image.DecompressionBombWarning,
     ):
         raise ValueError(
-            "自定义 T2I 服务返回的图片损坏或过大，请查看服务日志"
+            "T2I 服务返回的图片损坏、格式不支持或过大，请查看服务日志"
         ) from None
 
 
@@ -120,7 +120,7 @@ async def render_custom_t2i(
                         break
             data = bytes(content)
             if success and data.startswith((b"\xff\xd8", b"\x89PNG")):
-                await asyncio.to_thread(_validate_image, data)
+                await asyncio.to_thread(validate_t2i_image, data)
                 return data
     except (TimeoutError, httpx.TimeoutException):
         raise TimeoutError(
