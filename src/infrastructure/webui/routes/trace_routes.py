@@ -148,7 +148,9 @@ class TraceRoutes:
     async def api_get_distinct_groups(self) -> WebApiResponse:
         """获取所有有历史分析记录的群组列表（用于下拉快速筛选）"""
         try:
-            groups = self.trace_store.get_distinct_groups()
+            groups = self.trace_store.get_distinct_groups(
+                by_session=request.query.get("by_session") == "true"
+            )
             return json_response({"status": "ok", "data": groups})
         except Exception as e:
             logger.error(f"查询群组列表异常: {e}", exc_info=True)

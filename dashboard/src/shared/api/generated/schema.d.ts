@@ -1141,7 +1141,9 @@ export interface operations {
     };
     getDistinctGroups: {
         parameters: {
-            query?: never;
+            query?: {
+                by_session?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;

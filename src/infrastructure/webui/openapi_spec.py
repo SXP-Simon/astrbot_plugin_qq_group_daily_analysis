@@ -493,6 +493,13 @@ def generate_openapi_spec() -> dict[str, Any]:
                 "get": {
                     "summary": "Get distinct groups list",
                     "operationId": "getDistinctGroups",
+                    "parameters": [
+                        {
+                            "name": "by_session",
+                            "in": "query",
+                            "schema": {"type": "boolean"},
+                        }
+                    ],
                     "responses": {
                         "200": {
                             "description": "历史群聊的标识、名称和平台实例",
