@@ -20,7 +20,7 @@ export function T2iProbe({ input }: { input: T2iProbeInput }) {
         {hostService
           ? "无需保存即可测试图片服务。未绑定配置的群使用默认配置；旧版 AstrBot 可能只支持默认配置。"
           : "无需保存即可测试当前服务地址和 Token。"}
-        测试不调用大模型，也不会发到群里。模板素材请通过报告确认。
+        测试检查图片服务是否可用，不检查模板图片和字体；不会调用大模型或发到群里。
       </Typography.Text>
       {error && <Alert type="error" showIcon message={error} />}
       {result && <>

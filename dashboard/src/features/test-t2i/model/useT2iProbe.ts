@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { testT2i } from "../../../entities/config/api/configApi";
 import type { T2iProbe, T2iProbeInput } from "../../../entities/config/model/t2iProbe";
-import { fetchDistinctGroups } from "../../../entities/group/api/groupApi";
+import { fetchGroupSessions } from "../../../entities/group/api/groupApi";
 import type { GroupItem } from "../../../entities/group/model/types";
 
 export function useT2iProbe(input: T2iProbeInput) {
@@ -18,7 +18,7 @@ export function useT2iProbe(input: T2iProbeInput) {
   useEffect(() => {
     if (!hostService) return;
     let active = true;
-    void fetchDistinctGroups().then((list) => {
+    void fetchGroupSessions().then((list) => {
       if (active) { setGroups(list.filter((group) => Boolean(group.platform))); setGroupsError(""); }
     }).catch(() => {
       if (active) setGroupsError("群列表暂时无法读取，可以先测试 AstrBot 默认配置。");
