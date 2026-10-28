@@ -132,8 +132,8 @@ class PipelineContext:
         payload_dict = dict(initial_payload or {})
 
         if self.trace is not None:
-            span_cm = self.trace.span(stage_name, payload_dict)
-            span_record = span_cm.__enter__()
+            span_cm = self.trace.span_async(stage_name, payload_dict)
+            span_record = await span_cm.__aenter__()
         else:
             span_cm = None
             span_record: SpanRecord = {
@@ -190,7 +190,8 @@ class PipelineContext:
                         else step_obj.output
                     )
                     cur_trace_id = self.trace.trace_id if self.trace else ""
-                    self.checkpoint_store.save_checkpoint(
+                    await asyncio.to_thread(
+                        self.checkpoint_store.save_checkpoint,
                         group_id=self.group_id,
                         date_str=self.date_str,
                         stage_name=stage_name,
@@ -216,7 +217,7 @@ class PipelineContext:
             if heartbeat_task is not None and not heartbeat_task.done():
                 heartbeat_task.cancel()
             if span_cm is not None:
-                span_cm.__exit__(None, None, None)
+                await span_cm.__aexit__(None, None, None)
 
     def restore_checkpoint_span(
         self,

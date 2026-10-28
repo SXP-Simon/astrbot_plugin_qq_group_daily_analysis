@@ -551,7 +551,8 @@ class AnalysisApplicationService:
             await self.history_manager.save_analysis(group_id, analysis_result)
             if self.checkpoint_store:
                 try:
-                    self.checkpoint_store.save_checkpoint(
+                    await asyncio.to_thread(
+                        self.checkpoint_store.save_checkpoint,
                         group_id=group_id,
                         date_str=date_str,
                         stage_name=(

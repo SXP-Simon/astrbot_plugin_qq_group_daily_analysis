@@ -84,8 +84,10 @@ class ComicApplicationService:
         trace = TraceContext.current()
 
         # 1. 提取分镜和金句
-        sb_ctx = trace.span(AnalysisStage.COMIC_STORYBOARD) if trace else nullcontext()
-        with sb_ctx as sb_rec:
+        sb_ctx = (
+            trace.span_async(AnalysisStage.COMIC_STORYBOARD) if trace else nullcontext()
+        )
+        async with sb_ctx as sb_rec:
             (
                 storyboards,
                 storyboard_usage,
@@ -174,8 +176,10 @@ class ComicApplicationService:
                     f"[Comic] 无法加载参考图: {Path(reference_image_path).name}"
                 )
 
-        draw_ctx = trace.span(AnalysisStage.COMIC_DRAWING) if trace else nullcontext()
-        with draw_ctx as draw_rec:
+        draw_ctx = (
+            trace.span_async(AnalysisStage.COMIC_DRAWING) if trace else nullcontext()
+        )
+        async with draw_ctx as draw_rec:
             # 4. 若配置为外部绘图后端，优先走对应插件出图
             backend = self.config_manager.get_drawing_backend()
             if backend in {"general_plugin", "big_banana"}:

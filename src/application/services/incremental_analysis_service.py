@@ -420,7 +420,8 @@ class IncrementalAnalysisService:
             if self.checkpoint_store:
                 try:
                     cur_trace_id = trace.trace_id if trace else ""
-                    self.checkpoint_store.save_checkpoint(
+                    await asyncio.to_thread(
+                        self.checkpoint_store.save_checkpoint,
                         group_id=group_id,
                         date_str=date_str,
                         stage_name=f"INCREMENTAL_BATCH_{batch.batch_id[:8]}",

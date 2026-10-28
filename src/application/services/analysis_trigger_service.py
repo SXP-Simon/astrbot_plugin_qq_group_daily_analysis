@@ -217,7 +217,7 @@ class AnalysisTriggerService:
         render_to_chat: bool = True,
     ) -> None:
         """后台异步分析执行流程（绑定生命周期管理、静默落库与自动发图）。"""
-        trace = TraceContext.set(
+        trace = await TraceContext.set_async(
             trace_id=trace_id,
             group_id=group_id,
             group_name=group_name,
@@ -226,7 +226,7 @@ class AnalysisTriggerService:
         )
         if self.trace_store:
             try:
-                self.trace_store.save_trace(trace.to_dict())
+                (await asyncio.to_thread(self.trace_store.save_trace, trace.to_dict()))
             except Exception:
                 pass
 
@@ -286,13 +286,14 @@ class AnalysisTriggerService:
                             exc_info=True,
                         )
 
-                trace.finish(event=TaskEvent.SUCCEED)
+                (await asyncio.to_thread(trace.finish, event=TaskEvent.SUCCEED))
                 logger.info(
                     f"[LLM Tool Trigger] 异步任务执行成功: 群 {group_id}, trace={trace_id}"
                 )
             else:
                 reason = str(res.get("reason", "unknown"))
-                trace.finish(
+                await asyncio.to_thread(
+                    trace.finish,
                     event=TaskEvent.FAIL,
                     error_stage=target_stage_name,
                     error_message=f"分析失败: {reason}",
@@ -301,7 +302,8 @@ class AnalysisTriggerService:
                     f"[LLM Tool Trigger] 异步任务未完成: 群 {group_id}, 原因: {reason}"
                 )
         except Exception as exc:
-            trace.finish(
+            await asyncio.to_thread(
+                trace.finish,
                 event=TaskEvent.FAIL,
                 error_stage=target_stage_name,
                 error_message=str(exc),
@@ -314,7 +316,9 @@ class AnalysisTriggerService:
             self._pending_groups.discard(group_id)
             if self.trace_store:
                 try:
-                    self.trace_store.save_trace(trace.to_dict())
+                    await asyncio.to_thread(
+                        self.trace_store.save_trace, trace.to_dict()
+                    )
                 except Exception:
                     pass
             if self.active_task_manager:
