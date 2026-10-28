@@ -55,12 +55,21 @@ it("宿主方案可测试默认配置和群聊配置，切换目标后清除旧�
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
   await screen.findByAltText("T2I 测试图片");
   expect(testT2i).toHaveBeenLastCalledWith(host);
-  fireEvent.mouseDown(screen.getByLabelText("测试所用配置", { selector: "input" }));
+  fireEvent.mouseDown(screen.getByLabelText("测试使用的 AstrBot 配置", { selector: "input" }));
   fireEvent.click(await screen.findByText("日常交流群（123 · onebot_1）"));
   expect(screen.queryByAltText("T2I 测试图片")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
   await screen.findByAltText("T2I 测试图片");
   expect(testT2i).toHaveBeenLastCalledWith({ ...host, group_id: "123", platform_id: "onebot_1" });
+});
+
+it("简洁说明宿主和自定义测试的使用范围", () => {
+  const view = render(<T2iProbe input={{ render_service: "astrbot" }} />);
+  expect(screen.getByText(/未绑定配置的群使用默认配置/)).toBeInTheDocument();
+  expect(screen.getByText(/测试不调用大模型，也不会发到群里/)).toBeInTheDocument();
+  view.rerender(<T2iProbe input={{ render_service: "custom" }} />);
+  expect(screen.getByText(/无需保存即可测试当前服务地址和 Token/)).toBeInTheDocument();
+  expect(screen.getByText(/模板素材请通过报告确认/)).toBeInTheDocument();
 });
 
 it("群列表读取失败时保留默认配置测试", async () => {

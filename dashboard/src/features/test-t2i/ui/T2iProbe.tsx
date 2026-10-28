@@ -8,8 +8,8 @@ export function T2iProbe({ input }: { input: T2iProbeInput }) {
   return (
     <Space direction="vertical" style={{ width: "100%", marginTop: 12 }}>
       {hostService && <>
-        <Typography.Text>测试所用配置</Typography.Text>
-        <Select aria-label="测试所用配置" value={groupKey} onChange={setGroupKey}
+        <Typography.Text>测试使用的 AstrBot 配置</Typography.Text>
+        <Select aria-label="测试使用的 AstrBot 配置" value={groupKey} onChange={setGroupKey}
           options={groupOptions} style={{ width: "100%" }} />
         {groupsError && <Typography.Text type="secondary">{groupsError}</Typography.Text>}
       </>}
@@ -18,10 +18,9 @@ export function T2iProbe({ input }: { input: T2iProbeInput }) {
       </Button>
       <Typography.Text type="secondary">
         {hostService
-          ? "通过 AstrBot 生成一张测试图，可选择默认配置或列表中群聊绑定的配置；未绑定时跟随默认配置，旧版 AstrBot 可能只能使用默认配置。使用当前超时，不用先保存方案。"
-          : "不用先保存，使用当前地址、Token 和超时设置生成一张小图。"}
-        不调用大模型、不发送群消息，图片只在这里展示。
-        这项测试不加载外链资源，模板字体和图片是否完整，请再试生成报告。
+          ? "无需保存即可测试图片服务。未绑定配置的群使用默认配置；旧版 AstrBot 可能只支持默认配置。"
+          : "无需保存即可测试当前服务地址和 Token。"}
+        测试不调用大模型，也不会发到群里。模板素材请通过报告确认。
       </Typography.Text>
       {error && <Alert type="error" showIcon message={error} />}
       {result && <>
