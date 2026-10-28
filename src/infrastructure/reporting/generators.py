@@ -275,6 +275,81 @@ class ReportGenerator(IReportGenerator):
         """诊断非图片响应并提取排查信息。"""
         return diagnose_non_image_payload(data)
 
+    def _inspect_render_result(
+        self, image_data: object, response_info: RenderAttemptRecord
+    ) -> tuple[bool, str, int, str | None]:
+        """校验外部渲染响应并读取文件诊断信息，供工作线程执行。
+
+        Args:
+            image_data: 宿主或自定义 T2I 服务返回的路径、字节或异常类型。
+            response_info: 当前尝试的诊断字段，原地补充返回类型和大小。
+
+        Returns:
+            是否可用、失败原因、字节数和可选的图片尺寸。
+        """
+        response_info["return_type"] = type(image_data).__name__
+        if image_data is None:
+            return (
+                False,
+                "AstrBot 渲染接口返回了 None，未提供图片或具体原因。请同时查看 AstrBot 和 T2I 服务日志。",
+                0,
+                None,
+            )
+        if not isinstance(image_data, (str, bytes)):
+            return (
+                False,
+                f"AstrBot 渲染接口返回了不支持的数据类型：{type(image_data).__name__}。",
+                0,
+                None,
+            )
+        if not image_data:
+            error = (
+                "AstrBot 渲染接口返回了空字节数据（0 字节）。"
+                if isinstance(image_data, bytes)
+                else "AstrBot 渲染接口返回了空文件路径。"
+            )
+            if isinstance(image_data, bytes):
+                response_info["returned_bytes"] = 0
+            return False, error, 0, None
+
+        if isinstance(image_data, bytes):
+            raw_sample = image_data[:4096]
+            image_size = len(image_data)
+        else:
+            try:
+                with Path(image_data).open("rb") as image_file:
+                    response_info["file_exists"] = True
+                    raw_sample = image_file.read(4096)
+                    image_size = image_file.seek(0, 2)
+            except FileNotFoundError:
+                response_info["file_exists"] = False
+                return False, "渲染接口返回了文件路径，但图片文件不存在。", 0, None
+            except OSError as e:
+                return (
+                    False,
+                    f"无法读取渲染接口返回的图片文件：{type(e).__name__}：{summarize_render_error(str(e))}",
+                    0,
+                    None,
+                )
+        response_info["returned_bytes"] = image_size
+        if not raw_sample.startswith((b"\xff\xd8", b"\x89PNG")):
+            error = self._diagnose_non_image_payload(raw_sample)
+            if not raw_sample and isinstance(image_data, str):
+                error = "渲染接口返回的图片文件为空（0 字节）。"
+            return False, error, image_size, None
+
+        dimensions = None
+        try:
+            source = (
+                BytesIO(image_data) if isinstance(image_data, bytes) else image_data
+            )
+            with Image.open(source) as img:
+                dimensions = f"{img.width}x{img.height}"
+        except Exception:
+            # 尺寸观测失败不影响宿主已返回的图片发送。
+            pass
+        return True, "", image_size, dimensions
+
     async def generate_image_report(
         self,
         analysis_result: AnalysisResultPayload,
@@ -547,165 +622,85 @@ class ReportGenerator(IReportGenerator):
                         t2i_render_ms = round(
                             (time.perf_counter() - t2i_start_ts) * 1000, 2
                         )
-                        response_info["return_type"] = type(image_data).__name__
-                        if image_data is None:
-                            render_error = (
-                                "AstrBot 渲染接口返回了 None，未提供图片或具体原因。"
-                                "请同时查看 AstrBot 和 T2I 服务日志。"
-                            )
-                        elif isinstance(image_data, bytes):
-                            response_info["returned_bytes"] = len(image_data)
-                            if not image_data:
-                                render_error = (
-                                    "AstrBot 渲染接口返回了空字节数据（0 字节）。"
-                                )
-                        elif isinstance(image_data, str):
-                            if not image_data:
-                                render_error = "AstrBot 渲染接口返回了空文件路径。"
-                        else:
-                            render_error = (
-                                "AstrBot 渲染接口返回了不支持的数据类型："
-                                f"{type(image_data).__name__}。"
-                            )
-
-                        if image_data and isinstance(image_data, (str, bytes)):
-                            is_valid = False
-                            raw_sample = b""
-                            if isinstance(image_data, bytes):
-                                raw_sample = image_data[:4096]
-                            else:
-                                try:
-                                    with Path(image_data).open("rb") as image_file:
-                                        response_info["file_exists"] = True
-                                        raw_sample = image_file.read(4096)
-                                        response_info["returned_bytes"] = (
-                                            image_file.seek(0, 2)
+                        (
+                            is_valid,
+                            render_error,
+                            image_size,
+                            dimensions,
+                        ) = await asyncio.to_thread(
+                            self._inspect_render_result, image_data, response_info
+                        )
+                        if is_valid and isinstance(image_data, (str, bytes)):
+                            attempt_status = "success"
+                            trace_ctx = TraceContext.current()
+                            if trace_ctx:
+                                for s in reversed(trace_ctx._spans):
+                                    if (
+                                        s.get("stage_name")
+                                        == AnalysisStage.RENDER_REPORT.value
+                                    ):
+                                        payload = s.setdefault("payload", {})
+                                        topics_raw = analysis_result.get("topics") or []
+                                        titles_raw = (
+                                            analysis_result.get("user_titles") or []
                                         )
-                                except FileNotFoundError:
-                                    response_info["file_exists"] = False
-                                    render_error = (
-                                        "渲染接口返回了文件路径，但图片文件不存在。"
-                                    )
-                                except OSError as e:
-                                    render_error = (
-                                        "无法读取渲染接口返回的图片文件："
-                                        f"{type(e).__name__}：{summarize_render_error(str(e))}"
-                                    )
-                                else:
-                                    render_error = self._diagnose_non_image_payload(
-                                        raw_sample
-                                    )
-                                    if not raw_sample:
-                                        render_error = (
-                                            "渲染接口返回的图片文件为空（0 字节）。"
+                                        stats_raw = analysis_result.get("statistics")
+                                        golden_quotes_raw = (
+                                            stats_raw.golden_quotes if stats_raw else []
                                         )
+                                        payload.update(
+                                            {
+                                                "format": "image",
+                                                "template": template_theme
+                                                or "scrapbook",
+                                                "viewport": viewport_description,
+                                                "render_attempt": attempt,
+                                                "resource_environment": str(
+                                                    environment
+                                                ),
+                                                "image_format": str(
+                                                    image_options.get("type", "jpeg")
+                                                ),
+                                                "image_bytes": image_size,
+                                                "dimensions": dimensions,
+                                                "template_render_ms": template_render_ms,
+                                                "html_size_kb": html_size_kb,
+                                                "t2i_render_ms": t2i_render_ms,
+                                                "topics_rendered": len(topics_raw),
+                                                "titles_rendered": len(titles_raw),
+                                                "quotes_rendered": len(
+                                                    golden_quotes_raw
+                                                ),
+                                                "avatars_processed": len(
+                                                    render_payload.get(
+                                                        "avatar_reuse_registry", {}
+                                                    )
+                                                ),
+                                                "html_chars": len(html_content)
+                                                if html_content
+                                                else 0,
+                                                "hide_user_names": bool(
+                                                    hide_user_names
+                                                ),
+                                            }
+                                        )
+                                        break
 
                             if isinstance(image_data, bytes):
-                                render_error = self._diagnose_non_image_payload(
-                                    raw_sample
-                                )
-                            is_valid = raw_sample.startswith((b"\xff\xd8", b"\x89PNG"))
-
-                            if is_valid:
-                                attempt_status = "success"
-                                image_size = (
-                                    len(image_data)
-                                    if isinstance(image_data, bytes)
-                                    else (
-                                        os.path.getsize(image_data)
-                                        if os.path.exists(image_data)
-                                        else 0
-                                    )
-                                )
-
-                                dimensions = None
-                                try:
-                                    if isinstance(image_data, bytes):
-                                        with Image.open(BytesIO(image_data)) as img:
-                                            dimensions = f"{img.width}x{img.height}"
-                                    elif os.path.exists(image_data):
-                                        with Image.open(image_data) as img:
-                                            dimensions = f"{img.width}x{img.height}"
-                                except Exception:
-                                    pass
-
-                                trace_ctx = TraceContext.current()
-                                if trace_ctx:
-                                    for s in reversed(trace_ctx._spans):
-                                        if (
-                                            s.get("stage_name")
-                                            == AnalysisStage.RENDER_REPORT.value
-                                        ):
-                                            payload = s.setdefault("payload", {})
-                                            topics_raw = (
-                                                analysis_result.get("topics") or []
-                                            )
-                                            titles_raw = (
-                                                analysis_result.get("user_titles") or []
-                                            )
-                                            stats_raw = analysis_result.get(
-                                                "statistics"
-                                            )
-                                            golden_quotes_raw = (
-                                                stats_raw.golden_quotes
-                                                if stats_raw
-                                                else []
-                                            )
-                                            payload.update(
-                                                {
-                                                    "format": "image",
-                                                    "template": template_theme
-                                                    or "scrapbook",
-                                                    "viewport": viewport_description,
-                                                    "render_attempt": attempt,
-                                                    "resource_environment": str(
-                                                        environment
-                                                    ),
-                                                    "image_format": str(
-                                                        image_options.get(
-                                                            "type", "jpeg"
-                                                        )
-                                                    ),
-                                                    "image_bytes": image_size,
-                                                    "dimensions": dimensions,
-                                                    "template_render_ms": template_render_ms,
-                                                    "html_size_kb": html_size_kb,
-                                                    "t2i_render_ms": t2i_render_ms,
-                                                    "topics_rendered": len(topics_raw),
-                                                    "titles_rendered": len(titles_raw),
-                                                    "quotes_rendered": len(
-                                                        golden_quotes_raw
-                                                    ),
-                                                    "avatars_processed": len(
-                                                        render_payload.get(
-                                                            "avatar_reuse_registry", {}
-                                                        )
-                                                    ),
-                                                    "html_chars": len(html_content)
-                                                    if html_content
-                                                    else 0,
-                                                    "hide_user_names": bool(
-                                                        hide_user_names
-                                                    ),
-                                                }
-                                            )
-                                            break
-
-                                if isinstance(image_data, bytes):
-                                    b64 = base64.b64encode(image_data).decode("utf-8")
-                                    image_url = f"base64://{b64}"
-                                    logger.info(
-                                        "图片生成成功 "
-                                        f"(轮次 {attempt}, 视口 {viewport_description}): "
-                                        f"[Base64 数据 {len(image_data)} 字节]"
-                                    )
-                                    return image_url, html_content
+                                b64 = base64.b64encode(image_data).decode("utf-8")
+                                image_url = f"base64://{b64}"
                                 logger.info(
                                     "图片生成成功 "
                                     f"(轮次 {attempt}, 视口 {viewport_description}): "
-                                    f"{image_data}"
+                                    f"[Base64 数据 {len(image_data)} 字节]"
                                 )
-                                return image_data, html_content
+                                return image_url, html_content
+                            logger.info(
+                                "图片生成成功 "
+                                f"(轮次 {attempt}, 视口 {viewport_description}): "
+                                f"{image_data}"
+                            )
+                            return image_data, html_content
 
                     except asyncio.CancelledError:
                         attempt_status = "cancelled"
