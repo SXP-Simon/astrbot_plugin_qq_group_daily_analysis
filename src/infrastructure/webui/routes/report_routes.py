@@ -89,256 +89,15 @@ class ReportRoutes:
             except Exception:
                 pass
 
-            reports: list[ReportHistoryItemDTO] = []
-            group_info_map = {
-                str(g["group_id"]): {
-                    "group_name": str(g.get("group_name", "")),
-                    "platform": str(g.get("platform", "")),
-                }
-                for g in (await asyncio.to_thread(self.trace_store.get_distinct_groups))
-            }
-            candidate_dirs: list[Path] = []
-            if self.report_output_dir and self.report_output_dir.exists():
-                candidate_dirs.append(self.report_output_dir)
-
-            # 兼容自托管 HTML 输出目录
-            cfg_mgr = (
-                self.analysis_service.config_manager
-                if self.analysis_service
-                else (
-                    self.report_dispatcher.config_manager
-                    if self.report_dispatcher
-                    else None
-                )
+            reports, effective_total = await asyncio.to_thread(
+                self._load_report_history,
+                query_limit,
+                query_offset,
+                query_group_id,
+                query_search,
             )
-            if cfg_mgr:
-                custom_html_dir = cfg_mgr.get_html_output_dir() or ""
-                if custom_html_dir:
-                    p = Path(custom_html_dir)
-                    if p.exists() and p not in candidate_dirs:
-                        candidate_dirs.append(p)
-
-            seen_paths: set[Path] = set()
-            valid_exts = {".png", ".jpg", ".jpeg", ".html"}
-
-            # 1. Level 1: 优先走数据库 report_artifacts 索引极速查询
-            total_count = 0
-            db_artifacts: list[dict[str, object]] = []
-            try:
-                total_count = await asyncio.to_thread(
-                    self.trace_store.count_report_artifacts,
-                    group_id=query_group_id,
-                    search=query_search,
-                )
-                db_artifacts = await asyncio.to_thread(
-                    self.trace_store.query_report_artifacts,
-                    group_id=query_group_id,
-                    search=query_search,
-                    limit=query_limit,
-                    offset=query_offset,
-                )
-            except Exception:
-                pass
-
-            if db_artifacts:
-                for art in db_artifacts:
-                    fn = str(art.get("filename") or "")
-                    rel_p = str(art.get("relative_path") or fn)
-                    g_id = str(art.get("group_id") or "")
-                    t_id = str(art.get("trace_id") or "")
-
-                    matched_file: Path | None = None
-                    for d in candidate_dirs:
-                        cand = d / rel_p
-                        if cand.is_file() and cand.exists():
-                            matched_file = cand
-                            break
-                        if "/" in rel_p or "\\" in rel_p:
-                            cand2 = d / Path(rel_p).name
-                            if cand2.is_file() and cand2.exists():
-                                matched_file = cand2
-                                break
-
-                    if not matched_file:
-                        continue
-
-                    res_p = matched_file.resolve()
-                    if res_p in seen_paths:
-                        continue
-                    seen_paths.add(res_p)
-
-                    try:
-                        stat = matched_file.stat()
-                        stem = matched_file.stem
-                        is_html = matched_file.suffix.lower() == ".html"
-                        is_comic = stem.lower().startswith("comic_") or stem.startswith(
-                            "漫画_"
-                        )
-                        g_info = group_info_map.get(g_id, {})
-                        raw_created = art.get("created_at")
-                        art_ts: float = (
-                            float(raw_created)
-                            if isinstance(raw_created, (int, float, str))
-                            and str(raw_created).strip()
-                            else stat.st_mtime
-                        )
-                        reports.append(
-                            {
-                                "filename": matched_file.name,
-                                "size_bytes": stat.st_size,
-                                "modified_at": art_ts,
-                                "created_at": art_ts,
-                                "absolute_path": str(res_p),
-                                "is_html": is_html,
-                                "is_comic": is_comic,
-                                "report_type": "comic"
-                                if is_comic
-                                else ("html" if is_html else "image"),
-                                "group_id": g_id or stem,
-                                "group_name": g_info.get("group_name", ""),
-                                "platform": g_info.get("platform", ""),
-                                "trace_id": t_id,
-                            }
-                        )
-                    except Exception:
-                        pass
-
-            # 2. Level 2: 若数据库暂无数据（初次升级/外部古老文件），回退磁盘扫描并自愈补录进数据库
-            if not reports:
-                all_files: list[Path] = []
-                for d in candidate_dirs:
-                    if not d.exists() or not d.is_dir():
-                        continue
-                    for p in d.rglob("*"):
-                        if (
-                            p.is_file()
-                            and p.suffix.lower() in valid_exts
-                            and not any(
-                                part.startswith(".") for part in p.relative_to(d).parts
-                            )
-                        ):
-                            resolved = p.resolve()
-                            if resolved not in seen_paths:
-                                seen_paths.add(resolved)
-                                all_files.append(p)
-
-                report_trace_map: dict[str, str] = {}
-                try:
-                    report_trace_map = await asyncio.to_thread(
-                        self.trace_store.get_report_trace_map
-                    )
-                except Exception:
-                    pass
-
-                for file_path in sorted(
-                    all_files,
-                    key=lambda p: p.stat().st_mtime,
-                    reverse=True,
-                )[:150]:
-                    try:
-                        stat = file_path.stat()
-                        stem = file_path.stem
-                        is_html = file_path.suffix.lower() == ".html"
-                        is_comic = stem.lower().startswith("comic_") or stem.startswith(
-                            "漫画_"
-                        )
-                        trace_id = report_trace_map.get(file_path.name, "")
-                        group_id = ""
-
-                        # 优先通过数据库已登记群号精确匹配
-                        for known_gid in sorted(
-                            group_info_map.keys(), key=len, reverse=True
-                        ):
-                            if not known_gid:
-                                continue
-                            if re.search(
-                                rf"(?:^|_){re.escape(known_gid)}(?:_|$)", stem
-                            ):
-                                group_id = known_gid
-                                break
-
-                        # 若未匹配到已知群，按结构化模式解析群号
-                        if not group_id:
-                            m = re.match(
-                                r"^(?:report|群聊分析报告|comic|漫画)_(.+?)_(?:\d{4}-?\d{2}-?\d{2}|\d{8})(?:_\d{6})?(?:_([a-zA-Z0-9_\-]+))?$",
-                                stem,
-                                re.IGNORECASE,
-                            )
-                            if m:
-                                group_id = m.group(1)
-                                if m.group(2) and not trace_id:
-                                    cand = m.group(2)
-                                    if "_" in cand or len(cand) < 26:
-                                        trace_id = cand
-                            else:
-                                m = re.match(
-                                    r"^(?:report|群聊分析报告|comic|漫画)_(.+?)_\d+$",
-                                    stem,
-                                    re.IGNORECASE,
-                                )
-                                if m:
-                                    group_id = m.group(1)
-                                else:
-                                    m = re.match(
-                                        r"^(?:report|群聊分析报告|comic|漫画)_(.+?)$",
-                                        stem,
-                                        re.IGNORECASE,
-                                    )
-                                    group_id = m.group(1) if m else stem
-
-                        if (not group_id or group_id == stem) and (
-                            file_path.parent.name in group_info_map
-                            or re.match(r"^\d{5,12}$", file_path.parent.name)
-                        ):
-                            group_id = file_path.parent.name
-
-                        if not trace_id:
-                            trace_id = report_trace_map.get(file_path.name, "")
-                        if not trace_id:
-                            for tid in set(report_trace_map.values()):
-                                if tid and tid in stem:
-                                    trace_id = tid
-                                    break
-
-                        g_info = group_info_map.get(group_id, {})
-                        reports.append(
-                            {
-                                "filename": file_path.name,
-                                "size_bytes": stat.st_size,
-                                "modified_at": stat.st_mtime,
-                                "created_at": stat.st_mtime,
-                                "absolute_path": str(file_path.resolve()),
-                                "is_html": is_html,
-                                "is_comic": is_comic,
-                                "report_type": "comic"
-                                if is_comic
-                                else ("html" if is_html else "image"),
-                                "group_id": group_id,
-                                "group_name": g_info.get("group_name", ""),
-                                "platform": g_info.get("platform", ""),
-                                "trace_id": trace_id,
-                            }
-                        )
-
-                        # 自愈补录入数据库，使后续查询永久走索引
-                        try:
-                            fmt = "html" if is_html else "image"
-                            await asyncio.to_thread(
-                                self.trace_store.register_report_artifact,
-                                filename=file_path.name,
-                                group_id=group_id,
-                                file_format=fmt,
-                                relative_path=file_path.name,
-                                created_at=stat.st_mtime,
-                                trace_id=trace_id,
-                            )
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
 
             # 响应数据：标准分页结构 { items, total }，同时顶层保留 items 键兼容部分直接读取
-            effective_total = total_count if total_count > 0 else len(reports)
             return json_response(
                 {
                     "status": "ok",
@@ -353,6 +112,314 @@ class ReportRoutes:
         except Exception as e:
             logger.error(f"查询历史报告异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
+
+    def _load_report_history(
+        self,
+        query_limit: int,
+        query_offset: int,
+        query_group_id: str | None,
+        query_search: str | None,
+    ) -> tuple[list[ReportHistoryItemDTO], int]:
+        """在线程中完成历史产物查询和旧文件索引补录。
+
+        Args:
+            query_limit: 分页大小。
+            query_offset: 分页偏移。
+            query_group_id: 可选群号过滤条件。
+            query_search: 可选文件或追踪号关键词。
+
+        Returns:
+            当前分页记录及过滤后的总数。
+        """
+        group_info_map = {
+            str(g["group_id"]): {
+                "group_name": str(g.get("group_name", "")),
+                "platform": str(g.get("platform", "")),
+            }
+            for g in (self.trace_store.get_distinct_groups())
+        }
+        candidate_dirs: list[Path] = []
+        if self.report_output_dir and self.report_output_dir.exists():
+            candidate_dirs.append(self.report_output_dir)
+
+        # 兼容自托管 HTML 输出目录
+        cfg_mgr = (
+            self.analysis_service.config_manager
+            if self.analysis_service
+            else (
+                self.report_dispatcher.config_manager
+                if self.report_dispatcher
+                else None
+            )
+        )
+        if cfg_mgr:
+            custom_html_dir = cfg_mgr.get_html_output_dir() or ""
+            if custom_html_dir:
+                p = Path(custom_html_dir)
+                if p.exists() and p not in candidate_dirs:
+                    candidate_dirs.append(p)
+
+        # 1. Level 1: 优先走数据库 report_artifacts 索引极速查询
+        total_count = 0
+        db_artifacts: list[dict[str, object]] = []
+        try:
+            total_count = self.trace_store.count_report_artifacts(
+                group_id=query_group_id,
+                search=query_search,
+            )
+            db_artifacts = self.trace_store.query_report_artifacts(
+                group_id=query_group_id,
+                search=query_search,
+                limit=query_limit,
+                offset=query_offset,
+            )
+        except Exception:
+            pass
+
+        reports = self._read_indexed_reports(
+            db_artifacts, candidate_dirs, group_info_map
+        )
+        if reports or (total_count > 0 and query_offset >= total_count):
+            return reports, total_count
+        reports = self._scan_report_history(candidate_dirs, group_info_map)
+        if query_group_id:
+            reports = [
+                report for report in reports if report["group_id"] == query_group_id
+            ]
+        if query_search:
+            keyword = query_search.casefold()
+            reports = [
+                report
+                for report in reports
+                if any(
+                    keyword in report[field].casefold()
+                    for field in ("filename", "group_id", "trace_id")
+                )
+            ]
+        return reports[query_offset : query_offset + query_limit], len(reports)
+
+    def _read_indexed_reports(
+        self,
+        db_artifacts: list[dict[str, object]],
+        candidate_dirs: list[Path],
+        group_info_map: dict[str, dict[str, str]],
+    ) -> list[ReportHistoryItemDTO]:
+        """解析索引记录并验证实际产物仍在允许的报告目录中。
+
+        Args:
+            db_artifacts: 当前分页的数据库索引记录。
+            candidate_dirs: 允许读取的报告目录。
+            group_info_map: 群名与平台映射。
+
+        Returns:
+            仍有可读文件的历史报告列表。
+        """
+        reports: list[ReportHistoryItemDTO] = []
+        seen_paths: set[Path] = set()
+        for art in db_artifacts:
+            fn = str(art.get("filename") or "")
+            rel_p = str(art.get("relative_path") or fn)
+            g_id = str(art.get("group_id") or "")
+            t_id = str(art.get("trace_id") or "")
+
+            matched_file: Path | None = None
+            for d in candidate_dirs:
+                cand = d / rel_p
+                if cand.resolve().is_relative_to(d.resolve()) and cand.is_file():
+                    matched_file = cand
+                    break
+                if "/" in rel_p or "\\" in rel_p:
+                    cand2 = d / Path(rel_p).name
+                    if cand2.resolve().is_relative_to(d.resolve()) and cand2.is_file():
+                        matched_file = cand2
+                        break
+
+            if not matched_file:
+                continue
+
+            res_p = matched_file.resolve()
+            if res_p in seen_paths:
+                continue
+            seen_paths.add(res_p)
+
+            try:
+                stat = matched_file.stat()
+                stem = matched_file.stem
+                is_html = matched_file.suffix.lower() == ".html"
+                is_comic = stem.lower().startswith("comic_") or stem.startswith("漫画_")
+                g_info = group_info_map.get(g_id, {})
+                raw_created = art.get("created_at")
+                art_ts: float = (
+                    float(raw_created)
+                    if isinstance(raw_created, (int, float, str))
+                    and str(raw_created).strip()
+                    else stat.st_mtime
+                )
+                reports.append(
+                    {
+                        "filename": matched_file.name,
+                        "size_bytes": stat.st_size,
+                        "modified_at": art_ts,
+                        "created_at": art_ts,
+                        "absolute_path": str(res_p),
+                        "is_html": is_html,
+                        "is_comic": is_comic,
+                        "report_type": "comic"
+                        if is_comic
+                        else ("html" if is_html else "image"),
+                        "group_id": g_id or stem,
+                        "group_name": g_info.get("group_name", ""),
+                        "platform": g_info.get("platform", ""),
+                        "trace_id": t_id,
+                    }
+                )
+            except Exception:
+                pass
+
+        return reports
+
+    def _scan_report_history(
+        self,
+        candidate_dirs: list[Path],
+        group_info_map: dict[str, dict[str, str]],
+    ) -> list[ReportHistoryItemDTO]:
+        """扫描旧报告并补录索引，供首次升级或文件丢失后的查询回退。
+
+        Args:
+            candidate_dirs: 允许读取的报告目录。
+            group_info_map: 已知群组名称及平台信息。
+
+        Returns:
+            按生成时间倒序排列的历史报告列表。
+        """
+        reports: list[ReportHistoryItemDTO] = []
+        seen_paths: set[Path] = set()
+        valid_exts = {".png", ".jpg", ".jpeg", ".html"}
+        all_files: list[Path] = []
+        for d in candidate_dirs:
+            if not d.exists() or not d.is_dir():
+                continue
+            for p in d.rglob("*"):
+                if (
+                    p.is_file()
+                    and p.suffix.lower() in valid_exts
+                    and not any(part.startswith(".") for part in p.relative_to(d).parts)
+                ):
+                    resolved = p.resolve()
+                    if (
+                        resolved.is_relative_to(d.resolve())
+                        and resolved not in seen_paths
+                    ):
+                        seen_paths.add(resolved)
+                        all_files.append(p)
+
+        report_trace_map: dict[str, str] = {}
+        try:
+            report_trace_map = self.trace_store.get_report_trace_map()
+        except Exception:
+            pass
+
+        for file_path in sorted(
+            all_files,
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        ):
+            try:
+                stat = file_path.stat()
+                stem = file_path.stem
+                is_html = file_path.suffix.lower() == ".html"
+                is_comic = stem.lower().startswith("comic_") or stem.startswith("漫画_")
+                trace_id = report_trace_map.get(file_path.name, "")
+                group_id = ""
+
+                # 优先通过数据库已登记群号精确匹配
+                for known_gid in sorted(group_info_map.keys(), key=len, reverse=True):
+                    if not known_gid:
+                        continue
+                    if re.search(rf"(?:^|_){re.escape(known_gid)}(?:_|$)", stem):
+                        group_id = known_gid
+                        break
+
+                # 若未匹配到已知群，按结构化模式解析群号
+                if not group_id:
+                    m = re.match(
+                        r"^(?:report|群聊分析报告|comic|漫画)_(.+?)_(?:\d{4}-?\d{2}-?\d{2}|\d{8})(?:_\d{6})?(?:_([a-zA-Z0-9_\-]+))?$",
+                        stem,
+                        re.IGNORECASE,
+                    )
+                    if m:
+                        group_id = m.group(1)
+                        if m.group(2) and not trace_id:
+                            cand = m.group(2)
+                            if "_" in cand or len(cand) < 26:
+                                trace_id = cand
+                    else:
+                        m = re.match(
+                            r"^(?:report|群聊分析报告|comic|漫画)_(.+?)_\d+$",
+                            stem,
+                            re.IGNORECASE,
+                        )
+                        if m:
+                            group_id = m.group(1)
+                        else:
+                            m = re.match(
+                                r"^(?:report|群聊分析报告|comic|漫画)_(.+?)$",
+                                stem,
+                                re.IGNORECASE,
+                            )
+                            group_id = m.group(1) if m else stem
+
+                if (not group_id or group_id == stem) and (
+                    file_path.parent.name in group_info_map
+                    or re.match(r"^\d{5,12}$", file_path.parent.name)
+                ):
+                    group_id = file_path.parent.name
+
+                if not trace_id:
+                    trace_id = report_trace_map.get(file_path.name, "")
+                if not trace_id:
+                    for tid in set(report_trace_map.values()):
+                        if tid and tid in stem:
+                            trace_id = tid
+                            break
+
+                g_info = group_info_map.get(group_id, {})
+                reports.append(
+                    {
+                        "filename": file_path.name,
+                        "size_bytes": stat.st_size,
+                        "modified_at": stat.st_mtime,
+                        "created_at": stat.st_mtime,
+                        "absolute_path": str(file_path.resolve()),
+                        "is_html": is_html,
+                        "is_comic": is_comic,
+                        "report_type": "comic"
+                        if is_comic
+                        else ("html" if is_html else "image"),
+                        "group_id": group_id,
+                        "group_name": g_info.get("group_name", ""),
+                        "platform": g_info.get("platform", ""),
+                        "trace_id": trace_id,
+                    }
+                )
+
+                # 自愈补录入数据库，使后续查询永久走索引
+                try:
+                    fmt = "html" if is_html else "image"
+                    self.trace_store.register_report_artifact(
+                        filename=file_path.name,
+                        group_id=group_id,
+                        file_format=fmt,
+                        relative_path=str(file_path.resolve()),
+                        created_at=stat.st_mtime,
+                        trace_id=trace_id,
+                    )
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        return reports
 
     async def api_get_report_content(self) -> WebApiResponse:
         """获取单个历史报告文件（图片或 HTML）的内容用于在线预览与下载"""
