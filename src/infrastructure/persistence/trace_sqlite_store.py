@@ -917,25 +917,25 @@ class TraceSQLiteStore:
                 reconciled += cursor.rowcount
             return reconciled
 
-    def get_distinct_groups(self) -> list[dict[str, str]]:
+    def get_distinct_groups(self, *, by_session: bool = False) -> list[dict[str, str]]:
         """获取所有有历史分析记录的唯一群组列表（按 group_id 分组，取每个群最新一次运行的群名与平台标识）"""
+        partition = "group_id, COALESCE(platform, '')" if by_session else "group_id"
         with self._get_connection() as conn:
             rows = conn.execute(
-                """
+                f"""
                 WITH ranked_traces AS (
                     SELECT group_id,
                            group_name,
                            platform,
                            started_at,
-                           ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY started_at DESC) AS rn
+                           ROW_NUMBER() OVER (PARTITION BY {partition} ORDER BY started_at DESC) AS rn
                     FROM analysis_traces
                     WHERE group_id != ''
                 )
                 SELECT r.group_id,
                        COALESCE(
-                           NULLIF(r.group_name, ''),
-                           NULLIF(r.group_name, '未知群'),
-                           (SELECT group_name FROM analysis_traces WHERE group_id = r.group_id AND group_name != '' AND group_name != '未知群' ORDER BY started_at DESC LIMIT 1),
+                           NULLIF(NULLIF(r.group_name, ''), '未知群'),
+                           (SELECT group_name FROM analysis_traces WHERE group_id = r.group_id AND (? = 0 OR COALESCE(platform, '') = COALESCE(r.platform, '')) AND group_name != '' AND group_name != '未知群' ORDER BY started_at DESC LIMIT 1),
                            r.group_id
                        ) AS group_name,
                        r.platform,
@@ -943,7 +943,8 @@ class TraceSQLiteStore:
                 FROM ranked_traces r
                 WHERE r.rn = 1
                 ORDER BY r.started_at DESC;
-                """
+                """,
+                (by_session,),
             ).fetchall()
             return [
                 {
