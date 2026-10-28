@@ -495,7 +495,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                     "operationId": "getDistinctGroups",
                     "responses": {
                         "200": {
-                            "description": "List of group IDs",
+                            "description": "历史群聊的标识、名称和平台实例",
                             "content": {
                                 "application/json": {
                                     "schema": {
@@ -504,7 +504,9 @@ def generate_openapi_spec() -> dict[str, Any]:
                                             "status": {"type": "string"},
                                             "data": {
                                                 "type": "array",
-                                                "items": {"type": "string"},
+                                                "items": {
+                                                    "$ref": "#/components/schemas/GroupItem"
+                                                },
                                             },
                                         },
                                     }
@@ -767,6 +769,15 @@ def generate_openapi_spec() -> dict[str, Any]:
         },
         "components": {
             "schemas": {
+                "GroupItem": {
+                    "type": "object",
+                    "properties": {
+                        "group_id": {"type": "string", "minLength": 1},
+                        "group_name": {"type": "string"},
+                        "platform": {"type": "string"},
+                    },
+                    "required": ["group_id", "group_name", "platform"],
+                },
                 "T2iProbeRequest": {
                     "type": "object",
                     "properties": {

@@ -349,6 +349,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        GroupItem: {
+            group_id: string;
+            group_name: string;
+            platform: string;
+        };
         T2iProbeRequest: {
             /**
              * @default custom
@@ -1143,7 +1148,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List of group IDs */
+            /** @description 历史群聊的标识、名称和平台实例 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1151,7 +1156,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         status?: string;
-                        data?: string[];
+                        data?: components["schemas"]["GroupItem"][];
                     };
                 };
             };
