@@ -19,7 +19,7 @@ export function useT2iProbe(input: T2iProbeInput) {
     if (!hostService) return;
     let active = true;
     void fetchDistinctGroups().then((list) => {
-      if (active) { setGroups(list); setGroupsError(""); }
+      if (active) { setGroups(list.filter((group) => Boolean(group.platform))); setGroupsError(""); }
     }).catch(() => {
       if (active) setGroupsError("群列表暂时无法读取，可以先测试 AstrBot 默认配置。");
     });

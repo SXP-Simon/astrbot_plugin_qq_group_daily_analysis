@@ -2,8 +2,18 @@ import { describe, it, expect } from "vitest";
 import { mockHandlers } from "../handlers";
 import { createMswHandlerDefinitions } from "../mswHandlers";
 import { mockTraces } from "../data/traces";
+import { groupItemSchema } from "../../entities/group/model/types";
 
 describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => {
+  it("群列表与真实后端契约一致，包含可显示的群名和平台实例", () => {
+    const res = mockHandlers["GET groups"]();
+    expect(res.data.length).toBeGreaterThan(0);
+    for (const group of res.data) {
+      expect(groupItemSchema.safeParse(group).success).toBe(true);
+      expect(group.group_name).not.toBe("");
+      expect(group.platform).not.toBe("");
+    }
+  });
   it("应当返回包含核心 KPI 字段的指标大盘概览数据", () => {
     const res = mockHandlers["GET metrics/summary"]();
     expect(res.status).toBe("ok");

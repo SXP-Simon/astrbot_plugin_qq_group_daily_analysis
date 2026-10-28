@@ -5,6 +5,7 @@ import { mockReportHistory, mockReportTemplates } from "./data/reports";
 import { mockPluginConfig, mockProviders, mockPersonas } from "./data/configs";
 import { mockPluginLogs } from "./data/logs";
 import { mockConfigBackups } from "./data/configBackups";
+import { mockGroups } from "./data/groups";
 import {
   mockPluginDataOverview,
   mockIncrementalBatches,
@@ -77,14 +78,7 @@ export const mockHandlers = {
   },
   "GET groups": () => ({
     status: "ok",
-    data: [
-      "123456789",
-      "987654321",
-      "8899001122",
-      "-1001987654321",
-      "1082739182374",
-      "9988776655",
-    ],
+    data: mockGroups,
   }),
   "GET providers": () => ({ status: "ok", data: mockProviders }),
   "GET personas": () => ({ status: "ok", data: mockPersonas }),
