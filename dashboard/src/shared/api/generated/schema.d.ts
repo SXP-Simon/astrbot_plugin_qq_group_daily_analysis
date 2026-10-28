@@ -407,7 +407,7 @@ export interface components {
         };
         ConnectedPlatform: {
             id: string;
-            name: string;
+            display_name: string;
             type: string;
             label: string;
         };

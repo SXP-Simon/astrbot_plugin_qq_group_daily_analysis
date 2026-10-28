@@ -1148,7 +1148,7 @@
           "id": {
             "type": "string"
           },
-          "name": {
+          "display_name": {
             "type": "string"
           },
           "type": {
@@ -1160,7 +1160,7 @@
         },
         "required": [
           "id",
-          "name",
+          "display_name",
           "type",
           "label"
         ]

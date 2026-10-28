@@ -895,11 +895,11 @@ def generate_openapi_spec() -> dict[str, Any]:
                     "type": "object",
                     "properties": {
                         "id": {"type": "string"},
-                        "name": {"type": "string"},
+                        "display_name": {"type": "string"},
                         "type": {"type": "string"},
                         "label": {"type": "string"},
                     },
-                    "required": ["id", "name", "type", "label"],
+                    "required": ["id", "display_name", "type", "label"],
                 },
                 "TraceSpan": {
                     "type": "object",
