@@ -1,5 +1,6 @@
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { PluginLogItem, PluginLogResponse } from "../model/types";
+import { z } from "zod";
 
 export interface LogFilterParams {
   limit?: number;
@@ -23,7 +24,9 @@ export async function fetchPluginLogs(
 
   const res = await apiGet<PluginLogResponse>("logs", query);
   const data = extractData<PluginLogResponse>(res);
-  return data || { items: [], total: 0, available_tags: [] };
+  if (!data || !Array.isArray(data.items)) return { items: [], total: 0, available_tags: [] };
+  const tags = z.array(z.object({ key: z.string().min(1), label: z.string().min(1) })).safeParse(data.available_tags);
+  return { ...data, available_tags: tags.success ? tags.data : [] };
 }
 
 export async function fetchTraceLogs(
