@@ -296,18 +296,39 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     elif isinstance(output, str) and output:
                         path = Path(output)
                         if not path.is_file():
-                            raise ValueError("AstrBot 返回了图片路径，但文件不存在。")
+                            return error_response(
+                                "AstrBot 返回的图片文件不存在，请查看 AstrBot 和图片服务日志。",
+                                status_code=502,
+                            )
                         if path.stat().st_size > 32 * 1024 * 1024:
-                            raise ValueError("测试图片超过 32 MiB，未读取图片内容。")
+                            return error_response(
+                                "测试图片超过 32 MiB，无法显示。", status_code=502
+                            )
                         image = await asyncio.to_thread(path.read_bytes)
                     else:
-                        raise ValueError(
-                            "AstrBot 没有返回可用的测试图片，请查看 AstrBot 和 T2I 服务日志。"
+                        return error_response(
+                            "AstrBot 没有返回图片，请检查图片服务并查看 AstrBot 日志。",
+                            status_code=502,
                         )
                     if len(image) > 32 * 1024 * 1024:
-                        raise ValueError("测试图片超过 32 MiB，未展示图片内容。")
-                    await asyncio.to_thread(validate_t2i_image, image)
-        except (ValueError, RuntimeError, TimeoutError) as exc:
+                        return error_response(
+                            "测试图片超过 32 MiB，无法显示。", status_code=502
+                        )
+                    try:
+                        await asyncio.to_thread(validate_t2i_image, image)
+                    except ValueError:
+                        return error_response(
+                            "AstrBot 返回的内容不是有效图片，请查看 AstrBot 和图片服务日志。",
+                            status_code=502,
+                        )
+        except TimeoutError as exc:
+            message = (
+                str(exc)
+                if service == "custom"
+                else "图片服务响应超时，请检查服务状态和网络，并查看 AstrBot 日志。"
+            )
+            return error_response(message, status_code=502)
+        except (ValueError, RuntimeError) as exc:
             # 宿主和第三方包装器的异常可能含服务地址或凭据，不直接回显。
             message = (
                 str(exc)

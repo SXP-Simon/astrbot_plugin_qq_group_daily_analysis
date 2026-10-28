@@ -284,3 +284,36 @@ async def test_astrbot_timeout_and_cancellation(probe, monkeypatch):
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        (None, "没有返回图片"),
+        (b"<html>private-token</html>", "不是有效图片"),
+        ("missing/private-token.png", "图片文件不存在"),
+    ],
+)
+async def test_astrbot_invalid_output_gives_safe_actionable_reason(
+    probe, output, expected
+):
+    routes, request, _ = probe
+    request.json.return_value = {"render_service": "astrbot"}
+    routes.analysis_service.html_render = AsyncMock(return_value=output)
+    result = await routes.api_test_t2i()
+    assert result["status_code"] == 502
+    assert expected in result["message"]
+    assert "private-token" not in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_astrbot_timeout_has_safe_actionable_message(probe):
+    routes, request, _ = probe
+    request.json.return_value = {"render_service": "astrbot"}
+    routes.analysis_service.html_render = AsyncMock(
+        side_effect=TimeoutError("private-token")
+    )
+    result = await routes.api_test_t2i()
+    assert "超时" in result["message"] and "AstrBot 日志" in result["message"]
+    assert "private-token" not in result["message"]
