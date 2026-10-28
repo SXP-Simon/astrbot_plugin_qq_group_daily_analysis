@@ -307,7 +307,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                         image = await asyncio.to_thread(path.read_bytes)
                     else:
                         return error_response(
-                            "AstrBot 没有返回图片，请检查T2I 服务并查看 AstrBot 日志。",
+                            "AstrBot 没有返回图片，请检查 T2I 服务并查看 AstrBot 日志。",
                             status_code=502,
                         )
                     if len(image) > 32 * 1024 * 1024:
@@ -318,7 +318,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                         await asyncio.to_thread(validate_t2i_image, image)
                     except ValueError:
                         return error_response(
-                            "AstrBot 返回的内容不是有效图片，请查看 AstrBot 和T2I 服务日志。",
+                            "AstrBot 返回的内容不是有效图片，请查看 AstrBot 和 T2I 服务日志。",
                             status_code=502,
                         )
         except TimeoutError as exc:
