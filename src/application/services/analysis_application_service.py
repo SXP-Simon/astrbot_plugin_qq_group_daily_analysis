@@ -401,7 +401,8 @@ class AnalysisApplicationService:
                 user_activity, limit=max_user_titles
             )
 
-            self._save_daily_analysis_checkpoint(
+            await asyncio.to_thread(
+                self._save_daily_analysis_checkpoint,
                 group_id=group_id,
                 platform_id=platform_id,
                 date_str=date_str,
@@ -548,7 +549,9 @@ class AnalysisApplicationService:
             save_checkpoint=True,
             serializer=self._serialize_analysis_result,
         ) as step:
-            await self.history_manager.save_analysis(group_id, analysis_result)
+            await self.history_manager.save_analysis(
+                group_id, analysis_result, date_str=date_str
+            )
             if self.checkpoint_store:
                 try:
                     await asyncio.to_thread(

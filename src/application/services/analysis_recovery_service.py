@@ -21,6 +21,7 @@ from ...domain.value_objects import (
     GroupStatistics,
     TokenUsage,
 )
+from ...domain.value_objects.unified_message import UnifiedMessage
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
@@ -271,11 +272,14 @@ class AnalysisRecoveryService:
         )
 
         cached_llm = (
-            self.checkpoint_store.get_checkpoint(
-                group_id,
-                date_str,
-                AnalysisStage.LLM_ANALYSIS.value,
-                trace_id=checkpoint_trace_id,
+            (
+                await asyncio.to_thread(
+                    self.checkpoint_store.get_checkpoint,
+                    group_id,
+                    date_str,
+                    AnalysisStage.LLM_ANALYSIS.value,
+                    trace_id=checkpoint_trace_id,
+                )
             )
             if self.checkpoint_store
             else None
@@ -283,8 +287,10 @@ class AnalysisRecoveryService:
         if not cached_llm:
             try:
                 hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if hist_data:
-                    cached_llm = AnalysisResultSerializer.serialize(hist_data)
+                if isinstance(hist_data, dict) and isinstance(
+                    hist_data.get("statistics"), (dict, GroupStatistics)
+                ):
+                    cached_llm = hist_data
             except Exception:
                 cached_llm = None
 
@@ -335,11 +341,14 @@ class AnalysisRecoveryService:
                     }
 
         clean_checkpoint = (
-            self.checkpoint_store.get_checkpoint(
-                group_id,
-                date_str,
-                AnalysisStage.CLEAN_MESSAGES.value,
-                trace_id=checkpoint_trace_id,
+            (
+                await asyncio.to_thread(
+                    self.checkpoint_store.get_checkpoint,
+                    group_id,
+                    date_str,
+                    AnalysisStage.CLEAN_MESSAGES.value,
+                    trace_id=checkpoint_trace_id,
+                )
             )
             if self.checkpoint_store
             else None
@@ -386,9 +395,29 @@ class AnalysisRecoveryService:
                 top_users_raw if isinstance(top_users_raw, list) else None
             )
             unified_messages_raw = clean_checkpoint.get("unified_messages")
-            unified_messages = (
-                unified_messages_raw if isinstance(unified_messages_raw, list) else []
-            )
+            unified_messages: list[UnifiedMessage] = []
+            if isinstance(unified_messages_raw, list):
+                for message in unified_messages_raw:
+                    if isinstance(message, UnifiedMessage):
+                        unified_messages.append(message)
+                    elif isinstance(message, dict):
+                        # 续跑 LLM 只读取已清洗文本和发送者信息，无须恢复原始附件。
+                        timestamp = message.get("timestamp", 0)
+                        unified_messages.append(
+                            UnifiedMessage(
+                                message_id=str(message.get("message_id", "")),
+                                sender_id=str(message.get("sender_id", "")),
+                                sender_name=str(message.get("sender_name", "")),
+                                group_id=str(message.get("group_id", group_id)),
+                                text_content=str(message.get("text_content", "")),
+                                timestamp=int(timestamp)
+                                if isinstance(timestamp, (int, float, str))
+                                else 0,
+                                sender_card=str(message["sender_card"])
+                                if message.get("sender_card")
+                                else None,
+                            )
+                        )
 
             pipeline.restore_checkpoint_span(AnalysisStage.CLEAN_MESSAGES)
 
@@ -517,11 +546,14 @@ class AnalysisRecoveryService:
                 save_checkpoint=True,
                 serializer=AnalysisResultSerializer.serialize,
             ) as step:
-                await self.history_manager.save_analysis(group_id, analysis_result)
+                await self.history_manager.save_analysis(
+                    group_id, analysis_result, date_str=date_str
+                )
                 if self.checkpoint_store:
                     try:
                         cur_trace_id = trace.trace_id if trace else ""
-                        self.checkpoint_store.save_checkpoint(
+                        await asyncio.to_thread(
+                            self.checkpoint_store.save_checkpoint,
                             group_id=group_id,
                             date_str=date_str,
                             stage_name=AnalysisStage.LLM_ANALYSIS.value,
