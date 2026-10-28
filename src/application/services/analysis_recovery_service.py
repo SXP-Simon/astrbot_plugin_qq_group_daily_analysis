@@ -443,103 +443,26 @@ class AnalysisRecoveryService:
                 golden_quotes = []
                 total_token_usage = TokenUsage()
 
-            run_topic = topic_enabled and not bool(topics)
-            run_user_title = user_title_enabled and not bool(user_titles)
-            run_golden_quote = golden_quote_enabled and not bool(golden_quotes)
-            run_chat_quality = chat_quality_enabled and not bool(chat_quality_review)
-
-            legacy_messages = self.statistics_service._convert_to_legacy_dict(
-                unified_messages
-            )
-            unified_msg_origin = (
-                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
-            )
-
-            if run_topic or run_user_title or run_golden_quote or run_chat_quality:
-                async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
-                    async with self.task_guard.llm_slot(group_id, "resume"):
-                        (
-                            new_topics,
-                            new_user_titles,
-                            new_golden_quotes,
-                            new_tokens,
-                            new_chat_quality,
-                        ) = await self.llm_analyzer.analyze_all_concurrent(
-                            legacy_messages,
-                            user_activity,
-                            umo=unified_msg_origin,
-                            top_users=top_users,
-                            topic_enabled=run_topic,
-                            user_title_enabled=run_user_title,
-                            golden_quote_enabled=run_golden_quote,
-                            chat_quality_enabled=run_chat_quality,
-                        )
-                        if run_topic:
-                            topics = new_topics
-                        if run_user_title:
-                            user_titles = new_user_titles
-                        if run_golden_quote:
-                            golden_quotes = new_golden_quotes
-                        if run_chat_quality:
-                            chat_quality_review = new_chat_quality
-
-                        total_token_usage = TokenUsage(
-                            prompt_tokens=total_token_usage.prompt_tokens
-                            + new_tokens.prompt_tokens,
-                            completion_tokens=total_token_usage.completion_tokens
-                            + new_tokens.completion_tokens,
-                            total_tokens=total_token_usage.total_tokens
-                            + new_tokens.total_tokens,
-                        )
-
-                    enabled_count = sum(
-                        [
-                            bool(run_topic),
-                            bool(run_user_title),
-                            bool(run_golden_quote),
-                            bool(run_chat_quality),
-                        ]
-                    )
-                    success_count = sum(
-                        [
-                            bool(new_topics) if run_topic else False,
-                            bool(new_user_titles) if run_user_title else False,
-                            bool(new_golden_quotes) if run_golden_quote else False,
-                            bool(new_chat_quality) if run_chat_quality else False,
-                        ]
-                    )
-
-                    if enabled_count > 0 and success_count == 0:
-                        step.mark_failed(
-                            "续跑大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
-                        )
-                        if trace:
-                            trace.metadata["has_warnings"] = False
-                            trace.metadata["failure_stage"] = (
-                                AnalysisStage.LLM_ANALYSIS.value
-                            )
-                        return {
-                            "success": False,
-                            "reason": "llm_analysis_failed",
-                            "error": "大模型文本分析全部子任务失败，已中止续跑",
-                        }
-                    if enabled_count > 0 and success_count < enabled_count:
-                        step.mark_warning(
-                            f"续跑大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
-                        )
-                        if trace:
-                            trace.metadata["has_warnings"] = True
-
             statistics.golden_quotes = golden_quotes
             statistics.token_usage = total_token_usage
-
-            analysis_result = {
+            partial_result: AnalysisResultPayload = {
                 "statistics": statistics,
                 "topics": topics,
                 "user_titles": user_titles,
                 "user_analysis": user_activity,
                 "chat_quality_review": chat_quality_review,
             }
+            analysis_result = await self._complete_missing_sections(
+                pipeline, partial_result, unified_messages, top_users, platform_id
+            )
+            if analysis_result is None:
+                return {
+                    "success": False,
+                    "reason": "llm_analysis_failed",
+                    "error": "大模型文本分析全部子任务失败，已中止续跑",
+                }
+            topics = analysis_result["topics"]
+            user_titles = analysis_result["user_titles"]
 
             async with pipeline.step(
                 AnalysisStage.SAVE_SUMMARY,
@@ -547,7 +470,7 @@ class AnalysisRecoveryService:
                 serializer=AnalysisResultSerializer.serialize,
             ) as step:
                 await self.history_manager.save_analysis(
-                    group_id, analysis_result, date_str=date_str
+                    group_id, dict(analysis_result), date_str=date_str
                 )
                 if self.checkpoint_store:
                     try:
@@ -557,7 +480,9 @@ class AnalysisRecoveryService:
                             group_id=group_id,
                             date_str=date_str,
                             stage_name=AnalysisStage.LLM_ANALYSIS.value,
-                            data=AnalysisResultSerializer.serialize(analysis_result),
+                            data=AnalysisResultSerializer.serialize(
+                                dict(analysis_result)
+                            ),
                             trace_id=cur_trace_id,
                         )
                     except Exception as e:
@@ -579,3 +504,130 @@ class AnalysisRecoveryService:
                 "resumed_from": AnalysisStage.CLEAN_MESSAGES.value,
                 "trace_id": trace_id,
             }
+
+    async def _complete_missing_sections(
+        self,
+        pipeline: PipelineContext,
+        analysis_result: AnalysisResultPayload,
+        unified_messages: list[UnifiedMessage],
+        top_users: list[dict[str, object]] | None,
+        platform_id: str | None,
+    ) -> AnalysisResultPayload | None:
+        """补齐缺失的 LLM 子任务，并保留已成功生成的内容和 Token 用量。
+
+        Args:
+            pipeline: 恢复任务的阶段上下文。
+            analysis_result: 已恢复的部分分析结果。
+            unified_messages: 从清洗快照还原的消息。
+            top_users: 清洗阶段选出的活跃成员。
+            platform_id: 当前平台实例。
+
+        Returns:
+            合并后的分析结果；所有启用子任务均失败时返回 None。
+        """
+        group_id = pipeline.group_id
+        trace = pipeline.trace
+        statistics = analysis_result["statistics"]
+        topics = analysis_result["topics"]
+        user_titles = analysis_result["user_titles"]
+        user_activity = analysis_result["user_analysis"]
+        chat_quality_review = analysis_result.get("chat_quality_review")
+        golden_quotes = statistics.golden_quotes
+        total_token_usage = statistics.token_usage
+        topic_enabled = self.config_manager.get_topic_analysis_enabled()
+        user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
+        golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
+        chat_quality_enabled = self.config_manager.get_chat_quality_analysis_enabled()
+        run_topic = topic_enabled and not bool(topics)
+        run_user_title = user_title_enabled and not bool(user_titles)
+        run_golden_quote = golden_quote_enabled and not bool(golden_quotes)
+        run_chat_quality = chat_quality_enabled and not bool(chat_quality_review)
+
+        legacy_messages = self.statistics_service._convert_to_legacy_dict(
+            unified_messages
+        )
+        unified_msg_origin = (
+            f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
+        )
+
+        if run_topic or run_user_title or run_golden_quote or run_chat_quality:
+            async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
+                async with self.task_guard.llm_slot(group_id, "resume"):
+                    (
+                        new_topics,
+                        new_user_titles,
+                        new_golden_quotes,
+                        new_tokens,
+                        new_chat_quality,
+                    ) = await self.llm_analyzer.analyze_all_concurrent(
+                        legacy_messages,
+                        user_activity,
+                        umo=unified_msg_origin,
+                        top_users=top_users,
+                        topic_enabled=run_topic,
+                        user_title_enabled=run_user_title,
+                        golden_quote_enabled=run_golden_quote,
+                        chat_quality_enabled=run_chat_quality,
+                    )
+                    if run_topic:
+                        topics = new_topics
+                    if run_user_title:
+                        user_titles = new_user_titles
+                    if run_golden_quote:
+                        golden_quotes = new_golden_quotes
+                    if run_chat_quality:
+                        chat_quality_review = new_chat_quality
+
+                    total_token_usage = TokenUsage(
+                        prompt_tokens=total_token_usage.prompt_tokens
+                        + new_tokens.prompt_tokens,
+                        completion_tokens=total_token_usage.completion_tokens
+                        + new_tokens.completion_tokens,
+                        total_tokens=total_token_usage.total_tokens
+                        + new_tokens.total_tokens,
+                    )
+
+                enabled_count = sum(
+                    [
+                        bool(run_topic),
+                        bool(run_user_title),
+                        bool(run_golden_quote),
+                        bool(run_chat_quality),
+                    ]
+                )
+                success_count = sum(
+                    [
+                        bool(new_topics) if run_topic else False,
+                        bool(new_user_titles) if run_user_title else False,
+                        bool(new_golden_quotes) if run_golden_quote else False,
+                        bool(new_chat_quality) if run_chat_quality else False,
+                    ]
+                )
+
+                if enabled_count > 0 and success_count == 0:
+                    step.mark_failed(
+                        "续跑大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
+                    )
+                    if trace:
+                        trace.metadata["has_warnings"] = False
+                        trace.metadata["failure_stage"] = (
+                            AnalysisStage.LLM_ANALYSIS.value
+                        )
+                    return None
+                if enabled_count > 0 and success_count < enabled_count:
+                    step.mark_warning(
+                        f"续跑大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
+                    )
+                    if trace:
+                        trace.metadata["has_warnings"] = True
+
+        statistics.golden_quotes = golden_quotes
+        statistics.token_usage = total_token_usage
+
+        return {
+            "statistics": statistics,
+            "topics": topics,
+            "user_titles": user_titles,
+            "user_analysis": user_activity,
+            "chat_quality_review": chat_quality_review,
+        }
