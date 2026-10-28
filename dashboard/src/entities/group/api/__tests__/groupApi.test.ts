@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { apiGet } from "../../../../shared/api/bridge";
 import { mockHandlers } from "../../../../mocks/handlers";
-import { fetchDistinctGroups, invalidateGroupsCache } from "../groupApi";
+import { fetchDistinctGroups, fetchGroupSessions, invalidateGroupsCache } from "../groupApi";
 
 vi.mock("../../../../shared/api/bridge", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../../../shared/api/bridge")>(), apiGet: vi.fn(),
@@ -27,4 +27,15 @@ it.each([["123"], [{ group_id: "123" }], [{ group_id: "123", group_name: "群", 
 it("兼容宿主双层信封和没有历史记录的空列表", async () => {
   vi.mocked(apiGet).mockResolvedValue({ status: "ok", data: { status: "ok", data: [] } });
   expect(await fetchDistinctGroups()).toEqual([]);
+});
+
+
+it("测试渲染读取独立会话列表，不使用按群号去重的缓存", async () => {
+  vi.mocked(apiGet).mockResolvedValueOnce(mockHandlers["GET groups"]()).mockResolvedValueOnce({ status: "ok", data: [
+    { group_id: "1", group_name: "群", platform: "onebot_1" },
+    { group_id: "1", group_name: "群", platform: "onebot_2" },
+  ] });
+  await fetchDistinctGroups();
+  expect(await fetchGroupSessions()).toHaveLength(2);
+  expect(apiGet).toHaveBeenLastCalledWith("groups", { by_session: true });
 });

@@ -21,3 +21,10 @@ export async function fetchDistinctGroups(forceRefresh = false): Promise<GroupIt
   cachedGroups = list;
   return list;
 }
+
+export async function fetchGroupSessions(): Promise<GroupItem[]> {
+  const res = await apiGet<unknown>("groups", { by_session: true });
+  const parsed = z.array(groupItemSchema).safeParse(extractData<unknown>(res));
+  if (!parsed.success) throw new Error("群列表格式不正确，请刷新页面或检查插件版本。");
+  return parsed.data;
+}
