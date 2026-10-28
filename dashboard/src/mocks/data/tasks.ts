@@ -4,25 +4,25 @@ import type { ConnectedPlatform } from "../../entities/task/api/taskApi";
 export const mockConnectedPlatforms: ConnectedPlatform[] = [
   {
     id: "aiocqhttp_main",
-    name: "QQ (NapCat / OneBot)",
+    display_name: "QQ (NapCat / OneBot)",
     type: "aiocqhttp",
     label: "QQ 官方/OneBot 实例",
   },
   {
     id: "telegram_main",
-    name: "Telegram Bot",
+    display_name: "Telegram Bot",
     type: "telegram",
     label: "TG 频道与群聊适配器",
   },
   {
     id: "discord_main",
-    name: "Discord Server",
+    display_name: "Discord Server",
     type: "discord",
     label: "Discord 社区服务器",
   },
   {
     id: "qq_official_main",
-    name: "QQ 官方开放平台",
+    display_name: "QQ 官方开放平台",
     type: "qq_official",
     label: "QQ 官方机器人原生实例",
   },

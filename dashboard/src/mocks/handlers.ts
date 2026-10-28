@@ -6,6 +6,8 @@ import { mockPluginConfig, mockProviders, mockPersonas } from "./data/configs";
 import { mockPluginLogs } from "./data/logs";
 import { mockConfigBackups } from "./data/configBackups";
 import { mockGroups } from "./data/groups";
+import { TAG_STYLE_MAP } from "../entities/log/model/types";
+import type { AvailableTag } from "../entities/log/model/types";
 import {
   mockPluginDataOverview,
   mockIncrementalBatches,
@@ -159,13 +161,13 @@ export const mockHandlers = {
           (l.logger_name && l.logger_name.toLowerCase().includes(q))
       );
     }
-    const tags = Array.from(new Set(mockPluginLogs.map((l) => l.tag).filter(Boolean)));
+    const tags: AvailableTag[] = Object.entries(TAG_STYLE_MAP).map(([key, value]) => ({ key, label: value.label }));
     return {
       status: "ok",
       data: {
         items,
         total: items.length,
-        available_tags: tags.map((t) => ({ tag: t, count: mockPluginLogs.filter((l) => l.tag === t).length })),
+        available_tags: tags,
       },
     };
   },
