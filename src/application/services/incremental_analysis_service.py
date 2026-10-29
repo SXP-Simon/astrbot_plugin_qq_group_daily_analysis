@@ -331,47 +331,19 @@ class IncrementalAnalysisService:
                 participant_ids=participant_ids,
             )
 
-            if not await self.incremental_store.save_batch(batch):
+            safe_ts = await self._persist_incremental_batch(
+                pipeline,
+                batch,
+                unified_messages,
+                last_analyzed_ts,
+                last_analyzed_message_ids,
+            )
+            if safe_ts is None:
                 return {
                     "success": False,
                     "reason": "batch_persistence_failed",
                     "messages_count": 0,
                 }
-
-            if self.checkpoint_store:
-                try:
-                    cur_trace_id = trace.trace_id if trace else ""
-                    await asyncio.to_thread(
-                        self.checkpoint_store.save_checkpoint,
-                        group_id=group_id,
-                        date_str=date_str,
-                        stage_name=f"INCREMENTAL_BATCH_{batch.batch_id[:8]}",
-                        data=batch.to_dict(),
-                        trace_id=cur_trace_id,
-                    )
-                except Exception as e:
-                    logger.warning(f"保存增量批次 Checkpoint 失败: {e}")
-
-            import time
-
-            safe_now = int(time.time()) + 60
-            safe_ts = min(last_message_timestamp, safe_now)
-
-            analyzed_ids_at_boundary = {
-                msg.message_id
-                for msg in unified_messages
-                if msg.timestamp == last_message_timestamp and msg.message_id
-            }
-            if last_message_timestamp == last_analyzed_ts:
-                analyzed_ids_at_boundary.update(last_analyzed_message_ids)
-            if safe_ts != last_message_timestamp:
-                analyzed_ids_at_boundary.clear()
-
-            await self.incremental_store.update_last_analyzed_cursor(
-                group_id,
-                safe_ts,
-                analyzed_ids_at_boundary,
-            )
 
             logger.debug(
                 f"群 {group_id} 增量批次完成: "
@@ -391,6 +363,70 @@ class IncrementalAnalysisService:
                 "group_id": group_id,
                 "platform_id": adapter.platform_id if adapter else (platform_id or ""),
             }
+
+    async def _persist_incremental_batch(
+        self,
+        pipeline: PipelineContext,
+        batch: IncrementalBatch,
+        unified_messages: list[UnifiedMessage],
+        last_analyzed_ts: int,
+        last_analyzed_message_ids: set[str],
+    ) -> int | None:
+        """保存增量批次，再保存可选检查点并推进消息游标。
+
+        Args:
+            pipeline: 当前批次所属的日期和追踪上下文。
+            batch: 已完成分析的批次。
+            unified_messages: 批次包含的消息，用于构造同秒边界 ID。
+            last_analyzed_ts: 上一次游标的时间戳。
+            last_analyzed_message_ids: 上一次游标同秒已分析的消息 ID。
+
+        Returns:
+            推进后的时间戳；批次保存失败时返回 None，且不更新游标。
+
+        Raises:
+            RuntimeError: 增量仓储未初始化。
+        """
+        if self.incremental_store is None:
+            raise RuntimeError("增量分析未初始化：缺少 IncrementalStore")
+        if not await self.incremental_store.save_batch(batch):
+            return None
+        group_id = batch.group_id
+        last_message_timestamp = batch.last_message_timestamp
+        if self.checkpoint_store:
+            try:
+                cur_trace_id = pipeline.trace.trace_id if pipeline.trace else ""
+                await asyncio.to_thread(
+                    self.checkpoint_store.save_checkpoint,
+                    group_id=group_id,
+                    date_str=pipeline.date_str,
+                    stage_name=f"INCREMENTAL_BATCH_{batch.batch_id[:8]}",
+                    data=batch.to_dict(),
+                    trace_id=cur_trace_id,
+                )
+            except Exception as e:
+                logger.warning(f"保存增量批次 Checkpoint 失败: {e}")
+
+        safe_now = int(time_mod.time()) + 60
+        safe_ts = min(last_message_timestamp, safe_now)
+
+        analyzed_ids_at_boundary = {
+            msg.message_id
+            for msg in unified_messages
+            if msg.timestamp == last_message_timestamp and msg.message_id
+        }
+        if last_message_timestamp == last_analyzed_ts:
+            analyzed_ids_at_boundary.update(last_analyzed_message_ids)
+        if safe_ts != last_message_timestamp:
+            analyzed_ids_at_boundary.clear()
+
+        await self.incremental_store.update_last_analyzed_cursor(
+            group_id,
+            safe_ts,
+            analyzed_ids_at_boundary,
+        )
+
+        return safe_ts
 
     async def _analyze_incremental_messages(
         self,
