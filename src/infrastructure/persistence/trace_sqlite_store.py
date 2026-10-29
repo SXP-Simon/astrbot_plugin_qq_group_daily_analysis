@@ -1274,10 +1274,10 @@ class TraceSQLiteStore:
                         COALESCE(SUM(tu.estimated_cost), 0.0) as estimated_cost
                     FROM analysis_traces t
                     LEFT JOIN token_usage tu ON t.trace_id = tu.trace_id
-                    WHERE t.started_at >= ?
+                    WHERE t.started_at >= ? AND t.started_at <= ?
                     GROUP BY hour_str;
                     """,
-                    (start_timestamp,),
+                    (start_timestamp, now),
                 ).fetchall()
 
                 for r in rows:
@@ -1347,10 +1347,10 @@ class TraceSQLiteStore:
                         COALESCE(SUM(tu.estimated_cost), 0.0) as estimated_cost
                     FROM analysis_traces t
                     LEFT JOIN token_usage tu ON t.trace_id = tu.trace_id
-                    WHERE t.started_at >= ?
+                    WHERE t.started_at >= ? AND t.started_at <= ?
                     GROUP BY day_str;
                     """,
-                    (start_timestamp,),
+                    (start_timestamp, now),
                 ).fetchall()
 
                 for r in rows:
@@ -1384,9 +1384,9 @@ class TraceSQLiteStore:
                     COALESCE(tu.per_analyzer_tokens_json, '{}') as per_analyzer
                 FROM analysis_traces t
                 LEFT JOIN token_usage tu ON t.trace_id = tu.trace_id
-                WHERE t.started_at >= ?;
+                WHERE t.started_at >= ? AND t.started_at <= ?;
                 """,
-                (start_timestamp,),
+                (start_timestamp, now),
             ).fetchall()
 
             invalid_provider_names = {
