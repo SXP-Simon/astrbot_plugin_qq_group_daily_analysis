@@ -567,16 +567,22 @@ class ComicApplicationService:
             try:
                 header, b64_data = image_ref.split(",", 1)
                 mime_type = header.split(";")[0].replace("data:", "").strip()
-                return base64.b64decode(b64_data), mime_type or "image/png"
-            except Exception as e:
+                image_data = base64.b64decode(b64_data, validate=True)
+                if not image_data:
+                    raise ValueError("参考图数据为空")
+                return image_data, mime_type or "image/png"
+            except ValueError as e:
                 logger.error(f"[Comic] 解析 Data URL 参考图失败: {e}")
                 return None
 
         # 2. 支持 base64:// 格式
         if image_ref.startswith("base64://"):
             try:
-                return base64.b64decode(image_ref[9:]), "image/png"
-            except Exception as e:
+                image_data = base64.b64decode(image_ref[9:], validate=True)
+                if not image_data:
+                    raise ValueError("参考图数据为空")
+                return image_data, "image/png"
+            except ValueError as e:
                 logger.error(f"[Comic] 解析 Base64 参考图失败: {e}")
                 return None
 
