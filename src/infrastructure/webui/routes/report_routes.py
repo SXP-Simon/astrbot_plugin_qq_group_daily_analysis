@@ -301,17 +301,16 @@ class ReportRoutes:
                 continue
             for p in d.rglob("*"):
                 if (
-                    p.is_file()
-                    and p.suffix.lower() in valid_exts
-                    and not any(part.startswith(".") for part in p.relative_to(d).parts)
+                    not p.is_file()
+                    or p.suffix.lower() not in valid_exts
+                    or any(part.startswith(".") for part in p.relative_to(d).parts)
                 ):
-                    resolved = p.resolve()
-                    if (
-                        resolved.is_relative_to(d.resolve())
-                        and resolved not in seen_paths
-                    ):
-                        seen_paths.add(resolved)
-                        all_files.append(p)
+                    continue
+                resolved = p.resolve()
+                if not resolved.is_relative_to(d.resolve()) or resolved in seen_paths:
+                    continue
+                seen_paths.add(resolved)
+                all_files.append(p)
 
         report_trace_map: dict[str, str] = {}
         try:
