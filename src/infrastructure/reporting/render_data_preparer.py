@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 from markupsafe import Markup
 
+from ...domain.value_objects import QualityReview
 from ...shared.report_language import (
     format_report_date,
     resolve_report_language,
@@ -286,6 +287,65 @@ class RenderDataPreparer:
         }
 
         return common_context, cdn_base_url
+
+    def _render_chat_quality(
+        self,
+        review: QualityReview | dict[str, object] | None,
+        analysis_result: AnalysisResultPayload,
+        template_theme: str | None,
+        common_context: TemplateResourceContext,
+    ) -> str:
+        """独立准备聊天质量组件，并在匿名模式下净化所有评价文本。
+
+        Args:
+            review: 领域质量评价或旧版字典数据。
+            analysis_result: 包含质量评价及用户名单的领域结果。
+            template_theme: 当前报告主题。
+            common_context: 本次渲染固定的资源与展示选项。
+
+        Returns:
+            质量评价组件 HTML；没有评价时返回空字符串。
+        """
+        if not review:
+            return ""
+        review_data = review.to_dict() if isinstance(review, QualityReview) else review
+        if common_context["hide_user_names"]:
+            dimensions = review_data.get("dimensions", [])
+            review_data = {
+                **review_data,
+                "title": self.sanitize_identity_text(
+                    str(review_data.get("title", "")), analysis_result, True
+                ),
+                "subtitle": self.sanitize_identity_text(
+                    str(review_data.get("subtitle", "")), analysis_result, True
+                ),
+                "summary": self.sanitize_identity_text(
+                    str(review_data.get("summary", "")), analysis_result, True
+                ),
+                "dimensions": [
+                    {
+                        **dimension,
+                        "name": self.sanitize_identity_text(
+                            str(dimension.get("name", "")), analysis_result, True
+                        ),
+                        "comment": self.sanitize_identity_text(
+                            str(dimension.get("comment", "")), analysis_result, True
+                        ),
+                    }
+                    for dimension in (
+                        dimensions if isinstance(dimensions, list) else []
+                    )
+                    if isinstance(dimension, dict)
+                ],
+            }
+        rendered = self.html_templates.render_template(
+            "chat_quality_item.html",
+            template_theme=template_theme,
+            **review_data,
+            **common_context,
+        )
+        logger.debug(f"聊天质量锐评HTML生成完成，长度: {len(rendered)}")
+        return rendered
 
     async def prepare_render_data(
         self,
@@ -559,66 +619,10 @@ class RenderDataPreparer:
         )
         logger.debug(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
-        chat_quality_html = ""
-        chat_quality_review = analysis_result.get("chat_quality_review")
-        if not chat_quality_review:
-            chat_quality_review = stats.chat_quality_review
-
-        if chat_quality_review:
-            if hasattr(chat_quality_review, "dimensions"):
-                review_data = {
-                    "title": chat_quality_review.title,
-                    "subtitle": chat_quality_review.subtitle,
-                    "dimensions": [
-                        {
-                            "name": d.name,
-                            "percentage": d.percentage,
-                            "comment": d.comment,
-                            "color": d.color,
-                        }
-                        for d in chat_quality_review.dimensions
-                    ],
-                    "summary": chat_quality_review.summary,
-                }
-            else:
-                review_data = chat_quality_review
-
-            if hide_user_names and isinstance(review_data, dict):
-                review_data = {
-                    **review_data,
-                    "title": self.sanitize_identity_text(
-                        review_data.get("title", ""), analysis_result, True
-                    ),
-                    "subtitle": self.sanitize_identity_text(
-                        review_data.get("subtitle", ""), analysis_result, True
-                    ),
-                    "summary": self.sanitize_identity_text(
-                        review_data.get("summary", ""), analysis_result, True
-                    ),
-                    "dimensions": [
-                        {
-                            **dimension,
-                            "name": self.sanitize_identity_text(
-                                dimension.get("name", ""), analysis_result, True
-                            ),
-                            "comment": self.sanitize_identity_text(
-                                dimension.get("comment", ""),
-                                analysis_result,
-                                True,
-                            ),
-                        }
-                        for dimension in review_data.get("dimensions", [])
-                        if isinstance(dimension, dict)
-                    ],
-                }
-
-            chat_quality_html = self.html_templates.render_template(
-                "chat_quality_item.html",
-                template_theme=template_theme,
-                **review_data,
-                **common_context,
-            )
-            logger.debug(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
+        review = analysis_result.get("chat_quality_review") or stats.chat_quality_review
+        chat_quality_html = self._render_chat_quality(
+            review, analysis_result, template_theme, common_context
+        )
 
         render_data: RenderTemplateContext = {
             **common_context,
