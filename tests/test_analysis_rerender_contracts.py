@@ -80,6 +80,7 @@ async def test_rerender_returns_existing_file(recovery, tmp_path, fmt):
     )
     report_format = "image" if fmt == "base64" else fmt
     getattr(generator, f"generate_{report_format}_report").return_value = (value, None)
+    service.history_manager.get_analysis.return_value["trace_id"] = "../trace"
     result = await service.rerender_report(
         "../123",
         "2026-10-29",
@@ -118,3 +119,52 @@ async def test_rerender_rejects_invalid_base64(recovery, value):
     assert (await service.rerender_report("123", "2026-10-29", "test"))[
         "success"
     ] is False
+
+
+@pytest.mark.asyncio
+async def test_scoped_rerender_prefers_requested_checkpoint(recovery, analysis):
+    service, generator = recovery
+    old_snapshot = AnalysisResultSerializer.serialize(analysis)
+    service.history_manager.get_analysis.return_value = {
+        **old_snapshot,
+        "statistics": {"message_count": 999},
+        "trace_id": "latest-task",
+    }
+    service.checkpoint_store = MagicMock(
+        get_checkpoint=MagicMock(return_value=old_snapshot)
+    )
+    generator.generate_image_report.return_value = ("base64://YWJj", None)
+    result = await service.rerender_report(
+        "123", "2026-10-29", "test", trace_id="requested-task"
+    )
+    assert result["success"] is True
+    assert result["from_checkpoint"] is True
+    assert (
+        generator.generate_image_report.call_args.kwargs["analysis_result"][
+            "statistics"
+        ].message_count
+        == 10
+    )
+    service.history_manager.get_analysis.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_scoped_rerender_rejects_another_task_history(recovery):
+    service, generator = recovery
+    service.history_manager.get_analysis.return_value["trace_id"] = "latest-task"
+    service.checkpoint_store = MagicMock(get_checkpoint=MagicMock(return_value=None))
+    result = await service.rerender_report(
+        "123", "2026-10-29", "test", trace_id="missing-old-task"
+    )
+    assert result["success"] is False
+    generator.generate_image_report.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_daily_rerender_inherits_history_source_trace(recovery):
+    service, generator = recovery
+    service.history_manager.get_analysis.return_value["trace_id"] = "daily-source"
+    generator.generate_image_report.return_value = ("base64://YWJj", None)
+    result = await service.rerender_report("123", "2026-10-29", "test")
+    assert result["success"] is True
+    assert result["trace_id"] == "daily-source"

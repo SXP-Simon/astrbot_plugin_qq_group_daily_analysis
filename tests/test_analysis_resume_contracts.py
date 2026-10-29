@@ -97,3 +97,30 @@ async def test_resume_legacy_summary_does_not_fake_complete_analysis():
         result = await service.resume_analysis("legacy-summary", "123")
     assert result["success"] is False
     assert result["reason"] == "checkpoint_missing"
+
+
+@pytest.mark.asyncio
+async def test_resume_rejects_another_task_daily_history(monkeypatch):
+    monkeypatch.setattr("src.shared.trace_context._global_trace_store", None)
+    config = MagicMock()
+    config.get_topic_analysis_enabled.return_value = False
+    config.get_user_title_analysis_enabled.return_value = False
+    config.get_golden_quote_analysis_enabled.return_value = False
+    config.get_chat_quality_analysis_enabled.return_value = False
+    history = MagicMock(
+        get_analysis=AsyncMock(
+            return_value={
+                "trace_id": "another-task",
+                "statistics": {"message_count": 99},
+            }
+        )
+    )
+    service = AnalysisRecoveryService(
+        config, MagicMock(), history, MagicMock(), MagicMock(), MagicMock(), TaskGuard()
+    )
+    async with TraceContext(trace_id="requested-task"):
+        result = await service.resume_analysis(
+            "requested-task", "123", date_str="2026-10-29"
+        )
+    assert result["success"] is False
+    assert result["reason"] == "checkpoint_missing"

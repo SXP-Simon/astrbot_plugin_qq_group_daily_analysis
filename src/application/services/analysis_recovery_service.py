@@ -117,18 +117,36 @@ class AnalysisRecoveryService:
             return {"success": False, "reason": "不支持的报告格式"}
         analysis_result: AnalysisResultPayload | None = None
         from_checkpoint = False
-        if self.history_manager:
+        # 显式重绘某次任务时，专属检查点优先于按日保存的最近一次结果。
+        if trace_id and self.checkpoint_store:
+            cached_data = await asyncio.to_thread(
+                self.checkpoint_store.get_checkpoint,
+                group_id,
+                date_str,
+                AnalysisStage.LLM_ANALYSIS.value,
+                trace_id=trace_id,
+            )
+            if isinstance(cached_data, dict) and isinstance(
+                cached_data.get("statistics"), (dict, GroupStatistics)
+            ):
+                analysis_result = AnalysisResultSerializer.deserialize(cached_data)
+                from_checkpoint = True
+        if not analysis_result and self.history_manager:
             try:
                 hist_data = await self.history_manager.get_analysis(group_id, date_str)
                 # 旧 KV 记录只有摘要，不能作为可恢复的完整分析产物。
-                if isinstance(hist_data, dict) and isinstance(
-                    hist_data.get("statistics"), (dict, GroupStatistics)
+                if (
+                    isinstance(hist_data, dict)
+                    and isinstance(hist_data.get("statistics"), (dict, GroupStatistics))
+                    and (not trace_id or hist_data.get("trace_id") == trace_id)
                 ):
                     analysis_result = AnalysisResultSerializer.deserialize(hist_data)
+                    if not trace_id and isinstance(hist_data.get("trace_id"), str):
+                        trace_id = str(hist_data["trace_id"]) or None
             except Exception as e:
                 logger.debug(f"从 HistoryManager 获取分析记录异常: {e}")
 
-        if not analysis_result and self.checkpoint_store:
+        if not analysis_result and not trace_id and self.checkpoint_store:
             cached_data = await asyncio.to_thread(
                 self.checkpoint_store.get_checkpoint,
                 group_id,
@@ -287,8 +305,10 @@ class AnalysisRecoveryService:
         if not cached_llm:
             try:
                 hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if isinstance(hist_data, dict) and isinstance(
-                    hist_data.get("statistics"), (dict, GroupStatistics)
+                if (
+                    isinstance(hist_data, dict)
+                    and isinstance(hist_data.get("statistics"), (dict, GroupStatistics))
+                    and hist_data.get("trace_id") == checkpoint_trace_id
                 ):
                     cached_llm = hist_data
             except Exception:
