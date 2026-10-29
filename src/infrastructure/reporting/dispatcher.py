@@ -171,7 +171,7 @@ class ReportDispatcher:
             )
 
             if trace:
-                with trace.span(
+                async with trace.span_async(
                     AnalysisStage.RENDER_REPORT,
                     {"format": "image", "template": template_theme},
                 ):
@@ -208,8 +208,8 @@ class ReportDispatcher:
         sent = False
         dest_filename: str | None = None
         if image_url:
-            with (
-                trace_ctx.span(
+            async with (
+                trace_ctx.span_async(
                     AnalysisStage.DISPATCH_REPORT,
                     {
                         "platform": platform_id or "auto",
@@ -264,13 +264,10 @@ class ReportDispatcher:
                                     "created_at": time.time(),
                                 }
                             )
-                        from ...shared.trace_context import _global_trace_store
-
-                        if _global_trace_store is not None:
-                            try:
-                                _global_trace_store.save_trace(trace_ctx.to_dict())
-                            except Exception:
-                                pass
+                        try:
+                            await trace_ctx.persist_snapshot_async()
+                        except Exception as e:
+                            logger.warning(f"保存报告追踪快照失败: {e}")
                 except Exception as e:
                     logger.warning(f"[{trace_id}] 保存历史报告副本失败: {e}")
 
@@ -387,7 +384,7 @@ class ReportDispatcher:
             )
 
             if trace:
-                with trace.span(
+                async with trace.span_async(
                     AnalysisStage.RENDER_REPORT,
                     {"format": "html", "template": template_theme},
                 ):
@@ -422,8 +419,8 @@ class ReportDispatcher:
         html_filename: str | None = None
         sent = False
         if html_path:
-            with (
-                trace_ctx.span(
+            async with (
+                trace_ctx.span_async(
                     AnalysisStage.DISPATCH_REPORT,
                     {
                         "platform": platform_id or "auto",
@@ -456,13 +453,10 @@ class ReportDispatcher:
                                     "created_at": time.time(),
                                 }
                             )
-                        from ...shared.trace_context import _global_trace_store
-
-                        if _global_trace_store is not None:
-                            try:
-                                _global_trace_store.save_trace(trace_ctx.to_dict())
-                            except Exception:
-                                pass
+                        try:
+                            await trace_ctx.persist_snapshot_async()
+                        except Exception as e:
+                            logger.warning(f"保存报告追踪快照失败: {e}")
                 except Exception as e:
                     logger.warning(f"[{trace_id}] 关联 HTML 报告元数据失败: {e}")
 
@@ -574,8 +568,8 @@ class ReportDispatcher:
         # 尝试通过适配器发送文本报告
         logger.debug(f"[分发器] 正在尝试通过适配器发送文本报告。群: {group_id}")
 
-        with (
-            trace_ctx.span(
+        async with (
+            trace_ctx.span_async(
                 AnalysisStage.DISPATCH_REPORT,
                 {
                     "platform": platform_id or "auto",

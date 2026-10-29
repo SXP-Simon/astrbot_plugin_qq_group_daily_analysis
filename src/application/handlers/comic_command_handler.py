@@ -191,7 +191,7 @@ class ComicCommandHandler:
             trace_id = TraceContext.generate(
                 prefix="comic", group_name=group_name or group_id
             )
-            trace = TraceContext.set(
+            trace = await TraceContext.set_async(
                 trace_id=trace_id,
                 group_id=group_id,
                 group_name=group_name or group_id,
@@ -217,7 +217,8 @@ class ComicCommandHandler:
             if not result.get("success"):
                 reason = result.get("reason")
                 if trace and trace.status == "running":
-                    trace.finish(
+                    await asyncio.to_thread(
+                        trace.finish,
                         event=TaskEvent.FAIL,
                         error_message=f"提取漫画话题失败: {reason}",
                     )
@@ -245,23 +246,28 @@ class ComicCommandHandler:
                 yield event.plain_result("✅ 漫画生成任务已启动，完成后会发送到群里")
             elif status == "duplicate":
                 if trace and trace.status == "running":
-                    trace.finish(
-                        event=TaskEvent.WARN, error_message="该群已有漫画任务正在执行"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.WARN,
+                        error_message="该群已有漫画任务正在执行",
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("🎨 该群已有漫画任务正在执行，请稍后再试哦~")
             elif status == "blocked":
                 if trace and trace.status == "running":
-                    trace.finish(
-                        event=TaskEvent.WARN, error_message="此群未启用漫画生成功能"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.WARN,
+                        error_message="此群未启用漫画生成功能",
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("❌ 此群未启用漫画生成功能")
             elif status == "no_topics":
                 if trace and trace.status == "running":
-                    trace.finish(
+                    await asyncio.to_thread(
+                        trace.finish,
                         event=TaskEvent.WARN,
                         error_message="未提取到可用于生成漫画的话题",
                     )
@@ -270,8 +276,10 @@ class ComicCommandHandler:
                 yield event.plain_result("❌ 未提取到可用于生成漫画的话题")
             else:
                 if trace and trace.status == "running":
-                    trace.finish(
-                        event=TaskEvent.FAIL, error_message="漫画生成任务未启动"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.FAIL,
+                        error_message="漫画生成任务未启动",
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
@@ -279,8 +287,10 @@ class ComicCommandHandler:
 
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
-                trace.finish(
-                    event=TaskEvent.FAIL, error_message="该群的漫画话题提取任务正在执行"
+                await asyncio.to_thread(
+                    trace.finish,
+                    event=TaskEvent.FAIL,
+                    error_message="该群的漫画话题提取任务正在执行",
                 )
             if trace_id and self.active_task_manager:
                 await self.active_task_manager.finish_task(trace_id)
@@ -288,8 +298,10 @@ class ComicCommandHandler:
         except asyncio.CancelledError:
             if trace and trace.status == "running":
                 try:
-                    trace.finish(
-                        event=TaskEvent.ABORT, error_message="Task cancelled by system"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.ABORT,
+                        error_message="Task cancelled by system",
                     )
                 except RuntimeError as transition_error:
                     logger.info(f"取消收尾时任务已由并发事件收敛: {transition_error}")
@@ -298,7 +310,9 @@ class ComicCommandHandler:
             logger.info("手动漫画任务被取消（插件正在关闭或重载）")
         except Exception as e:
             if trace and trace.status == "running":
-                trace.finish(event=TaskEvent.FAIL, error_message=str(e))
+                await asyncio.to_thread(
+                    trace.finish, event=TaskEvent.FAIL, error_message=str(e)
+                )
             if trace_id and self.active_task_manager:
                 await self.active_task_manager.finish_task(trace_id)
             logger.error(f"手动漫画生成失败: {e}", exc_info=True)
@@ -460,98 +474,77 @@ class ComicCommandHandler:
                 )
                 if stop_request is not None and stop_request.refresh():
                     return
-                if comic_bytes:
-                    logger.info(f"群 {group_id} 漫画生成成功，准备发送和保存副本...")
-                    ext = self.detect_image_ext(comic_bytes)
-                    ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    trace_suffix = f"_{cur_trace.trace_id}" if cur_trace else ""
-                    filename = f"comic_{group_id}_{ts_str}{trace_suffix}{ext}"
+                if not comic_bytes:
+                    if fallback_url:
+                        adapter = self.bot_manager.get_adapter(platform_id)
+                        if adapter:
+                            await adapter.send_image(group_id, fallback_url)
+                    else:
+                        logger.warning(f"群 {group_id} 漫画生成未产生有效输出。")
+                    return
 
-                    reports_dir = (
-                        self.plugin_data_dir / "reports"
-                        if self.plugin_data_dir
-                        else Path.cwd()
-                        / "data"
-                        / "plugin_data"
-                        / PLUGIN_NAME
-                        / "reports"
+                logger.info(f"群 {group_id} 漫画生成成功，准备发送和保存副本...")
+                ext = self.detect_image_ext(comic_bytes)
+                ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                trace_suffix = f"_{cur_trace.trace_id}" if cur_trace else ""
+                filename = f"comic_{group_id}_{ts_str}{trace_suffix}{ext}"
+
+                reports_dir = (
+                    self.plugin_data_dir / "reports"
+                    if self.plugin_data_dir
+                    else Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME / "reports"
+                )
+                reports_dir.mkdir(parents=True, exist_ok=True)
+                comic_file_path = reports_dir / filename
+                comic_file_path.write_bytes(comic_bytes)
+
+                if cur_trace:
+                    rfiles = cur_trace.metadata.setdefault("report_files", [])
+                    if isinstance(rfiles, list):
+                        rfiles.append(
+                            {
+                                "filename": filename,
+                                "format": "image",
+                                "size_bytes": len(comic_bytes),
+                                "stage": "COMIC_GENERATION",
+                            }
+                        )
+
+                adapter = (
+                    self.bot_manager.get_adapter(platform_id)
+                    if self.bot_manager
+                    else None
+                )
+                if not adapter:
+                    return
+                show_caption_fn = (
+                    getattr(self.config_manager, "get_show_report_caption", None)
+                    if self.config_manager
+                    else None
+                )
+                show_caption = show_caption_fn() if callable(show_caption_fn) else True
+                caption = TraceContext.make_report_caption() if show_caption else ""
+                sent = await adapter.send_image(
+                    group_id, str(comic_file_path), caption=caption
+                )
+                if not sent:
+                    return
+                upload_image = self._try_upload_image
+                if self.plugin_instance:
+                    inst_upload = getattr(
+                        self.plugin_instance, "_try_upload_image", None
                     )
-                    reports_dir.mkdir(parents=True, exist_ok=True)
-                    comic_file_path = reports_dir / filename
-                    comic_file_path.write_bytes(comic_bytes)
-
-                    if cur_trace:
-                        rfiles = cur_trace.metadata.setdefault("report_files", [])
-                        if isinstance(rfiles, list):
-                            rfiles.append(
-                                {
-                                    "filename": filename,
-                                    "format": "image",
-                                    "size_bytes": len(comic_bytes),
-                                    "stage": "COMIC_GENERATION",
-                                }
-                            )
-
-                    adapter = (
-                        self.bot_manager.get_adapter(platform_id)
-                        if self.bot_manager
-                        else None
-                    )
-                    if adapter:
-                        show_caption_fn = (
-                            getattr(
-                                self.config_manager, "get_show_report_caption", None
-                            )
-                            if self.config_manager
-                            else None
-                        )
-                        show_caption = (
-                            show_caption_fn() if callable(show_caption_fn) else True
-                        )
-                        caption = (
-                            TraceContext.make_report_caption() if show_caption else ""
-                        )
-                        sent = await adapter.send_image(
-                            group_id, str(comic_file_path), caption=caption
-                        )
-                        if sent:
-                            if self.plugin_instance:
-                                inst_upload = getattr(
-                                    self.plugin_instance, "_try_upload_image", None
-                                )
-                                if inst_upload is not None and (
-                                    hasattr(inst_upload, "assert_called")
-                                    or hasattr(inst_upload, "assert_awaited")
-                                    or hasattr(inst_upload, "_mock_name")
-                                    or type(inst_upload).__name__
-                                    in ("Mock", "MagicMock", "AsyncMock")
-                                ):
-                                    await inst_upload(
-                                        group_id,
-                                        str(comic_file_path),
-                                        platform_id,
-                                        is_comic=True,
-                                    )
-                                else:
-                                    await self._try_upload_image(
-                                        group_id,
-                                        str(comic_file_path),
-                                        platform_id,
-                                        is_comic=True,
-                                    )
-                            else:
-                                await self._try_upload_image(
-                                    group_id,
-                                    str(comic_file_path),
-                                    platform_id,
-                                    is_comic=True,
-                                )
-                elif fallback_url:
-                    adapter = self.bot_manager.get_adapter(platform_id)
-                    if adapter:
-                        await adapter.send_image(group_id, fallback_url)
-                else:
-                    logger.warning(f"群 {group_id} 漫画生成未产生有效输出。")
+                    if inst_upload is not None and (
+                        hasattr(inst_upload, "assert_called")
+                        or hasattr(inst_upload, "assert_awaited")
+                        or hasattr(inst_upload, "_mock_name")
+                        or type(inst_upload).__name__
+                        in ("Mock", "MagicMock", "AsyncMock")
+                    ):
+                        upload_image = inst_upload
+                await upload_image(
+                    group_id, str(comic_file_path), platform_id, is_comic=True
+                )
             except Exception as e:
                 logger.error(f"群 {group_id} 后台漫画生成执行异常: {e}", exc_info=True)
 

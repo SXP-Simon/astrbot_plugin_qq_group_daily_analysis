@@ -296,7 +296,7 @@ async def test_reaper_loop_reaps_timed_out_tasks(temp_db: Path):
 
     # 启动 reaper (极短 interval 用于测试)
     manager.start_reaper(interval_seconds=0.01, timeout_seconds=180)
-    await asyncio.sleep(0.05)
+    await asyncio.wait_for(asyncio.gather(hung_task, return_exceptions=True), 3)
     manager.stop_reaper()
 
     # 验证活跃列表已清理

@@ -168,3 +168,25 @@ async def test_pipeline_heartbeat_keeper_refreshes_active_task(tmp_path: Path):
         # 退出 step 后检查 span 完成
         assert len(trace._spans) == 1
         assert trace._spans[0]["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_cancelled_pipeline_stage_preserves_cancellation_snapshot(
+    monkeypatch, tmp_path
+):
+    from unittest.mock import AsyncMock
+
+    trace = TraceContext(trace_id="cancelled-stage-review")
+    save_snapshot = AsyncMock()
+    monkeypatch.setattr(trace, "persist_snapshot_async", save_snapshot)
+    checkpoints = CheckpointStore(tmp_path / "cancelled-stage.db")
+    pipeline = PipelineContext(trace, checkpoints, "123", "2026-10-29")
+    with pytest.raises(asyncio.CancelledError):
+        async with pipeline.step(
+            AnalysisStage.LLM_ANALYSIS, save_checkpoint=True
+        ) as step:
+            step.set_output({"unfinished": True})
+            raise asyncio.CancelledError
+    assert trace._spans[-1]["status"] == "running"
+    save_snapshot.assert_awaited_once()
+    assert checkpoints.get_checkpoint("123", "2026-10-29", "LLM_ANALYSIS") is None

@@ -205,7 +205,7 @@ class TaskRoutes:
         """后台异步执行触发任务"""
         if not self.analysis_service:
             return
-        trace_ctx = TraceContext.set(
+        trace_ctx = await TraceContext.set_async(
             trace_id=trace_id,
             group_id=group_id,
             group_name=group_name,
@@ -253,7 +253,7 @@ class TaskRoutes:
                 trace_ctx.platform = str(dispatch_platform_id)
                 if self.report_dispatcher and isinstance(analysis_result, dict):
                     try:
-                        with trace_ctx.span(
+                        async with trace_ctx.span_async(
                             AnalysisStage.DISPATCH_REPORT,
                             {
                                 "platform": dispatch_platform_id or "auto",
@@ -272,10 +272,11 @@ class TaskRoutes:
                         )
 
                 if trace_ctx.status == "running":
-                    trace_ctx.finish(event=TaskEvent.SUCCEED)
+                    (await asyncio.to_thread(trace_ctx.finish, event=TaskEvent.SUCCEED))
             else:
                 if trace_ctx.status == "running":
-                    trace_ctx.finish(
+                    await asyncio.to_thread(
+                        trace_ctx.finish,
                         event=TaskEvent.FAIL,
                         error_message=str(result.get("reason", "unknown"))
                         if result
@@ -285,14 +286,18 @@ class TaskRoutes:
             logger.info(f"触发分析任务已取消: {trace_id}")
             if trace_ctx.status == "running":
                 try:
-                    trace_ctx.finish(
-                        event=TaskEvent.CANCEL, error_message="Task cancelled"
+                    await asyncio.to_thread(
+                        trace_ctx.finish,
+                        event=TaskEvent.CANCEL,
+                        error_message="Task cancelled",
                     )
                 except RuntimeError as transition_error:
                     logger.info(f"取消收尾时任务已由并发事件收敛: {transition_error}")
         except Exception as e:
             if trace_ctx.status == "running":
-                trace_ctx.finish(event=TaskEvent.FAIL, error_message=str(e))
+                await asyncio.to_thread(
+                    trace_ctx.finish, event=TaskEvent.FAIL, error_message=str(e)
+                )
             logger.error(f"任务 {trace_id} 执行出错: {e}", exc_info=True)
         finally:
             await self.active_task_manager.finish_task(trace_id)
@@ -303,7 +308,7 @@ class TaskRoutes:
             return error_response("分析服务未初始化", status_code=500)
 
         try:
-            trace_record = self.trace_store.get_trace(trace_id)
+            trace_record = await asyncio.to_thread(self.trace_store.get_trace, trace_id)
             if not trace_record:
                 return error_response(f"Trace {trace_id} not found", status_code=404)
 
@@ -352,7 +357,8 @@ class TaskRoutes:
                 "template_name": template_name,
             }
 
-            self.trace_store.save_trace(
+            await asyncio.to_thread(
+                self.trace_store.save_trace,
                 {
                     "trace_id": resume_trace_id,
                     "group_id": group_id,
@@ -360,7 +366,7 @@ class TaskRoutes:
                     "platform": platform,
                     "trigger_type": "resume",
                     "status": TaskStatus.RUNNING.value,
-                }
+                },
             )
 
             asyncio_task = asyncio.create_task(
@@ -414,7 +420,7 @@ class TaskRoutes:
         """后台异步执行断点续跑"""
         if not self.analysis_service:
             return
-        trace_ctx = TraceContext.set(
+        trace_ctx = await TraceContext.set_async(
             trace_id=trace_id,
             group_id=group_id,
             group_name=group_name,
@@ -475,7 +481,7 @@ class TaskRoutes:
                 trace_ctx.platform = str(dispatch_platform_id)
                 if self.report_dispatcher and isinstance(analysis_result, dict):
                     try:
-                        with trace_ctx.span(
+                        async with trace_ctx.span_async(
                             AnalysisStage.DISPATCH_REPORT,
                             {
                                 "platform": dispatch_platform_id or "auto",
@@ -494,10 +500,11 @@ class TaskRoutes:
                         )
 
                 if trace_ctx.status == "running":
-                    trace_ctx.finish(event=TaskEvent.SUCCEED)
+                    (await asyncio.to_thread(trace_ctx.finish, event=TaskEvent.SUCCEED))
             else:
                 if trace_ctx.status == "running":
-                    trace_ctx.finish(
+                    await asyncio.to_thread(
+                        trace_ctx.finish,
                         event=TaskEvent.FAIL,
                         error_message=str(result.get("reason", "unknown"))
                         if result
@@ -505,7 +512,9 @@ class TaskRoutes:
                     )
         except Exception as e:
             if trace_ctx.status == "running":
-                trace_ctx.finish(event=TaskEvent.FAIL, error_message=str(e))
+                await asyncio.to_thread(
+                    trace_ctx.finish, event=TaskEvent.FAIL, error_message=str(e)
+                )
             logger.error(f"续跑任务 {trace_id} 执行出错: {e}", exc_info=True)
         finally:
             await self.active_task_manager.finish_task(trace_id)

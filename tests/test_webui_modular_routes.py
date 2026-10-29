@@ -101,7 +101,10 @@ async def test_resume_task_uses_new_trace_and_preserves_terminal_source(
     monkeypatch.setattr(
         route_module,
         "json_response",
-        lambda data, **kwargs: {"status_code": kwargs.get("status_code", 200), "data": data},
+        lambda data, **kwargs: {
+            "status_code": kwargs.get("status_code", 200),
+            "data": data,
+        },
     )
     monkeypatch.setattr(
         route_module,
@@ -187,20 +190,29 @@ async def test_trace_detail_uses_live_rounds_but_never_overwrites_terminal_statu
     route_module = importlib.import_module(TraceRoutes.__module__)
     trace = route_module.TraceContext(trace_id="live-round-detail", group_id="123")
     mock_trace_store.save_trace(trace.to_dict())
-    monkeypatch.setattr(route_module.TraceContext, "get_active_trace", staticmethod(lambda _: trace))
+    monkeypatch.setattr(
+        route_module.TraceContext, "get_active_trace", staticmethod(lambda _: trace)
+    )
     monkeypatch.setattr(route_module, "json_response", lambda payload: payload)
     routes = TraceRoutes(MagicMock(), mock_trace_store, mock_active_mgr, MagicMock())
     with trace.span("RENDER_REPORT") as span:
-        span["payload"]["render_attempts"] = [{"attempt": 1, "status": "running", "strategy_name": "本地备用"}]
+        span["payload"]["render_attempts"] = [
+            {"attempt": 1, "status": "running", "strategy_name": "本地备用"}
+        ]
         if terminal:
-            TaskLifecycleService(mock_trace_store).transition(trace.trace_id, TaskEvent.CANCEL)
+            TaskLifecycleService(mock_trace_store).transition(
+                trace.trace_id, TaskEvent.CANCEL
+            )
         result = await routes.api_get_trace_detail(trace.trace_id)
         if terminal:
             assert result["data"]["status"] == "aborted"
             assert result["data"]["spans"] == []
         else:
             assert result["data"]["status"] == "running"
-            assert result["data"]["spans"][0]["payload"]["render_attempts"][0]["status"] == "running"
+            assert (
+                result["data"]["spans"][0]["payload"]["render_attempts"][0]["status"]
+                == "running"
+            )
 
 
 @pytest.mark.asyncio
@@ -208,17 +220,27 @@ async def test_trace_detail_rechecks_terminal_status_when_active_trace_disappear
     mock_trace_store, mock_active_mgr, monkeypatch
 ):
     """在两次查询之间完成取消，详情不能返回第一次读到的运行快照。"""
-    from astrbot_plugin_qq_group_daily_analysis.src.application.services.task_lifecycle_service import TaskLifecycleService
-    from astrbot_plugin_qq_group_daily_analysis.src.domain.value_objects.task_event import TaskEvent
+    from astrbot_plugin_qq_group_daily_analysis.src.application.services.task_lifecycle_service import (
+        TaskLifecycleService,
+    )
+    from astrbot_plugin_qq_group_daily_analysis.src.domain.value_objects.task_event import (
+        TaskEvent,
+    )
 
     route_module = importlib.import_module(TraceRoutes.__module__)
-    mock_trace_store.save_trace({"trace_id": "cancel-between-reads", "group_id": "123", "status": "running"})
+    mock_trace_store.save_trace(
+        {"trace_id": "cancel-between-reads", "group_id": "123", "status": "running"}
+    )
 
     def finish_before_active_lookup_returns(trace_id):
         TaskLifecycleService(mock_trace_store).transition(trace_id, TaskEvent.CANCEL)
         return None
 
-    monkeypatch.setattr(route_module.TraceContext, "get_active_trace", staticmethod(finish_before_active_lookup_returns))
+    monkeypatch.setattr(
+        route_module.TraceContext,
+        "get_active_trace",
+        staticmethod(finish_before_active_lookup_returns),
+    )
     monkeypatch.setattr(route_module, "json_response", lambda payload: payload)
     routes = TraceRoutes(MagicMock(), mock_trace_store, mock_active_mgr, MagicMock())
     result = await routes.api_get_trace_detail("cancel-between-reads")
@@ -526,3 +548,93 @@ async def test_report_routes_database_first_querying_and_migration(
     assert items[0]["group_id"] == "112233"
     assert items[0]["modified_at"] == 1700000000.0
     assert items[0]["created_at"] == 1700000000.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("offset", [0, 1, 99])
+async def test_report_scan_matches_indexed_pagination(
+    tmp_path, mock_trace_store, monkeypatch, offset
+):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    for group in ("12345", "67890"):
+        for day in (1, 2, 3):
+            file = reports_dir / f"report_{group}_2026100{day}.html"
+            file.write_text("<html>report</html>", encoding="utf-8")
+            import os
+
+            os.utime(file, (day, day))
+    route_module = importlib.import_module(ReportRoutes.__module__)
+    req = MagicMock(query={"group_id": "12345", "limit": "1", "offset": str(offset)})
+    monkeypatch.setattr(route_module, "request", req)
+    routes = ReportRoutes(mock_trace_store, None, report_output_dir=reports_dir)
+    cold = await routes.api_get_report_history()
+    warm = await routes.api_get_report_history()
+    for result in (cold, warm):
+        body = (
+            result.get("data")
+            if isinstance(result.get("data"), dict) and "status" in result["data"]
+            else result
+        )
+        assert body["status"] == "ok"
+        assert body["data"]["total"] == 3
+        items = body["data"]["items"]
+        assert len(items) == (0 if offset == 99 else 1)
+        if items:
+            assert items[0]["group_id"] == "12345"
+            assert items[0]["filename"] == f"report_12345_2026100{3 - offset}.html"
+
+
+@pytest.mark.asyncio
+async def test_report_scan_applies_search_before_pagination(
+    tmp_path, mock_trace_store, monkeypatch
+):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    for day in (1, 2):
+        (reports_dir / f"report_12345_2026100{day}.html").write_text(
+            "report", encoding="utf-8"
+        )
+    route_module = importlib.import_module(ReportRoutes.__module__)
+    monkeypatch.setattr(
+        route_module, "request", MagicMock(query={"search": "20261001", "limit": "1"})
+    )
+    routes = ReportRoutes(mock_trace_store, None, report_output_dir=reports_dir)
+    for _ in range(2):
+        result = await routes.api_get_report_history()
+        body = (
+            result.get("data")
+            if isinstance(result.get("data"), dict) and "status" in result["data"]
+            else result
+        )
+        assert body["data"]["total"] == 1
+        assert body["data"]["items"][0]["filename"] == "report_12345_20261001.html"
+
+
+@pytest.mark.asyncio
+async def test_rerender_date_does_not_guess_unrelated_latest_trace(
+    mock_trace_store, monkeypatch
+):
+    mock_trace_store.save_trace(
+        {"trace_id": "another-date", "group_id": "12345", "status": "running"}
+    )
+    route_module = importlib.import_module(ReportRoutes.__module__)
+    monkeypatch.setattr(
+        route_module,
+        "request",
+        MagicMock(
+            query={},
+            json=AsyncMock(
+                return_value={
+                    "group_id": "12345",
+                    "date_str": "2026-10-01",
+                    "template_name": "scrapbook",
+                }
+            ),
+        ),
+    )
+    service = MagicMock(
+        rerender_report=AsyncMock(return_value={"success": False, "reason": "missing"})
+    )
+    await ReportRoutes(mock_trace_store, service).api_rerender_report()
+    assert service.rerender_report.call_args.kwargs["trace_id"] is None

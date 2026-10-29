@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from typing import TYPE_CHECKING, cast
 
@@ -71,8 +72,9 @@ class CrashRecoveryService:
         effective_boot_id = current_boot_id or PROCESS_BOOT_ID
 
         try:
-            crashed_traces = self.trace_store.get_crashed_traces_on_startup(
-                current_boot_id=effective_boot_id
+            crashed_traces = await asyncio.to_thread(
+                self.trace_store.get_crashed_traces_on_startup,
+                current_boot_id=effective_boot_id,
             )
         except Exception as e:
             logger.error(f"[CrashRecovery] 读取开机遗留崩溃任务失败: {e}")
@@ -109,21 +111,27 @@ class CrashRecoveryService:
             )
 
             has_clean_cp = (
-                self.checkpoint_store.get_checkpoint(
-                    group_id,
-                    task_date_str,
-                    AnalysisStage.CLEAN_MESSAGES.value,
-                    trace_id=trace_id,
+                (
+                    await asyncio.to_thread(
+                        self.checkpoint_store.get_checkpoint,
+                        group_id,
+                        task_date_str,
+                        AnalysisStage.CLEAN_MESSAGES.value,
+                        trace_id=trace_id,
+                    )
                 )
                 if self.checkpoint_store
                 else None
             )
             has_llm_cp = (
-                self.checkpoint_store.get_checkpoint(
-                    group_id,
-                    task_date_str,
-                    AnalysisStage.LLM_ANALYSIS.value,
-                    trace_id=trace_id,
+                (
+                    await asyncio.to_thread(
+                        self.checkpoint_store.get_checkpoint,
+                        group_id,
+                        task_date_str,
+                        AnalysisStage.LLM_ANALYSIS.value,
+                        trace_id=trace_id,
+                    )
                 )
                 if self.checkpoint_store
                 else None
@@ -133,7 +141,8 @@ class CrashRecoveryService:
                 logger.info(
                     f"[CrashRecovery] 任务 {trace_id} (群 {group_id}) 无前置快照，标记为已回收"
                 )
-                self._transition_trace(
+                await asyncio.to_thread(
+                    self._transition_trace,
                     trace_id,
                     TaskEvent.ABORT,
                     error_stage="CRASH_RECOVERY",
@@ -183,13 +192,16 @@ class CrashRecoveryService:
                         )
                         archived_count += 1
 
-                    self._transition_trace(trace_id, TaskEvent.SUCCEED)
+                    await asyncio.to_thread(
+                        self._transition_trace, trace_id, TaskEvent.SUCCEED
+                    )
                 else:
                     err_msg = result.get("error") or result.get("reason") or "未知原因"
                     logger.warning(
                         f"[CrashRecovery] 任务 {trace_id} (群 {group_id}) 恢复失败: {err_msg}"
                     )
-                    self._transition_trace(
+                    await asyncio.to_thread(
+                        self._transition_trace,
                         trace_id,
                         TaskEvent.FAIL,
                         error_stage="CRASH_RECOVERY",
@@ -202,7 +214,8 @@ class CrashRecoveryService:
                     f"[CrashRecovery] 任务 {trace_id} (群 {group_id}) 自愈过程异常: {exc}",
                     exc_info=True,
                 )
-                self._transition_trace(
+                await asyncio.to_thread(
+                    self._transition_trace,
                     trace_id,
                     TaskEvent.FAIL,
                     error_stage="CRASH_RECOVERY",

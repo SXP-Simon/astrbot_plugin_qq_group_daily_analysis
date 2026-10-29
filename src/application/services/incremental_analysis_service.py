@@ -32,6 +32,8 @@ if TYPE_CHECKING:
     from ...domain.services.analysis_domain_service import AnalysisDomainService
     from ...domain.services.incremental_merge_service import IncrementalMergeService
     from ...domain.services.statistics_service import StatisticsService
+    from ...domain.value_objects import GoldenQuote, QualityReview, SummaryTopic
+    from ...domain.value_objects.unified_message import UnifiedMessage
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.history_manager import HistoryManager
     from ...infrastructure.platform.bot_manager import BotManager
@@ -280,106 +282,25 @@ class IncrementalAnalysisService:
                 unified_messages
             )
 
-            topics_per_batch = self.config_manager.get_incremental_topics_per_batch()
-            quotes_per_batch = self.config_manager.get_incremental_quotes_per_batch()
-
-            topic_enabled = self.config_manager.get_topic_analysis_enabled()
-            golden_quote_enabled = (
-                self.config_manager.get_golden_quote_analysis_enabled()
+            (
+                topics,
+                golden_quotes,
+                token_usage,
+                chat_quality_review,
+            ) = await self._analyze_incremental_messages(
+                pipeline, unified_messages, platform_id
             )
-            chat_quality_enabled = (
-                self.config_manager.get_chat_quality_analysis_enabled()
-            )
-
-            legacy_messages = self.statistics_service._convert_to_legacy_dict(
-                unified_messages
-            )
-            unified_msg_origin = (
-                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
-            )
-
-            topics = []
-            golden_quotes = []
-            token_usage = TokenUsage()
-            chat_quality_review = None
-
-            if topic_enabled or golden_quote_enabled or chat_quality_enabled:
-                async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
-                    async with self.task_guard.llm_slot(group_id, "incremental"):
-                        logger.debug(f"[LLM] 已进入增量分析队列 (群: {group_id})")
-                        (
-                            topics,
-                            golden_quotes,
-                            token_usage,
-                            chat_quality_review,
-                        ) = await self.llm_analyzer.analyze_incremental_concurrent(
-                            legacy_messages,
-                            umo=unified_msg_origin,
-                            topics_per_batch=topics_per_batch,
-                            quotes_per_batch=quotes_per_batch,
-                            topic_enabled=topic_enabled,
-                            golden_quote_enabled=golden_quote_enabled,
-                            chat_quality_enabled=chat_quality_enabled,
-                        )
-                    step.set_payload(
-                        topics_count=len(topics),
-                        quotes_count=len(golden_quotes),
-                        prompt_tokens=getattr(token_usage, "prompt_tokens", 0),
-                        completion_tokens=getattr(token_usage, "completion_tokens", 0),
-                        total_tokens=getattr(token_usage, "total_tokens", 0),
-                    )
 
             user_stats = convert_user_activity_for_merge(
                 user_activity, unified_messages
             )
-            emoji_stats = {
-                "face_count": statistics.emoji_statistics.face_count,
-                "mface_count": statistics.emoji_statistics.mface_count,
-                "bface_count": statistics.emoji_statistics.bface_count,
-                "sface_count": statistics.emoji_statistics.sface_count,
-                "other_emoji_count": statistics.emoji_statistics.other_emoji_count,
-                "face_details": statistics.emoji_statistics.face_details,
-            }
-            new_topics = [
-                {
-                    "topic": t.topic,
-                    "contributors": t.contributors,
-                    "detail": t.detail,
-                    "contributor_ids": t.contributor_ids,
-                }
-                for t in topics
-            ]
-            new_quotes = [
-                {
-                    "content": q.content,
-                    "sender": q.sender,
-                    "reason": q.reason,
-                    "user_id": q.user_id,
-                }
-                for q in golden_quotes
-            ]
-            token_usage_dict = {
-                "prompt_tokens": token_usage.prompt_tokens,
-                "completion_tokens": token_usage.completion_tokens,
-                "total_tokens": token_usage.total_tokens,
-            }
-
-            chat_quality_dict = None
-            if chat_quality_review:
-                chat_quality_dict = {
-                    "title": chat_quality_review.title,
-                    "subtitle": chat_quality_review.subtitle,
-                    "dimensions": [
-                        {
-                            "name": d.name,
-                            "percentage": d.percentage,
-                            "comment": d.comment,
-                            "color": d.color,
-                        }
-                        for d in chat_quality_review.dimensions
-                    ],
-                    "summary": chat_quality_review.summary,
-                }
+            emoji_stats = statistics.emoji_statistics.to_dict()
+            new_topics = [topic.to_dict() for topic in topics]
+            new_quotes = [quote.to_dict() for quote in golden_quotes]
+            token_usage_dict = token_usage.to_dict()
+            chat_quality_dict = (
+                chat_quality_review.to_dict() if chat_quality_review else None
+            )
 
             participant_ids = list({msg.sender_id for msg in unified_messages})
             last_message_timestamp = max(
@@ -410,50 +331,23 @@ class IncrementalAnalysisService:
                 participant_ids=participant_ids,
             )
 
-            if not await self.incremental_store.save_batch(batch):
+            safe_ts = await self._persist_incremental_batch(
+                pipeline,
+                batch,
+                unified_messages,
+                last_analyzed_ts,
+                last_analyzed_message_ids,
+            )
+            if safe_ts is None:
                 return {
                     "success": False,
                     "reason": "batch_persistence_failed",
                     "messages_count": 0,
                 }
 
-            if self.checkpoint_store:
-                try:
-                    cur_trace_id = trace.trace_id if trace else ""
-                    self.checkpoint_store.save_checkpoint(
-                        group_id=group_id,
-                        date_str=date_str,
-                        stage_name=f"INCREMENTAL_BATCH_{batch.batch_id[:8]}",
-                        data=batch.to_dict(),
-                        trace_id=cur_trace_id,
-                    )
-                except Exception as e:
-                    logger.warning(f"保存增量批次 Checkpoint 失败: {e}")
-
-            import time
-
-            safe_now = int(time.time()) + 60
-            safe_ts = min(last_message_timestamp, safe_now)
-
-            analyzed_ids_at_boundary = {
-                msg.message_id
-                for msg in unified_messages
-                if msg.timestamp == last_message_timestamp and msg.message_id
-            }
-            if last_message_timestamp == last_analyzed_ts:
-                analyzed_ids_at_boundary.update(last_analyzed_message_ids)
-            if safe_ts != last_message_timestamp:
-                analyzed_ids_at_boundary.clear()
-
-            await self.incremental_store.update_last_analyzed_cursor(
-                group_id,
-                safe_ts,
-                analyzed_ids_at_boundary,
-            )
-
             logger.debug(
                 f"群 {group_id} 增量批次完成: "
-                f"platform={getattr(adapter, 'platform_id', platform_id) or 'default'}, "
+                f"platform={adapter.platform_id or 'default'}, "
                 f"batch={batch.batch_id[:8]}, 消息={len(unified_messages)}, "
                 f"raw={raw_count}, cleaned={cleaned_count}, eligible={eligible_count}, "
                 f"cursor={last_analyzed_ts}->{safe_ts}, "
@@ -469,6 +363,134 @@ class IncrementalAnalysisService:
                 "group_id": group_id,
                 "platform_id": adapter.platform_id if adapter else (platform_id or ""),
             }
+
+    async def _persist_incremental_batch(
+        self,
+        pipeline: PipelineContext,
+        batch: IncrementalBatch,
+        unified_messages: list[UnifiedMessage],
+        last_analyzed_ts: int,
+        last_analyzed_message_ids: set[str],
+    ) -> int | None:
+        """保存增量批次，再保存可选检查点并推进消息游标。
+
+        Args:
+            pipeline: 当前批次所属的日期和追踪上下文。
+            batch: 已完成分析的批次。
+            unified_messages: 批次包含的消息，用于构造同秒边界 ID。
+            last_analyzed_ts: 上一次游标的时间戳。
+            last_analyzed_message_ids: 上一次游标同秒已分析的消息 ID。
+
+        Returns:
+            推进后的时间戳；批次保存失败时返回 None，且不更新游标。
+
+        Raises:
+            RuntimeError: 增量仓储未初始化。
+        """
+        if self.incremental_store is None:
+            raise RuntimeError("增量分析未初始化：缺少 IncrementalStore")
+        if not await self.incremental_store.save_batch(batch):
+            return None
+        group_id = batch.group_id
+        last_message_timestamp = batch.last_message_timestamp
+        if self.checkpoint_store:
+            try:
+                cur_trace_id = pipeline.trace.trace_id if pipeline.trace else ""
+                await asyncio.to_thread(
+                    self.checkpoint_store.save_checkpoint,
+                    group_id=group_id,
+                    date_str=pipeline.date_str,
+                    stage_name=f"INCREMENTAL_BATCH_{batch.batch_id[:8]}",
+                    data=batch.to_dict(),
+                    trace_id=cur_trace_id,
+                )
+            except Exception as e:
+                logger.warning(f"保存增量批次 Checkpoint 失败: {e}")
+
+        safe_now = int(time_mod.time()) + 60
+        safe_ts = min(last_message_timestamp, safe_now)
+
+        analyzed_ids_at_boundary = {
+            msg.message_id
+            for msg in unified_messages
+            if msg.timestamp == last_message_timestamp and msg.message_id
+        }
+        if last_message_timestamp == last_analyzed_ts:
+            analyzed_ids_at_boundary.update(last_analyzed_message_ids)
+        if safe_ts != last_message_timestamp:
+            analyzed_ids_at_boundary.clear()
+
+        await self.incremental_store.update_last_analyzed_cursor(
+            group_id,
+            safe_ts,
+            analyzed_ids_at_boundary,
+        )
+
+        return safe_ts
+
+    async def _analyze_incremental_messages(
+        self,
+        pipeline: PipelineContext,
+        unified_messages: list[UnifiedMessage],
+        platform_id: str | None,
+    ) -> tuple[list[SummaryTopic], list[GoldenQuote], TokenUsage, QualityReview | None]:
+        """执行增量批次的 LLM 阶段，集中维护并发槽位与阶段观测数据。
+
+        Args:
+            pipeline: 当前增量任务的流水线上下文。
+            unified_messages: 已清洗并按游标裁剪的消息。
+            platform_id: 当前平台实例。
+
+        Returns:
+            本批次的话题、金句、Token 用量和聊天质量产物。
+        """
+        group_id = pipeline.group_id
+        topics_per_batch = self.config_manager.get_incremental_topics_per_batch()
+        quotes_per_batch = self.config_manager.get_incremental_quotes_per_batch()
+
+        topic_enabled = self.config_manager.get_topic_analysis_enabled()
+        golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
+        chat_quality_enabled = self.config_manager.get_chat_quality_analysis_enabled()
+
+        legacy_messages = self.statistics_service._convert_to_legacy_dict(
+            unified_messages
+        )
+        unified_msg_origin = (
+            f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
+        )
+
+        topics = []
+        golden_quotes = []
+        token_usage = TokenUsage()
+        chat_quality_review = None
+
+        if topic_enabled or golden_quote_enabled or chat_quality_enabled:
+            async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
+                async with self.task_guard.llm_slot(group_id, "incremental"):
+                    logger.debug(f"[LLM] 已进入增量分析队列 (群: {group_id})")
+                    (
+                        topics,
+                        golden_quotes,
+                        token_usage,
+                        chat_quality_review,
+                    ) = await self.llm_analyzer.analyze_incremental_concurrent(
+                        legacy_messages,
+                        umo=unified_msg_origin,
+                        topics_per_batch=topics_per_batch,
+                        quotes_per_batch=quotes_per_batch,
+                        topic_enabled=topic_enabled,
+                        golden_quote_enabled=golden_quote_enabled,
+                        chat_quality_enabled=chat_quality_enabled,
+                    )
+                step.set_payload(
+                    topics_count=len(topics),
+                    quotes_count=len(golden_quotes),
+                    prompt_tokens=token_usage.prompt_tokens,
+                    completion_tokens=token_usage.completion_tokens,
+                    total_tokens=token_usage.total_tokens,
+                )
+
+        return topics, golden_quotes, token_usage, chat_quality_review
 
     async def execute_incremental_final_report(
         self, group_id: str, platform_id: str | None = None
@@ -634,5 +656,5 @@ class IncrementalAnalysisService:
                 "messages_count": state.total_message_count,
                 "adapter": adapter,
                 "group_id": group_id,
-                "platform_id": getattr(adapter, "platform_id", platform_id),
+                "platform_id": adapter.platform_id or platform_id,
             }

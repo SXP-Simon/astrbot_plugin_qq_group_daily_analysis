@@ -221,7 +221,7 @@ class AnalysisCommandHandler:
             trace_id = TraceContext.generate(
                 prefix="manual", group_name=group_name or group_id
             )
-            trace = TraceContext.set(
+            trace = await TraceContext.set_async(
                 trace_id=trace_id,
                 group_id=group_id,
                 group_name=group_name,
@@ -277,7 +277,8 @@ class AnalysisCommandHandler:
                         if result.get("error")
                         else f"Analysis skipped/failed: {reason}"
                     )
-                    trace.finish(
+                    await asyncio.to_thread(
+                        trace.finish,
                         event=TaskEvent.FAIL,
                         error_message=err_msg,
                     )
@@ -318,7 +319,7 @@ class AnalysisCommandHandler:
                 raise AnalysisStoppedError
 
             if trace and trace.status == "running":
-                trace.finish(event=TaskEvent.SUCCEED)
+                (await asyncio.to_thread(trace.finish, event=TaskEvent.SUCCEED))
 
         except AnalysisStoppedError:
             if stop_watcher is not None:
@@ -328,22 +329,28 @@ class AnalysisCommandHandler:
             return
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
-                trace.finish(
-                    event=TaskEvent.ABORT, error_message="Task already running in group"
+                await asyncio.to_thread(
+                    trace.finish,
+                    event=TaskEvent.ABORT,
+                    error_message="Task already running in group",
                 )
             yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
         except asyncio.CancelledError:
             if trace and trace.status == "running":
                 try:
-                    trace.finish(
-                        event=TaskEvent.ABORT, error_message="Task cancelled by system"
+                    await asyncio.to_thread(
+                        trace.finish,
+                        event=TaskEvent.ABORT,
+                        error_message="Task cancelled by system",
                     )
                 except RuntimeError as transition_error:
                     logger.info(f"取消收尾时任务已由并发事件收敛: {transition_error}")
             logger.info("群分析任务被取消 (插件重载或卸载)")
         except Exception as e:
             if trace and trace.status == "running":
-                trace.finish(event=TaskEvent.FAIL, error_message=str(e))
+                await asyncio.to_thread(
+                    trace.finish, event=TaskEvent.FAIL, error_message=str(e)
+                )
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
                 f"❌ 分析失败: {e!s}。请检查网络连接和LLM配置，或联系管理员"
@@ -455,7 +462,8 @@ class AnalysisCommandHandler:
         """
         if trace is not None and trace.status == "running":
             try:
-                trace.finish(
+                await asyncio.to_thread(
+                    trace.finish,
                     event=TaskEvent.CANCEL,
                     error_message="用户通过 stop 中止了本次分析",
                 )
@@ -547,8 +555,8 @@ class AnalysisCommandHandler:
             html_render = bind_group_html_renderer(
                 self.html_render, group_id, platform_id
             )
-            with (
-                trace.span(
+            async with (
+                trace.span_async(
                     "RENDER_REPORT",
                     {"format": "image", "template": template_theme},
                 )
@@ -582,11 +590,18 @@ class AnalysisCommandHandler:
                 cur_tid = trace.trace_id if trace else None
                 if callable(save_history):
                     try:
-                        save_history(image_url, group_id, trace_id=cur_tid)
+                        await asyncio.to_thread(
+                            save_history, image_url, group_id, trace_id=cur_tid
+                        )
                     except TypeError:
-                        save_history(image_url, group_id)
+                        await asyncio.to_thread(save_history, image_url, group_id)
                 else:
-                    self._save_report_to_history(image_url, group_id, trace_id=cur_tid)
+                    await asyncio.to_thread(
+                        self._save_report_to_history,
+                        image_url,
+                        group_id,
+                        trace_id=cur_tid,
+                    )
 
                 caption = (
                     TraceContext.make_report_caption()
@@ -612,8 +627,8 @@ class AnalysisCommandHandler:
 
         if output_format == "html":
             cur_trace_id = trace.trace_id if trace else None
-            with (
-                trace.span(
+            async with (
+                trace.span_async(
                     "RENDER_REPORT",
                     {"format": "html", "template": template_theme},
                 )
@@ -639,62 +654,10 @@ class AnalysisCommandHandler:
             if stop_request is not None and stop_request.refresh():
                 raise AnalysisStoppedError
             if html_path:
-                is_only_url = self.config_manager.get_html_only_url()
-                base_url = self.config_manager.get_html_base_url()
-                should_send_file = True
-
-                if is_only_url:
-                    if base_url and base_url.strip():
-                        html_output_dir = self.config_manager.get_html_output_dir()
-                        if not html_output_dir:
-                            html_output_dir = os.path.join(
-                                str(self.plugin_data_dir),
-                                "self_hosted_html_reports",
-                            )
-
-                        rel_path = os.path.relpath(html_path, html_output_dir)
-                        url_path = rel_path.replace(os.sep, "/")
-                        encoded_url_path = quote(url_path.lstrip("/"), safe="/")
-                        report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
-
-                        yield event.plain_result(
-                            f"📊 今日群聊分析报告已生成：\n{report_url}"
-                        )
-                        should_send_file = False
-                    else:
-                        logger.warning(
-                            f"手动触发群 {group_id} 开启了仅发送外链，但未配置 html_base_url，回退至发送文件。"
-                        )
-
-                if should_send_file:
-                    caption = self.report_generator.build_html_caption(html_path)
-                    sent = False
-                    if self.message_sender:
-                        sent = await self.message_sender.send_file(
-                            group_id,
-                            html_path,
-                            caption=caption,
-                            platform_id=platform_id,
-                        )
-                        if stop_request is not None and stop_request.refresh():
-                            raise AnalysisStoppedError
-                    elif isinstance(adapter, GroupFileSupportProtocol):
-                        sent = await adapter.upload_group_file_to_folder(
-                            group_id, html_path, filename=Path(html_path).name
-                        )
-                        if stop_request is not None and stop_request.refresh():
-                            raise AnalysisStoppedError
-                        if sent and caption:
-                            await adapter.send_text(group_id, caption)
-
-                    if not sent:
-                        yield event.chain_result(
-                            [File(name=Path(html_path).name, file=html_path)]
-                        )
-                        if caption:
-                            if stop_request is not None and stop_request.refresh():
-                                raise AnalysisStoppedError
-                            yield event.plain_result(caption)
+                async for message in self._send_html_report(
+                    event, html_path, group_id, platform_id, adapter, stop_request
+                ):
+                    yield message
             else:
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
@@ -702,6 +665,72 @@ class AnalysisCommandHandler:
             await self._send_text_reports(
                 group_id, analysis_result, is_qq_official, adapter, stop_request
             )
+
+    async def _send_html_report(
+        self,
+        event: AstrMessageEvent,
+        html_path: str,
+        group_id: str,
+        platform_id: str | None,
+        adapter: PlatformAdapterProtocol,
+        stop_request: StopRequest | None = None,
+    ) -> AsyncGenerator[MessageEventResult]:
+        """发送已生成的 HTML 外链或文件，并在交付边界处理停止请求。
+
+        Args:
+            event: 用于构建消息结果的宿主事件。
+            html_path: 已生成的 HTML 文件路径。
+            group_id: 目标群号。
+            platform_id: 当前平台实例标识。
+            adapter: 目标平台适配器。
+            stop_request: 当前手动任务的停止请求。
+
+        Returns:
+            需要由宿主发送的外链、文件或说明消息。
+
+        Raises:
+            AnalysisStoppedError: 用户在交付期间停止任务。
+        """
+        is_only_url = self.config_manager.get_html_only_url()
+        base_url = self.config_manager.get_html_base_url()
+        if is_only_url and base_url and base_url.strip():
+            html_output_dir = self.config_manager.get_html_output_dir() or (
+                self.plugin_data_dir / "self_hosted_html_reports"
+            )
+            rel_path = os.path.relpath(html_path, html_output_dir)
+            url_path = rel_path.replace(os.sep, "/")
+            encoded_url_path = quote(url_path.lstrip("/"), safe="/")
+            report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
+            yield event.plain_result(f"📊 今日群聊分析报告已生成：\n{report_url}")
+            return
+        if is_only_url:
+            logger.warning(
+                f"手动触发群 {group_id} 开启了仅发送外链，但未配置 html_base_url，回退至发送文件。"
+            )
+
+        caption = self.report_generator.build_html_caption(html_path)
+        sent = False
+        if self.message_sender:
+            sent = await self.message_sender.send_file(
+                group_id, html_path, caption=caption, platform_id=platform_id
+            )
+            if stop_request is not None and stop_request.refresh():
+                raise AnalysisStoppedError
+        elif isinstance(adapter, GroupFileSupportProtocol):
+            sent = await adapter.upload_group_file_to_folder(
+                group_id, html_path, filename=Path(html_path).name
+            )
+            if stop_request is not None and stop_request.refresh():
+                raise AnalysisStoppedError
+            if sent and caption:
+                await adapter.send_text(group_id, caption)
+
+        if not sent:
+            yield event.chain_result([File(name=Path(html_path).name, file=html_path)])
+            if caption:
+                if stop_request is not None and stop_request.refresh():
+                    raise AnalysisStoppedError
+                yield event.plain_result(caption)
 
     async def _send_text_reports(
         self,
@@ -798,13 +827,10 @@ class AnalysisCommandHandler:
                             "created_at": time.time(),
                         }
                     )
-                from ...shared.trace_context import _global_trace_store
-
-                if _global_trace_store is not None:
-                    try:
-                        _global_trace_store.save_trace(cur_trace.to_dict())
-                    except Exception:
-                        pass
+                try:
+                    cur_trace.persist_snapshot()
+                except Exception as e:
+                    logger.warning(f"保存报告追踪快照失败: {e}")
             return dest
         except Exception as e:
             logger.warning(f"保存历史报告副本失败: {e}")

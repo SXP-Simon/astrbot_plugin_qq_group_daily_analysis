@@ -937,6 +937,12 @@ class OneBotAdapter(
     async def is_group_muted(self, group_id: str) -> bool:
         """
         检查 OneBot 平台下的群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）。
+
+        Args:
+            group_id: 目标群号。
+
+        Returns:
+            缓存或接口确认 Bot 无法发言时返回 True。
         """
         group_id_str = str(group_id)
 
@@ -974,16 +980,15 @@ class OneBotAdapter(
                 login_info = await asyncio.wait_for(
                     self.bot.call_action("get_login_info"), timeout=5.0
                 )
-                if login_info:
-                    info = (
-                        login_info.get("data")
-                        if isinstance(login_info, dict)
-                        and isinstance(login_info.get("data"), dict)
-                        else login_info
-                    )
-                    if isinstance(info, dict) and "user_id" in info:
-                        bot_user_id = str(info["user_id"])
-                        self.bot_self_ids = [bot_user_id]
+                info = (
+                    login_info.get("data")
+                    if isinstance(login_info, dict)
+                    and isinstance(login_info.get("data"), dict)
+                    else login_info
+                )
+                if isinstance(info, dict) and "user_id" in info:
+                    bot_user_id = str(info["user_id"])
+                    self.bot_self_ids = [bot_user_id]
             except Exception as e:
                 if self._is_mute_exception(e):
                     self._record_mute_status(group_id, True)
@@ -1007,26 +1012,21 @@ class OneBotAdapter(
                     ),
                     timeout=5.0,
                 )
-                if member_info:
-                    info = (
-                        member_info.get("data")
-                        if isinstance(member_info, dict)
-                        and isinstance(member_info.get("data"), dict)
-                        else member_info
+                info = (
+                    member_info.get("data")
+                    if isinstance(member_info, dict)
+                    and isinstance(member_info.get("data"), dict)
+                    else member_info
+                )
+                if member_info and isinstance(info, dict):
+                    role = info.get("role", "member")
+                    # 缓存角色信息，用于 get_group_member_info 超时时降级使用
+                    self._group_role_cache[group_id_str] = (role, time.time())
+                    shut_up_time = info.get("shut_up_time", 0)
+                    # 大数按 Unix 截止时间判断，其余正数按剩余禁言秒数判断。
+                    is_individually_muted = shut_up_time > 0 and (
+                        shut_up_time <= 1000000000 or shut_up_time > time.time()
                     )
-                    if isinstance(info, dict):
-                        role = info.get("role", "member")
-                        # 缓存角色信息，用于 get_group_member_info 超时时降级使用
-                        self._group_role_cache[group_id_str] = (role, time.time())
-                        shut_up_time = info.get("shut_up_time", 0)
-                        if shut_up_time > 0:
-                            # 如果 shut_up_time 是 Unix 时间戳
-                            if shut_up_time > 1000000000:
-                                if shut_up_time > time.time():
-                                    is_individually_muted = True
-                            else:
-                                # 否则认为是相对禁言剩余时间（秒）
-                                is_individually_muted = True
             except TimeoutError:
                 # 超时降级：优先使用缓存的角色（角色几乎不会变）
                 cached_role = self._group_role_cache.get(group_id_str)
@@ -1057,41 +1057,44 @@ class OneBotAdapter(
 
         # 4. 如果 Bot 不是管理员或群主，则需要检查群聊是否开启了全群禁言
         # 管理员 (admin) 和群主 (owner) 在全群禁言下依然可以发言
-        if role not in ("admin", "owner"):
-            try:
-                # 设定 5.0 秒超时，不传 no_cache=True
-                group_info = await asyncio.wait_for(
-                    self.bot.call_action(
-                        "get_group_info",
-                        group_id=int(group_id),
-                    ),
-                    timeout=5.0,
+        if role in ("admin", "owner"):
+            return False
+        try:
+            # 设定 5.0 秒超时，不传 no_cache=True
+            group_info = await asyncio.wait_for(
+                self.bot.call_action(
+                    "get_group_info",
+                    group_id=int(group_id),
+                ),
+                timeout=5.0,
+            )
+            if not group_info:
+                return False
+            info = (
+                group_info.get("data")
+                if isinstance(group_info, dict)
+                and isinstance(group_info.get("data"), dict)
+                else group_info
+            )
+            if not isinstance(info, dict):
+                return False
+            driver = await self._ensure_driver()
+            if driver.is_whole_ban(info):
+                self._record_mute_status(group_id, True)
+                logger.info(
+                    f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
                 )
-                if group_info:
-                    info = (
-                        group_info.get("data")
-                        if isinstance(group_info, dict)
-                        and isinstance(group_info.get("data"), dict)
-                        else group_info
-                    )
-                    if isinstance(info, dict):
-                        driver = await self._ensure_driver()
-                        if driver.is_whole_ban(info):
-                            self._record_mute_status(group_id, True)
-                            logger.info(
-                                f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
-                            )
-                            return True
-            except TimeoutError:
-                logger.warning(f"[OneBot] 获取群信息超时 (group_id={group_id})")
-            except Exception as e:
-                if self._is_mute_exception(e):
-                    self._record_mute_status(group_id, True)
-                    logger.info(
-                        f"[OneBot] 从 get_group_info 异常中检测到 Bot 在群 {group_id} 中已被禁言"
-                    )
-                    return True
-                logger.warning(f"[OneBot] 获取群信息失败 (group_id={group_id}): {e}")
+                return True
+        except TimeoutError:
+            logger.warning(f"[OneBot] 获取群信息超时 (group_id={group_id})")
+        except Exception as e:
+            if self._is_mute_exception(e):
+                self._record_mute_status(group_id, True)
+                logger.info(
+                    f"[OneBot] 从 get_group_info 异常中检测到 Bot 在群 {group_id} 中已被禁言"
+                )
+                return True
+            logger.warning(f"[OneBot] 获取群信息失败 (group_id={group_id}): {e}")
 
         # 如果所有检测均未发现禁言，则暂时视为未禁言
         return False

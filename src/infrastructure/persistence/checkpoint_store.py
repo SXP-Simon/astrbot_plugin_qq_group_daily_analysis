@@ -7,12 +7,15 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...domain.repositories.persistence_repository import ICheckpointStore
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from ...domain.value_objects.analysis_results import (
         CheckpointDetailPayload,
         CheckpointSummaryPayload,
@@ -27,11 +30,17 @@ class CheckpointStore(ICheckpointStore):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
-    def _get_connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def _get_connection(self) -> Generator[sqlite3.Connection]:
+        """在当前调用线程管理连接和事务，确保异常回滚且及时释放句柄。"""
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL;")
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._get_connection() as conn:
@@ -140,8 +149,8 @@ class CheckpointStore(ICheckpointStore):
                 # 2. 如果 scoped_id 没找到，尝试按 (trace_id, stage_name) 查找
                 if not row:
                     row = conn.execute(
-                        "SELECT * FROM stage_checkpoints WHERE trace_id = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
-                        (str(trace_id), stage_name, now),
+                        "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND trace_id = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                        (str(group_id), str(date_str), str(trace_id), stage_name, now),
                     ).fetchone()
 
             # 3. 回退查找通用快照：

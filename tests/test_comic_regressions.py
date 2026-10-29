@@ -12,6 +12,7 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfoNotFoundError
 
+from src.domain.value_objects import TokenUsage
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.templates import HTMLTemplates
 
@@ -170,63 +171,17 @@ def load_main_method(name: str):
 
 
 def load_comic_service_method(name: str):
-    """从漫画服务加载单个方法，避免测试依赖 AstrBot 运行时。
+    """读取真实漫画服务方法，保留其辅助方法和异常类型依赖。
 
     Args:
-        name: 目标异步方法名称。
+        name: 目标方法名称。
 
     Returns:
-        可直接绑定到测试替身对象的方法。
+        可绑定到测试服务实例的方法。
     """
-    service_path = (
-        Path(__file__).parents[1]
-        / "src"
-        / "application"
-        / "services"
-        / "comic_application_service.py"
-    )
-    module = ast.parse(
-        service_path.read_text(encoding="utf-8"), filename=str(service_path)
-    )
-    service_class = next(
-        node
-        for node in module.body
-        if isinstance(node, ast.ClassDef) and node.name == "ComicApplicationService"
-    )
-    method = next(
-        node
-        for node in service_class.body
-        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
-        and node.name == name
-    )
-    isolated_class = ast.ClassDef(
-        name="ComicServiceHarness",
-        bases=[],
-        keywords=[],
-        body=[method],
-        decorator_list=[],
-    )
-    isolated_module = ast.fix_missing_locations(
-        ast.Module(body=[isolated_class], type_ignores=[])
-    )
-    from collections.abc import Sequence
-    from contextlib import nullcontext
-    from src.domain.value_objects import ComicStoryboard, SummaryTopic
-    from src.shared.trace_context import TraceContext
+    from src.application.services.comic_application_service import ComicApplicationService
 
-    namespace = {
-        "Path": Path,
-        "mimetypes": mimetypes,
-        "logger": Mock(),
-        "Any": Any,
-        "Sequence": Sequence,
-        "SummaryTopic": SummaryTopic,
-        "ComicStoryboard": ComicStoryboard,
-        "TraceContext": TraceContext,
-        "nullcontext": nullcontext,
-    }
-    exec(compile(isolated_module, str(service_path), "exec"), namespace)
-    return getattr(namespace["ComicServiceHarness"], name)
+    return getattr(ComicApplicationService, name)
 
 
 def load_config_manager_class(plugin_data_dir: Path):
@@ -425,17 +380,16 @@ def test_qq_official_webhook_uses_official_report_capabilities():
 
 def test_uploaded_reference_image_is_loaded_from_plugin_data_dir(tmp_path: Path):
     """已选参考图只允许从插件数据目录读取。"""
-    fetch_reference_image = load_comic_service_method("_fetch_reference_image")
+    from src.application.services.comic_application_service import ComicApplicationService
+
     image_path = tmp_path / "files" / "daily_comic" / "drawing_reference_image"
     image_path.mkdir(parents=True)
     (image_path / "reference.png").write_bytes(b"\x89PNG\r\n\x1a\nimage")
-    service = SimpleNamespace(
-        plugin_data_dir=tmp_path,
-    )
+    service = object.__new__(ComicApplicationService)
+    service.plugin_data_dir = tmp_path
 
     result = asyncio.run(
-        fetch_reference_image(
-            service,
+        service._fetch_reference_image(
             "files/daily_comic/drawing_reference_image/reference.png",
         )
     )
@@ -524,7 +478,7 @@ def test_comic_generation_passes_character_storyboard_prompt():
     topics = [{"topic": "话题", "detail": "详情"}]
     character = {"name": "角色甲", "storyboard_prompt": "角色模板"}
     llm_analyzer = SimpleNamespace(
-        analyze_comic_storyboards=AsyncMock(return_value=([], object()))
+        analyze_comic_storyboards=AsyncMock(return_value=([], TokenUsage()))
     )
     config_manager = SimpleNamespace(
         get_enable_daily_comic=Mock(return_value=True),
@@ -532,10 +486,11 @@ def test_comic_generation_passes_character_storyboard_prompt():
         get_comic_character_persona_id=Mock(return_value="persona-a"),
         get_comic_character_storyboard_prompt=Mock(return_value="角色模板"),
     )
-    service = SimpleNamespace(
-        config_manager=config_manager,
-        llm_analyzer=llm_analyzer,
-    )
+    from src.application.services.comic_application_service import ComicApplicationService
+
+    service = object.__new__(ComicApplicationService)
+    service.config_manager = config_manager
+    service.llm_analyzer = llm_analyzer
 
     asyncio.run(generate_comic(service, topics, "123456", "umo"))
 
@@ -1125,7 +1080,7 @@ def _comic_service(config_manager, drawing_client, **methods):
         "config_manager": config_manager,
         "llm_analyzer": SimpleNamespace(
             analyze_comic_storyboards=AsyncMock(
-                return_value=([{"scene": "comic scene prompt"}], None)
+                return_value=([{"scene": "comic scene prompt"}], TokenUsage())
             )
         ),
         "drawing_client": drawing_client,
@@ -1134,7 +1089,11 @@ def _comic_service(config_manager, drawing_client, **methods):
         "_generate_via_general_plugin": AsyncMock(return_value=None),
     }
     service.update(methods)
-    return SimpleNamespace(**service)
+    from src.application.services.comic_application_service import ComicApplicationService
+
+    instance = object.__new__(ComicApplicationService)
+    instance.__dict__.update(service)
+    return instance
 
 
 def test_big_banana_backend_returns_none_when_plugin_missing():

@@ -681,90 +681,102 @@ async def call_provider_with_retry(
                         context.llm_generate(**llm_call_params)  # pyright: ignore[reportArgumentType]
                     )
 
-                next_stack_dump_seconds = _LLM_REQUEST_STACK_DUMP_SECONDS
-                try:
-                    while True:
-                        elapsed_seconds = time.monotonic() - request_started_at
-                        remaining_timeout = effective_timeout - elapsed_seconds
-                        if remaining_timeout <= 0:
-                            diagnosis = diagnose_llm_task_block(
-                                request_task,
-                                elapsed_seconds,
-                                default_block_point=call_path,
-                                is_timeout_aborted=True,
-                            )
-                            logger.error(
-                                f"[LLM 硬超时截断] {diagnosis.status_title}: "
-                                f"group={observation_group}, stage={observation_stage}, "
-                                f"area={observation_area}, attempt={attempt_num}, "
-                                f"fallback={is_fallback_request}, provider={pid}, "
-                                f"elapsed={elapsed_seconds:.1f}s >= limit={effective_timeout:.1f}s ({timeout_source}), "
-                                f"block_point={diagnosis.block_point} | "
-                                f"排查提示: {diagnosis.guidance_hint}"
-                            )
-                            if not request_task.done():
-                                request_task.cancel()
-                                try:
-                                    await request_task
-                                except (asyncio.CancelledError, Exception):
-                                    pass
-                            raise TimeoutError(
-                                f"LLM 请求超过硬超时上限 ({effective_timeout:.1f}s, 来源: {timeout_source}), 已主动截断连接"
-                            )
+                async def _await_provider_response() -> LLMResponse:
+                    """等待当前 Provider 响应，并维护硬超时、阻塞诊断和取消收尾。
 
-                        slice_timeout = min(
-                            _LLM_REQUEST_WARN_SECONDS, remaining_timeout
-                        )
-                        try:
-                            resp = await asyncio.wait_for(
-                                asyncio.shield(request_task),
-                                timeout=slice_timeout,
-                            )
-                            break
-                        except TimeoutError:
+                    Returns:
+                        当前请求完成后的模型响应。
+
+                    Raises:
+                        TimeoutError: 请求达到硬超时上限。
+                        asyncio.CancelledError: 调用任务被取消；先等待请求协程退出。
+                    """
+                    next_stack_dump_seconds = _LLM_REQUEST_STACK_DUMP_SECONDS
+                    try:
+                        while True:
                             elapsed_seconds = time.monotonic() - request_started_at
-                            if elapsed_seconds >= effective_timeout:
-                                continue
-
-                            diagnosis = diagnose_llm_task_block(
-                                request_task,
-                                elapsed_seconds,
-                                default_block_point=call_path,
-                            )
-                            logger.warning(
-                                f"[LLM 阻塞诊断] {diagnosis.status_title}: "
-                                f"group={observation_group}, "
-                                f"stage={observation_stage}, area={observation_area}, "
-                                f"attempt={attempt_num}, "
-                                f"fallback={is_fallback_request}, provider={pid}, "
-                                f"elapsed={elapsed_seconds:.0f}s / limit={effective_timeout:.0f}s, "
-                                f"block_point={diagnosis.block_point} | "
-                                f"提示: {diagnosis.guidance_hint}"
-                            )
-                            if not diagnosis.is_known:
-                                logger.warning(
-                                    f"[LLM 栈观测] Provider 请求 await 链: "
-                                    f"group={observation_group}, "
-                                    f"stage={observation_stage}, "
-                                    f"area={observation_area}, "
-                                    f"attempt={attempt_num}, "
-                                    f"fallback={is_fallback_request}, "
-                                    f"provider={pid}, elapsed={elapsed_seconds:.0f}s, "
-                                    f"block_point={diagnosis.block_point}, "
-                                    f"await_chain={diagnosis.await_chain}"
+                            remaining_timeout = effective_timeout - elapsed_seconds
+                            if remaining_timeout <= 0:
+                                diagnosis = diagnose_llm_task_block(
+                                    request_task,
+                                    elapsed_seconds,
+                                    default_block_point=call_path,
+                                    is_timeout_aborted=True,
                                 )
-                            else:
-                                if elapsed_seconds >= next_stack_dump_seconds:
-                                    logger.debug(
-                                        f"[LLM 栈观测] Provider 请求 await 链 (已知状态 {diagnosis.state}): "
-                                        f"group={observation_group}, area={observation_area}, "
+                                logger.error(
+                                    f"[LLM 硬超时截断] {diagnosis.status_title}: "
+                                    f"group={observation_group}, stage={observation_stage}, "
+                                    f"area={observation_area}, attempt={attempt_num}, "
+                                    f"fallback={is_fallback_request}, provider={pid}, "
+                                    f"elapsed={elapsed_seconds:.1f}s >= limit={effective_timeout:.1f}s ({timeout_source}), "
+                                    f"block_point={diagnosis.block_point} | "
+                                    f"排查提示: {diagnosis.guidance_hint}"
+                                )
+                                if not request_task.done():
+                                    request_task.cancel()
+                                    try:
+                                        await request_task
+                                    except (asyncio.CancelledError, Exception):
+                                        pass
+                                raise TimeoutError(
+                                    f"LLM 请求超过硬超时上限 ({effective_timeout:.1f}s, 来源: {timeout_source}), 已主动截断连接"
+                                )
+
+                            slice_timeout = min(
+                                _LLM_REQUEST_WARN_SECONDS, remaining_timeout
+                            )
+                            try:
+                                return await asyncio.wait_for(
+                                    asyncio.shield(request_task),
+                                    timeout=slice_timeout,
+                                )
+                            except TimeoutError:
+                                elapsed_seconds = time.monotonic() - request_started_at
+                                if elapsed_seconds >= effective_timeout:
+                                    continue
+
+                                diagnosis = diagnose_llm_task_block(
+                                    request_task,
+                                    elapsed_seconds,
+                                    default_block_point=call_path,
+                                )
+                                logger.warning(
+                                    f"[LLM 阻塞诊断] {diagnosis.status_title}: "
+                                    f"group={observation_group}, "
+                                    f"stage={observation_stage}, area={observation_area}, "
+                                    f"attempt={attempt_num}, "
+                                    f"fallback={is_fallback_request}, provider={pid}, "
+                                    f"elapsed={elapsed_seconds:.0f}s / limit={effective_timeout:.0f}s, "
+                                    f"block_point={diagnosis.block_point} | "
+                                    f"提示: {diagnosis.guidance_hint}"
+                                )
+                                if not diagnosis.is_known:
+                                    logger.warning(
+                                        f"[LLM 栈观测] Provider 请求 await 链: "
+                                        f"group={observation_group}, "
+                                        f"stage={observation_stage}, "
+                                        f"area={observation_area}, "
+                                        f"attempt={attempt_num}, "
+                                        f"fallback={is_fallback_request}, "
+                                        f"provider={pid}, elapsed={elapsed_seconds:.0f}s, "
+                                        f"block_point={diagnosis.block_point}, "
                                         f"await_chain={diagnosis.await_chain}"
                                     )
-                                    next_stack_dump_seconds *= 2
-                except asyncio.CancelledError:
-                    if not request_task.done():
-                        request_task.cancel()
-                    raise
+                                else:
+                                    if elapsed_seconds >= next_stack_dump_seconds:
+                                        logger.debug(
+                                            f"[LLM 栈观测] Provider 请求 await 链 (已知状态 {diagnosis.state}): "
+                                            f"group={observation_group}, area={observation_area}, "
+                                            f"await_chain={diagnosis.await_chain}"
+                                        )
+                                        next_stack_dump_seconds *= 2
+                    except asyncio.CancelledError:
+                        if not request_task.done():
+                            request_task.cancel()
+                        await asyncio.gather(request_task, return_exceptions=True)
+                        raise
+
+                resp = await _await_provider_response()
 
                 logger.debug(
                     f"[LLM 调用观测] Provider 请求完成: "

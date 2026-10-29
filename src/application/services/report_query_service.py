@@ -6,6 +6,7 @@ TraceSQLiteStore 与群组权限校验，提供弹性日期解析、智能群目
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import re
 from typing import TYPE_CHECKING
@@ -210,22 +211,32 @@ class ReportQueryService:
         if self.checkpoint_store:
             if is_latest_query:
                 # 获取最新一份 Checkpoint (LLM_ANALYSIS 优先，兜底 ON_DEMAND_ANALYSIS)
-                latest_cp = self._get_latest_checkpoint(
-                    group_id, stage_name=AnalysisStage.LLM_ANALYSIS.value
-                ) or self._get_latest_checkpoint(
-                    group_id, stage_name=AnalysisStage.ON_DEMAND_ANALYSIS.value
+                latest_cp = (
+                    await asyncio.to_thread(
+                        self._get_latest_checkpoint,
+                        group_id,
+                        stage_name=AnalysisStage.LLM_ANALYSIS.value,
+                    )
+                ) or (
+                    await asyncio.to_thread(
+                        self._get_latest_checkpoint,
+                        group_id,
+                        stage_name=AnalysisStage.ON_DEMAND_ANALYSIS.value,
+                    )
                 )
                 if latest_cp:
                     reports_data.append(latest_cp)
             else:
-                reports_data = self.checkpoint_store.get_checkpoints_by_date_range(
+                reports_data = await asyncio.to_thread(
+                    self.checkpoint_store.get_checkpoints_by_date_range,
                     group_id=group_id,
                     start_date=start_date,
                     end_date=end_date,
                     stage_name=AnalysisStage.LLM_ANALYSIS.value,
                 )
                 if not reports_data:
-                    reports_data = self.checkpoint_store.get_checkpoints_by_date_range(
+                    reports_data = await asyncio.to_thread(
+                        self.checkpoint_store.get_checkpoints_by_date_range,
                         group_id=group_id,
                         start_date=start_date,
                         end_date=end_date,
@@ -235,7 +246,9 @@ class ReportQueryService:
         # 2. 检查单日临近探测 (若指定了单日但未命中任何报告)
         probe_notice = ""
         if not reports_data and start_date and start_date == end_date:
-            nearby_cp = self._probe_nearby_checkpoint(group_id, start_date)
+            nearby_cp = await asyncio.to_thread(
+                self._probe_nearby_checkpoint, group_id, start_date
+            )
             if nearby_cp:
                 reports_data.append(nearby_cp)
                 probe_notice = (
@@ -260,7 +273,8 @@ class ReportQueryService:
             )
 
         # 4. 组装响应内容与字段投影
-        return self._format_reports_output(
+        return await asyncio.to_thread(
+            self._format_reports_output,
             group_id=group_id,
             group_name=group_name,
             reports=reports_data,

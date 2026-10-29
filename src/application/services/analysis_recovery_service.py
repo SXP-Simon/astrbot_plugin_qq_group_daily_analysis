@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import datetime as dt
-import time as time_mod
-from collections.abc import Awaitable, Callable, Mapping
+import re
+import shutil
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,6 +21,7 @@ from ...domain.value_objects import (
     GroupStatistics,
     TokenUsage,
 )
+from ...domain.value_objects.unified_message import UnifiedMessage
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
@@ -27,6 +30,8 @@ from .analysis_serializer import AnalysisResultSerializer
 from .pipeline_context import PipelineContext
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from ...domain.repositories.analysis_repository import IAnalysisProvider
     from ...domain.repositories.persistence_repository import ICheckpointStore
     from ...domain.repositories.report_repository import IReportGenerator
@@ -108,175 +113,124 @@ class AnalysisRecoveryService:
         Returns:
             包含渲染结果与生成文件路径的字典。
         """
+        if render_format not in {"image", "html"}:
+            return {"success": False, "reason": "不支持的报告格式"}
         analysis_result: AnalysisResultPayload | None = None
-        if self.history_manager:
+        from_checkpoint = False
+        # 显式重绘某次任务时，专属检查点优先于按日保存的最近一次结果。
+        if trace_id and self.checkpoint_store:
+            cached_data = await asyncio.to_thread(
+                self.checkpoint_store.get_checkpoint,
+                group_id,
+                date_str,
+                AnalysisStage.LLM_ANALYSIS.value,
+                trace_id=trace_id,
+            )
+            if isinstance(cached_data, dict) and isinstance(
+                cached_data.get("statistics"), (dict, GroupStatistics)
+            ):
+                analysis_result = AnalysisResultSerializer.deserialize(cached_data)
+                from_checkpoint = True
+        if not analysis_result and self.history_manager:
             try:
                 hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if isinstance(hist_data, dict):
-                    analysis_result = (
-                        hist_data  # type: ignore[assignment]
-                        if "statistics" in hist_data
-                        and isinstance(hist_data["statistics"], GroupStatistics)
-                        else AnalysisResultSerializer.deserialize(hist_data)
-                    )
+                # 旧 KV 记录只有摘要，不能作为可恢复的完整分析产物。
+                if (
+                    isinstance(hist_data, dict)
+                    and isinstance(hist_data.get("statistics"), (dict, GroupStatistics))
+                    and (not trace_id or hist_data.get("trace_id") == trace_id)
+                ):
+                    analysis_result = AnalysisResultSerializer.deserialize(hist_data)
+                    if not trace_id and isinstance(hist_data.get("trace_id"), str):
+                        trace_id = str(hist_data["trace_id"]) or None
             except Exception as e:
                 logger.debug(f"从 HistoryManager 获取分析记录异常: {e}")
 
-        if not analysis_result and self.checkpoint_store:
-            cached_data = self.checkpoint_store.get_checkpoint(
-                group_id, date_str, "LLM_ANALYSIS", trace_id=trace_id or ""
+        if not analysis_result and not trace_id and self.checkpoint_store:
+            cached_data = await asyncio.to_thread(
+                self.checkpoint_store.get_checkpoint,
+                group_id,
+                date_str,
+                "LLM_ANALYSIS",
+                trace_id=trace_id or "",
             )
-            if isinstance(cached_data, dict):
+            if isinstance(cached_data, dict) and isinstance(
+                cached_data.get("statistics"), (dict, GroupStatistics)
+            ):
                 analysis_result = AnalysisResultSerializer.deserialize(cached_data)
+                from_checkpoint = True
 
         if not analysis_result:
             return {
                 "success": False,
-                "reason": f"未找到群 {group_id} 在 {date_str} 的分析产物记录",
+                "reason": f"未找到群 {group_id} 在 {date_str} 的完整分析产物记录",
             }
 
         reports_dir = StarTools.get_data_dir(PLUGIN_NAME) / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
+        # 所有外部标识只参与文件名，不能改变报告目录。
+        components = [group_id, trace_id or "", template_name]
+        safe_group, safe_trace, safe_template = [
+            re.sub(r'[\s/\\:*?"<>|\x00-\x1f]', "_", value)[:64] for value in components
+        ]
         ts_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        if render_format == "html":
-            filename = (
-                f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.html"
-                if trace_id
-                else f"report_{group_id}_{ts_str}_{template_name}.html"
-            )
-            dest = reports_dir / filename
-            html_path, _ = await self.report_generator.generate_html_report(
-                analysis_result=analysis_result,
-                group_id=group_id,
-                template_theme=template_name,
-                custom_filename=filename,
-                trace_id=trace_id,
-            )
-            if not html_path or not Path(html_path).exists():
-                prep_func = getattr(self.report_generator, "_prepare_render_data", None)
-                if callable(prep_func):
-                    prep_res = prep_func(analysis_result)
-                    render_data = (
-                        await prep_res if asyncio.iscoroutine(prep_res) else prep_res
-                    )
-                else:
-                    render_data = analysis_result
-                html_tpls = self.report_generator.html_templates
-                if html_tpls and hasattr(html_tpls, "render_template"):
-                    render_kwargs: dict[str, object] = (
-                        dict(render_data) if isinstance(render_data, Mapping) else {}
-                    )
-                    html_content = html_tpls.render_template(
-                        "html_template.html",
-                        template_theme=template_name,
-                        **render_kwargs,
-                    )
-                    dest.write_text(html_content, encoding="utf-8")
-
-            if trace_id:
-                from ...shared.trace_context import _global_trace_store
-
-                if _global_trace_store is not None:
-                    try:
-                        trace_data = _global_trace_store.get_trace(trace_id)
-                        if trace_data:
-                            extra = trace_data.get("extra")
-                            if isinstance(extra, dict):
-                                rfiles = extra.setdefault("report_files", [])
-                                if isinstance(rfiles, list) and not any(
-                                    isinstance(rf, dict)
-                                    and rf.get("filename") == filename
-                                    for rf in rfiles
-                                ):
-                                    rfiles.append(
-                                        {
-                                            "filename": filename,
-                                            "path": str(dest.resolve()),
-                                            "format": "html",
-                                            "template": template_name,
-                                            "size_bytes": dest.stat().st_size
-                                            if dest.exists()
-                                            else 0,
-                                            "created_at": time_mod.time(),
-                                        }
-                                    )
-                                trace_data["extra"] = extra
-                                _global_trace_store.save_trace(trace_data)
-                    except Exception:
-                        pass
-
-            return {
-                "success": True,
-                "filename": filename,
-                "report_path": str(dest),
-                "is_html": True,
-                "from_checkpoint": True,
-                "trace_id": trace_id,
-            }
-        image_res = await self.report_generator.generate_image_report(
-            analysis_result=analysis_result,
-            group_id=group_id,
-            html_render_func=bind_group_html_renderer(
-                self.html_render, group_id, platform_id
-            ),
-            template_theme=template_name,
-        )
-        image_url = image_res[0]
-        filename = (
-            f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.jpg"
-            if trace_id
-            else f"report_{group_id}_{ts_str}_{template_name}.jpg"
-        )
+        suffix = "html" if render_format == "html" else "jpg"
+        trace_suffix = f"_{safe_trace}" if safe_trace else ""
+        filename = f"report_{safe_group}_{ts_str}{trace_suffix}_{safe_template}_{uuid.uuid4().hex[:8]}.{suffix}"
         dest = reports_dir / filename
-        if image_url and Path(image_url).exists():
-            import shutil
+        image_url: str | None = None
+        try:
+            await asyncio.to_thread(reports_dir.mkdir, parents=True, exist_ok=True)
+            if render_format == "html":
+                html_path, _ = await self.report_generator.generate_html_report(
+                    analysis_result=analysis_result,
+                    group_id=group_id,
+                    template_theme=template_name,
+                    custom_filename=filename,
+                    trace_id=trace_id,
+                )
+                if not html_path or not Path(html_path).is_file():
+                    return {
+                        "success": False,
+                        "reason": "HTML 报告生成失败，未产生可用文件",
+                    }
+                source = Path(html_path)
+                if source.resolve() != dest.resolve():
+                    await asyncio.to_thread(shutil.copy2, source, dest)
+            else:
+                image_url, _ = await self.report_generator.generate_image_report(
+                    analysis_result=analysis_result,
+                    group_id=group_id,
+                    html_render_func=bind_group_html_renderer(
+                        self.html_render, group_id, platform_id
+                    ),
+                    template_theme=template_name,
+                )
+                if image_url and image_url.startswith("base64://"):
+                    data = base64.b64decode(image_url[9:], validate=True)
+                    await asyncio.to_thread(dest.write_bytes, data)
+                elif image_url and Path(image_url).is_file():
+                    await asyncio.to_thread(shutil.copy2, image_url, dest)
+                else:
+                    return {
+                        "success": False,
+                        "reason": "图片报告生成失败，未产生可用文件",
+                    }
+            if not dest.is_file() or dest.stat().st_size == 0:
+                return {"success": False, "reason": "报告生成失败，产物内容为空"}
+        except Exception as e:
+            logger.warning(f"重新渲染报告失败: {e}")
+            return {"success": False, "reason": f"重新渲染报告失败: {e}"}
 
-            shutil.copy2(image_url, dest)
-        elif image_url and image_url.startswith("base64://"):
-            import base64
-
-            data = base64.b64decode(image_url[9:])
-            dest.write_bytes(data)
-
-        if trace_id:
-            from ...shared.trace_context import _global_trace_store
-
-            if _global_trace_store is not None:
-                try:
-                    trace_data = _global_trace_store.get_trace(trace_id)
-                    if trace_data:
-                        extra = trace_data.get("extra")
-                        if isinstance(extra, dict):
-                            rfiles = extra.setdefault("report_files", [])
-                            if isinstance(rfiles, list) and not any(
-                                isinstance(rf, dict) and rf.get("filename") == filename
-                                for rf in rfiles
-                            ):
-                                rfiles.append(
-                                    {
-                                        "filename": filename,
-                                        "path": str(dest.resolve()),
-                                        "format": "image",
-                                        "template": template_name,
-                                        "size_bytes": dest.stat().st_size
-                                        if dest.exists()
-                                        else 0,
-                                        "created_at": time_mod.time(),
-                                    }
-                                )
-                            trace_data["extra"] = extra
-                            _global_trace_store.save_trace(trace_data)
-                except Exception:
-                    pass
-
+        await TraceContext.register_report(
+            dest, group_id, render_format, trace_id or ""
+        )
         return {
             "success": True,
             "filename": filename,
             "report_path": str(dest),
             "image_url": image_url,
-            "is_html": False,
-            "from_checkpoint": True,
+            "is_html": render_format == "html",
+            "from_checkpoint": from_checkpoint,
             "trace_id": trace_id,
         }
 
@@ -335,26 +289,10 @@ class AnalysisRecoveryService:
             date_str=date_str,
         )
 
-        cached_llm = (
-            self.checkpoint_store.get_checkpoint(
-                group_id,
-                date_str,
-                AnalysisStage.LLM_ANALYSIS.value,
-                trace_id=checkpoint_trace_id,
-            )
-            if self.checkpoint_store
-            else None
+        cached_result = await self._load_analysis_checkpoint(
+            group_id, date_str, checkpoint_trace_id
         )
-        if not cached_llm:
-            try:
-                hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if hist_data:
-                    cached_llm = AnalysisResultSerializer.serialize(hist_data)
-            except Exception:
-                cached_llm = None
-
-        if isinstance(cached_llm, dict):
-            cached_result = AnalysisResultSerializer.deserialize(cached_llm)
+        if cached_result is not None:
             cached_topics = cached_result.get("topics", [])
             cached_titles = cached_result.get("user_titles", [])
             cached_stats = cached_result.get("statistics")
@@ -400,11 +338,14 @@ class AnalysisRecoveryService:
                     }
 
         clean_checkpoint = (
-            self.checkpoint_store.get_checkpoint(
-                group_id,
-                date_str,
-                AnalysisStage.CLEAN_MESSAGES.value,
-                trace_id=checkpoint_trace_id,
+            (
+                await asyncio.to_thread(
+                    self.checkpoint_store.get_checkpoint,
+                    group_id,
+                    date_str,
+                    AnalysisStage.CLEAN_MESSAGES.value,
+                    trace_id=checkpoint_trace_id,
+                )
             )
             if self.checkpoint_store
             else None
@@ -436,161 +377,62 @@ class AnalysisRecoveryService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            stats_data = clean_checkpoint.get("statistics")
-            deserialized = AnalysisResultSerializer.deserialize(
-                {
-                    "statistics": stats_data if isinstance(stats_data, dict) else {},
-                    "user_analysis": clean_checkpoint.get("user_activity", {}),
-                    "user_titles": clean_checkpoint.get("top_users", []),
-                }
+            cleaned_result, unified_messages, top_users = (
+                self._restore_clean_checkpoint(clean_checkpoint, group_id)
             )
-            statistics = deserialized["statistics"]
-            user_activity = deserialized.get("user_analysis") or {}
-            top_users_raw = clean_checkpoint.get("top_users")
-            top_users: list[dict[str, object]] | None = (
-                top_users_raw if isinstance(top_users_raw, list) else None
-            )
-            unified_messages_raw = clean_checkpoint.get("unified_messages")
-            unified_messages = (
-                unified_messages_raw if isinstance(unified_messages_raw, list) else []
-            )
+            statistics = cleaned_result["statistics"]
+            user_activity = cleaned_result.get("user_analysis") or {}
 
             pipeline.restore_checkpoint_span(AnalysisStage.CLEAN_MESSAGES)
 
-            cached_result = (
-                AnalysisResultSerializer.deserialize(cached_llm)
-                if isinstance(cached_llm, dict)
-                else {}
-            )
-
-            raw_topics = cached_result.get("topics")
-            topics = raw_topics if isinstance(raw_topics, list) else []
-            raw_user_titles = cached_result.get("user_titles")
-            user_titles = raw_user_titles if isinstance(raw_user_titles, list) else []
-            cached_stats = cached_result.get("statistics")
+            cached_result = cached_result or AnalysisResultSerializer.deserialize({})
+            topics = cached_result["topics"]
+            user_titles = cached_result["user_titles"]
+            cached_stats = cached_result["statistics"]
             chat_quality_review = cached_result.get("chat_quality_review")
-            if isinstance(cached_stats, GroupStatistics):
-                golden_quotes = cached_stats.golden_quotes
-                total_token_usage = cached_stats.token_usage
-            elif isinstance(cached_stats, dict):
-                golden_quotes = cached_stats.get("golden_quotes", [])
-                total_token_usage = cached_stats.get("token_usage", TokenUsage())
-            else:
-                golden_quotes = []
-                total_token_usage = TokenUsage()
-
-            run_topic = topic_enabled and not bool(topics)
-            run_user_title = user_title_enabled and not bool(user_titles)
-            run_golden_quote = golden_quote_enabled and not bool(golden_quotes)
-            run_chat_quality = chat_quality_enabled and not bool(chat_quality_review)
-
-            legacy_messages = self.statistics_service._convert_to_legacy_dict(
-                unified_messages
-            )
-            unified_msg_origin = (
-                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
-            )
-
-            if run_topic or run_user_title or run_golden_quote or run_chat_quality:
-                async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
-                    async with self.task_guard.llm_slot(group_id, "resume"):
-                        (
-                            new_topics,
-                            new_user_titles,
-                            new_golden_quotes,
-                            new_tokens,
-                            new_chat_quality,
-                        ) = await self.llm_analyzer.analyze_all_concurrent(
-                            legacy_messages,
-                            user_activity,
-                            umo=unified_msg_origin,
-                            top_users=top_users,
-                            topic_enabled=run_topic,
-                            user_title_enabled=run_user_title,
-                            golden_quote_enabled=run_golden_quote,
-                            chat_quality_enabled=run_chat_quality,
-                        )
-                        if run_topic:
-                            topics = new_topics
-                        if run_user_title:
-                            user_titles = new_user_titles
-                        if run_golden_quote:
-                            golden_quotes = new_golden_quotes
-                        if run_chat_quality:
-                            chat_quality_review = new_chat_quality
-
-                        total_token_usage = TokenUsage(
-                            prompt_tokens=total_token_usage.prompt_tokens
-                            + new_tokens.prompt_tokens,
-                            completion_tokens=total_token_usage.completion_tokens
-                            + new_tokens.completion_tokens,
-                            total_tokens=total_token_usage.total_tokens
-                            + new_tokens.total_tokens,
-                        )
-
-                    enabled_count = sum(
-                        [
-                            bool(run_topic),
-                            bool(run_user_title),
-                            bool(run_golden_quote),
-                            bool(run_chat_quality),
-                        ]
-                    )
-                    success_count = sum(
-                        [
-                            bool(new_topics) if run_topic else False,
-                            bool(new_user_titles) if run_user_title else False,
-                            bool(new_golden_quotes) if run_golden_quote else False,
-                            bool(new_chat_quality) if run_chat_quality else False,
-                        ]
-                    )
-
-                    if enabled_count > 0 and success_count == 0:
-                        step.mark_failed(
-                            "续跑大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
-                        )
-                        if trace:
-                            trace.metadata["has_warnings"] = False
-                            trace.metadata["failure_stage"] = (
-                                AnalysisStage.LLM_ANALYSIS.value
-                            )
-                        return {
-                            "success": False,
-                            "reason": "llm_analysis_failed",
-                            "error": "大模型文本分析全部子任务失败，已中止续跑",
-                        }
-                    if enabled_count > 0 and success_count < enabled_count:
-                        step.mark_warning(
-                            f"续跑大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
-                        )
-                        if trace:
-                            trace.metadata["has_warnings"] = True
+            golden_quotes = cached_stats.golden_quotes
+            total_token_usage = cached_stats.token_usage
 
             statistics.golden_quotes = golden_quotes
             statistics.token_usage = total_token_usage
-
-            analysis_result = {
+            partial_result: AnalysisResultPayload = {
                 "statistics": statistics,
                 "topics": topics,
                 "user_titles": user_titles,
                 "user_analysis": user_activity,
                 "chat_quality_review": chat_quality_review,
             }
+            analysis_result = await self._complete_missing_sections(
+                pipeline, partial_result, unified_messages, top_users, platform_id
+            )
+            if analysis_result is None:
+                return {
+                    "success": False,
+                    "reason": "llm_analysis_failed",
+                    "error": "大模型文本分析全部子任务失败，已中止续跑",
+                }
+            topics = analysis_result["topics"]
+            user_titles = analysis_result["user_titles"]
 
             async with pipeline.step(
                 AnalysisStage.SAVE_SUMMARY,
                 save_checkpoint=True,
                 serializer=AnalysisResultSerializer.serialize,
             ) as step:
-                await self.history_manager.save_analysis(group_id, analysis_result)
+                await self.history_manager.save_analysis(
+                    group_id, dict(analysis_result), date_str=date_str
+                )
                 if self.checkpoint_store:
                     try:
                         cur_trace_id = trace.trace_id if trace else ""
-                        self.checkpoint_store.save_checkpoint(
+                        await asyncio.to_thread(
+                            self.checkpoint_store.save_checkpoint,
                             group_id=group_id,
                             date_str=date_str,
                             stage_name=AnalysisStage.LLM_ANALYSIS.value,
-                            data=AnalysisResultSerializer.serialize(analysis_result),
+                            data=AnalysisResultSerializer.serialize(
+                                dict(analysis_result)
+                            ),
                             trace_id=cur_trace_id,
                         )
                     except Exception as e:
@@ -612,3 +454,232 @@ class AnalysisRecoveryService:
                 "resumed_from": AnalysisStage.CLEAN_MESSAGES.value,
                 "trace_id": trace_id,
             }
+
+    @staticmethod
+    def _restore_clean_checkpoint(
+        clean_checkpoint: dict[str, object], group_id: str
+    ) -> tuple[
+        AnalysisResultPayload, list[UnifiedMessage], list[dict[str, object]] | None
+    ]:
+        """在恢复边界还原清洗阶段统计、消息和活跃成员候选。
+
+        Args:
+            clean_checkpoint: 持久化的清洗快照，兼容内存中的消息对象。
+            group_id: 旧消息缺少群标识时采用的目标群号。
+
+        Returns:
+            领域分析结果、恢复的消息列表及可选活跃成员候选列表。
+        """
+        stats_data = clean_checkpoint.get("statistics")
+        deserialized = AnalysisResultSerializer.deserialize(
+            {
+                "statistics": stats_data if isinstance(stats_data, dict) else {},
+                "user_analysis": clean_checkpoint.get("user_activity", {}),
+                "user_titles": clean_checkpoint.get("top_users", []),
+            }
+        )
+        top_users_raw = clean_checkpoint.get("top_users")
+        top_users: list[dict[str, object]] | None = (
+            top_users_raw if isinstance(top_users_raw, list) else None
+        )
+        unified_messages_raw = clean_checkpoint.get("unified_messages")
+        unified_messages: list[UnifiedMessage] = []
+        if isinstance(unified_messages_raw, list):
+            for message in unified_messages_raw:
+                if isinstance(message, UnifiedMessage):
+                    unified_messages.append(message)
+                elif isinstance(message, dict):
+                    # 续跑 LLM 只读取已清洗文本和发送者信息，无须恢复原始附件。
+                    timestamp = message.get("timestamp", 0)
+                    try:
+                        restored_timestamp = (
+                            int(timestamp)
+                            if isinstance(timestamp, (int, float, str))
+                            else 0
+                        )
+                    except (ValueError, OverflowError):
+                        # 时间戳不参与文本续跑，旧值无效时保留消息正文并使用零值。
+                        restored_timestamp = 0
+                    unified_messages.append(
+                        UnifiedMessage(
+                            message_id=str(message.get("message_id", "")),
+                            sender_id=str(message.get("sender_id", "")),
+                            sender_name=str(message.get("sender_name", "")),
+                            group_id=str(message.get("group_id", group_id)),
+                            text_content=str(message.get("text_content", "")),
+                            timestamp=restored_timestamp,
+                            sender_card=str(message["sender_card"])
+                            if message.get("sender_card")
+                            else None,
+                        )
+                    )
+
+        return deserialized, unified_messages, top_users
+
+    async def _load_analysis_checkpoint(
+        self, group_id: str, date_str: str, checkpoint_trace_id: str
+    ) -> AnalysisResultPayload | None:
+        """优先加载指定任务的分析快照，缺失时仅回退同源的每日历史。
+
+        Args:
+            group_id: 待恢复的群组标识。
+            date_str: 原分析日期。
+            checkpoint_trace_id: 原任务的追踪标识。
+
+        Returns:
+            已还原为领域模型的完整或部分结果；未命中同源快照时返回 None。
+        """
+        cached = (
+            await asyncio.to_thread(
+                self.checkpoint_store.get_checkpoint,
+                group_id,
+                date_str,
+                AnalysisStage.LLM_ANALYSIS.value,
+                trace_id=checkpoint_trace_id,
+            )
+            if self.checkpoint_store
+            else None
+        )
+        if not cached:
+            try:
+                history = await self.history_manager.get_analysis(group_id, date_str)
+                if (
+                    isinstance(history, dict)
+                    and isinstance(history.get("statistics"), (dict, GroupStatistics))
+                    and history.get("trace_id") == checkpoint_trace_id
+                ):
+                    cached = history
+            except Exception:
+                cached = None
+        return (
+            AnalysisResultSerializer.deserialize(cached)
+            if isinstance(cached, dict)
+            else None
+        )
+
+    async def _complete_missing_sections(
+        self,
+        pipeline: PipelineContext,
+        analysis_result: AnalysisResultPayload,
+        unified_messages: list[UnifiedMessage],
+        top_users: list[dict[str, object]] | None,
+        platform_id: str | None,
+    ) -> AnalysisResultPayload | None:
+        """补齐缺失的 LLM 子任务，并保留已成功生成的内容和 Token 用量。
+
+        Args:
+            pipeline: 恢复任务的阶段上下文。
+            analysis_result: 已恢复的部分分析结果。
+            unified_messages: 从清洗快照还原的消息。
+            top_users: 清洗阶段选出的活跃成员。
+            platform_id: 当前平台实例。
+
+        Returns:
+            合并后的分析结果；所有启用子任务均失败时返回 None。
+        """
+        group_id = pipeline.group_id
+        trace = pipeline.trace
+        statistics = analysis_result["statistics"]
+        topics = analysis_result["topics"]
+        user_titles = analysis_result["user_titles"]
+        user_activity = analysis_result["user_analysis"]
+        chat_quality_review = analysis_result.get("chat_quality_review")
+        golden_quotes = statistics.golden_quotes
+        total_token_usage = statistics.token_usage
+        topic_enabled = self.config_manager.get_topic_analysis_enabled()
+        user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
+        golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
+        chat_quality_enabled = self.config_manager.get_chat_quality_analysis_enabled()
+        run_topic = topic_enabled and not bool(topics)
+        run_user_title = user_title_enabled and not bool(user_titles)
+        run_golden_quote = golden_quote_enabled and not bool(golden_quotes)
+        run_chat_quality = chat_quality_enabled and not bool(chat_quality_review)
+
+        legacy_messages = self.statistics_service._convert_to_legacy_dict(
+            unified_messages
+        )
+        unified_msg_origin = (
+            f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
+        )
+
+        if run_topic or run_user_title or run_golden_quote or run_chat_quality:
+            async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
+                async with self.task_guard.llm_slot(group_id, "resume"):
+                    (
+                        new_topics,
+                        new_user_titles,
+                        new_golden_quotes,
+                        new_tokens,
+                        new_chat_quality,
+                    ) = await self.llm_analyzer.analyze_all_concurrent(
+                        legacy_messages,
+                        user_activity,
+                        umo=unified_msg_origin,
+                        top_users=top_users,
+                        topic_enabled=run_topic,
+                        user_title_enabled=run_user_title,
+                        golden_quote_enabled=run_golden_quote,
+                        chat_quality_enabled=run_chat_quality,
+                    )
+                    if run_topic:
+                        topics = new_topics
+                    if run_user_title:
+                        user_titles = new_user_titles
+                    if run_golden_quote:
+                        golden_quotes = new_golden_quotes
+                    if run_chat_quality:
+                        chat_quality_review = new_chat_quality
+
+                    total_token_usage = TokenUsage(
+                        prompt_tokens=total_token_usage.prompt_tokens
+                        + new_tokens.prompt_tokens,
+                        completion_tokens=total_token_usage.completion_tokens
+                        + new_tokens.completion_tokens,
+                        total_tokens=total_token_usage.total_tokens
+                        + new_tokens.total_tokens,
+                    )
+
+                enabled_count = sum(
+                    [
+                        bool(run_topic),
+                        bool(run_user_title),
+                        bool(run_golden_quote),
+                        bool(run_chat_quality),
+                    ]
+                )
+                success_count = sum(
+                    [
+                        bool(new_topics) if run_topic else False,
+                        bool(new_user_titles) if run_user_title else False,
+                        bool(new_golden_quotes) if run_golden_quote else False,
+                        bool(new_chat_quality) if run_chat_quality else False,
+                    ]
+                )
+
+                if enabled_count > 0 and success_count == 0:
+                    step.mark_failed(
+                        "续跑大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
+                    )
+                    if trace:
+                        trace.metadata["has_warnings"] = False
+                        trace.metadata["failure_stage"] = (
+                            AnalysisStage.LLM_ANALYSIS.value
+                        )
+                    return None
+                if enabled_count > 0 and success_count < enabled_count:
+                    step.mark_warning(
+                        f"续跑大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
+                    )
+                    if trace:
+                        trace.metadata["has_warnings"] = True
+
+        statistics.golden_quotes = golden_quotes
+        statistics.token_usage = total_token_usage
+
+        return {
+            "statistics": statistics,
+            "topics": topics,
+            "user_titles": user_titles,
+            "user_analysis": user_activity,
+            "chat_quality_review": chat_quality_review,
+        }

@@ -7,8 +7,15 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from ...domain.value_objects import (
+    GroupStatistics,
+    QualityReview,
+    SummaryTopic,
+    UserTitle,
+)
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -41,9 +48,9 @@ class HistoryManager:
         time_str: str | None = None,
     ) -> bool:
         """
-        序列化并存储一份分析报告摘要。
+        序列化并存储分析快照及可独立查询的摘要。
 
-        摘要包含：发言总量、人数、提取的主题摘要及生成时间，不包含完整的原始消息流。
+        快照包含完整分析产物；摘要接口保持兼容，不保存原始消息流。
 
         Args:
             group_id (str): 群组 ID
@@ -80,26 +87,53 @@ class HistoryManager:
                             "detail": str(t.get("detail", "")),
                         }
                     )
-                elif hasattr(t, "topic"):
+                elif isinstance(t, SummaryTopic):
                     topics_summary.append(
                         {
-                            "topic": str(getattr(t, "topic", "")),
-                            "detail": str(getattr(t, "detail", "")),
+                            "topic": t.topic,
+                            "detail": t.detail,
                         }
                     )
 
             summary = {
-                "message_count": getattr(stats, "message_count", 0) if stats else 0,
-                "participant_count": getattr(stats, "participant_count", 0)
-                if stats
+                "message_count": stats.message_count
+                if isinstance(stats, GroupStatistics)
+                else 0,
+                "participant_count": stats.participant_count
+                if isinstance(stats, GroupStatistics)
                 else 0,
                 "topics": topics_summary,
                 "user_titles_count": len(user_titles),
                 "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
             }
 
+            quality = analysis_result.get("chat_quality_review")
             key = f"analysis_{group_id}_{date_str}_{time_str}"
-            await self.plugin.put_kv_data(key, summary)
+            trace = TraceContext.current()
+            snapshot = {
+                "trace_id": trace.trace_id if trace else "",
+                "statistics": stats.to_dict()
+                if isinstance(stats, GroupStatistics)
+                else stats,
+                "topics": [
+                    t.to_dict() if isinstance(t, SummaryTopic) else t for t in topics
+                ],
+                "user_titles": [
+                    t.to_dict() if isinstance(t, UserTitle) else t for t in user_titles
+                ],
+                "user_analysis": analysis_result.get("user_analysis", {}),
+                "chat_quality_review": stats.chat_quality_review.to_dict()
+                if isinstance(stats, GroupStatistics) and stats.chat_quality_review
+                else quality.to_dict()
+                if isinstance(quality, QualityReview)
+                else quality,
+                "generated_at": summary["generated_at"],
+            }
+            await self.plugin.put_kv_data(
+                key, {"summary": summary, "analysis": snapshot}
+            )
+            # 时间点保留独立版本，日期键只指向最近一次成功保存的记录。
+            await self.plugin.put_kv_data(f"analysis_{group_id}_{date_str}", key)
 
             logger.info(
                 f"已保存群 {group_id} 在 {date_str} {time_str} 的分析摘要到历史记录 (Key: {key})"
@@ -114,17 +148,26 @@ class HistoryManager:
     ) -> dict[str, object] | None:
         """根据群组和日期获取分析数据。
 
-        如果指定了 time_str 则按精确 key 读取，否则检索该日期的分析记录。
-        """
-        if time_str:
-            return await self.get_history(group_id, date_str, time_str)
+        Args:
+            group_id: 群组 ID。
+            date_str: 归档日期。
+            time_str: 可选归档时间；省略时读取每日最新记录。
 
-        # 尝试常见或最新的 time_str 归档，若无具体时间点则尝试默认前缀 key
-        key_default = f"analysis_{group_id}_{date_str}"
-        res = await self.plugin.get_kv_data(key_default, None)
-        if res:
-            return res
-        return None
+        Returns:
+            完整分析快照；旧版本仅保存摘要的记录仍原样返回。
+        """
+        key = f"analysis_{group_id}_{date_str}"
+        if time_str:
+            key += f"_{time_str.replace(':', '-')}"
+        record = cast("object", await self.plugin.get_kv_data(key, None))
+        if isinstance(record, str) and record.startswith(
+            f"analysis_{group_id}_{date_str}_"
+        ):
+            record = cast("object", await self.plugin.get_kv_data(record, None))
+        if not isinstance(record, dict):
+            return None
+        analysis = record.get("analysis")
+        return analysis if isinstance(analysis, dict) else record
 
     async def get_history(
         self, group_id: str, date_str: str, time_str: str
@@ -134,7 +177,11 @@ class HistoryManager:
         """
         time_str = time_str.replace(":", "-")
         key = f"analysis_{group_id}_{date_str}_{time_str}"
-        return await self.plugin.get_kv_data(key, None)
+        record = cast("object", await self.plugin.get_kv_data(key, None))
+        if not isinstance(record, dict):
+            return None
+        summary = record.get("summary")
+        return summary if isinstance(summary, dict) else record
 
     async def has_history(self, group_id: str, date_str: str, time_str: str) -> bool:
         """

@@ -719,11 +719,10 @@ class GroupDailyAnalysis(Star):
             if hasattr(event, "get_group_id") and event.get_group_id()
             else None
         )
-        target_group_id, matched_name, candidates = (
-            self.report_query_service.resolve_target_group(
-                group_input=group,
-                current_event_group_id=current_event_group_id,
-            )
+        target_group_id, matched_name, candidates = await asyncio.to_thread(
+            self.report_query_service.resolve_target_group,
+            group_input=group,
+            current_event_group_id=current_event_group_id,
         )
 
         if candidates:

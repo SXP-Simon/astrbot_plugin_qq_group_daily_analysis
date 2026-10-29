@@ -11,8 +11,9 @@ import hashlib
 import json
 import re
 import time
+import uuid
 from collections.abc import Iterable
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING
 
 from ....shared.constants import PLUGIN_NAME
@@ -80,6 +81,132 @@ def _config_revision(config: Mapping[str, object]) -> str:
         dict(config), ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def _normalize_rendering_config_for_save(new_config: dict[str, object]) -> None:
+    """在保存前原地规范化渲染方案，保留自定义资源和稳定优先级顺序。
+
+    Args:
+        new_config: 来自保存请求的配置对象，不是运行中的配置实例。
+
+    Raises:
+        ValueError: 渲染配置、方案结构或字段值无效。
+    """
+    if "t2i_rendering" not in new_config:
+        return
+    rendering_config = new_config["t2i_rendering"]
+    if not isinstance(rendering_config, dict):
+        raise ValueError("t2i_rendering 必须是配置对象")
+    if "t2i_rendering_strategies" in rendering_config:
+        strategies = rendering_config["t2i_rendering_strategies"]
+        if strategies == []:
+            strategies = [dict(item) for item in DEFAULT_RENDERING_STRATEGY_PRESETS]
+            rendering_config["t2i_rendering_strategies"] = strategies
+        if not isinstance(strategies, list):
+            raise ValueError("渲染方案必须是列表")
+        priorities: list[int] = []
+        for strategy in strategies:
+            normalized = parse_rendering_strategies([strategy])[0]
+            priorities.append(normalized["priority"])
+            for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                if strategy.get(key) == CUSTOM_RESOURCE_OPTION:
+                    strategy[f"custom_{key}"] = normalized[key]
+                if normalized["render_service"] == "custom" and strategy.get(key) == "":
+                    continue
+                strategy[key] = normalized[key]
+            for key in (
+                "__template_key",
+                "environment",
+                "service_endpoint",
+                "service_token",
+            ):
+                strategy[key] = normalized[key]
+            if "request_timeout" in normalized:
+                strategy["request_timeout"] = normalized["request_timeout"]
+            if "font_mode" in normalized:
+                strategy["font_mode"] = normalized["font_mode"]
+            else:
+                strategy.pop("font_mode", None)
+            strategy.pop("render_service", None)
+        strategies[:] = [
+            item
+            for _priority, item in sorted(
+                zip(priorities, strategies, strict=True),
+                key=lambda pair: pair[0],
+            )
+        ]
+    for legacy_key in LEGACY_RENDERING_RESOURCE_KEYS:
+        rendering_config.pop(legacy_key, None)
+
+
+def _normalize_comic_references_for_save(
+    new_config: dict[str, object], plugin_root: Path
+) -> None:
+    """规范化漫画角色及参考图，不遍历或改写其他动态配置节点。
+
+    Args:
+        new_config: 来自保存请求的配置，原地更新漫画参考图字段。
+        plugin_root: 迁移内嵌参考图时使用的插件代码目录。
+
+    Raises:
+        ValueError: 内嵌参考图的 Base64 数据无效或为空。
+        OSError: 无法创建目录或保存迁移后的参考图。
+    """
+    comic = new_config.get("daily_comic")
+    if not isinstance(comic, dict):
+        return
+    characters = comic.get("comic_characters")
+    if not isinstance(characters, list):
+        return
+    folder = _config_key_to_folder(
+        "daily_comic.comic_characters.templates.character.reference_images"
+    )
+    for character in characters:
+        if not isinstance(character, dict):
+            continue
+        if not character.get("__template_key"):
+            character["__template_key"] = "character"
+        references = character.get("reference_images")
+        if not isinstance(references, list):
+            continue
+        cleaned: list[object] = []
+        for item in references:
+            if not isinstance(item, str):
+                cleaned.append(item)
+                continue
+            if item.startswith("data:image/"):
+                try:
+                    _, encoded = item.split(",", 1)
+                    file_bytes = base64.b64decode(encoded, validate=True)
+                    if not file_bytes:
+                        raise ValueError("参考图内容为空")
+                except ValueError as exc:
+                    raise ValueError("参考图的 Base64 数据无效或为空") from exc
+                filename = (
+                    f"{int(time.time() * 1000)}_{uuid.uuid4().hex}_migrated_image.png"
+                )
+                for directory in (
+                    Path.cwd()
+                    / "data"
+                    / "plugin_data"
+                    / PLUGIN_NAME
+                    / "files"
+                    / folder,
+                    plugin_root / "files" / folder,
+                ):
+                    directory.mkdir(parents=True, exist_ok=True)
+                    (directory / filename).write_bytes(file_bytes)
+                cleaned.append(f"files/{folder}/{filename}")
+            elif item.startswith("files/"):
+                prefix = f"files/{folder}/"
+                cleaned.append(
+                    item.strip()
+                    if item.startswith(prefix)
+                    else f"{prefix}{Path(item).name}"
+                )
+            elif item.strip():
+                cleaned.append(item.strip())
+        character["reference_images"] = cleaned
 
 
 class ConfigRoutes:
@@ -396,63 +523,10 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     status_code=409,
                 )
 
-            if "t2i_rendering" in new_config:
-                rendering_config = new_config["t2i_rendering"]
-                if not isinstance(rendering_config, dict):
-                    return error_response(
-                        "t2i_rendering 必须是配置对象", status_code=400
-                    )
-                if "t2i_rendering_strategies" in rendering_config:
-                    try:
-                        strategies = rendering_config["t2i_rendering_strategies"]
-                        if strategies == []:
-                            strategies = [
-                                dict(item)
-                                for item in DEFAULT_RENDERING_STRATEGY_PRESETS
-                            ]
-                            rendering_config["t2i_rendering_strategies"] = strategies
-                        if not isinstance(strategies, list):
-                            raise ValueError("渲染方案必须是列表")
-                        priorities: list[int] = []
-                        for strategy in strategies:
-                            normalized = parse_rendering_strategies([strategy])[0]
-                            priorities.append(normalized["priority"])
-                            for key in ("cdn_base_url", "google_fonts", "gstatic"):
-                                if strategy.get(key) == CUSTOM_RESOURCE_OPTION:
-                                    strategy[f"custom_{key}"] = normalized[key]
-                                if (
-                                    normalized["render_service"] == "custom"
-                                    and strategy.get(key) == ""
-                                ):
-                                    continue
-                                strategy[key] = normalized[key]
-                            for key in (
-                                "__template_key",
-                                "environment",
-                                "service_endpoint",
-                                "service_token",
-                            ):
-                                strategy[key] = normalized[key]
-                            if "request_timeout" in normalized:
-                                strategy["request_timeout"] = normalized[
-                                    "request_timeout"
-                                ]
-                            if "font_mode" in normalized:
-                                strategy["font_mode"] = normalized["font_mode"]
-                            else:
-                                strategy.pop("font_mode", None)
-                            strategy.pop("render_service", None)
-                        strategies[:] = [
-                            item
-                            for _priority, item in sorted(
-                                zip(priorities, strategies, strict=True),
-                                key=lambda pair: pair[0],
-                            )
-                        ]
-                    except ValueError as exc:
-                        return error_response(str(exc), status_code=400)
-                for legacy_key in LEGACY_RENDERING_RESOURCE_KEYS:
-                    rendering_config.pop(legacy_key, None)
+            try:
+                _normalize_rendering_config_for_save(new_config)
+            except ValueError as exc:
+                return error_response(str(exc), status_code=400)
 
             daily_comic_config = new_config.get("daily_comic")
             if isinstance(daily_comic_config, dict):
@@ -489,89 +563,14 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                             status_code=400,
                         )
 
-            plugin_root = Path(__file__).resolve().parents[4]
-
-            def _cleanse_reference_images(val: object, config_key: str = "") -> object:
-                """仅清洗漫画角色与参考图，其他动态配置保持原样。
-
-                Args:
-                    val: 待保存的配置节点。
-                    config_key: 当前节点的配置路径。
-
-                Returns:
-                    清洗后的配置节点。
-                """
-                if isinstance(val, list):
-                    if config_key not in (
-                        "daily_comic.comic_characters",
-                        "daily_comic.comic_characters.reference_images",
-                    ):
-                        return val
-                    cleaned = []
-                    for item in val:
-                        if isinstance(item, dict):
-                            cleaned_item = _cleanse_reference_images(item, config_key)
-                            if (
-                                config_key == "daily_comic.comic_characters"
-                                and isinstance(cleaned_item, dict)
-                                and (
-                                    "__template_key" not in cleaned_item
-                                    or not cleaned_item["__template_key"]
-                                )
-                            ):
-                                cleaned_item["__template_key"] = "character"
-                            cleaned.append(cleaned_item)
-                        elif isinstance(item, str) and config_key.endswith(
-                            ".reference_images"
-                        ):
-                            folder = _config_key_to_folder(
-                                "daily_comic.comic_characters.templates.character.reference_images"
-                            )
-                            if item.startswith("data:image/"):
-                                try:
-                                    _, b64 = item.split(",", 1)
-                                    file_bytes = base64.b64decode(b64)
-                                    ts = int(time.time() * 1000)
-                                    filename = f"{ts}_migrated_image.png"
-                                    for d in [
-                                        Path.cwd()
-                                        / "data"
-                                        / "plugin_data"
-                                        / PLUGIN_NAME
-                                        / "files"
-                                        / Path(folder),
-                                        plugin_root / "files" / Path(folder),
-                                    ]:
-                                        d.mkdir(parents=True, exist_ok=True)
-                                        (d / filename).write_bytes(file_bytes)
-                                    cleaned.append(f"files/{folder}/{filename}")
-                                except Exception:
-                                    pass
-                            elif item.startswith("files/"):
-                                expected_prefix = f"files/{folder}/"
-                                if item.startswith(expected_prefix):
-                                    cleaned.append(item.strip())
-                                else:
-                                    clean_name = Path(item).name
-                                    cleaned.append(f"files/{folder}/{clean_name}")
-                            elif item.strip():
-                                cleaned.append(item.strip())
-                        else:
-                            cleaned.append(item)
-                    return cleaned
-                if isinstance(val, dict):
-                    return {
-                        k: _cleanse_reference_images(
-                            v, f"{config_key}.{k}" if config_key else k
-                        )
-                        for k, v in val.items()
-                    }
-                return val
-
-            cleansed = _cleanse_reference_images(save_dto["config"])
-            if isinstance(cleansed, dict):
-                for k, v in cleansed.items():
-                    config_obj[k] = v
+            try:
+                _normalize_comic_references_for_save(
+                    save_dto["config"], Path(__file__).resolve().parents[4]
+                )
+            except ValueError as exc:
+                return error_response(str(exc), status_code=400)
+            for key, value in save_dto["config"].items():
+                config_obj[key] = value
 
             if cfg_mgr:
                 cfg_mgr.save_config()
@@ -661,33 +660,30 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     if callable(getlist_fn) and isinstance(uploaded_files, Iterable):
                         for key in uploaded_files:
                             file_items = getlist_fn(key)
-                            if isinstance(file_items, list):
-                                for f in file_items:
-                                    orig_name = (
-                                        getattr(f, "filename", "")
-                                        or "uploaded_image.png"
+                            if not isinstance(file_items, list):
+                                continue
+                            for f in file_items:
+                                orig_name = (
+                                    getattr(f, "filename", "") or "uploaded_image.png"
+                                )
+                                clean_name = re.sub(r"[^\w\.\-]", "_", str(orig_name))
+                                ts = int(time.time() * 1000)
+                                final_name = f"{ts}_{uuid.uuid4().hex}_{clean_name}"
+                                read_fn = getattr(f, "read", None)
+                                if callable(read_fn):
+                                    res_read = read_fn()
+                                    file_bytes = (
+                                        await res_read
+                                        if asyncio.iscoroutine(res_read)
+                                        else res_read
                                     )
-                                    clean_name = re.sub(
-                                        r"[^\w\.\-]", "_", str(orig_name)
-                                    )
-                                    ts = int(time.time() * 1000)
-                                    final_name = f"{ts}_{clean_name}"
-                                    read_fn = getattr(f, "read", None)
-                                    if callable(read_fn):
-                                        res_read = read_fn()
-                                        file_bytes = (
-                                            await res_read
-                                            if asyncio.iscoroutine(res_read)
-                                            else res_read
-                                        )
-                                    else:
-                                        file_bytes = None
-                                    if isinstance(file_bytes, bytes):
-                                        for d in target_dirs:
-                                            (d / final_name).write_bytes(file_bytes)
-                                        saved_paths.append(
-                                            f"files/{folder}/{final_name}"
-                                        )
+                                else:
+                                    file_bytes = None
+                                if not isinstance(file_bytes, bytes) or not file_bytes:
+                                    continue
+                                for d in target_dirs:
+                                    (d / final_name).write_bytes(file_bytes)
+                                saved_paths.append(f"files/{folder}/{final_name}")
                 except Exception:
                     pass
 
@@ -698,13 +694,21 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 file_name = str(body.get("filename") or "upload.png")
                 clean_name = re.sub(r"[^\w\.\-]", "_", file_name)
                 if raw_data and isinstance(raw_data, str):
-                    if raw_data.startswith("data:"):
-                        _, b64 = raw_data.split(",", 1)
-                    else:
-                        b64 = raw_data
-                    file_bytes = base64.b64decode(b64)
+                    try:
+                        b64 = (
+                            raw_data.split(",", 1)[1]
+                            if raw_data.startswith("data:")
+                            else raw_data
+                        )
+                        file_bytes = base64.b64decode(b64, validate=True)
+                        if not file_bytes:
+                            raise ValueError("文件内容为空")
+                    except (ValueError, IndexError):
+                        return error_response(
+                            "文件的 Base64 数据无效或为空", status_code=400
+                        )
                     ts = int(time.time() * 1000)
-                    final_name = f"{ts}_{clean_name}"
+                    final_name = f"{ts}_{uuid.uuid4().hex}_{clean_name}"
                     for d in target_dirs:
                         (d / final_name).write_bytes(file_bytes)
                     saved_paths.append(f"files/{folder}/{final_name}")
@@ -742,6 +746,13 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 return error_response("Missing path parameter", status_code=400)
 
             query_dto: ConfigFileContentQueryDTO = {"path": rel_path}
+            relative_path = Path(rel_path.replace("\\", "/"))
+            if (
+                relative_path.is_absolute()
+                or PureWindowsPath(rel_path).drive
+                or ".." in relative_path.parts
+            ):
+                return error_response("文件路径必须位于插件资源目录内", status_code=400)
 
             search_roots: list[Path] = []
             try:
@@ -759,10 +770,10 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
             search_roots.append(Path.cwd() / "data" / "plugins" / PLUGIN_NAME)
 
             target_file: Path | None = None
-            clean_rel = query_dto["path"].lstrip("/\\")
+            clean_rel = relative_path.as_posix()
             for root in search_roots:
                 cand = (root / clean_rel).resolve()
-                if cand.is_file() and cand.exists():
+                if cand.is_relative_to(root.resolve()) and cand.is_file():
                     target_file = cand
                     break
 
@@ -770,9 +781,14 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 filename = Path(clean_rel).name
                 for root in search_roots:
                     files_dir = root / "files"
-                    if files_dir.exists():
+                    if files_dir.exists() and files_dir.resolve().is_relative_to(
+                        root.resolve()
+                    ):
                         for match in files_dir.rglob(filename):
-                            if match.is_file():
+                            if (
+                                match.resolve().is_relative_to(root.resolve())
+                                and match.is_file()
+                            ):
                                 target_file = match
                                 break
                     if target_file:
@@ -785,8 +801,8 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
 
             ext = target_file.suffix.lower().lstrip(".")
             mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
-            with open(target_file, "rb") as f:
-                b64_content = base64.b64encode(f.read()).decode("utf-8")
+            content = await asyncio.to_thread(target_file.read_bytes)
+            b64_content = base64.b64encode(content).decode("utf-8")
 
             return json_response(
                 {

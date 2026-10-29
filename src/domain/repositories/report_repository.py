@@ -11,14 +11,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from ...infrastructure.reporting.templates import HTMLTemplates
     from ..value_objects import AnalysisResultPayload
 
 
 class IReportGenerator(ABC):
     """报告生成器接口 - 领域层契约。"""
-
-    html_templates: HTMLTemplates | None = None
 
     @abstractmethod
     async def generate_image_report(

@@ -9,7 +9,7 @@ import functools
 import re
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -20,7 +20,8 @@ from ..domain.value_objects.task_status import TaskStatus
 from .constants import PROCESS_BOOT_ID, PROCESS_PID, AnalysisStage
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine, Generator, Mapping
+    from collections.abc import AsyncGenerator, Callable, Coroutine, Generator, Mapping
+    from pathlib import Path
 
     from ..application.services.task_lifecycle_service import TaskLifecycleService
     from ..infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
@@ -297,12 +298,15 @@ class TraceContext:
         self,
         stage_name: AnalysisStage | str,
         payload: Mapping[str, object] | None = None,
+        *,
+        persist_on_exit: bool = True,
     ) -> Generator[SpanRecord]:
         """创建一个细粒度 Span 上下文，自动记录该步骤耗时、内存增量与执行状态。
 
         Args:
             stage_name: 阶段名称，如 AnalysisStage.FETCH_MESSAGES 或字符串
             payload: 随 Span 记录的参数或快照字典
+            persist_on_exit: 是否同步保存终态快照；异步入口负责在线程中保存。
         """
         stage_str = (
             stage_name.value
@@ -370,13 +374,46 @@ class TraceContext:
                 p["delta_memory_mb"] = span_record["delta_memory_mb"]
 
             # 外部取消可能已先落库终态；在 finish 读取该快照前保存本协程的取消收尾。
-            if _global_trace_store is not None and (
-                self.status != "running" or was_cancelled
+            if (
+                persist_on_exit
+                and _global_trace_store is not None
+                and (self.status != "running" or was_cancelled)
             ):
                 try:
                     self.persist_snapshot()
                 except Exception:
                     pass
+
+    @asynccontextmanager
+    async def span_async(
+        self,
+        stage_name: AnalysisStage | str,
+        payload: Mapping[str, object] | None = None,
+    ) -> AsyncGenerator[SpanRecord]:
+        """记录异步阶段，并在线程中保存取消或已结束任务的最终快照。
+
+        Args:
+            stage_name: 阶段名称。
+            payload: 阶段初始载荷。
+
+        Yields:
+            当前阶段的追踪记录。
+        """
+        was_cancelled = False
+        try:
+            with self.span(stage_name, payload, persist_on_exit=False) as record:
+                yield record
+        except asyncio.CancelledError:
+            was_cancelled = True
+            raise
+        finally:
+            if self.status != "running" or was_cancelled:
+                try:
+                    await self.persist_snapshot_async()
+                except Exception as e:
+                    from ..utils.logger import logger
+
+                    logger.warning(f"异步阶段快照保存失败: {e}")
 
     def touch_heartbeat(self) -> None:
         """刷新当前 Trace 关联的活跃任务心跳时间戳（供长耗时阶段保活）。"""
@@ -683,12 +720,88 @@ class TraceContext:
         if _global_trace_store is not None:
             _global_trace_store.save_trace(self.to_dict())
 
+    async def persist_snapshot_async(self) -> None:
+        """在工作线程保存快照，避免 SQLite 锁等待阻塞事件循环。"""
+        if _global_trace_store is not None:
+            from copy import deepcopy
+
+            snapshot = deepcopy(self.to_dict())
+            await asyncio.to_thread(_global_trace_store.save_trace, snapshot)
+
+    @classmethod
+    async def register_report(
+        cls, path: Path, group_id: str, file_format: str, trace_id: str = ""
+    ) -> None:
+        """登记已生成的报告文件，不通过重写 Trace 快照修改历史状态。
+
+        Args:
+            path: 已生成且非空的报告文件。
+            group_id: 报告所属群组。
+            file_format: 报告格式。
+            trace_id: 可选的历史追踪标识。
+        """
+        if _global_trace_store is None:
+            return
+        try:
+            await asyncio.to_thread(
+                _global_trace_store.register_report_artifact,
+                filename=path.name,
+                group_id=group_id,
+                file_format=file_format,
+                relative_path=str(path.resolve()),
+                created_at=time.time(),
+                trace_id=trace_id,
+            )
+        except Exception as e:
+            from ..utils.logger import logger
+
+            logger.warning(f"报告产物登记失败: {e}")
+
     def __enter__(self) -> TraceContext:
         self._token = _current_trace.set(self)
         _active_traces[self.trace_id] = self
         if _global_trace_store is not None and self.status == TaskStatus.RUNNING.value:
             self.persist_snapshot()
         return self
+
+    async def __aenter__(self) -> TraceContext:
+        """绑定异步上下文，初始保存失败或取消时恢复进入前的绑定。"""
+        previous_active = _active_traces.get(self.trace_id)
+        self._token = _current_trace.set(self)
+        _active_traces[self.trace_id] = self
+        try:
+            await self.persist_snapshot_async()
+        except BaseException:
+            _current_trace.reset(self._token)
+            self._token = None
+            if previous_active is not None:
+                _active_traces[self.trace_id] = previous_active
+            else:
+                _active_traces.pop(self.trace_id, None)
+            raise
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
+        try:
+            if self.status == "running":
+                await asyncio.to_thread(
+                    self.finish,
+                    event=TaskEvent.ABORT
+                    if isinstance(exc_val, asyncio.CancelledError)
+                    else TaskEvent.FAIL
+                    if exc_type is not None
+                    else TaskEvent.SUCCEED,
+                    error_message=str(exc_val) if exc_val else None,
+                )
+        finally:
+            if self._token:
+                _current_trace.reset(self._token)
+                self._token = None
 
     def __exit__(
         self,
@@ -793,6 +906,49 @@ class TraceContext:
         return ctx
 
     @classmethod
+    async def set_async(
+        cls,
+        trace_id: str,
+        group_id: str = "",
+        group_name: str = "",
+        platform: str = "",
+        trigger_type: str = "manual",
+    ) -> TraceContext:
+        """在当前协程绑定追踪上下文，并在线程中完成初始持久化。
+
+        Args:
+            trace_id: 追踪标识。
+            group_id: 群组标识。
+            group_name: 群组名称。
+            platform: 平台标识。
+            trigger_type: 任务触发来源。
+
+        Returns:
+            已绑定并持久化的追踪上下文。
+        """
+        ctx = cls(
+            trace_id=trace_id,
+            group_id=str(group_id),
+            group_name=group_name,
+            platform=platform,
+            trigger_type=trigger_type,
+        )
+        previous_active = _active_traces.get(ctx.trace_id)
+        ctx._token = _current_trace.set(ctx)
+        _active_traces[ctx.trace_id] = ctx
+        try:
+            await ctx.persist_snapshot_async()
+        except BaseException:
+            _current_trace.reset(ctx._token)
+            ctx._token = None
+            if previous_active is not None:
+                _active_traces[ctx.trace_id] = previous_active
+            else:
+                _active_traces.pop(ctx.trace_id, None)
+            raise
+        return ctx
+
+    @classmethod
     def get(cls) -> str:
         return get_trace_id()
 
@@ -818,7 +974,7 @@ def with_trace(
         @functools.wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             op_name = operation or func.__name__
-            with TraceContext(
+            async with TraceContext(
                 group_id=group_id,
                 platform=platform,
                 operation=op_name,
