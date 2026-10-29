@@ -169,6 +169,8 @@ class ComicApplicationService:
                     return None, None
                 logger.warning(f"[Comic] {backend} 后端未产出结果，回退内置绘图后端。")
 
+            # 已通过外部后端返回的分支在上方结束；此处开始实际使用内置后端。
+            backend = "builtin"
             # 5. 内置绘图后端未配置时直接取消，避免空跑
             if not self.config_manager.get_drawing_provider_configs():
                 logger.warning(
