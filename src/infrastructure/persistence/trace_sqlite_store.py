@@ -230,59 +230,12 @@ class TraceSQLiteStore:
         initial_status = "pending" if requested_status == "pending" else "running"
 
         with self._get_connection() as conn:
-            extra_raw = trace_dict.get("extra")
-            extra_payload: dict[str, object] = (
-                dict(extra_raw) if isinstance(extra_raw, dict) else {}
-            )
-            meta = trace_dict.get("metadata", {})
-            if isinstance(meta, dict):
-                for k, v in meta.items():
-                    if k not in extra_payload:
-                        extra_payload[k] = v
-                    elif isinstance(v, dict):
-                        existing_val = extra_payload.get(k)
-                        if isinstance(existing_val, dict):
-                            existing_val.update(v)
-                    elif isinstance(v, list):
-                        extra_payload[k] = v
-
             existing_row = conn.execute(
                 "SELECT extra_json FROM analysis_traces WHERE trace_id = ?", (trace_id,)
             ).fetchone()
-            if existing_row and existing_row[0]:
-                try:
-                    old_extra = json.loads(existing_row[0])
-                    merged_rfiles = list(old_extra.get("report_files", []))
-                    seen_filenames = {
-                        rf.get("filename")
-                        for rf in merged_rfiles
-                        if isinstance(rf, dict) and rf.get("filename")
-                    }
-                    new_rfiles = extra_payload.get("report_files")
-                    if isinstance(new_rfiles, list):
-                        for rf in new_rfiles:
-                            if not isinstance(rf, dict):
-                                continue
-                            fn = rf.get("filename")
-                            if not fn or fn in seen_filenames:
-                                continue
-                            seen_filenames.add(fn)
-                            merged_rfiles.append(rf)
-                    extra_payload["report_files"] = merged_rfiles
-
-                    # 保留历史已记录的 prompts 与 attempts
-                    if (
-                        "llm_prompts" not in extra_payload
-                        and "llm_prompts" in old_extra
-                    ):
-                        extra_payload["llm_prompts"] = old_extra["llm_prompts"]
-                    if (
-                        "llm_attempts" not in extra_payload
-                        and "llm_attempts" in old_extra
-                    ):
-                        extra_payload["llm_attempts"] = old_extra["llm_attempts"]
-                except Exception:
-                    pass
+            extra_payload = self._merge_trace_metadata(
+                trace_dict, existing_row[0] if existing_row else None
+            )
 
             started_raw = trace_dict.get("started_at")
             started_val = (
@@ -372,6 +325,66 @@ class TraceSQLiteStore:
                     """,
                     (fn, trace_id, grp_id, fmt, rel_path, rf_ts),
                 )
+
+    @staticmethod
+    def _merge_trace_metadata(
+        trace_dict: TraceContextSnapshot | dict[str, object], previous_json: str | None
+    ) -> dict[str, object]:
+        """合并当前快照与历史诊断，按文件名保留首次记录的报告产物。
+
+        Args:
+            trace_dict: 当前追踪快照，包含扩展字段和运行元数据。
+            previous_json: 在当前事务连接中读取的历史扩展字段。
+
+        Returns:
+            待写入快照的元数据，保留已有提示词和尝试记录的兼容规则。
+        """
+        extra_raw = trace_dict.get("extra")
+        extra_payload: dict[str, object] = (
+            dict(extra_raw) if isinstance(extra_raw, dict) else {}
+        )
+        meta = trace_dict.get("metadata", {})
+        if isinstance(meta, dict):
+            for k, v in meta.items():
+                if k not in extra_payload:
+                    extra_payload[k] = v
+                elif isinstance(v, dict):
+                    existing_val = extra_payload.get(k)
+                    if isinstance(existing_val, dict):
+                        existing_val.update(v)
+                elif isinstance(v, list):
+                    extra_payload[k] = v
+
+        if previous_json:
+            try:
+                old_extra = json.loads(previous_json)
+                merged_rfiles = list(old_extra.get("report_files", []))
+                seen_filenames = {
+                    rf.get("filename")
+                    for rf in merged_rfiles
+                    if isinstance(rf, dict) and rf.get("filename")
+                }
+                new_rfiles = extra_payload.get("report_files")
+                if isinstance(new_rfiles, list):
+                    for rf in new_rfiles:
+                        if not isinstance(rf, dict):
+                            continue
+                        fn = rf.get("filename")
+                        if not fn or fn in seen_filenames:
+                            continue
+                        seen_filenames.add(fn)
+                        merged_rfiles.append(rf)
+                extra_payload["report_files"] = merged_rfiles
+
+                # 保留历史已记录的 prompts 与 attempts
+                if "llm_prompts" not in extra_payload and "llm_prompts" in old_extra:
+                    extra_payload["llm_prompts"] = old_extra["llm_prompts"]
+                if "llm_attempts" not in extra_payload and "llm_attempts" in old_extra:
+                    extra_payload["llm_attempts"] = old_extra["llm_attempts"]
+            except Exception:
+                pass
+
+        return extra_payload
 
     def _save_trace_spans(
         self,
