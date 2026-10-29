@@ -557,16 +557,6 @@ class ReportRoutes:
 
             date_str = _dt.datetime.now().strftime("%Y-%m-%d")
 
-        if not trace_id and self.trace_store:
-            try:
-                items, _ = await asyncio.to_thread(
-                    self.trace_store.list_traces, group_id=group_id, limit=5
-                )
-                if items:
-                    trace_id = str(items[0].get("trace_id", ""))
-            except Exception:
-                pass
-
         rerender_dto: RerenderReportRequestDTO = {
             "group_id": group_id,
             "date_str": date_str,

@@ -609,3 +609,32 @@ async def test_report_scan_applies_search_before_pagination(
         )
         assert body["data"]["total"] == 1
         assert body["data"]["items"][0]["filename"] == "report_12345_20261001.html"
+
+
+@pytest.mark.asyncio
+async def test_rerender_date_does_not_guess_unrelated_latest_trace(
+    mock_trace_store, monkeypatch
+):
+    mock_trace_store.save_trace(
+        {"trace_id": "another-date", "group_id": "12345", "status": "running"}
+    )
+    route_module = importlib.import_module(ReportRoutes.__module__)
+    monkeypatch.setattr(
+        route_module,
+        "request",
+        MagicMock(
+            query={},
+            json=AsyncMock(
+                return_value={
+                    "group_id": "12345",
+                    "date_str": "2026-10-01",
+                    "template_name": "scrapbook",
+                }
+            ),
+        ),
+    )
+    service = MagicMock(
+        rerender_report=AsyncMock(return_value={"success": False, "reason": "missing"})
+    )
+    await ReportRoutes(mock_trace_store, service).api_rerender_report()
+    assert service.rerender_report.call_args.kwargs["trace_id"] is None
