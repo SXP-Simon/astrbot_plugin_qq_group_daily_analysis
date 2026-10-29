@@ -23,6 +23,22 @@ if TYPE_CHECKING:
     from ...shared.trace_context import TraceContextSnapshot
 
 
+def _load_json_object(raw: str | None) -> dict[str, object]:
+    """读取持久化 JSON 对象，对损坏数据或非对象旧数据返回空字典。
+
+    Args:
+        raw: SQLite 中保存的 JSON 文本。
+
+    Returns:
+        可安全按字段访问的对象字典。
+    """
+    try:
+        parsed = json.loads(raw or "{}")
+    except (ValueError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 class TokenBreakdownItem(TypedDict):
     """Token 服务商/模型消耗分布结构"""
 
@@ -612,10 +628,7 @@ class TraceSQLiteStore:
                 return None
 
             trace_data = dict(trace_row)
-            try:
-                trace_data["extra"] = json.loads(trace_data.pop("extra_json") or "{}")
-            except Exception:
-                trace_data["extra"] = {}
+            trace_data["extra"] = _load_json_object(trace_data.pop("extra_json"))
 
             # 查询 Spans
             spans_rows = conn.execute(
@@ -627,10 +640,7 @@ class TraceSQLiteStore:
             extra_attempts = trace_data.get("extra", {}).get("llm_attempts", [])
             for r in spans_rows:
                 s = dict(r)
-                try:
-                    s["payload"] = json.loads(s.pop("stage_payload_json") or "{}")
-                except Exception:
-                    s["payload"] = {}
+                s["payload"] = _load_json_object(s.pop("stage_payload_json"))
                 if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                     if extra_prompts and not s["payload"].get("prompts"):
                         s["payload"]["prompts"] = extra_prompts
@@ -651,12 +661,9 @@ class TraceSQLiteStore:
             ).fetchone()
             if token_row:
                 t_data = dict(token_row)
-                try:
-                    t_data["per_analyzer"] = json.loads(
-                        t_data.pop("per_analyzer_tokens_json") or "{}"
-                    )
-                except Exception:
-                    t_data["per_analyzer"] = {}
+                t_data["per_analyzer"] = _load_json_object(
+                    t_data.pop("per_analyzer_tokens_json")
+                )
                 trace_data["token_usage"] = t_data
             else:
                 trace_data["token_usage"] = None
@@ -667,12 +674,7 @@ class TraceSQLiteStore:
             ).fetchone()
             if perf_row:
                 p_data = dict(perf_row)
-                try:
-                    p_data["metrics_extra"] = json.loads(
-                        p_data.pop("metrics_json") or "{}"
-                    )
-                except Exception:
-                    p_data["metrics_extra"] = {}
+                p_data["metrics_extra"] = _load_json_object(p_data.pop("metrics_json"))
                 trace_data["performance_metrics"] = p_data
             else:
                 trace_data["performance_metrics"] = None
