@@ -491,6 +491,15 @@ class AnalysisRecoveryService:
                 elif isinstance(message, dict):
                     # 续跑 LLM 只读取已清洗文本和发送者信息，无须恢复原始附件。
                     timestamp = message.get("timestamp", 0)
+                    try:
+                        restored_timestamp = (
+                            int(timestamp)
+                            if isinstance(timestamp, (int, float, str))
+                            else 0
+                        )
+                    except (ValueError, OverflowError):
+                        # 时间戳不参与文本续跑，旧值无效时保留消息正文并使用零值。
+                        restored_timestamp = 0
                     unified_messages.append(
                         UnifiedMessage(
                             message_id=str(message.get("message_id", "")),
@@ -498,9 +507,7 @@ class AnalysisRecoveryService:
                             sender_name=str(message.get("sender_name", "")),
                             group_id=str(message.get("group_id", group_id)),
                             text_content=str(message.get("text_content", "")),
-                            timestamp=int(timestamp)
-                            if isinstance(timestamp, (int, float, str))
-                            else 0,
+                            timestamp=restored_timestamp,
                             sender_card=str(message["sender_card"])
                             if message.get("sender_card")
                             else None,

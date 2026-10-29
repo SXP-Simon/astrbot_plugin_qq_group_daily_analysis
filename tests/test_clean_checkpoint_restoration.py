@@ -30,3 +30,12 @@ def test_clean_checkpoint_restores_domain_data_without_mutating_snapshot(seriali
     assert checkpoint == before
     if not serialized:
         assert messages[0] is message
+
+
+@pytest.mark.parametrize("timestamp,expected", [("", 0), ("not-a-time", 0), (float("nan"), 0), (float("inf"), 0), (None, 0), ("123", 123)])
+def test_clean_checkpoint_keeps_text_when_legacy_timestamp_is_invalid(timestamp, expected):
+    checkpoint = {"unified_messages": [{"message_id": "m", "text_content": "必须保留的正文", "timestamp": timestamp}]}
+    _, messages, _ = AnalysisRecoveryService._restore_clean_checkpoint(checkpoint, "123")
+    assert len(messages) == 1
+    assert messages[0].text_content == "必须保留的正文"
+    assert messages[0].timestamp == expected
