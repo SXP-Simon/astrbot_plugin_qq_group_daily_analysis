@@ -214,44 +214,24 @@ class RenderDataPreparer:
             ]
         return value
 
-    async def prepare_render_data(
+    def _build_resource_context(
         self,
-        analysis_result: AnalysisResultPayload,
-        template_theme: str | None = None,
-        chart_template: str = "activity_chart.html",
-        avatar_url_getter: Callable | None = None,
-        nickname_getter: Callable | None = None,
-        avatar_cache_namespace: str | None = None,
-        hide_user_names: bool = False,
-        allow_alphanumeric_user_ids: bool = False,
-        environment: str | None = None,
-        resources: RenderingResourceConfig | None = None,
-        font_mode: FontMode = "network",
-    ) -> RenderTemplateContext:
-        """组装模板引擎所需的完整数据字典。
+        environment: str | None,
+        resources: RenderingResourceConfig | None,
+        font_mode: FontMode,
+        hide_user_names: bool,
+    ) -> tuple[TemplateResourceContext, str]:
+        """同步固定本次渲染资源，供主模板、子模板与人格图片共享。
 
         Args:
-            analysis_result: 分析结果对象字典。
-            template_theme: 模板主题名称。
-            chart_template: 活跃度图表子模板。
-            avatar_url_getter: 头像 URL 异步获取回调。
-            nickname_getter: 用户昵称异步获取回调。
-            avatar_cache_namespace: 平台隔离的头像缓存命名空间。
-            hide_user_names: 是否匿名化渲染（纯头像模式）。
-            allow_alphanumeric_user_ids: 是否允许字母数字用户 ID 识别。
-            environment: 当前渲染方案的资源环境，省略时采用第一优先级方案。
-            resources: 当前轮次的资源地址快照，相同环境也可使用不同地址。
-            font_mode: 图片T2I的字体加载方式；独立 HTML 导出保持在线字体。
+            environment: 当前轮次的资源环境。
+            resources: 当前方案明确指定的资源地址快照。
+            font_mode: 当前轮次的字体加载方式。
+            hide_user_names: 是否隐藏用户姓名。
 
         Returns:
-            包含全量模板渲染变量的强类型上下文。
-
-        Raises:
-            KeyError: 分析结果缺少统计信息或其他必需字段。
+            模板共用资源上下文和人格图片需要的 CDN 根地址。
         """
-        stats = analysis_result["statistics"]
-        topics = analysis_result["topics"]
-        user_titles = analysis_result["user_titles"]
         # 在首次异步等待前固定资源地址，主模板与所有组件共用这一快照。
         if resources is not None:
             cdn_base_url = resources["cdn_base_url"]
@@ -304,6 +284,51 @@ class RenderDataPreparer:
             "t2i_npm_mirror": f"{cdn_base_url}/npm",
             "cdn_assets_base": assets_base_url,
         }
+
+        return common_context, cdn_base_url
+
+    async def prepare_render_data(
+        self,
+        analysis_result: AnalysisResultPayload,
+        template_theme: str | None = None,
+        chart_template: str = "activity_chart.html",
+        avatar_url_getter: Callable | None = None,
+        nickname_getter: Callable | None = None,
+        avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
+        environment: str | None = None,
+        resources: RenderingResourceConfig | None = None,
+        font_mode: FontMode = "network",
+    ) -> RenderTemplateContext:
+        """组装模板引擎所需的完整数据字典。
+
+        Args:
+            analysis_result: 分析结果对象字典。
+            template_theme: 模板主题名称。
+            chart_template: 活跃度图表子模板。
+            avatar_url_getter: 头像 URL 异步获取回调。
+            nickname_getter: 用户昵称异步获取回调。
+            avatar_cache_namespace: 平台隔离的头像缓存命名空间。
+            hide_user_names: 是否匿名化渲染（纯头像模式）。
+            allow_alphanumeric_user_ids: 是否允许字母数字用户 ID 识别。
+            environment: 当前渲染方案的资源环境，省略时采用第一优先级方案。
+            resources: 当前轮次的资源地址快照，相同环境也可使用不同地址。
+            font_mode: 图片T2I的字体加载方式；独立 HTML 导出保持在线字体。
+
+        Returns:
+            包含全量模板渲染变量的强类型上下文。
+
+        Raises:
+            KeyError: 分析结果缺少统计信息或其他必需字段。
+        """
+        stats = analysis_result["statistics"]
+        topics = analysis_result["topics"]
+        user_titles = analysis_result["user_titles"]
+        common_context, cdn_base_url = self._build_resource_context(
+            environment, resources, font_mode, hide_user_names
+        )
+        report_language = common_context["report_language"]
 
         activity_viz = stats.activity_visualization
 
