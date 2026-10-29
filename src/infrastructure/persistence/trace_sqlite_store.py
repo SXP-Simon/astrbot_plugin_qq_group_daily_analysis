@@ -628,7 +628,7 @@ class TraceSQLiteStore:
                 return None
 
             trace_data = dict(trace_row)
-            trace_data["extra"] = _load_json_object(trace_data.pop("extra_json"))
+            trace_data["extra"] = _load_json_object(trace_data.pop("extra_json", None))
 
             # 查询 Spans
             spans_rows = conn.execute(
@@ -640,7 +640,7 @@ class TraceSQLiteStore:
             extra_attempts = trace_data.get("extra", {}).get("llm_attempts", [])
             for r in spans_rows:
                 s = dict(r)
-                s["payload"] = _load_json_object(s.pop("stage_payload_json"))
+                s["payload"] = _load_json_object(s.pop("stage_payload_json", None))
                 if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                     if extra_prompts and not s["payload"].get("prompts"):
                         s["payload"]["prompts"] = extra_prompts
@@ -662,7 +662,7 @@ class TraceSQLiteStore:
             if token_row:
                 t_data = dict(token_row)
                 t_data["per_analyzer"] = _load_json_object(
-                    t_data.pop("per_analyzer_tokens_json")
+                    t_data.pop("per_analyzer_tokens_json", None)
                 )
                 trace_data["token_usage"] = t_data
             else:
@@ -674,7 +674,9 @@ class TraceSQLiteStore:
             ).fetchone()
             if perf_row:
                 p_data = dict(perf_row)
-                p_data["metrics_extra"] = _load_json_object(p_data.pop("metrics_json"))
+                p_data["metrics_extra"] = _load_json_object(
+                    p_data.pop("metrics_json", None)
+                )
                 trace_data["performance_metrics"] = p_data
             else:
                 trace_data["performance_metrics"] = None
