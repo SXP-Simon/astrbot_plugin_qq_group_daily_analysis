@@ -141,6 +141,76 @@ def _normalize_rendering_config_for_save(new_config: dict[str, object]) -> None:
             rendering_config.pop(legacy_key, None)
 
 
+def _normalize_comic_references_for_save(
+    new_config: dict[str, object], plugin_root: Path
+) -> None:
+    """规范化漫画角色及参考图，不遍历或改写其他动态配置节点。
+
+    Args:
+        new_config: 来自保存请求的配置，原地更新漫画参考图字段。
+        plugin_root: 迁移内嵌参考图时使用的插件代码目录。
+
+    Raises:
+        ValueError: 内嵌参考图的 Base64 数据无效或为空。
+        OSError: 无法创建目录或保存迁移后的参考图。
+    """
+    comic = new_config.get("daily_comic")
+    if not isinstance(comic, dict):
+        return
+    characters = comic.get("comic_characters")
+    if not isinstance(characters, list):
+        return
+    folder = _config_key_to_folder(
+        "daily_comic.comic_characters.templates.character.reference_images"
+    )
+    for character in characters:
+        if not isinstance(character, dict):
+            continue
+        if not character.get("__template_key"):
+            character["__template_key"] = "character"
+        references = character.get("reference_images")
+        if not isinstance(references, list):
+            continue
+        cleaned: list[object] = []
+        for item in references:
+            if not isinstance(item, str):
+                cleaned.append(item)
+                continue
+            if item.startswith("data:image/"):
+                try:
+                    _, encoded = item.split(",", 1)
+                    file_bytes = base64.b64decode(encoded, validate=True)
+                    if not file_bytes:
+                        raise ValueError("参考图内容为空")
+                except ValueError as exc:
+                    raise ValueError("参考图的 Base64 数据无效或为空") from exc
+                filename = (
+                    f"{int(time.time() * 1000)}_{uuid.uuid4().hex}_migrated_image.png"
+                )
+                for directory in (
+                    Path.cwd()
+                    / "data"
+                    / "plugin_data"
+                    / PLUGIN_NAME
+                    / "files"
+                    / folder,
+                    plugin_root / "files" / folder,
+                ):
+                    directory.mkdir(parents=True, exist_ok=True)
+                    (directory / filename).write_bytes(file_bytes)
+                cleaned.append(f"files/{folder}/{filename}")
+            elif item.startswith("files/"):
+                prefix = f"files/{folder}/"
+                cleaned.append(
+                    item.strip()
+                    if item.startswith(prefix)
+                    else f"{prefix}{Path(item).name}"
+                )
+            elif item.strip():
+                cleaned.append(item.strip())
+        character["reference_images"] = cleaned
+
+
 class ConfigRoutes:
     """插件配置中心 Web API 路由处理器。"""
 
@@ -495,98 +565,14 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                             status_code=400,
                         )
 
-            plugin_root = Path(__file__).resolve().parents[4]
-
-            def _cleanse_reference_images(val: object, config_key: str = "") -> object:
-                """仅清洗漫画角色与参考图，其他动态配置保持原样。
-
-                Args:
-                    val: 待保存的配置节点。
-                    config_key: 当前节点的配置路径。
-
-                Returns:
-                    清洗后的配置节点。
-                """
-                if isinstance(val, list):
-                    if config_key not in (
-                        "daily_comic.comic_characters",
-                        "daily_comic.comic_characters.reference_images",
-                    ):
-                        return val
-                    cleaned = []
-                    for item in val:
-                        if isinstance(item, dict):
-                            cleaned_item = _cleanse_reference_images(item, config_key)
-                            if (
-                                config_key == "daily_comic.comic_characters"
-                                and isinstance(cleaned_item, dict)
-                                and (
-                                    "__template_key" not in cleaned_item
-                                    or not cleaned_item["__template_key"]
-                                )
-                            ):
-                                cleaned_item["__template_key"] = "character"
-                            cleaned.append(cleaned_item)
-                        elif isinstance(item, str) and config_key.endswith(
-                            ".reference_images"
-                        ):
-                            folder = _config_key_to_folder(
-                                "daily_comic.comic_characters.templates.character.reference_images"
-                            )
-                            if item.startswith("data:image/"):
-                                try:
-                                    _, b64 = item.split(",", 1)
-                                    file_bytes = base64.b64decode(b64, validate=True)
-                                    if not file_bytes:
-                                        raise ValueError("参考图内容为空")
-                                    ts = int(time.time() * 1000)
-                                    filename = (
-                                        f"{ts}_{uuid.uuid4().hex}_migrated_image.png"
-                                    )
-                                    for d in [
-                                        Path.cwd()
-                                        / "data"
-                                        / "plugin_data"
-                                        / PLUGIN_NAME
-                                        / "files"
-                                        / Path(folder),
-                                        plugin_root / "files" / Path(folder),
-                                    ]:
-                                        d.mkdir(parents=True, exist_ok=True)
-                                        (d / filename).write_bytes(file_bytes)
-                                    cleaned.append(f"files/{folder}/{filename}")
-                                except ValueError as exc:
-                                    raise ValueError(
-                                        "参考图的 Base64 数据无效或为空"
-                                    ) from exc
-                            elif item.startswith("files/"):
-                                expected_prefix = f"files/{folder}/"
-                                if item.startswith(expected_prefix):
-                                    cleaned.append(item.strip())
-                                else:
-                                    clean_name = Path(item).name
-                                    cleaned.append(f"files/{folder}/{clean_name}")
-                            elif item.strip():
-                                cleaned.append(item.strip())
-                        else:
-                            cleaned.append(item)
-                    return cleaned
-                if isinstance(val, dict):
-                    return {
-                        k: _cleanse_reference_images(
-                            v, f"{config_key}.{k}" if config_key else k
-                        )
-                        for k, v in val.items()
-                    }
-                return val
-
             try:
-                cleansed = _cleanse_reference_images(save_dto["config"])
+                _normalize_comic_references_for_save(
+                    save_dto["config"], Path(__file__).resolve().parents[4]
+                )
             except ValueError as exc:
                 return error_response(str(exc), status_code=400)
-            if isinstance(cleansed, dict):
-                for k, v in cleansed.items():
-                    config_obj[k] = v
+            for key, value in save_dto["config"].items():
+                config_obj[key] = value
 
             if cfg_mgr:
                 cfg_mgr.save_config()
