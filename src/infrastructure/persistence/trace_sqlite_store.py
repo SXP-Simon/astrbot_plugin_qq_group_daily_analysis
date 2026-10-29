@@ -191,30 +191,32 @@ class TraceSQLiteStore:
                 artifact_count = conn.execute(
                     "SELECT COUNT(*) FROM report_artifacts"
                 ).fetchone()[0]
-                if artifact_count == 0:
-                    rows = conn.execute(
-                        "SELECT trace_id, group_id, started_at, extra_json FROM analysis_traces WHERE extra_json LIKE '%report_files%'"
-                    ).fetchall()
-                    for r in rows:
-                        t_id = str(r["trace_id"] or "")
-                        g_id = str(r["group_id"] or "")
-                        c_at = float(r["started_at"] or time.time())
-                        extra_obj = json.loads(r["extra_json"] or "{}")
-                        for rf in extra_obj.get("report_files", []):
-                            if isinstance(rf, dict) and rf.get("filename"):
-                                fn = str(rf["filename"])
-                                fmt = str(
-                                    rf.get("format")
-                                    or ("html" if fn.endswith(".html") else "image")
-                                )
-                                conn.execute(
-                                    """
-                                    INSERT OR IGNORE INTO report_artifacts (
-                                        filename, trace_id, group_id, file_format, relative_path, created_at
-                                    ) VALUES (?, ?, ?, ?, ?, ?)
-                                    """,
-                                    (fn, t_id, g_id, fmt, fn, c_at),
-                                )
+                if artifact_count != 0:
+                    return
+                rows = conn.execute(
+                    "SELECT trace_id, group_id, started_at, extra_json FROM analysis_traces WHERE extra_json LIKE '%report_files%'"
+                ).fetchall()
+                for r in rows:
+                    t_id = str(r["trace_id"] or "")
+                    g_id = str(r["group_id"] or "")
+                    c_at = float(r["started_at"] or time.time())
+                    extra_obj = json.loads(r["extra_json"] or "{}")
+                    for rf in extra_obj.get("report_files", []):
+                        if not isinstance(rf, dict) or not rf.get("filename"):
+                            continue
+                        fn = str(rf["filename"])
+                        fmt = str(
+                            rf.get("format")
+                            or ("html" if fn.endswith(".html") else "image")
+                        )
+                        conn.execute(
+                            """
+                            INSERT OR IGNORE INTO report_artifacts (
+                                filename, trace_id, group_id, file_format, relative_path, created_at
+                            ) VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            (fn, t_id, g_id, fmt, fn, c_at),
+                        )
             except Exception:
                 pass
 
