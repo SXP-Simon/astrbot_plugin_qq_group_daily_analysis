@@ -531,7 +531,9 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                             if item.startswith("data:image/"):
                                 try:
                                     _, b64 = item.split(",", 1)
-                                    file_bytes = base64.b64decode(b64)
+                                    file_bytes = base64.b64decode(b64, validate=True)
+                                    if not file_bytes:
+                                        raise ValueError("参考图内容为空")
                                     ts = int(time.time() * 1000)
                                     filename = (
                                         f"{ts}_{uuid.uuid4().hex}_migrated_image.png"
@@ -548,8 +550,10 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                                         d.mkdir(parents=True, exist_ok=True)
                                         (d / filename).write_bytes(file_bytes)
                                     cleaned.append(f"files/{folder}/{filename}")
-                                except Exception:
-                                    pass
+                                except ValueError as exc:
+                                    raise ValueError(
+                                        "参考图的 Base64 数据无效或为空"
+                                    ) from exc
                             elif item.startswith("files/"):
                                 expected_prefix = f"files/{folder}/"
                                 if item.startswith(expected_prefix):
@@ -571,7 +575,10 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     }
                 return val
 
-            cleansed = _cleanse_reference_images(save_dto["config"])
+            try:
+                cleansed = _cleanse_reference_images(save_dto["config"])
+            except ValueError as exc:
+                return error_response(str(exc), status_code=400)
             if isinstance(cleansed, dict):
                 for k, v in cleansed.items():
                     config_obj[k] = v
@@ -685,7 +692,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                                         )
                                     else:
                                         file_bytes = None
-                                    if isinstance(file_bytes, bytes):
+                                    if isinstance(file_bytes, bytes) and file_bytes:
                                         for d in target_dirs:
                                             (d / final_name).write_bytes(file_bytes)
                                         saved_paths.append(
@@ -701,11 +708,19 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 file_name = str(body.get("filename") or "upload.png")
                 clean_name = re.sub(r"[^\w\.\-]", "_", file_name)
                 if raw_data and isinstance(raw_data, str):
-                    if raw_data.startswith("data:"):
-                        _, b64 = raw_data.split(",", 1)
-                    else:
-                        b64 = raw_data
-                    file_bytes = base64.b64decode(b64)
+                    try:
+                        b64 = (
+                            raw_data.split(",", 1)[1]
+                            if raw_data.startswith("data:")
+                            else raw_data
+                        )
+                        file_bytes = base64.b64decode(b64, validate=True)
+                        if not file_bytes:
+                            raise ValueError("文件内容为空")
+                    except (ValueError, IndexError):
+                        return error_response(
+                            "文件的 Base64 数据无效或为空", status_code=400
+                        )
                     ts = int(time.time() * 1000)
                     final_name = f"{ts}_{uuid.uuid4().hex}_{clean_name}"
                     for d in target_dirs:
