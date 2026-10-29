@@ -204,7 +204,7 @@ class TraceSQLiteStore:
 
     def save_trace(self, trace_dict: TraceContextSnapshot | dict[str, object]) -> None:
         """保存追踪快照；已有任务的生命周期字段只能由条件跃迁接口修改。"""
-        trace_id = trace_dict.get("trace_id", "")
+        trace_id = str(trace_dict.get("trace_id") or "")
         if not trace_id:
             return
 
@@ -315,140 +315,8 @@ class TraceSQLiteStore:
                 ),
             )
 
-            # 2. 写入 Spans (增量覆写)
-            persisted_status_row = conn.execute(
-                "SELECT status FROM analysis_traces WHERE trace_id = ?", (trace_id,)
-            ).fetchone()
-            terminal_span_status: str | None = None
-            if persisted_status_row:
-                try:
-                    terminal_span_status = {
-                        TaskStatus.SUCCEEDED: "success",
-                        TaskStatus.WARNING: "warning",
-                        TaskStatus.COMPLETED: "success",
-                        TaskStatus.FAILED: "failed",
-                        TaskStatus.CANCELLED: "aborted",
-                        TaskStatus.ABORTED: "aborted",
-                        TaskStatus.SKIPPED: "skipped",
-                    }.get(TaskStatus(str(persisted_status_row["status"])))
-                except ValueError:
-                    pass
-
-            spans_raw = trace_dict.get("spans")
-            spans = spans_raw if isinstance(spans_raw, list) else []
-            for span in spans:
-                if not isinstance(span, dict):
-                    continue
-                span_status = str(span.get("status", "success"))
-                if span_status == "running" and terminal_span_status:
-                    span_status = terminal_span_status
-                span_started_raw = span.get("started_at")
-                span_started = (
-                    float(span_started_raw)
-                    if isinstance(span_started_raw, (int, float))
-                    else time.time()
-                )
-                conn.execute(
-                    """
-                    INSERT INTO trace_spans (
-                        span_id, trace_id, stage_name, status, started_at, duration_ms, stage_payload_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(span_id) DO UPDATE SET
-                        status=excluded.status,
-                        duration_ms=excluded.duration_ms,
-                        stage_payload_json=excluded.stage_payload_json;
-                    """,
-                    (
-                        span.get("span_id", f"{trace_id}_{span.get('stage_name')}"),
-                        trace_id,
-                        str(span.get("stage_name", "")),
-                        span_status,
-                        span_started,
-                        span.get("duration_ms"),
-                        json.dumps(span.get("payload", {}), ensure_ascii=False),
-                    ),
-                )
-
-            # 3. 写入 Context Metrics
-            context_metrics = trace_dict.get("context_metrics")
-            if isinstance(context_metrics, dict):
-                conn.execute(
-                    """
-                    INSERT INTO context_metrics (
-                        trace_id, raw_message_count, cleaned_message_count,
-                        compression_ratio, incremental_batches, window_size
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(trace_id) DO UPDATE SET
-                        raw_message_count=excluded.raw_message_count,
-                        cleaned_message_count=excluded.cleaned_message_count,
-                        compression_ratio=excluded.compression_ratio,
-                        incremental_batches=excluded.incremental_batches,
-                        window_size=excluded.window_size;
-                    """,
-                    (
-                        trace_id,
-                        int(context_metrics.get("raw_message_count", 0)),
-                        int(context_metrics.get("cleaned_message_count", 0)),
-                        float(context_metrics.get("compression_ratio", 0.0)),
-                        int(context_metrics.get("incremental_batches", 0)),
-                        int(context_metrics.get("window_size", 0)),
-                    ),
-                )
-
-            # 4. 写入 Token Usage
-            token_usage = trace_dict.get("token_usage")
-            if isinstance(token_usage, dict):
-                conn.execute(
-                    """
-                    INSERT INTO token_usage (
-                        trace_id, prompt_tokens, completion_tokens, total_tokens,
-                        estimated_cost, per_analyzer_tokens_json
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(trace_id) DO UPDATE SET
-                        prompt_tokens=excluded.prompt_tokens,
-                        completion_tokens=excluded.completion_tokens,
-                        total_tokens=excluded.total_tokens,
-                        estimated_cost=excluded.estimated_cost,
-                        per_analyzer_tokens_json=excluded.per_analyzer_tokens_json;
-                    """,
-                    (
-                        trace_id,
-                        int(token_usage.get("prompt_tokens", 0)),
-                        int(token_usage.get("completion_tokens", 0)),
-                        int(token_usage.get("total_tokens", 0)),
-                        float(token_usage.get("estimated_cost", 0.0)),
-                        json.dumps(
-                            token_usage.get("per_analyzer", {}), ensure_ascii=False
-                        ),
-                    ),
-                )
-
-            # 5. 写入 Performance Metrics
-            perf_metrics = trace_dict.get("performance_metrics")
-            if perf_metrics and isinstance(perf_metrics, dict):
-                conn.execute(
-                    """
-                    INSERT INTO performance_metrics (
-                        trace_id, init_memory_mb, peak_memory_mb, final_memory_mb, delta_memory_mb, metrics_json
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(trace_id) DO UPDATE SET
-                        init_memory_mb=excluded.init_memory_mb,
-                        peak_memory_mb=excluded.peak_memory_mb,
-                        final_memory_mb=excluded.final_memory_mb,
-                        delta_memory_mb=excluded.delta_memory_mb,
-                        metrics_json=excluded.metrics_json;
-                    """,
-                    (
-                        trace_id,
-                        float(perf_metrics.get("init_memory_mb", 0.0)),
-                        float(perf_metrics.get("peak_memory_mb", 0.0)),
-                        float(perf_metrics.get("final_memory_mb", 0.0)),
-                        float(perf_metrics.get("delta_memory_mb", 0.0)),
-                        json.dumps(
-                            perf_metrics.get("metrics_extra", {}), ensure_ascii=False
-                        ),
-                    ),
-                )
+            self._save_trace_spans(conn, trace_id, trace_dict)
+            self._save_trace_metrics(conn, trace_id, trace_dict)
 
             # 6. 同步写入结构化产物关联表 report_artifacts
             raw_rfiles = extra_payload.get("report_files")
@@ -483,6 +351,165 @@ class TraceSQLiteStore:
                             """,
                             (fn, trace_id, grp_id, fmt, rel_path, rf_ts),
                         )
+
+    def _save_trace_spans(
+        self,
+        conn: sqlite3.Connection,
+        trace_id: str,
+        trace_dict: TraceContextSnapshot | dict[str, object],
+    ) -> None:
+        """在当前快照事务内保存阶段记录，并按已持久化的任务终态收敛运行阶段。
+
+        Args:
+            conn: 调用方持有的同一事务连接。
+            trace_id: 当前追踪标识。
+            trace_dict: 包含阶段记录的快照。
+        """
+        # 2. 写入 Spans (增量覆写)
+        persisted_status_row = conn.execute(
+            "SELECT status FROM analysis_traces WHERE trace_id = ?", (trace_id,)
+        ).fetchone()
+        terminal_span_status: str | None = None
+        if persisted_status_row:
+            try:
+                terminal_span_status = {
+                    TaskStatus.SUCCEEDED: "success",
+                    TaskStatus.WARNING: "warning",
+                    TaskStatus.COMPLETED: "success",
+                    TaskStatus.FAILED: "failed",
+                    TaskStatus.CANCELLED: "aborted",
+                    TaskStatus.ABORTED: "aborted",
+                    TaskStatus.SKIPPED: "skipped",
+                }.get(TaskStatus(str(persisted_status_row["status"])))
+            except ValueError:
+                pass
+
+        spans_raw = trace_dict.get("spans")
+        spans = spans_raw if isinstance(spans_raw, list) else []
+        for span in spans:
+            if not isinstance(span, dict):
+                continue
+            span_status = str(span.get("status", "success"))
+            if span_status == "running" and terminal_span_status:
+                span_status = terminal_span_status
+            span_started_raw = span.get("started_at")
+            span_started = (
+                float(span_started_raw)
+                if isinstance(span_started_raw, (int, float))
+                else time.time()
+            )
+            conn.execute(
+                """
+                INSERT INTO trace_spans (
+                    span_id, trace_id, stage_name, status, started_at, duration_ms, stage_payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(span_id) DO UPDATE SET
+                    status=excluded.status,
+                    duration_ms=excluded.duration_ms,
+                    stage_payload_json=excluded.stage_payload_json;
+                """,
+                (
+                    span.get("span_id", f"{trace_id}_{span.get('stage_name')}"),
+                    trace_id,
+                    str(span.get("stage_name", "")),
+                    span_status,
+                    span_started,
+                    span.get("duration_ms"),
+                    json.dumps(span.get("payload", {}), ensure_ascii=False),
+                ),
+            )
+
+    def _save_trace_metrics(
+        self,
+        conn: sqlite3.Connection,
+        trace_id: str,
+        trace_dict: TraceContextSnapshot | dict[str, object],
+    ) -> None:
+        """在当前快照事务内保存上下文、Token 和性能指标。
+
+        Args:
+            conn: 调用方持有的同一事务连接，不在此提交或关闭。
+            trace_id: 当前追踪标识。
+            trace_dict: 包含三类指标的快照。
+        """
+        # 3. 写入 Context Metrics
+        context_metrics = trace_dict.get("context_metrics")
+        if isinstance(context_metrics, dict):
+            conn.execute(
+                """
+                INSERT INTO context_metrics (
+                    trace_id, raw_message_count, cleaned_message_count,
+                    compression_ratio, incremental_batches, window_size
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(trace_id) DO UPDATE SET
+                    raw_message_count=excluded.raw_message_count,
+                    cleaned_message_count=excluded.cleaned_message_count,
+                    compression_ratio=excluded.compression_ratio,
+                    incremental_batches=excluded.incremental_batches,
+                    window_size=excluded.window_size;
+                """,
+                (
+                    trace_id,
+                    int(context_metrics.get("raw_message_count", 0)),
+                    int(context_metrics.get("cleaned_message_count", 0)),
+                    float(context_metrics.get("compression_ratio", 0.0)),
+                    int(context_metrics.get("incremental_batches", 0)),
+                    int(context_metrics.get("window_size", 0)),
+                ),
+            )
+
+        # 4. 写入 Token Usage
+        token_usage = trace_dict.get("token_usage")
+        if isinstance(token_usage, dict):
+            conn.execute(
+                """
+                INSERT INTO token_usage (
+                    trace_id, prompt_tokens, completion_tokens, total_tokens,
+                    estimated_cost, per_analyzer_tokens_json
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(trace_id) DO UPDATE SET
+                    prompt_tokens=excluded.prompt_tokens,
+                    completion_tokens=excluded.completion_tokens,
+                    total_tokens=excluded.total_tokens,
+                    estimated_cost=excluded.estimated_cost,
+                    per_analyzer_tokens_json=excluded.per_analyzer_tokens_json;
+                """,
+                (
+                    trace_id,
+                    int(token_usage.get("prompt_tokens", 0)),
+                    int(token_usage.get("completion_tokens", 0)),
+                    int(token_usage.get("total_tokens", 0)),
+                    float(token_usage.get("estimated_cost", 0.0)),
+                    json.dumps(token_usage.get("per_analyzer", {}), ensure_ascii=False),
+                ),
+            )
+
+        # 5. 写入 Performance Metrics
+        perf_metrics = trace_dict.get("performance_metrics")
+        if perf_metrics and isinstance(perf_metrics, dict):
+            conn.execute(
+                """
+                INSERT INTO performance_metrics (
+                    trace_id, init_memory_mb, peak_memory_mb, final_memory_mb, delta_memory_mb, metrics_json
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(trace_id) DO UPDATE SET
+                    init_memory_mb=excluded.init_memory_mb,
+                    peak_memory_mb=excluded.peak_memory_mb,
+                    final_memory_mb=excluded.final_memory_mb,
+                    delta_memory_mb=excluded.delta_memory_mb,
+                    metrics_json=excluded.metrics_json;
+                """,
+                (
+                    trace_id,
+                    float(perf_metrics.get("init_memory_mb", 0.0)),
+                    float(perf_metrics.get("peak_memory_mb", 0.0)),
+                    float(perf_metrics.get("final_memory_mb", 0.0)),
+                    float(perf_metrics.get("delta_memory_mb", 0.0)),
+                    json.dumps(
+                        perf_metrics.get("metrics_extra", {}), ensure_ascii=False
+                    ),
+                ),
+            )
 
     def get_task_status(self, trace_id: str) -> TaskStatus | None:
         """读取单条 Trace 的领域状态。
