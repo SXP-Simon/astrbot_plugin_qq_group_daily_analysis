@@ -30,9 +30,14 @@ from ...utils.logger import logger
 from .profile_mappings import resolve_profile_info
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping, Sequence
 
-    from ...domain.value_objects import AnalysisResultPayload
+    from ...domain.value_objects import (
+        AnalysisResultPayload,
+        GoldenQuote,
+        SummaryTopic,
+        UserTitle,
+    )
     from ..config.config_manager import ConfigManager
     from ..config.rendering_config import FontMode, RenderingResourceConfig
     from ..visualization.activity_charts import ActivityVisualizer
@@ -347,6 +352,62 @@ class RenderDataPreparer:
         logger.debug(f"聊天质量锐评HTML生成完成，长度: {len(rendered)}")
         return rendered
 
+    @staticmethod
+    def _collect_avatar_user_ids(
+        topics: Sequence[SummaryTopic],
+        user_titles: Sequence[UserTitle],
+        golden_quotes: Sequence[GoldenQuote],
+        user_analysis: Mapping[str, object] | None,
+        hide_user_names: bool,
+    ) -> set[str]:
+        """收集本次展示内容需要的头像，区分匿名贡献者及普通文本引用。
+
+        Args:
+            topics: 已按展示上限截取的话题。
+            user_titles: 已按展示上限截取的用户称号。
+            golden_quotes: 已按展示上限截取的金句。
+            user_analysis: 用于确认文本引用身份的用户活动字典。
+            hide_user_names: 是否额外渲染贡献者和称号理由中的匿名头像。
+
+        Returns:
+            去重后的头像用户 ID 集合。
+        """
+        avatar_user_ids: set[str] = set()
+        known_user_ids = {
+            str(user_id).strip()
+            for user_id in (user_analysis or {})
+            if str(user_id).strip()
+        }
+        for title in user_titles:
+            user_id = str(title.user_id or "").strip()
+            if user_id:
+                avatar_user_ids.add(user_id)
+        for golden_quote in golden_quotes:
+            user_id = str(golden_quote.user_id or "").strip()
+            if user_id:
+                avatar_user_ids.add(user_id)
+        mention_sources = []
+        for topic in topics:
+            if hide_user_names:
+                avatar_user_ids.update(
+                    str(user_id).strip()
+                    for user_id in (topic.contributor_ids or [])
+                    if str(user_id).strip()
+                )
+            mention_sources.append(str(topic.detail or ""))
+        mention_sources.extend(
+            str(golden_quote.reason or "") for golden_quote in golden_quotes
+        )
+        if hide_user_names:
+            mention_sources.extend(str(title.reason or "") for title in user_titles)
+        for source in mention_sources:
+            avatar_user_ids.update(
+                matched_user_id
+                for matched_user_id in re.findall(r"\[([A-Za-z0-9_-]{1,128})\]", source)
+                if matched_user_id in known_user_ids
+            )
+        return avatar_user_ids
+
     async def prepare_render_data(
         self,
         analysis_result: AnalysisResultPayload,
@@ -398,45 +459,15 @@ class RenderDataPreparer:
         avatar_reuse_registry: dict[str, str] = {}
         avatar_reuse_aliases: dict[str, str] = {}
 
-        avatar_user_ids: set[str] = set()
-        known_user_ids = {
-            str(user_id).strip()
-            for user_id in (user_analysis or {})
-            if str(user_id).strip()
-        }
         max_user_titles = self.config_manager.get_max_user_titles()
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
-        for title in user_titles[:max_user_titles]:
-            user_id = str(title.user_id or "").strip()
-            if user_id:
-                avatar_user_ids.add(user_id)
-        for golden_quote in stats.golden_quotes[:max_golden_quotes]:
-            user_id = str(golden_quote.user_id or "").strip()
-            if user_id:
-                avatar_user_ids.add(user_id)
-        mention_sources = []
-        for topic in topics[:max_topics]:
-            if hide_user_names:
-                avatar_user_ids.update(
-                    str(user_id).strip()
-                    for user_id in (topic.contributor_ids or [])
-                    if str(user_id).strip()
-                )
-            mention_sources.append(str(topic.detail or ""))
-        mention_sources.extend(
-            str(golden_quote.reason or "")
-            for golden_quote in stats.golden_quotes[:max_golden_quotes]
+        avatar_user_ids = self._collect_avatar_user_ids(
+            topics[:max_topics],
+            user_titles[:max_user_titles],
+            stats.golden_quotes[:max_golden_quotes],
+            user_analysis,
+            hide_user_names,
         )
-        if hide_user_names:
-            mention_sources.extend(
-                str(title.reason or "") for title in user_titles[:max_user_titles]
-            )
-        for source in mention_sources:
-            avatar_user_ids.update(
-                matched_user_id
-                for matched_user_id in re.findall(r"\[([A-Za-z0-9_-]{1,128})\]", source)
-                if matched_user_id in known_user_ids
-            )
         if avatar_user_ids:
             await asyncio.gather(
                 *(
