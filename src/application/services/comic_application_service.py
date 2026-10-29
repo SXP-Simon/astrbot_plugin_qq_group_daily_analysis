@@ -614,6 +614,14 @@ class ComicApplicationService:
         Returns:
             图片字节和 MIME 类型；找不到或无法读取时返回 None。
         """
+        # 常见图片扩展名优先使用固定类型，避免依赖 Windows 注册表中的 MIME 注册情况。
+        image_types = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+            ".gif": "image/gif",
+        }
         # 4. 支持本地文件路径（插件数据目录、插件代码目录、AstrBot 根目录、或绝对路径）
         try:
             clean_rel = image_ref.lstrip("/\\")
@@ -642,7 +650,9 @@ class ComicApplicationService:
             for p in candidate_paths:
                 if p.is_file():
                     guessed_type, _ = mimetypes.guess_type(p.name)
-                    return p.read_bytes(), guessed_type or "image/png"
+                    return p.read_bytes(), image_types.get(
+                        p.suffix.lower()
+                    ) or guessed_type or "image/png"
 
             # 模糊查找纯文件名
             filename = Path(clean_rel).name
@@ -662,7 +672,9 @@ class ComicApplicationService:
                     for match in files_dir.rglob(filename):
                         if match.is_file():
                             guessed_type, _ = mimetypes.guess_type(match.name)
-                            return match.read_bytes(), guessed_type or "image/png"
+                            return match.read_bytes(), image_types.get(
+                                match.suffix.lower()
+                            ) or guessed_type or "image/png"
 
             logger.warning(f"[Comic] 找不到已选参考图: {image_ref}")
             return None

@@ -73,3 +73,18 @@ async def test_local_reference_preserves_absolute_path(tmp_path, monkeypatch):
     service = object.__new__(ComicApplicationService)
     service.plugin_data_dir = data
     assert await service._fetch_reference_image(str(reference)) == (b"external-image", "image/png")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("suffix,mime", [(".webp", "image/webp"), (".JPG", "image/jpeg")])
+@pytest.mark.parametrize("by_filename", [True, False])
+async def test_reference_mime_does_not_depend_on_system_registration(tmp_path, monkeypatch, suffix, mime, by_filename):
+    monkeypatch.setattr("mimetypes.guess_type", lambda _: (None, None))
+    service = object.__new__(ComicApplicationService)
+    service.plugin_data_dir = tmp_path
+    directory = tmp_path / "files" / "uploaded"
+    directory.mkdir(parents=True)
+    reference = directory / f"reference{suffix}"
+    reference.write_bytes(b"image")
+    selected = reference.name if by_filename else str(reference.relative_to(tmp_path))
+    assert await service._fetch_reference_image(selected) == (b"image", mime)
