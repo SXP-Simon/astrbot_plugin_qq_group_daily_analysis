@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from ....utils.logger import logger
+from .doubao import build_doubao_payload
 
 if TYPE_CHECKING:
     from .context import DrawingRequestContext
@@ -128,64 +129,7 @@ async def call_preset_api(
             else "/api/v3/images/generations"
         )
         target_url = f"{base}{endpoint}"
-        configured_model = str(provider.get("endpoint_id") or model).strip()
-        model = configured_model or model
-        size_mode = str(provider.get("size_mode") or "preset").strip().lower()
-        configured_size = (
-            provider.get("custom_size")
-            if size_mode == "custom"
-            else provider.get("size") or image_size
-        )
-        resolved_doubao_size = str(configured_size or image_size).strip()
-        if "x" in resolved_doubao_size.lower() or "×" in resolved_doubao_size:
-            resolved_doubao_size = resolved_doubao_size.lower().replace("×", "x")
-        elif resolved_doubao_size.upper() not in {"1K", "2K", "3K", "4K"}:
-            resolved_doubao_size = context.resolve_size(
-                resolved_doubao_size, aspect_ratio
-            )
-        is_seedream_5_pro = (
-            str(provider.get("model_capability") or "").lower() == "seedream_5_pro"
-            or "seedream-5.0-pro" in model.lower()
-            or "seedream-5-0-pro" in model.lower()
-        )
-        payload: dict[str, object] = {
-            "model": model,
-            "prompt": prompt,
-            "response_format": "url",
-            "output_format": output_format or "png",
-            "watermark": bool(provider.get("watermark", False)),
-            "size": resolved_doubao_size,
-        }
-        if data_uris:
-            max_references = 10 if is_seedream_5_pro else 14
-            try:
-                max_references = min(
-                    max_references,
-                    max(0, int(provider.get("max_reference_images", max_references))),
-                )
-            except (TypeError, ValueError):
-                pass
-            selected_images = data_uris[:max_references]
-            if selected_images:
-                payload["image"] = (
-                    selected_images[0] if len(selected_images) == 1 else selected_images
-                )
-        optimize_mode = str(provider.get("optimize_prompt_mode") or "").strip()
-        if optimize_mode in {"standard", "fast"}:
-            payload["optimize_prompt_options"] = {"mode": optimize_mode}
-        sequential_mode = provider.get("sequential_image_generation")
-        if sequential_mode == "auto" and not is_seedream_5_pro:
-            payload["sequential_image_generation"] = "auto"
-            try:
-                sequential_max_images = int(provider.get("sequential_max_images", 0))
-            except (TypeError, ValueError):
-                sequential_max_images = 0
-            if 1 <= sequential_max_images <= 12:
-                payload["sequential_image_generation_options"] = {
-                    "max_images": sequential_max_images
-                }
-        elif sequential_mode == "auto":
-            logger.info("[Comic] 豆包 Seedream 5.0 Pro 不支持组图生成，已忽略该配置。")
+        payload = build_doubao_payload(context, prompt, data_uris, provider)
         provider_name = "豆包"
     elif provider_type == "sensenova":
         base = api_base or "https://token.sensenova.cn"
