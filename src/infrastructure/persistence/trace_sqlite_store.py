@@ -1405,10 +1405,10 @@ class TraceSQLiteStore:
                     extra = json.loads(tw["extra_json"] or "{}")
                 except Exception:
                     extra = {}
+                if not isinstance(extra, dict):
+                    extra = {}
 
-                llm_prompts = (
-                    extra.get("llm_prompts", {}) if isinstance(extra, dict) else {}
-                )
+                llm_prompts = extra.get("llm_prompts", {})
 
                 # 收集有效 provider_id
                 providers_in_trace: set[str] = set()
