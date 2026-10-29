@@ -662,33 +662,30 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     if callable(getlist_fn) and isinstance(uploaded_files, Iterable):
                         for key in uploaded_files:
                             file_items = getlist_fn(key)
-                            if isinstance(file_items, list):
-                                for f in file_items:
-                                    orig_name = (
-                                        getattr(f, "filename", "")
-                                        or "uploaded_image.png"
+                            if not isinstance(file_items, list):
+                                continue
+                            for f in file_items:
+                                orig_name = (
+                                    getattr(f, "filename", "") or "uploaded_image.png"
+                                )
+                                clean_name = re.sub(r"[^\w\.\-]", "_", str(orig_name))
+                                ts = int(time.time() * 1000)
+                                final_name = f"{ts}_{uuid.uuid4().hex}_{clean_name}"
+                                read_fn = getattr(f, "read", None)
+                                if callable(read_fn):
+                                    res_read = read_fn()
+                                    file_bytes = (
+                                        await res_read
+                                        if asyncio.iscoroutine(res_read)
+                                        else res_read
                                     )
-                                    clean_name = re.sub(
-                                        r"[^\w\.\-]", "_", str(orig_name)
-                                    )
-                                    ts = int(time.time() * 1000)
-                                    final_name = f"{ts}_{uuid.uuid4().hex}_{clean_name}"
-                                    read_fn = getattr(f, "read", None)
-                                    if callable(read_fn):
-                                        res_read = read_fn()
-                                        file_bytes = (
-                                            await res_read
-                                            if asyncio.iscoroutine(res_read)
-                                            else res_read
-                                        )
-                                    else:
-                                        file_bytes = None
-                                    if isinstance(file_bytes, bytes) and file_bytes:
-                                        for d in target_dirs:
-                                            (d / final_name).write_bytes(file_bytes)
-                                        saved_paths.append(
-                                            f"files/{folder}/{final_name}"
-                                        )
+                                else:
+                                    file_bytes = None
+                                if not isinstance(file_bytes, bytes) or not file_bytes:
+                                    continue
+                                for d in target_dirs:
+                                    (d / final_name).write_bytes(file_bytes)
+                                saved_paths.append(f"files/{folder}/{final_name}")
                 except Exception:
                     pass
 
