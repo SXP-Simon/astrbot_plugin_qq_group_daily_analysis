@@ -64,3 +64,15 @@ async def test_legacy_history_summary_is_preserved(history):
     records["analysis_123_2026-10-29_12-00"] = summary
     assert await manager.get_analysis("123", "2026-10-29") == summary
     assert await manager.get_history("123", "2026-10-29", "12:00") == summary
+
+
+@pytest.mark.asyncio
+async def test_history_snapshot_records_source_trace(history, analysis, monkeypatch):
+    from src.shared.trace_context import TraceContext
+
+    monkeypatch.setattr("src.shared.trace_context._global_trace_store", None)
+    manager, _ = history
+    with TraceContext(trace_id="saved-report-source"):
+        assert await manager.save_analysis("123", analysis, "2026-10-29", "12:00")
+    restored = await manager.get_analysis("123", "2026-10-29")
+    assert restored["trace_id"] == "saved-report-source"

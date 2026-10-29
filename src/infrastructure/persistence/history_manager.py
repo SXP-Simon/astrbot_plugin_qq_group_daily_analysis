@@ -15,6 +15,7 @@ from ...domain.value_objects import (
     SummaryTopic,
     UserTitle,
 )
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -108,7 +109,9 @@ class HistoryManager:
 
             quality = analysis_result.get("chat_quality_review")
             key = f"analysis_{group_id}_{date_str}_{time_str}"
+            trace = TraceContext.current()
             snapshot = {
+                "trace_id": trace.trace_id if trace else "",
                 "statistics": stats.to_dict()
                 if isinstance(stats, GroupStatistics)
                 else stats,
