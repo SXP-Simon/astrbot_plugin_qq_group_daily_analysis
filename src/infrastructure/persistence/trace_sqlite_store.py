@@ -679,51 +679,81 @@ class TraceSQLiteStore:
             else:
                 trace_data["performance_metrics"] = None
 
-            raw_rfiles = trace_data.get("extra", {}).get("report_files", [])
-            seen_rfiles = set()
-            deduped_rfiles = []
-            for rf in raw_rfiles:
-                fn = rf.get("filename") if isinstance(rf, dict) else None
-                if fn and fn not in seen_rfiles:
-                    seen_rfiles.add(fn)
-                    deduped_rfiles.append(rf)
+        trace_data["report_files"] = self._collect_report_files(
+            trace_id, trace_data["extra"].get("report_files")
+        )
+        return trace_data
 
-            # 额外扫描磁盘 reports 目录，聚合文件名中明确带有 trace_id 的产物文件（如换模板重绘/续跑生成的文件）
-            try:
-                reports_dir = self.db_path.parent / "reports"
-                if reports_dir.is_dir():
-                    for p in reports_dir.iterdir():
-                        if (
-                            p.is_file()
-                            and trace_id in p.name
-                            and p.name not in seen_rfiles
-                        ):
-                            seen_rfiles.add(p.name)
-                            is_html = p.suffix.lower() in (".html", ".htm")
-                            is_comic = p.name.lower().startswith(
-                                "comic_"
-                            ) or p.name.startswith("漫画_")
-                            stat = p.stat()
-                            deduped_rfiles.append(
-                                {
-                                    "filename": p.name,
-                                    "path": str(p.resolve()),
-                                    "format": "html" if is_html else "image",
-                                    "report_type": "comic" if is_comic else "daily",
-                                    "size_bytes": stat.st_size,
-                                    "created_at": stat.st_mtime,
-                                }
-                            )
-            except Exception:
-                pass
+    def _collect_report_files(
+        self, trace_id: str, raw_files: object
+    ) -> list[dict[str, object]]:
+        """在释放数据库连接后合并快照与磁盘报告，忽略无效的旧产物记录。
 
-            # 按生成时间降序排序，最新生成的报告排在前面
-            deduped_rfiles.sort(
-                key=lambda x: x.get("created_at", 0) if isinstance(x, dict) else 0,
-                reverse=True,
-            )
-            trace_data["report_files"] = deduped_rfiles
-            return trace_data
+        Args:
+            trace_id: 用于匹配磁盘产物的追踪标识。
+            raw_files: 旧快照中的产物列表，读取边界允许结构无效。
+
+        Returns:
+            按生成时间降序排列且按文件名去重的产物列表。
+        """
+        seen: set[str] = set()
+        reports: list[dict[str, object]] = []
+        if isinstance(raw_files, list):
+            for raw in raw_files:
+                if not isinstance(raw, dict):
+                    continue
+                filename = raw.get("filename")
+                if not isinstance(filename, str) or not filename or filename in seen:
+                    continue
+                report = dict(raw)
+                created_at = report.get("created_at")
+                if not isinstance(created_at, (int, float)):
+                    report["created_at"] = 0
+                seen.add(filename)
+                reports.append(report)
+
+        reports_dir = self.db_path.parent / "reports"
+        try:
+            if reports_dir.is_dir():
+                for path in reports_dir.iterdir():
+                    if trace_id not in path.name or path.name in seen:
+                        continue
+                    try:
+                        if not path.is_file():
+                            continue
+                        stat = path.stat()
+                        resolved_path = str(path.resolve())
+                    except OSError:
+                        # 单个文件被删除或无法读取时仍继续扫描其他报告。
+                        continue
+                    seen.add(path.name)
+                    is_html = path.suffix.lower() in (".html", ".htm")
+                    is_comic = path.name.lower().startswith(
+                        "comic_"
+                    ) or path.name.startswith("漫画_")
+                    reports.append(
+                        {
+                            "filename": path.name,
+                            "path": resolved_path,
+                            "format": "html" if is_html else "image",
+                            "report_type": "comic" if is_comic else "daily",
+                            "size_bytes": stat.st_size,
+                            "created_at": stat.st_mtime,
+                        }
+                    )
+        except OSError:
+            # 目录不可读时仍可返回快照中的产物。
+            pass
+
+        reports.sort(
+            key=lambda item: (
+                value
+                if isinstance(value := item.get("created_at"), (int, float))
+                else 0
+            ),
+            reverse=True,
+        )
+        return reports
 
     def get_report_trace_map(self) -> dict[str, str]:
         """获取已生成的报告文件名与 trace_id 的双向映射（优先走结构化表索引）"""
