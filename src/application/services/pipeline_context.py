@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import enum
+import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -214,10 +215,13 @@ class PipelineContext:
             step_obj.mark_failed(str(exc))
             raise
         finally:
-            if heartbeat_task is not None and not heartbeat_task.done():
+            # 将真实退出原因交给 Span，取消不能被记录为阶段成功。
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            if heartbeat_task is not None:
                 heartbeat_task.cancel()
+                await asyncio.gather(heartbeat_task, return_exceptions=True)
             if span_cm is not None:
-                await span_cm.__aexit__(None, None, None)
+                await span_cm.__aexit__(exc_type, exc_value, exc_traceback)
 
     def restore_checkpoint_span(
         self,
