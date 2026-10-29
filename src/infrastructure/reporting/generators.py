@@ -527,19 +527,26 @@ class ReportGenerator(IReportGenerator):
                         **response_info,
                     }
                     trace_ctx = TraceContext.current()
-                    if trace_ctx:
-                        for span in reversed(trace_ctx._spans):
-                            if (
-                                span.get("stage_name")
+                    render_span = (
+                        next(
+                            (
+                                span
+                                for span in reversed(trace_ctx._spans)
+                                if span.get("stage_name")
                                 == AnalysisStage.RENDER_REPORT.value
-                            ):
-                                payload = span.setdefault("payload", {})
-                                payload["render_service"] = renderer_info
-                                attempts = payload.setdefault("render_attempts", [])
-                                if isinstance(attempts, list):
-                                    # 请求开始即挂入原阶段，任务详情轮询可以看到正在等待的方案。
-                                    attempts.append(attempt_record)
-                                break
+                            ),
+                            None,
+                        )
+                        if trace_ctx
+                        else None
+                    )
+                    if render_span is not None:
+                        payload = render_span.setdefault("payload", {})
+                        payload["render_service"] = renderer_info
+                        attempts = payload.setdefault("render_attempts", [])
+                        if isinstance(attempts, list):
+                            # 请求开始即挂入原阶段，任务详情轮询可以看到正在等待的方案。
+                            attempts.append(attempt_record)
                     attempt_status = "failed"
                     attempt_start_ts = time.perf_counter()
                     attempt_timeout = asyncio.timeout_at(render_deadline)
@@ -632,59 +639,43 @@ class ReportGenerator(IReportGenerator):
                         )
                         if is_valid and isinstance(image_data, (str, bytes)):
                             attempt_status = "success"
-                            trace_ctx = TraceContext.current()
-                            if trace_ctx:
-                                for s in reversed(trace_ctx._spans):
-                                    if (
-                                        s.get("stage_name")
-                                        == AnalysisStage.RENDER_REPORT.value
-                                    ):
-                                        payload = s.setdefault("payload", {})
-                                        topics_raw = analysis_result.get("topics") or []
-                                        titles_raw = (
-                                            analysis_result.get("user_titles") or []
-                                        )
-                                        stats_raw = analysis_result.get("statistics")
-                                        golden_quotes_raw = (
-                                            stats_raw.golden_quotes if stats_raw else []
-                                        )
-                                        payload.update(
-                                            {
-                                                "format": "image",
-                                                "template": template_theme
-                                                or "scrapbook",
-                                                "viewport": viewport_description,
-                                                "render_attempt": attempt,
-                                                "resource_environment": str(
-                                                    environment
-                                                ),
-                                                "image_format": str(
-                                                    image_options.get("type", "jpeg")
-                                                ),
-                                                "image_bytes": image_size,
-                                                "dimensions": dimensions,
-                                                "template_render_ms": template_render_ms,
-                                                "html_size_kb": html_size_kb,
-                                                "t2i_render_ms": t2i_render_ms,
-                                                "topics_rendered": len(topics_raw),
-                                                "titles_rendered": len(titles_raw),
-                                                "quotes_rendered": len(
-                                                    golden_quotes_raw
-                                                ),
-                                                "avatars_processed": len(
-                                                    render_payload.get(
-                                                        "avatar_reuse_registry", {}
-                                                    )
-                                                ),
-                                                "html_chars": len(html_content)
-                                                if html_content
-                                                else 0,
-                                                "hide_user_names": bool(
-                                                    hide_user_names
-                                                ),
-                                            }
-                                        )
-                                        break
+                            if render_span is not None:
+                                payload = render_span.setdefault("payload", {})
+                                topics_raw = analysis_result.get("topics") or []
+                                titles_raw = analysis_result.get("user_titles") or []
+                                stats_raw = analysis_result.get("statistics")
+                                golden_quotes_raw = (
+                                    stats_raw.golden_quotes if stats_raw else []
+                                )
+                                payload.update(
+                                    {
+                                        "format": "image",
+                                        "template": template_theme or "scrapbook",
+                                        "viewport": viewport_description,
+                                        "render_attempt": attempt,
+                                        "resource_environment": str(environment),
+                                        "image_format": str(
+                                            image_options.get("type", "jpeg")
+                                        ),
+                                        "image_bytes": image_size,
+                                        "dimensions": dimensions,
+                                        "template_render_ms": template_render_ms,
+                                        "html_size_kb": html_size_kb,
+                                        "t2i_render_ms": t2i_render_ms,
+                                        "topics_rendered": len(topics_raw),
+                                        "titles_rendered": len(titles_raw),
+                                        "quotes_rendered": len(golden_quotes_raw),
+                                        "avatars_processed": len(
+                                            render_payload.get(
+                                                "avatar_reuse_registry", {}
+                                            )
+                                        ),
+                                        "html_chars": len(html_content)
+                                        if html_content
+                                        else 0,
+                                        "hide_user_names": bool(hide_user_names),
+                                    }
+                                )
 
                             if isinstance(image_data, bytes):
                                 b64 = base64.b64encode(image_data).decode("utf-8")
