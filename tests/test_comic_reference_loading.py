@@ -60,3 +60,16 @@ async def test_local_reference_scan_and_read_runs_outside_event_loop(tmp_path, m
     monkeypatch.setattr(Path, "read_bytes", read_bytes)
     monkeypatch.setattr(Path, "rglob", rglob)
     assert await service._fetch_reference_image("reference.png") == (b"image", "image/png")
+
+
+@pytest.mark.asyncio
+async def test_local_reference_preserves_absolute_path(tmp_path, monkeypatch):
+    data, working, external = (tmp_path / name for name in ("data", "working", "external"))
+    for directory in (data, working, external):
+        directory.mkdir()
+    reference = external / "reference.png"
+    reference.write_bytes(b"external-image")
+    monkeypatch.chdir(working)
+    service = object.__new__(ComicApplicationService)
+    service.plugin_data_dir = data
+    assert await service._fetch_reference_image(str(reference)) == (b"external-image", "image/png")

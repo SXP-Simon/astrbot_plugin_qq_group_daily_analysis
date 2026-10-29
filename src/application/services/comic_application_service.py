@@ -617,7 +617,10 @@ class ComicApplicationService:
         # 4. 支持本地文件路径（插件数据目录、插件代码目录、AstrBot 根目录、或绝对路径）
         try:
             clean_rel = image_ref.lstrip("/\\")
-            candidate_paths: list[Path] = []
+            requested_path = Path(image_ref)
+            candidate_paths: list[Path] = (
+                [requested_path] if requested_path.is_absolute() else []
+            )
             if self.plugin_data_dir:
                 p_data = Path(self.plugin_data_dir)
                 candidate_paths.extend(
