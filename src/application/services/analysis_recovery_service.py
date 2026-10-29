@@ -377,44 +377,11 @@ class AnalysisRecoveryService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            stats_data = clean_checkpoint.get("statistics")
-            deserialized = AnalysisResultSerializer.deserialize(
-                {
-                    "statistics": stats_data if isinstance(stats_data, dict) else {},
-                    "user_analysis": clean_checkpoint.get("user_activity", {}),
-                    "user_titles": clean_checkpoint.get("top_users", []),
-                }
+            cleaned_result, unified_messages, top_users = (
+                self._restore_clean_checkpoint(clean_checkpoint, group_id)
             )
-            statistics = deserialized["statistics"]
-            user_activity = deserialized.get("user_analysis") or {}
-            top_users_raw = clean_checkpoint.get("top_users")
-            top_users: list[dict[str, object]] | None = (
-                top_users_raw if isinstance(top_users_raw, list) else None
-            )
-            unified_messages_raw = clean_checkpoint.get("unified_messages")
-            unified_messages: list[UnifiedMessage] = []
-            if isinstance(unified_messages_raw, list):
-                for message in unified_messages_raw:
-                    if isinstance(message, UnifiedMessage):
-                        unified_messages.append(message)
-                    elif isinstance(message, dict):
-                        # 续跑 LLM 只读取已清洗文本和发送者信息，无须恢复原始附件。
-                        timestamp = message.get("timestamp", 0)
-                        unified_messages.append(
-                            UnifiedMessage(
-                                message_id=str(message.get("message_id", "")),
-                                sender_id=str(message.get("sender_id", "")),
-                                sender_name=str(message.get("sender_name", "")),
-                                group_id=str(message.get("group_id", group_id)),
-                                text_content=str(message.get("text_content", "")),
-                                timestamp=int(timestamp)
-                                if isinstance(timestamp, (int, float, str))
-                                else 0,
-                                sender_card=str(message["sender_card"])
-                                if message.get("sender_card")
-                                else None,
-                            )
-                        )
+            statistics = cleaned_result["statistics"]
+            user_activity = cleaned_result.get("user_analysis") or {}
 
             pipeline.restore_checkpoint_span(AnalysisStage.CLEAN_MESSAGES)
 
@@ -487,6 +454,60 @@ class AnalysisRecoveryService:
                 "resumed_from": AnalysisStage.CLEAN_MESSAGES.value,
                 "trace_id": trace_id,
             }
+
+    @staticmethod
+    def _restore_clean_checkpoint(
+        clean_checkpoint: dict[str, object], group_id: str
+    ) -> tuple[
+        AnalysisResultPayload, list[UnifiedMessage], list[dict[str, object]] | None
+    ]:
+        """在恢复边界还原清洗阶段统计、消息和活跃成员候选。
+
+        Args:
+            clean_checkpoint: 持久化的清洗快照，兼容内存中的消息对象。
+            group_id: 旧消息缺少群标识时采用的目标群号。
+
+        Returns:
+            领域分析结果、恢复的消息列表及可选活跃成员候选列表。
+        """
+        stats_data = clean_checkpoint.get("statistics")
+        deserialized = AnalysisResultSerializer.deserialize(
+            {
+                "statistics": stats_data if isinstance(stats_data, dict) else {},
+                "user_analysis": clean_checkpoint.get("user_activity", {}),
+                "user_titles": clean_checkpoint.get("top_users", []),
+            }
+        )
+        top_users_raw = clean_checkpoint.get("top_users")
+        top_users: list[dict[str, object]] | None = (
+            top_users_raw if isinstance(top_users_raw, list) else None
+        )
+        unified_messages_raw = clean_checkpoint.get("unified_messages")
+        unified_messages: list[UnifiedMessage] = []
+        if isinstance(unified_messages_raw, list):
+            for message in unified_messages_raw:
+                if isinstance(message, UnifiedMessage):
+                    unified_messages.append(message)
+                elif isinstance(message, dict):
+                    # 续跑 LLM 只读取已清洗文本和发送者信息，无须恢复原始附件。
+                    timestamp = message.get("timestamp", 0)
+                    unified_messages.append(
+                        UnifiedMessage(
+                            message_id=str(message.get("message_id", "")),
+                            sender_id=str(message.get("sender_id", "")),
+                            sender_name=str(message.get("sender_name", "")),
+                            group_id=str(message.get("group_id", group_id)),
+                            text_content=str(message.get("text_content", "")),
+                            timestamp=int(timestamp)
+                            if isinstance(timestamp, (int, float, str))
+                            else 0,
+                            sender_card=str(message["sender_card"])
+                            if message.get("sender_card")
+                            else None,
+                        )
+                    )
+
+        return deserialized, unified_messages, top_users
 
     async def _load_analysis_checkpoint(
         self, group_id: str, date_str: str, checkpoint_trace_id: str
