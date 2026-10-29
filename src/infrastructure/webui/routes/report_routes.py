@@ -16,6 +16,8 @@ from ...reporting.template_installer import TemplateInstallError, validate_templ
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from os import stat_result
+
     from ....application.dto.webui_dto import (
         ReportContentQueryDTO,
         RerenderReportRequestDTO,
@@ -318,13 +320,20 @@ class ReportRoutes:
         except Exception:
             pass
 
-        for file_path in sorted(
-            all_files,
-            key=lambda p: p.stat().st_mtime,
+        file_stats: list[tuple[Path, stat_result]] = []
+        for file_path in all_files:
+            try:
+                file_stats.append((file_path, file_path.stat()))
+            except OSError:
+                # 文件可能在枚举后被清理或变为不可读，单个文件失败不阻断历史查询。
+                continue
+
+        for file_path, stat in sorted(
+            file_stats,
+            key=lambda item: item[1].st_mtime,
             reverse=True,
         ):
             try:
-                stat = file_path.stat()
                 stem = file_path.stem
                 is_html = file_path.suffix.lower() == ".html"
                 is_comic = stem.lower().startswith("comic_") or stem.startswith("漫画_")
