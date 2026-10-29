@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 from contextlib import nullcontext
 from pathlib import Path
@@ -602,11 +603,22 @@ class ComicApplicationService:
                 logger.error(f"[Comic] 下载远程参考图失败 {image_ref}: {e}")
                 return None
 
+        return await asyncio.to_thread(self._read_local_reference_image, image_ref)
+
+    def _read_local_reference_image(self, image_ref: str) -> tuple[bytes, str] | None:
+        """在线程中查找并读取本地参考图，避免递归目录扫描阻塞异步任务。
+
+        Args:
+            image_ref: 本地文件引用或已上传文件的相对路径。
+
+        Returns:
+            图片字节和 MIME 类型；找不到或无法读取时返回 None。
+        """
         # 4. 支持本地文件路径（插件数据目录、插件代码目录、AstrBot 根目录、或绝对路径）
         try:
             clean_rel = image_ref.lstrip("/\\")
             candidate_paths: list[Path] = []
-            if hasattr(self, "plugin_data_dir") and self.plugin_data_dir:
+            if self.plugin_data_dir:
                 p_data = Path(self.plugin_data_dir)
                 candidate_paths.extend(
                     [
@@ -632,7 +644,7 @@ class ComicApplicationService:
             # 模糊查找纯文件名
             filename = Path(clean_rel).name
             search_roots: list[Path] = []
-            if hasattr(self, "plugin_data_dir") and self.plugin_data_dir:
+            if self.plugin_data_dir:
                 search_roots.append(Path(self.plugin_data_dir))
             search_roots.append(
                 Path.cwd()

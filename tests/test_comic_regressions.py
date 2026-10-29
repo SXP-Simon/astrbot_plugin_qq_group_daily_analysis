@@ -425,17 +425,16 @@ def test_qq_official_webhook_uses_official_report_capabilities():
 
 def test_uploaded_reference_image_is_loaded_from_plugin_data_dir(tmp_path: Path):
     """已选参考图只允许从插件数据目录读取。"""
-    fetch_reference_image = load_comic_service_method("_fetch_reference_image")
+    from src.application.services.comic_application_service import ComicApplicationService
+
     image_path = tmp_path / "files" / "daily_comic" / "drawing_reference_image"
     image_path.mkdir(parents=True)
     (image_path / "reference.png").write_bytes(b"\x89PNG\r\n\x1a\nimage")
-    service = SimpleNamespace(
-        plugin_data_dir=tmp_path,
-    )
+    service = object.__new__(ComicApplicationService)
+    service.plugin_data_dir = tmp_path
 
     result = asyncio.run(
-        fetch_reference_image(
-            service,
+        service._fetch_reference_image(
             "files/daily_comic/drawing_reference_image/reference.png",
         )
     )
