@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 import httpx
 
 from ....utils.logger import logger
+from .dashscope import build_dashscope_payload
+from .dashscope import resolve_dashscope_size as resolve_dashscope_size
 from .doubao import build_doubao_payload
 
 if TYPE_CHECKING:
@@ -193,63 +195,7 @@ async def call_preset_api(
         target_url = (
             f"{clean_base}/api/v1/services/aigc/multimodal-generation/generation"
         )
-        content: list[dict[str, str]] = [{"text": prompt}]
-        try:
-            dashscope_max_references = min(
-                9, max(0, int(provider.get("max_reference_images", 9)))
-            )
-        except (TypeError, ValueError):
-            dashscope_max_references = 9
-        content.extend(
-            {"image": data_uri} for data_uri in data_uris[:dashscope_max_references]
-        )
-        size_mode = str(provider.get("size_mode") or "preset").strip().lower()
-        custom_size = str(provider.get("custom_size") or "").strip()
-        if size_mode == "custom" and custom_size:
-            normalized_size = custom_size.upper()
-            if normalized_size not in {"1K", "2K", "4K"}:
-                normalized_size = (
-                    custom_size.lower().replace("×", "*").replace("x", "*")
-                )
-            dashscope_size = normalized_size
-        else:
-            dashscope_size = resolve_dashscope_size(image_size, aspect_ratio)
-        is_wan27 = str(model).startswith("wan2.7")
-        enable_sequential = is_wan27 and bool(provider.get("enable_sequential", False))
-        if enable_sequential:
-            dashscope_n_limit = 12
-        elif is_wan27:
-            dashscope_n_limit = 4
-        elif str(model).startswith("qwen-image-2.0"):
-            dashscope_n_limit = 6
-        else:
-            dashscope_n_limit = 1
-        try:
-            dashscope_n = max(1, min(dashscope_n_limit, int(provider.get("n", 1))))
-        except (TypeError, ValueError):
-            dashscope_n = 1
-        parameters: dict[str, object] = {
-            "size": dashscope_size,
-            "n": dashscope_n,
-            "watermark": bool(provider.get("watermark", False)),
-        }
-        negative_prompt = str(provider.get("negative_prompt") or "").strip()
-        if negative_prompt and not is_wan27:
-            parameters["negative_prompt"] = negative_prompt
-        elif negative_prompt:
-            logger.info("[Comic] DashScope wan2.7 不支持负面提示词，已忽略该配置。")
-        if is_wan27:
-            if enable_sequential:
-                parameters["enable_sequential"] = True
-            else:
-                parameters["thinking_mode"] = bool(provider.get("thinking_mode", True))
-        else:
-            parameters["prompt_extend"] = bool(provider.get("prompt_extend", False))
-        payload = {
-            "model": model,
-            "input": {"messages": [{"role": "user", "content": content}]},
-            "parameters": parameters,
-        }
+        payload = build_dashscope_payload(context, prompt, data_uris, provider)
         provider_name = "DashScope"
     elif provider_type == "stepfun":
         return await call_stepfun_api(
@@ -331,21 +277,3 @@ async def call_stepfun_api(
     if image:
         return image
     raise Exception(f"阶跃星辰 API 返回格式异常: {context.summarize_response(data)}")
-
-
-def resolve_dashscope_size(image_size: str, aspect_ratio: str) -> str:
-    """将漫画尺寸和比例换算为 DashScope 的 size 格式。"""
-    long_edge = {"1K": 1280, "2K": 2048, "4K": 4096}.get(image_size.upper(), 2048)
-    try:
-        width_ratio, height_ratio = (int(value) for value in aspect_ratio.split(":", 1))
-        if width_ratio <= 0 or height_ratio <= 0:
-            raise ValueError
-    except (AttributeError, TypeError, ValueError):
-        width_ratio, height_ratio = 1, 1
-    if width_ratio >= height_ratio:
-        width = long_edge
-        height = round(long_edge * height_ratio / width_ratio / 16) * 16
-    else:
-        height = long_edge
-        width = round(long_edge * width_ratio / height_ratio / 16) * 16
-    return f"{max(512, width)}*{max(512, height)}"
