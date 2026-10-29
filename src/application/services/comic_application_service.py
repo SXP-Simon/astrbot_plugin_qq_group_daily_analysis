@@ -251,80 +251,21 @@ class ComicApplicationService:
                     )
                 return None, None
 
-            # 6. 调用绘图 API，捕获"有 URL 但下载失败"的情况
-            fallback_url: str | None = None
-            try:
-                (
-                    final_comic_bytes,
-                    last_error,
-                ) = await self.drawing_client.generate_image(
-                    scene_prompt, images_data=images_data or None
-                )
-            except ImageDownloadFailedError as exc:
-                logger.warning(
-                    f"[Comic] 图片下载失败，保留 fallback URL: {exc.fallback_url}"
-                )
+            (
+                final_comic_bytes,
+                last_error,
+                fallback_url,
+            ) = await self._generate_builtin_comic(scene_prompt, images_data, umo)
+            if fallback_url:
                 if draw_rec:
                     draw_rec.setdefault("payload", {}).update(
                         {
                             "backend": "builtin",
-                            "fallback_url": exc.fallback_url,
-                            "error": "图片下载失败，使用 fallback URL 发送",
+                            "fallback_url": fallback_url,
+                            "error": last_error,
                         }
                     )
-                return None, exc.fallback_url
-
-            if final_comic_bytes and any(
-                final_comic_bytes == reference[0] for reference in images_data
-            ):
-                logger.warning("[Comic] 内建绘图原样返回了参考图，拒绝发送。")
-                final_comic_bytes = None
-                last_error = "绘图服务原样返回了参考图"
-
-            exception_keywords = (
-                self.config_manager.get_drawing_output_exception_retry_keywords()
-            )
-            should_rewrite_prompt = bool(
-                last_error
-                and any(
-                    keyword in last_error for keyword in exception_keywords if keyword
-                )
-            )
-            if not final_comic_bytes and last_error and should_rewrite_prompt:
-                logger.info(
-                    f"[Comic] 画图重试已用尽，请求 LLM 分析报错并重写 Prompt: {last_error}"
-                )
-                new_prompt = await self.llm_analyzer.analyze_retry_prompt(
-                    scene_prompt, last_error, umo
-                )
-                if new_prompt:
-                    logger.info("[Comic] 获取到重写后的 Prompt，进行最后一次尝试...")
-                    try:
-                        final_comic_bytes, _ = await self.drawing_client.generate_image(
-                            new_prompt,
-                            images_data=images_data or None,
-                            disable_retry=True,
-                        )
-                    except ImageDownloadFailedError as exc:
-                        logger.warning(
-                            f"[Comic] 重写 Prompt 后图片下载仍失败，保留 fallback URL: {exc.fallback_url}"
-                        )
-                        if draw_rec:
-                            draw_rec.setdefault("payload", {}).update(
-                                {
-                                    "backend": "builtin",
-                                    "fallback_url": exc.fallback_url,
-                                    "error": "重写 Prompt 后下载仍失败",
-                                }
-                            )
-                        return None, exc.fallback_url
-                    if final_comic_bytes and any(
-                        final_comic_bytes == reference[0] for reference in images_data
-                    ):
-                        logger.warning(
-                            "[Comic] 重写 Prompt 后仍原样返回参考图，拒绝发送。"
-                        )
-                        final_comic_bytes = None
+                return None, fallback_url
 
             if draw_rec:
                 draw_prompts = {
@@ -361,6 +302,78 @@ class ComicApplicationService:
                 logger.error("[Comic] 漫画生成最终失败。")
 
             return final_comic_bytes, fallback_url
+
+    async def _generate_builtin_comic(
+        self,
+        scene_prompt: str,
+        images_data: list[tuple[bytes, str]],
+        umo: str | None,
+    ) -> tuple[bytes | None, str | None, str | None]:
+        """调用内置绘图并按配置执行一次提示词重写，拒绝原样返回的参考图。
+
+        Args:
+            scene_prompt: 已生成的漫画提示词。
+            images_data: 已加载的角色参考图。
+            umo: 用于选择重写模型的消息来源。
+
+        Returns:
+            图片字节、最后的失败原因及下载失败时可直接发送的 URL。
+        """
+        # 6. 调用绘图 API，捕获"有 URL 但下载失败"的情况
+        try:
+            (
+                final_comic_bytes,
+                last_error,
+            ) = await self.drawing_client.generate_image(
+                scene_prompt, images_data=images_data or None
+            )
+        except ImageDownloadFailedError as exc:
+            logger.warning(
+                f"[Comic] 图片下载失败，保留 fallback URL: {exc.fallback_url}"
+            )
+            return None, "图片下载失败，使用 fallback URL 发送", exc.fallback_url
+
+        if final_comic_bytes and any(
+            final_comic_bytes == reference[0] for reference in images_data
+        ):
+            logger.warning("[Comic] 内建绘图原样返回了参考图，拒绝发送。")
+            final_comic_bytes = None
+            last_error = "绘图服务原样返回了参考图"
+
+        exception_keywords = (
+            self.config_manager.get_drawing_output_exception_retry_keywords()
+        )
+        should_rewrite_prompt = bool(
+            last_error
+            and any(keyword in last_error for keyword in exception_keywords if keyword)
+        )
+        if not final_comic_bytes and last_error and should_rewrite_prompt:
+            logger.info(
+                f"[Comic] 画图重试已用尽，请求 LLM 分析报错并重写 Prompt: {last_error}"
+            )
+            new_prompt = await self.llm_analyzer.analyze_retry_prompt(
+                scene_prompt, last_error, umo
+            )
+            if new_prompt:
+                logger.info("[Comic] 获取到重写后的 Prompt，进行最后一次尝试...")
+                try:
+                    final_comic_bytes, _ = await self.drawing_client.generate_image(
+                        new_prompt,
+                        images_data=images_data or None,
+                        disable_retry=True,
+                    )
+                except ImageDownloadFailedError as exc:
+                    logger.warning(
+                        f"[Comic] 重写 Prompt 后图片下载仍失败，保留 fallback URL: {exc.fallback_url}"
+                    )
+                    return None, "重写 Prompt 后下载仍失败", exc.fallback_url
+                if final_comic_bytes and any(
+                    final_comic_bytes == reference[0] for reference in images_data
+                ):
+                    logger.warning("[Comic] 重写 Prompt 后仍原样返回参考图，拒绝发送。")
+                    final_comic_bytes = None
+
+        return final_comic_bytes, last_error, None
 
     async def _generate_via_general_plugin(
         self,

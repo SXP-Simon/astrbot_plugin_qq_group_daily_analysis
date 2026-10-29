@@ -170,63 +170,17 @@ def load_main_method(name: str):
 
 
 def load_comic_service_method(name: str):
-    """从漫画服务加载单个方法，避免测试依赖 AstrBot 运行时。
+    """读取真实漫画服务方法，保留其辅助方法和异常类型依赖。
 
     Args:
-        name: 目标异步方法名称。
+        name: 目标方法名称。
 
     Returns:
-        可直接绑定到测试替身对象的方法。
+        可绑定到测试服务实例的方法。
     """
-    service_path = (
-        Path(__file__).parents[1]
-        / "src"
-        / "application"
-        / "services"
-        / "comic_application_service.py"
-    )
-    module = ast.parse(
-        service_path.read_text(encoding="utf-8"), filename=str(service_path)
-    )
-    service_class = next(
-        node
-        for node in module.body
-        if isinstance(node, ast.ClassDef) and node.name == "ComicApplicationService"
-    )
-    method = next(
-        node
-        for node in service_class.body
-        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
-        and node.name == name
-    )
-    isolated_class = ast.ClassDef(
-        name="ComicServiceHarness",
-        bases=[],
-        keywords=[],
-        body=[method],
-        decorator_list=[],
-    )
-    isolated_module = ast.fix_missing_locations(
-        ast.Module(body=[isolated_class], type_ignores=[])
-    )
-    from collections.abc import Sequence
-    from contextlib import nullcontext
-    from src.domain.value_objects import ComicStoryboard, SummaryTopic
-    from src.shared.trace_context import TraceContext
+    from src.application.services.comic_application_service import ComicApplicationService
 
-    namespace = {
-        "Path": Path,
-        "mimetypes": mimetypes,
-        "logger": Mock(),
-        "Any": Any,
-        "Sequence": Sequence,
-        "SummaryTopic": SummaryTopic,
-        "ComicStoryboard": ComicStoryboard,
-        "TraceContext": TraceContext,
-        "nullcontext": nullcontext,
-    }
-    exec(compile(isolated_module, str(service_path), "exec"), namespace)
-    return getattr(namespace["ComicServiceHarness"], name)
+    return getattr(ComicApplicationService, name)
 
 
 def load_config_manager_class(plugin_data_dir: Path):
@@ -1133,7 +1087,11 @@ def _comic_service(config_manager, drawing_client, **methods):
         "_generate_via_general_plugin": AsyncMock(return_value=None),
     }
     service.update(methods)
-    return SimpleNamespace(**service)
+    from src.application.services.comic_application_service import ComicApplicationService
+
+    instance = object.__new__(ComicApplicationService)
+    instance.__dict__.update(service)
+    return instance
 
 
 def test_big_banana_backend_returns_none_when_plugin_missing():
