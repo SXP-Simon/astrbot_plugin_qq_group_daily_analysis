@@ -83,6 +83,64 @@ def _config_revision(config: Mapping[str, object]) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+def _normalize_rendering_config_for_save(new_config: dict[str, object]) -> None:
+    """在保存前原地规范化渲染方案，保留自定义资源和稳定优先级顺序。
+
+    Args:
+        new_config: 来自保存请求的配置对象，不是运行中的配置实例。
+
+    Raises:
+        ValueError: 渲染配置、方案结构或字段值无效。
+    """
+    if "t2i_rendering" in new_config:
+        rendering_config = new_config["t2i_rendering"]
+        if not isinstance(rendering_config, dict):
+            raise ValueError("t2i_rendering 必须是配置对象")
+        if "t2i_rendering_strategies" in rendering_config:
+            strategies = rendering_config["t2i_rendering_strategies"]
+            if strategies == []:
+                strategies = [dict(item) for item in DEFAULT_RENDERING_STRATEGY_PRESETS]
+                rendering_config["t2i_rendering_strategies"] = strategies
+            if not isinstance(strategies, list):
+                raise ValueError("渲染方案必须是列表")
+            priorities: list[int] = []
+            for strategy in strategies:
+                normalized = parse_rendering_strategies([strategy])[0]
+                priorities.append(normalized["priority"])
+                for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                    if strategy.get(key) == CUSTOM_RESOURCE_OPTION:
+                        strategy[f"custom_{key}"] = normalized[key]
+                    if (
+                        normalized["render_service"] == "custom"
+                        and strategy.get(key) == ""
+                    ):
+                        continue
+                    strategy[key] = normalized[key]
+                for key in (
+                    "__template_key",
+                    "environment",
+                    "service_endpoint",
+                    "service_token",
+                ):
+                    strategy[key] = normalized[key]
+                if "request_timeout" in normalized:
+                    strategy["request_timeout"] = normalized["request_timeout"]
+                if "font_mode" in normalized:
+                    strategy["font_mode"] = normalized["font_mode"]
+                else:
+                    strategy.pop("font_mode", None)
+                strategy.pop("render_service", None)
+            strategies[:] = [
+                item
+                for _priority, item in sorted(
+                    zip(priorities, strategies, strict=True),
+                    key=lambda pair: pair[0],
+                )
+            ]
+        for legacy_key in LEGACY_RENDERING_RESOURCE_KEYS:
+            rendering_config.pop(legacy_key, None)
+
+
 class ConfigRoutes:
     """插件配置中心 Web API 路由处理器。"""
 
@@ -397,63 +455,10 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     status_code=409,
                 )
 
-            if "t2i_rendering" in new_config:
-                rendering_config = new_config["t2i_rendering"]
-                if not isinstance(rendering_config, dict):
-                    return error_response(
-                        "t2i_rendering 必须是配置对象", status_code=400
-                    )
-                if "t2i_rendering_strategies" in rendering_config:
-                    try:
-                        strategies = rendering_config["t2i_rendering_strategies"]
-                        if strategies == []:
-                            strategies = [
-                                dict(item)
-                                for item in DEFAULT_RENDERING_STRATEGY_PRESETS
-                            ]
-                            rendering_config["t2i_rendering_strategies"] = strategies
-                        if not isinstance(strategies, list):
-                            raise ValueError("渲染方案必须是列表")
-                        priorities: list[int] = []
-                        for strategy in strategies:
-                            normalized = parse_rendering_strategies([strategy])[0]
-                            priorities.append(normalized["priority"])
-                            for key in ("cdn_base_url", "google_fonts", "gstatic"):
-                                if strategy.get(key) == CUSTOM_RESOURCE_OPTION:
-                                    strategy[f"custom_{key}"] = normalized[key]
-                                if (
-                                    normalized["render_service"] == "custom"
-                                    and strategy.get(key) == ""
-                                ):
-                                    continue
-                                strategy[key] = normalized[key]
-                            for key in (
-                                "__template_key",
-                                "environment",
-                                "service_endpoint",
-                                "service_token",
-                            ):
-                                strategy[key] = normalized[key]
-                            if "request_timeout" in normalized:
-                                strategy["request_timeout"] = normalized[
-                                    "request_timeout"
-                                ]
-                            if "font_mode" in normalized:
-                                strategy["font_mode"] = normalized["font_mode"]
-                            else:
-                                strategy.pop("font_mode", None)
-                            strategy.pop("render_service", None)
-                        strategies[:] = [
-                            item
-                            for _priority, item in sorted(
-                                zip(priorities, strategies, strict=True),
-                                key=lambda pair: pair[0],
-                            )
-                        ]
-                    except ValueError as exc:
-                        return error_response(str(exc), status_code=400)
-                for legacy_key in LEGACY_RENDERING_RESOURCE_KEYS:
-                    rendering_config.pop(legacy_key, None)
+            try:
+                _normalize_rendering_config_for_save(new_config)
+            except ValueError as exc:
+                return error_response(str(exc), status_code=400)
 
             daily_comic_config = new_config.get("daily_comic")
             if isinstance(daily_comic_config, dict):
