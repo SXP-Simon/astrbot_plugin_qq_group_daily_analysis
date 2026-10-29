@@ -764,6 +764,7 @@ async def call_provider_with_retry(
                 except asyncio.CancelledError:
                     if not request_task.done():
                         request_task.cancel()
+                    await asyncio.gather(request_task, return_exceptions=True)
                     raise
 
                 logger.debug(

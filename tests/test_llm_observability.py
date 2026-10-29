@@ -1158,18 +1158,26 @@ def test_is_content_risk_error_patterns():
     from src.infrastructure.analysis.utils.llm_utils import _is_content_risk_error
 
     # DeepSeek 400 Content Exists Risk
-    err_deepseek = RuntimeError("Error code: 400 - {'error': {'message': 'Content Exists Risk (request_id: 3f16-9-fbf)', 'type': 'invalid_request_error'}}")
+    err_deepseek = RuntimeError(
+        "Error code: 400 - {'error': {'message': 'Content Exists Risk (request_id: 3f16-9-fbf)', 'type': 'invalid_request_error'}}"
+    )
     assert _is_content_risk_error(err_deepseek) is True
 
     # OpenAI / Azure content_filter
-    err_openai = RuntimeError("Error code: 400 - The response was filtered due to the prompt triggering Azure OpenAI's content management policy.")
+    err_openai = RuntimeError(
+        "Error code: 400 - The response was filtered due to the prompt triggering Azure OpenAI's content management policy."
+    )
     assert _is_content_risk_error(err_openai) is True
 
-    err_cf_code = RuntimeError("{'code': 'content_filter', 'message': 'sensitive_words_detected'}")
+    err_cf_code = RuntimeError(
+        "{'code': 'content_filter', 'message': 'sensitive_words_detected'}"
+    )
     assert _is_content_risk_error(err_cf_code) is True
 
     # 通义千问 / DashScope
-    err_qwen = RuntimeError("DataInspectionFailed: Input data may contain inappropriate content.")
+    err_qwen = RuntimeError(
+        "DataInspectionFailed: Input data may contain inappropriate content."
+    )
     assert _is_content_risk_error(err_qwen) is True
 
     # 智谱 / 百度千帆 (含文本或纯数字代码)
@@ -1217,7 +1225,9 @@ def test_content_risk_fast_fails_without_retrying_same_provider_and_protects_cir
 
         async def llm_generate(self, **kwargs):
             self.call_count += 1
-            raise RuntimeError("Error code: 400 - {'error': {'message': 'Content Exists Risk (request_id: mock-123)'}}")
+            raise RuntimeError(
+                "Error code: 400 - {'error': {'message': 'Content Exists Risk (request_id: mock-123)'}}"
+            )
 
     class MockConfig:
         def get_llm_retries(self):
@@ -1263,6 +1273,7 @@ def test_content_risk_fast_fails_without_retrying_same_provider_and_protects_cir
 
 def test_content_risk_switches_to_fallback_provider_when_available():
     """验证当主 Provider 遭遇内容风控时，能够快速短路并切换至备用 Fallback Provider。"""
+
     class FakeProvider:
         def __init__(self, pid: str, model: str):
             self.id = pid
@@ -1288,7 +1299,9 @@ def test_content_risk_switches_to_fallback_provider_when_available():
             pid = kwargs.get("chat_provider_id")
             self.called_providers.append(pid)
             if pid == "main-deepseek":
-                raise RuntimeError("400 Content Exists Risk: sensitive keywords detected")
+                raise RuntimeError(
+                    "400 Content Exists Risk: sensitive keywords detected"
+                )
             return LLMResponse(role="assistant", completion_text="fallback success")
 
     class MockConfig:
@@ -1330,4 +1343,54 @@ def test_content_risk_switches_to_fallback_provider_when_available():
     asyncio.run(scenario())
 
 
+def test_provider_cancellation_waits_for_cleanup_before_releasing_slot():
+    """取消时等待 Provider 的异步清理，避免过早释放并发槽位。"""
 
+    async def scenario():
+        _reset_global_limiter()
+        llm_utils._circuit_breakers.clear()
+        limiter = GlobalRateLimiter.get_instance(1)
+        started, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+        class FakeContext:
+            def get_provider_by_id(self, provider_id):
+                return object()
+
+            async def llm_generate(self, **kwargs):
+                started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cleaning.set()
+                    await release.wait()
+
+        config = SimpleNamespace(
+            get_llm_retries=lambda: 1,
+            get_llm_backoff=lambda: 0,
+            get_enable_streaming_llm_call=lambda: False,
+        )
+        request = asyncio.create_task(
+            call_provider_with_retry(
+                FakeContext(), config, "hello", provider_id="cancel-cleanup-provider"
+            )
+        )
+        try:
+            await asyncio.wait_for(started.wait(), 2)
+            request.cancel()
+            await asyncio.wait_for(cleaning.wait(), 2)
+            await asyncio.sleep(0)
+            assert not request.done()
+            assert limiter.available_slots == 0
+            release.set()
+            results = await asyncio.gather(request, return_exceptions=True)
+            assert isinstance(results[0], asyncio.CancelledError)
+            assert limiter.available_slots == 1
+        finally:
+            release.set()
+            if not request.done():
+                request.cancel()
+            await asyncio.gather(request, return_exceptions=True)
+            _reset_global_limiter()
+            llm_utils._circuit_breakers.clear()
+
+    asyncio.run(scenario())
