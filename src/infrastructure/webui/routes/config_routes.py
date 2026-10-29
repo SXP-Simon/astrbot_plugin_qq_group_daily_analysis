@@ -12,7 +12,7 @@ import json
 import re
 import time
 from collections.abc import Iterable
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING
 
 from ....shared.constants import PLUGIN_NAME
@@ -742,6 +742,13 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 return error_response("Missing path parameter", status_code=400)
 
             query_dto: ConfigFileContentQueryDTO = {"path": rel_path}
+            relative_path = Path(rel_path.replace("\\", "/"))
+            if (
+                relative_path.is_absolute()
+                or PureWindowsPath(rel_path).drive
+                or ".." in relative_path.parts
+            ):
+                return error_response("文件路径必须位于插件资源目录内", status_code=400)
 
             search_roots: list[Path] = []
             try:
@@ -759,10 +766,10 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
             search_roots.append(Path.cwd() / "data" / "plugins" / PLUGIN_NAME)
 
             target_file: Path | None = None
-            clean_rel = query_dto["path"].lstrip("/\\")
+            clean_rel = relative_path.as_posix()
             for root in search_roots:
                 cand = (root / clean_rel).resolve()
-                if cand.is_file() and cand.exists():
+                if cand.is_relative_to(root.resolve()) and cand.is_file():
                     target_file = cand
                     break
 
@@ -770,9 +777,14 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 filename = Path(clean_rel).name
                 for root in search_roots:
                     files_dir = root / "files"
-                    if files_dir.exists():
+                    if files_dir.exists() and files_dir.resolve().is_relative_to(
+                        root.resolve()
+                    ):
                         for match in files_dir.rglob(filename):
-                            if match.is_file():
+                            if (
+                                match.resolve().is_relative_to(root.resolve())
+                                and match.is_file()
+                            ):
                                 target_file = match
                                 break
                     if target_file:
@@ -785,8 +797,8 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
 
             ext = target_file.suffix.lower().lstrip(".")
             mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
-            with open(target_file, "rb") as f:
-                b64_content = base64.b64encode(f.read()).decode("utf-8")
+            content = await asyncio.to_thread(target_file.read_bytes)
+            b64_content = base64.b64encode(content).decode("utf-8")
 
             return json_response(
                 {
