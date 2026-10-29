@@ -654,62 +654,10 @@ class AnalysisCommandHandler:
             if stop_request is not None and stop_request.refresh():
                 raise AnalysisStoppedError
             if html_path:
-                is_only_url = self.config_manager.get_html_only_url()
-                base_url = self.config_manager.get_html_base_url()
-                should_send_file = True
-
-                if is_only_url:
-                    if base_url and base_url.strip():
-                        html_output_dir = self.config_manager.get_html_output_dir()
-                        if not html_output_dir:
-                            html_output_dir = os.path.join(
-                                str(self.plugin_data_dir),
-                                "self_hosted_html_reports",
-                            )
-
-                        rel_path = os.path.relpath(html_path, html_output_dir)
-                        url_path = rel_path.replace(os.sep, "/")
-                        encoded_url_path = quote(url_path.lstrip("/"), safe="/")
-                        report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
-
-                        yield event.plain_result(
-                            f"📊 今日群聊分析报告已生成：\n{report_url}"
-                        )
-                        should_send_file = False
-                    else:
-                        logger.warning(
-                            f"手动触发群 {group_id} 开启了仅发送外链，但未配置 html_base_url，回退至发送文件。"
-                        )
-
-                if should_send_file:
-                    caption = self.report_generator.build_html_caption(html_path)
-                    sent = False
-                    if self.message_sender:
-                        sent = await self.message_sender.send_file(
-                            group_id,
-                            html_path,
-                            caption=caption,
-                            platform_id=platform_id,
-                        )
-                        if stop_request is not None and stop_request.refresh():
-                            raise AnalysisStoppedError
-                    elif isinstance(adapter, GroupFileSupportProtocol):
-                        sent = await adapter.upload_group_file_to_folder(
-                            group_id, html_path, filename=Path(html_path).name
-                        )
-                        if stop_request is not None and stop_request.refresh():
-                            raise AnalysisStoppedError
-                        if sent and caption:
-                            await adapter.send_text(group_id, caption)
-
-                    if not sent:
-                        yield event.chain_result(
-                            [File(name=Path(html_path).name, file=html_path)]
-                        )
-                        if caption:
-                            if stop_request is not None and stop_request.refresh():
-                                raise AnalysisStoppedError
-                            yield event.plain_result(caption)
+                async for message in self._send_html_report(
+                    event, html_path, group_id, platform_id, adapter, stop_request
+                ):
+                    yield message
             else:
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
@@ -717,6 +665,72 @@ class AnalysisCommandHandler:
             await self._send_text_reports(
                 group_id, analysis_result, is_qq_official, adapter, stop_request
             )
+
+    async def _send_html_report(
+        self,
+        event: AstrMessageEvent,
+        html_path: str,
+        group_id: str,
+        platform_id: str | None,
+        adapter: PlatformAdapterProtocol,
+        stop_request: StopRequest | None = None,
+    ) -> AsyncGenerator[MessageEventResult]:
+        """发送已生成的 HTML 外链或文件，并在交付边界处理停止请求。
+
+        Args:
+            event: 用于构建消息结果的宿主事件。
+            html_path: 已生成的 HTML 文件路径。
+            group_id: 目标群号。
+            platform_id: 当前平台实例标识。
+            adapter: 目标平台适配器。
+            stop_request: 当前手动任务的停止请求。
+
+        Returns:
+            需要由宿主发送的外链、文件或说明消息。
+
+        Raises:
+            AnalysisStoppedError: 用户在交付期间停止任务。
+        """
+        is_only_url = self.config_manager.get_html_only_url()
+        base_url = self.config_manager.get_html_base_url()
+        if is_only_url and base_url and base_url.strip():
+            html_output_dir = self.config_manager.get_html_output_dir() or (
+                self.plugin_data_dir / "self_hosted_html_reports"
+            )
+            rel_path = os.path.relpath(html_path, html_output_dir)
+            url_path = rel_path.replace(os.sep, "/")
+            encoded_url_path = quote(url_path.lstrip("/"), safe="/")
+            report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
+            yield event.plain_result(f"📊 今日群聊分析报告已生成：\n{report_url}")
+            return
+        if is_only_url:
+            logger.warning(
+                f"手动触发群 {group_id} 开启了仅发送外链，但未配置 html_base_url，回退至发送文件。"
+            )
+
+        caption = self.report_generator.build_html_caption(html_path)
+        sent = False
+        if self.message_sender:
+            sent = await self.message_sender.send_file(
+                group_id, html_path, caption=caption, platform_id=platform_id
+            )
+            if stop_request is not None and stop_request.refresh():
+                raise AnalysisStoppedError
+        elif isinstance(adapter, GroupFileSupportProtocol):
+            sent = await adapter.upload_group_file_to_folder(
+                group_id, html_path, filename=Path(html_path).name
+            )
+            if stop_request is not None and stop_request.refresh():
+                raise AnalysisStoppedError
+            if sent and caption:
+                await adapter.send_text(group_id, caption)
+
+        if not sent:
+            yield event.chain_result([File(name=Path(html_path).name, file=html_path)])
+            if caption:
+                if stop_request is not None and stop_request.refresh():
+                    raise AnalysisStoppedError
+                yield event.plain_result(caption)
 
     async def _send_text_reports(
         self,
