@@ -12,6 +12,7 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfoNotFoundError
 
+from src.domain.value_objects import TokenUsage
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.templates import HTMLTemplates
 
@@ -477,7 +478,7 @@ def test_comic_generation_passes_character_storyboard_prompt():
     topics = [{"topic": "话题", "detail": "详情"}]
     character = {"name": "角色甲", "storyboard_prompt": "角色模板"}
     llm_analyzer = SimpleNamespace(
-        analyze_comic_storyboards=AsyncMock(return_value=([], object()))
+        analyze_comic_storyboards=AsyncMock(return_value=([], TokenUsage()))
     )
     config_manager = SimpleNamespace(
         get_enable_daily_comic=Mock(return_value=True),
@@ -485,10 +486,11 @@ def test_comic_generation_passes_character_storyboard_prompt():
         get_comic_character_persona_id=Mock(return_value="persona-a"),
         get_comic_character_storyboard_prompt=Mock(return_value="角色模板"),
     )
-    service = SimpleNamespace(
-        config_manager=config_manager,
-        llm_analyzer=llm_analyzer,
-    )
+    from src.application.services.comic_application_service import ComicApplicationService
+
+    service = object.__new__(ComicApplicationService)
+    service.config_manager = config_manager
+    service.llm_analyzer = llm_analyzer
 
     asyncio.run(generate_comic(service, topics, "123456", "umo"))
 
@@ -1078,7 +1080,7 @@ def _comic_service(config_manager, drawing_client, **methods):
         "config_manager": config_manager,
         "llm_analyzer": SimpleNamespace(
             analyze_comic_storyboards=AsyncMock(
-                return_value=([{"scene": "comic scene prompt"}], None)
+                return_value=([{"scene": "comic scene prompt"}], TokenUsage())
             )
         ),
         "drawing_client": drawing_client,

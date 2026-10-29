@@ -62,6 +62,11 @@ class ComicApplicationService:
         """
         生成漫画并返回图片字节数据。
 
+        Args:
+            topics: 待改编的群聊话题。
+            group_id: 目标群组标识。
+            umo: 用于选择模型的消息来源。
+
         Returns:
             (comic_bytes, fallback_url):
             - comic_bytes: 生成成功时为图片字节，失败时为 None。
@@ -84,82 +89,10 @@ class ComicApplicationService:
 
         trace = TraceContext.current()
 
-        # 1. 提取分镜和金句
-        sb_ctx = (
-            trace.span_async(AnalysisStage.COMIC_STORYBOARD) if trace else nullcontext()
-        )
-        async with sb_ctx as sb_rec:
-            (
-                storyboards,
-                storyboard_usage,
-            ) = await self.llm_analyzer.analyze_comic_storyboards(
-                topics,
-                umo,
-                persona_id=persona_id or None,
-                prompt_template=prompt_template or None,
-            )
-            if sb_rec:
-                sb_prompts: dict[str, object] = {}
-                llm_prompts = trace.metadata.get("llm_prompts") if trace else None
-                if isinstance(llm_prompts, dict):
-                    for k, p in llm_prompts.items():
-                        if "comic" in str(k) or str(k) == "comic_storyboards":
-                            sb_prompts[str(k)] = p
-                if not sb_prompts and storyboards:
-                    first_sb = storyboards[0] if storyboards else None
-                    first_scene = (
-                        (
-                            first_sb.scene
-                            if isinstance(first_sb, ComicStoryboard)
-                            else first_sb.get("scene", "")
-                        )
-                        if first_sb
-                        else ""
-                    )
-                    sb_prompts["comic_storyboards"] = {
-                        "prompt": prompt_template
-                        or "自动从群聊话题中提取漫画多格分镜与生图提示词",
-                        "system_prompt": f"漫画分镜师 | 人格: {persona_id or character_name}",
-                        "completion": first_scene,
-                        "prompt_tokens": getattr(storyboard_usage, "prompt_tokens", 0),
-                        "completion_tokens": getattr(
-                            storyboard_usage, "completion_tokens", 0
-                        ),
-                        "tokens": getattr(storyboard_usage, "total_tokens", 0),
-                    }
-                sb_rec.setdefault("payload", {}).update(
-                    {
-                        "character_name": character_name,
-                        "topics_count": len(topics),
-                        "storyboards_count": len(storyboards) if storyboards else 0,
-                        "prompt_tokens": getattr(storyboard_usage, "prompt_tokens", 0),
-                        "completion_tokens": getattr(
-                            storyboard_usage, "completion_tokens", 0
-                        ),
-                        "total_tokens": getattr(storyboard_usage, "total_tokens", 0),
-                        "prompts": sb_prompts,
-                    }
-                )
-                if not storyboards:
-                    sb_rec["payload"]["warning"] = "未能从群聊话题中提取出漫画分镜"
-
-        if not storyboards:
-            logger.warning(
-                f"[Comic] 群 {group_id} 未能提取到任何金句分镜，取消漫画生成。"
-            )
-            return None, None
-
-        logger.info("[Comic] 成功提取到全景分镜提示词，开始调用绘画 API...")
-
-        # 2. 直接生成一张图片
-        first_sb = storyboards[0]
-        scene_prompt = (
-            first_sb.scene
-            if isinstance(first_sb, ComicStoryboard)
-            else first_sb.get("scene", "")
+        scene_prompt = await self._generate_scene_prompt(
+            topics, umo, character_name, persona_id, prompt_template
         )
         if not scene_prompt:
-            logger.error("[Comic] 提取到的场景提示词为空，取消漫画生成。")
             return None, None
 
         logger.debug(f"[Comic] 漫画 Prompt 已生成，长度: {len(scene_prompt)}")
@@ -302,6 +235,101 @@ class ComicApplicationService:
                 logger.error("[Comic] 漫画生成最终失败。")
 
             return final_comic_bytes, fallback_url
+
+    async def _generate_scene_prompt(
+        self,
+        topics: Sequence[SummaryTopic] | Sequence[dict[str, object]],
+        umo: str | None,
+        character_name: str,
+        persona_id: str,
+        prompt_template: str,
+    ) -> str | None:
+        """生成漫画分镜并记录该步骤的提示词、Token 用量与空结果诊断。
+
+        Args:
+            topics: 待改编的群聊话题。
+            umo: 用于选择分析模型的消息来源。
+            character_name: 当前角色方案名称。
+            persona_id: 当前角色使用的人格标识。
+            prompt_template: 当前角色的分镜提示词模板。
+
+        Returns:
+            第一条有效分镜的绘图提示词；分镜缺失或为空时返回 None。
+        """
+        trace = TraceContext.current()
+        # 1. 提取分镜和金句
+        sb_ctx = (
+            trace.span_async(AnalysisStage.COMIC_STORYBOARD) if trace else nullcontext()
+        )
+        async with sb_ctx as sb_rec:
+            (
+                storyboards,
+                storyboard_usage,
+            ) = await self.llm_analyzer.analyze_comic_storyboards(
+                topics,
+                umo,
+                persona_id=persona_id or None,
+                prompt_template=prompt_template or None,
+            )
+            if sb_rec:
+                sb_prompts: dict[str, object] = {}
+                llm_prompts = trace.metadata.get("llm_prompts") if trace else None
+                if isinstance(llm_prompts, dict):
+                    for k, p in llm_prompts.items():
+                        if "comic" in str(k) or str(k) == "comic_storyboards":
+                            sb_prompts[str(k)] = p
+                if not sb_prompts and storyboards:
+                    first_sb = storyboards[0] if storyboards else None
+                    first_scene = (
+                        (
+                            first_sb.scene
+                            if isinstance(first_sb, ComicStoryboard)
+                            else first_sb.get("scene", "")
+                        )
+                        if first_sb
+                        else ""
+                    )
+                    sb_prompts["comic_storyboards"] = {
+                        "prompt": prompt_template
+                        or "自动从群聊话题中提取漫画多格分镜与生图提示词",
+                        "system_prompt": f"漫画分镜师 | 人格: {persona_id or character_name}",
+                        "completion": first_scene,
+                        "prompt_tokens": storyboard_usage.prompt_tokens,
+                        "completion_tokens": storyboard_usage.completion_tokens,
+                        "tokens": storyboard_usage.total_tokens,
+                    }
+                sb_rec.setdefault("payload", {}).update(
+                    {
+                        "character_name": character_name,
+                        "topics_count": len(topics),
+                        "storyboards_count": len(storyboards) if storyboards else 0,
+                        "prompt_tokens": storyboard_usage.prompt_tokens,
+                        "completion_tokens": storyboard_usage.completion_tokens,
+                        "total_tokens": storyboard_usage.total_tokens,
+                        "prompts": sb_prompts,
+                    }
+                )
+                if not storyboards:
+                    sb_rec["payload"]["warning"] = "未能从群聊话题中提取出漫画分镜"
+
+        if not storyboards:
+            logger.warning("[Comic] 未能提取到任何金句分镜，取消漫画生成。")
+            return None
+
+        logger.info("[Comic] 成功提取到全景分镜提示词，开始调用绘画 API...")
+
+        # 2. 直接生成一张图片
+        first_sb = storyboards[0]
+        scene_prompt = (
+            first_sb.scene
+            if isinstance(first_sb, ComicStoryboard)
+            else first_sb.get("scene", "")
+        )
+        if not scene_prompt:
+            logger.error("[Comic] 提取到的场景提示词为空，取消漫画生成。")
+            return None
+
+        return scene_prompt
 
     async def _generate_builtin_comic(
         self,
