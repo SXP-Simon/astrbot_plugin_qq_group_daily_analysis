@@ -289,33 +289,10 @@ class AnalysisRecoveryService:
             date_str=date_str,
         )
 
-        cached_llm = (
-            (
-                await asyncio.to_thread(
-                    self.checkpoint_store.get_checkpoint,
-                    group_id,
-                    date_str,
-                    AnalysisStage.LLM_ANALYSIS.value,
-                    trace_id=checkpoint_trace_id,
-                )
-            )
-            if self.checkpoint_store
-            else None
+        cached_result = await self._load_analysis_checkpoint(
+            group_id, date_str, checkpoint_trace_id
         )
-        if not cached_llm:
-            try:
-                hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if (
-                    isinstance(hist_data, dict)
-                    and isinstance(hist_data.get("statistics"), (dict, GroupStatistics))
-                    and hist_data.get("trace_id") == checkpoint_trace_id
-                ):
-                    cached_llm = hist_data
-            except Exception:
-                cached_llm = None
-
-        if isinstance(cached_llm, dict):
-            cached_result = AnalysisResultSerializer.deserialize(cached_llm)
+        if cached_result is not None:
             cached_topics = cached_result.get("topics", [])
             cached_titles = cached_result.get("user_titles", [])
             cached_stats = cached_result.get("statistics")
@@ -441,27 +418,13 @@ class AnalysisRecoveryService:
 
             pipeline.restore_checkpoint_span(AnalysisStage.CLEAN_MESSAGES)
 
-            cached_result = (
-                AnalysisResultSerializer.deserialize(cached_llm)
-                if isinstance(cached_llm, dict)
-                else {}
-            )
-
-            raw_topics = cached_result.get("topics")
-            topics = raw_topics if isinstance(raw_topics, list) else []
-            raw_user_titles = cached_result.get("user_titles")
-            user_titles = raw_user_titles if isinstance(raw_user_titles, list) else []
-            cached_stats = cached_result.get("statistics")
+            cached_result = cached_result or AnalysisResultSerializer.deserialize({})
+            topics = cached_result["topics"]
+            user_titles = cached_result["user_titles"]
+            cached_stats = cached_result["statistics"]
             chat_quality_review = cached_result.get("chat_quality_review")
-            if isinstance(cached_stats, GroupStatistics):
-                golden_quotes = cached_stats.golden_quotes
-                total_token_usage = cached_stats.token_usage
-            elif isinstance(cached_stats, dict):
-                golden_quotes = cached_stats.get("golden_quotes", [])
-                total_token_usage = cached_stats.get("token_usage", TokenUsage())
-            else:
-                golden_quotes = []
-                total_token_usage = TokenUsage()
+            golden_quotes = cached_stats.golden_quotes
+            total_token_usage = cached_stats.token_usage
 
             statistics.golden_quotes = golden_quotes
             statistics.token_usage = total_token_usage
@@ -524,6 +487,47 @@ class AnalysisRecoveryService:
                 "resumed_from": AnalysisStage.CLEAN_MESSAGES.value,
                 "trace_id": trace_id,
             }
+
+    async def _load_analysis_checkpoint(
+        self, group_id: str, date_str: str, checkpoint_trace_id: str
+    ) -> AnalysisResultPayload | None:
+        """优先加载指定任务的分析快照，缺失时仅回退同源的每日历史。
+
+        Args:
+            group_id: 待恢复的群组标识。
+            date_str: 原分析日期。
+            checkpoint_trace_id: 原任务的追踪标识。
+
+        Returns:
+            已还原为领域模型的完整或部分结果；未命中同源快照时返回 None。
+        """
+        cached = (
+            await asyncio.to_thread(
+                self.checkpoint_store.get_checkpoint,
+                group_id,
+                date_str,
+                AnalysisStage.LLM_ANALYSIS.value,
+                trace_id=checkpoint_trace_id,
+            )
+            if self.checkpoint_store
+            else None
+        )
+        if not cached:
+            try:
+                history = await self.history_manager.get_analysis(group_id, date_str)
+                if (
+                    isinstance(history, dict)
+                    and isinstance(history.get("statistics"), (dict, GroupStatistics))
+                    and history.get("trace_id") == checkpoint_trace_id
+                ):
+                    cached = history
+            except Exception:
+                cached = None
+        return (
+            AnalysisResultSerializer.deserialize(cached)
+            if isinstance(cached, dict)
+            else None
+        )
 
     async def _complete_missing_sections(
         self,
