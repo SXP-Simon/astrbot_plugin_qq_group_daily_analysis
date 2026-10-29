@@ -1441,8 +1441,10 @@ class TraceSQLiteStore:
                         models_in_trace.add("默认会话模型")
 
                 tot_tok = int(tw["total_tokens"] or 0)
-                tokens_per_p = tot_tok // max(1, len(providers_in_trace))
-                for pid in providers_in_trace:
+                tokens_per_p, provider_remainder = divmod(
+                    tot_tok, len(providers_in_trace)
+                )
+                for index, pid in enumerate(sorted(providers_in_trace)):
                     if pid not in provider_map:
                         provider_map[pid] = {
                             "name": pid,
@@ -1451,11 +1453,13 @@ class TraceSQLiteStore:
                         }
                     cur_p_tokens = int(provider_map[pid]["total_tokens"])
                     cur_p_reqs = int(provider_map[pid]["request_count"])
-                    provider_map[pid]["total_tokens"] = cur_p_tokens + tokens_per_p
+                    provider_map[pid]["total_tokens"] = (
+                        cur_p_tokens + tokens_per_p + (index < provider_remainder)
+                    )
                     provider_map[pid]["request_count"] = cur_p_reqs + 1
 
-                tokens_per_m = tot_tok // max(1, len(models_in_trace))
-                for mid in models_in_trace:
+                tokens_per_m, model_remainder = divmod(tot_tok, len(models_in_trace))
+                for index, mid in enumerate(sorted(models_in_trace)):
                     if mid not in model_map:
                         model_map[mid] = {
                             "name": mid,
@@ -1464,7 +1468,9 @@ class TraceSQLiteStore:
                         }
                     cur_m_tokens = int(model_map[mid]["total_tokens"])
                     cur_m_reqs = int(model_map[mid]["request_count"])
-                    model_map[mid]["total_tokens"] = cur_m_tokens + tokens_per_m
+                    model_map[mid]["total_tokens"] = (
+                        cur_m_tokens + tokens_per_m + (index < model_remainder)
+                    )
                     model_map[mid]["request_count"] = cur_m_reqs + 1
 
         provider_breakdown = [
