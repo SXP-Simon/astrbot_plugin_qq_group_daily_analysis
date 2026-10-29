@@ -226,46 +226,46 @@ class ScheduledTargetResolver:
                             },
                         )
 
-                if adapter:
-                    try:
-                        actual_platform_id = self.bot_manager.get_adapter_platform_id(
-                            adapter
-                        ) or str(platform_id)
-                        groups = await adapter.get_group_list()
-                        groups = [
-                            str(group_id).strip()
-                            for group_id in groups
-                            if str(group_id).strip()
-                        ]
+                if not adapter:
+                    logger.debug(f"平台 {platform_id} 无匹配适配器，跳过获取群列表")
+                    continue
+                try:
+                    actual_platform_id = self.bot_manager.get_adapter_platform_id(
+                        adapter
+                    ) or str(platform_id)
+                    groups = await adapter.get_group_list()
+                    groups = [
+                        str(group_id).strip()
+                        for group_id in groups
+                        if str(group_id).strip()
+                    ]
 
-                        p_name = None
-                        if hasattr(adapter, "get_platform_name"):
-                            try:
-                                p_name = adapter.get_platform_name()
-                            except Exception:
-                                p_name = None
+                    p_name = None
+                    if hasattr(adapter, "get_platform_name"):
+                        try:
+                            p_name = adapter.get_platform_name()
+                        except Exception:
+                            p_name = None
 
-                        enabled_count = 0
-                        for group_id in groups:
-                            if self.bot_manager.is_plugin_enabled(
-                                actual_platform_id, PLUGIN_NAME, group_id=group_id
-                            ):
-                                all_groups.add((actual_platform_id, str(group_id)))
-                                enabled_count += 1
-                            else:
-                                logger.debug(
-                                    f"群组 {actual_platform_id}:{group_id} 所在 AstrBot 配置文件未启用插件 {PLUGIN_NAME}，跳过"
-                                )
+                    enabled_count = 0
+                    for group_id in groups:
+                        if not self.bot_manager.is_plugin_enabled(
+                            actual_platform_id, PLUGIN_NAME, group_id=group_id
+                        ):
+                            logger.debug(
+                                f"群组 {actual_platform_id}:{group_id} 所在 AstrBot 配置文件未启用插件 {PLUGIN_NAME}，跳过"
+                            )
+                            continue
+                        all_groups.add((actual_platform_id, str(group_id)))
+                        enabled_count += 1
 
-                        logger.info(
-                            f"平台 {actual_platform_id} ({p_name or 'unknown'}) 扫描到 {len(groups)} 个群组 (启用插件: {enabled_count} 个)"
-                        )
-                        continue
+                    logger.info(
+                        f"平台 {actual_platform_id} ({p_name or 'unknown'}) 扫描到 {len(groups)} 个群组 (启用插件: {enabled_count} 个)"
+                    )
+                    continue
 
-                    except Exception as e:
-                        logger.warning(f"适配器 {platform_id} 获取群列表失败: {e}")
-
-                logger.debug(f"平台 {platform_id} 无匹配适配器，跳过获取群列表")
+                except Exception as e:
+                    logger.warning(f"适配器 {platform_id} 获取群列表失败: {e}")
 
             except Exception as e:
                 logger.error(f"平台 {platform_id} 获取群列表异常: {e}")
