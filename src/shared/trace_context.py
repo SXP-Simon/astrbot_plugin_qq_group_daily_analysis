@@ -765,9 +765,20 @@ class TraceContext:
         return self
 
     async def __aenter__(self) -> TraceContext:
+        """绑定异步上下文，初始保存失败或取消时恢复进入前的绑定。"""
+        previous_active = _active_traces.get(self.trace_id)
         self._token = _current_trace.set(self)
         _active_traces[self.trace_id] = self
-        await self.persist_snapshot_async()
+        try:
+            await self.persist_snapshot_async()
+        except BaseException:
+            _current_trace.reset(self._token)
+            self._token = None
+            if previous_active is not None:
+                _active_traces[self.trace_id] = previous_active
+            else:
+                _active_traces.pop(self.trace_id, None)
+            raise
         return self
 
     async def __aexit__(
@@ -922,9 +933,19 @@ class TraceContext:
             platform=platform,
             trigger_type=trigger_type,
         )
+        previous_active = _active_traces.get(ctx.trace_id)
         ctx._token = _current_trace.set(ctx)
         _active_traces[ctx.trace_id] = ctx
-        await ctx.persist_snapshot_async()
+        try:
+            await ctx.persist_snapshot_async()
+        except BaseException:
+            _current_trace.reset(ctx._token)
+            ctx._token = None
+            if previous_active is not None:
+                _active_traces[ctx.trace_id] = previous_active
+            else:
+                _active_traces.pop(ctx.trace_id, None)
+            raise
         return ctx
 
     @classmethod

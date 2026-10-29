@@ -68,3 +68,31 @@ async def test_async_trace_context_keeps_binding_and_persists(tmp_path):
         assert store.get_trace("async-context")["status"] == "succeeded"
     finally:
         TraceContext.set_global_store(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["set", "context"])
+@pytest.mark.parametrize("error_type", [RuntimeError, asyncio.CancelledError])
+async def test_async_trace_initialization_failure_restores_parent(
+    monkeypatch, entry, error_type
+):
+    import src.shared.trace_context as trace_module
+
+    monkeypatch.setattr(trace_module, "_global_trace_store", None)
+
+    async def failing_persist(self):
+        raise error_type("initial save interrupted")
+
+    monkeypatch.setattr(TraceContext, "persist_snapshot_async", failing_persist)
+    with TraceContext(trace_id="parent-before-failure") as parent:
+        try:
+            with pytest.raises(error_type):
+                if entry == "set":
+                    await TraceContext.set_async("failed-initialization")
+                else:
+                    async with TraceContext(trace_id="failed-initialization"):
+                        pytest.fail("failed initialization must not enter the body")
+            assert TraceContext.current() is parent
+            assert TraceContext.get_active_trace("failed-initialization") is None
+        finally:
+            trace_module._active_traces.pop("failed-initialization", None)
