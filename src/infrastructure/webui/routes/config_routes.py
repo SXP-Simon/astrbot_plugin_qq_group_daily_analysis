@@ -11,6 +11,7 @@ import hashlib
 import json
 import re
 import time
+import uuid
 from collections.abc import Iterable
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING
@@ -532,7 +533,9 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                                     _, b64 = item.split(",", 1)
                                     file_bytes = base64.b64decode(b64)
                                     ts = int(time.time() * 1000)
-                                    filename = f"{ts}_migrated_image.png"
+                                    filename = (
+                                        f"{ts}_{uuid.uuid4().hex}_migrated_image.png"
+                                    )
                                     for d in [
                                         Path.cwd()
                                         / "data"
@@ -671,7 +674,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                                         r"[^\w\.\-]", "_", str(orig_name)
                                     )
                                     ts = int(time.time() * 1000)
-                                    final_name = f"{ts}_{clean_name}"
+                                    final_name = f"{ts}_{uuid.uuid4().hex}_{clean_name}"
                                     read_fn = getattr(f, "read", None)
                                     if callable(read_fn):
                                         res_read = read_fn()
@@ -704,7 +707,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                         b64 = raw_data
                     file_bytes = base64.b64decode(b64)
                     ts = int(time.time() * 1000)
-                    final_name = f"{ts}_{clean_name}"
+                    final_name = f"{ts}_{uuid.uuid4().hex}_{clean_name}"
                     for d in target_dirs:
                         (d / final_name).write_bytes(file_bytes)
                     saved_paths.append(f"files/{folder}/{final_name}")
