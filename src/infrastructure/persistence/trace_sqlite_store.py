@@ -261,11 +261,13 @@ class TraceSQLiteStore:
                     new_rfiles = extra_payload.get("report_files")
                     if isinstance(new_rfiles, list):
                         for rf in new_rfiles:
-                            if isinstance(rf, dict):
-                                fn = rf.get("filename")
-                                if fn and fn not in seen_filenames:
-                                    seen_filenames.add(fn)
-                                    merged_rfiles.append(rf)
+                            if not isinstance(rf, dict):
+                                continue
+                            fn = rf.get("filename")
+                            if not fn or fn in seen_filenames:
+                                continue
+                            seen_filenames.add(fn)
+                            merged_rfiles.append(rf)
                     extra_payload["report_files"] = merged_rfiles
 
                     # 保留历史已记录的 prompts 与 attempts
@@ -338,37 +340,38 @@ class TraceSQLiteStore:
 
             # 6. 同步写入结构化产物关联表 report_artifacts
             raw_rfiles = extra_payload.get("report_files")
-            if isinstance(raw_rfiles, list):
-                grp_id = str(trace_dict.get("group_id", ""))
-                fallback_ts = time.time()
-                for rf in raw_rfiles:
-                    if isinstance(rf, dict) and rf.get("filename"):
-                        fn = str(rf["filename"])
-                        fmt = str(
-                            rf.get("format")
-                            or ("html" if fn.endswith(".html") else "image")
-                        )
-                        rel_path = str(rf.get("path") or fn)
-                        rf_ts_raw = rf.get("created_at")
-                        rf_ts = (
-                            float(rf_ts_raw)
-                            if isinstance(rf_ts_raw, (int, float)) and rf_ts_raw > 0
-                            else fallback_ts
-                        )
-                        conn.execute(
-                            """
-                            INSERT INTO report_artifacts (
-                                filename, trace_id, group_id, file_format, relative_path, created_at
-                            ) VALUES (?, ?, ?, ?, ?, ?)
-                            ON CONFLICT(filename) DO UPDATE SET
-                                trace_id=excluded.trace_id,
-                                group_id=excluded.group_id,
-                                file_format=excluded.file_format,
-                                relative_path=excluded.relative_path,
-                                created_at=COALESCE(report_artifacts.created_at, excluded.created_at);
-                            """,
-                            (fn, trace_id, grp_id, fmt, rel_path, rf_ts),
-                        )
+            if not isinstance(raw_rfiles, list):
+                return
+            grp_id = str(trace_dict.get("group_id", ""))
+            fallback_ts = time.time()
+            for rf in raw_rfiles:
+                if not isinstance(rf, dict) or not rf.get("filename"):
+                    continue
+                fn = str(rf["filename"])
+                fmt = str(
+                    rf.get("format") or ("html" if fn.endswith(".html") else "image")
+                )
+                rel_path = str(rf.get("path") or fn)
+                rf_ts_raw = rf.get("created_at")
+                rf_ts = (
+                    float(rf_ts_raw)
+                    if isinstance(rf_ts_raw, (int, float)) and rf_ts_raw > 0
+                    else fallback_ts
+                )
+                conn.execute(
+                    """
+                    INSERT INTO report_artifacts (
+                        filename, trace_id, group_id, file_format, relative_path, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(filename) DO UPDATE SET
+                        trace_id=excluded.trace_id,
+                        group_id=excluded.group_id,
+                        file_format=excluded.file_format,
+                        relative_path=excluded.relative_path,
+                        created_at=COALESCE(report_artifacts.created_at, excluded.created_at);
+                    """,
+                    (fn, trace_id, grp_id, fmt, rel_path, rf_ts),
+                )
 
     def _save_trace_spans(
         self,
