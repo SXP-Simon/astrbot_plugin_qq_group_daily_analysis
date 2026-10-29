@@ -149,8 +149,8 @@ class CheckpointStore(ICheckpointStore):
                 # 2. 如果 scoped_id 没找到，尝试按 (trace_id, stage_name) 查找
                 if not row:
                     row = conn.execute(
-                        "SELECT * FROM stage_checkpoints WHERE trace_id = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
-                        (str(trace_id), stage_name, now),
+                        "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND trace_id = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                        (str(group_id), str(date_str), str(trace_id), stage_name, now),
                     ).fetchone()
 
             # 3. 回退查找通用快照：
