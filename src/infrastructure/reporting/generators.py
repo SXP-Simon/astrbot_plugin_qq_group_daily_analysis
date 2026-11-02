@@ -480,7 +480,9 @@ class ReportGenerator(IReportGenerator):
                     render_service = strategy_options.pop("render_service", "astrbot")
                     configured_font_mode = strategy_options.pop("font_mode", "network")
                     font_mode = (
-                        configured_font_mode
+                        "local"
+                        if render_service == "typst"
+                        else configured_font_mode
                         if render_service == "custom"
                         else "network"
                     )
@@ -714,6 +716,8 @@ class ReportGenerator(IReportGenerator):
                                         "hide_user_names": bool(hide_user_names),
                                     }
                                 )
+                                if render_service == "typst":
+                                    payload.pop("avatars_processed", None)
 
                             if isinstance(image_data, bytes):
                                 b64 = base64.b64encode(image_data).decode("utf-8")
