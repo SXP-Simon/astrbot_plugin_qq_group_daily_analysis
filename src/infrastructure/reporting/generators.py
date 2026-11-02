@@ -52,6 +52,7 @@ from .render_diagnostics import (
     summarize_render_error,
 )
 from .templates import HTMLTemplates
+from .typst_renderer import render_typst_report
 
 # 产物内嵌追踪号的 meta 名称与匹配模式（注入与自愈共用同一套定义）
 _TRACE_META_ATTR = "astrbot-trace-id"
@@ -380,8 +381,6 @@ class ReportGenerator(IReportGenerator):
             元组 (image_url_or_path, html_content)。
         """
         html_content = None
-        if not self.html_templates:
-            return None, None
         if not template_theme:
             trace_ctx = TraceContext.current()
             if trace_ctx and trace_ctx.metadata.get("override_template_name"):
@@ -406,41 +405,49 @@ class ReportGenerator(IReportGenerator):
                 and render_strategies[0].get("render_service") == "custom"
                 else "network"
             )
-            render_payload = await self._prepare_render_data(
-                analysis_result,
-                template_theme=template_theme,
-                chart_template="activity_chart.html",
-                avatar_url_getter=avatar_url_getter,
-                nickname_getter=nickname_getter,
-                avatar_cache_namespace=avatar_cache_namespace,
-                hide_user_names=hide_user_names,
-                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
-                environment=active_environment,
-                resources=active_resources,
-                font_mode=active_font_mode,
-            )
+            render_payload: RenderTemplateContext | None = None
+            template_render_ms = 0.0
+            html_size_kb = 0.0
+            # Typst 必须在 HTML 组件准备前分流；后备 HTML 方案按需准备自己的内容。
+            if (
+                render_strategies
+                and render_strategies[0].get("render_service") != "typst"
+            ):
+                render_payload = await self._prepare_render_data(
+                    analysis_result,
+                    template_theme=template_theme,
+                    chart_template="activity_chart.html",
+                    avatar_url_getter=avatar_url_getter,
+                    nickname_getter=nickname_getter,
+                    avatar_cache_namespace=avatar_cache_namespace,
+                    hide_user_names=hide_user_names,
+                    allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
+                    environment=active_environment,
+                    resources=active_resources,
+                    font_mode=active_font_mode,
+                )
 
-            tpl_render_start_ts = time.perf_counter()
-            html_content = self._render_prepared_html(
-                "image_template.html", template_theme, render_payload
-            )
-            template_render_ms = round(
-                (time.perf_counter() - tpl_render_start_ts) * 1000, 2
-            )
-            html_size_kb = (
-                round(len(html_content.encode("utf-8")) / 1024, 2)
-                if html_content
-                else 0.0
-            )
+                tpl_render_start_ts = time.perf_counter()
+                html_content = self._render_prepared_html(
+                    "image_template.html", template_theme, render_payload
+                )
+                template_render_ms = round(
+                    (time.perf_counter() - tpl_render_start_ts) * 1000, 2
+                )
+                html_size_kb = (
+                    round(len(html_content.encode("utf-8")) / 1024, 2)
+                    if html_content
+                    else 0.0
+                )
 
-            if not html_content:
-                logger.error("图片报告HTML渲染失败：返回空内容")
-                return None, None
+                if not html_content:
+                    logger.error("图片报告HTML渲染失败：返回空内容")
+                    return None, None
 
-            logger.debug(
-                f"图片报告HTML渲染完成，耗时 {template_render_ms}ms, "
-                f"大小: {html_size_kb} KB ({len(html_content)} 字符)"
-            )
+                logger.debug(
+                    f"图片报告HTML渲染完成，耗时 {template_render_ms}ms, "
+                    f"大小: {html_size_kb} KB ({len(html_content)} 字符)"
+                )
 
             async with self._render_semaphore:
                 render_loop = asyncio.get_running_loop()
@@ -482,6 +489,8 @@ class ReportGenerator(IReportGenerator):
                     request_timeout_ms = strategy_options.pop(
                         "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
                     )
+                    strategy_options.pop("typst_width", None)
+                    strategy_options.pop("typst_ppi", None)
                     image_options: ScreenshotOptions = strategy_options
                     service_url = urlsplit(service_endpoint)
                     renderer_info = host_renderer_info
@@ -494,6 +503,11 @@ class ReportGenerator(IReportGenerator):
                         renderer_info = {
                             "config_lookup": "本轮自定义 T2I 服务",
                             "configured_endpoint": f"{service_url.scheme}://{service_host}",
+                        }
+                    if render_service == "typst":
+                        renderer_info = {
+                            "config_lookup": "插件独立 Typst 编译器",
+                            "configured_endpoint": "本地隔离进程",
                         }
                     logger.debug(
                         "[T2I诊断 v2] 开始生成图片；"
@@ -551,63 +565,84 @@ class ReportGenerator(IReportGenerator):
                     attempt_start_ts = time.perf_counter()
                     attempt_timeout = asyncio.timeout_at(render_deadline)
                     try:
-                        if (
-                            environment != active_environment
-                            or resources != active_resources
-                            or font_mode != active_font_mode
-                        ):
-                            async with attempt_timeout:
-                                next_payload = await self._prepare_render_data(
-                                    analysis_result,
-                                    template_theme=template_theme,
-                                    chart_template="activity_chart.html",
-                                    avatar_url_getter=avatar_url_getter,
-                                    nickname_getter=nickname_getter,
-                                    avatar_cache_namespace=avatar_cache_namespace,
-                                    hide_user_names=hide_user_names,
-                                    allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
-                                    environment=environment,
-                                    resources=resources,
-                                    font_mode=font_mode,
+                        if render_service == "typst":
+                            viewport_description = f"Typst {strategy.get('typst_width', 940)}px / {strategy.get('typst_ppi', 144)}ppi"
+                        else:
+                            if (
+                                html_content is None
+                                or environment != active_environment
+                                or resources != active_resources
+                                or font_mode != active_font_mode
+                            ):
+                                async with attempt_timeout:
+                                    next_payload = await self._prepare_render_data(
+                                        analysis_result,
+                                        template_theme=template_theme,
+                                        chart_template="activity_chart.html",
+                                        avatar_url_getter=avatar_url_getter,
+                                        nickname_getter=nickname_getter,
+                                        avatar_cache_namespace=avatar_cache_namespace,
+                                        hide_user_names=hide_user_names,
+                                        allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
+                                        environment=environment,
+                                        resources=resources,
+                                        font_mode=font_mode,
+                                    )
+                                next_html = self._render_prepared_html(
+                                    "image_template.html", template_theme, next_payload
                                 )
-                            next_html = self._render_prepared_html(
-                                "image_template.html", template_theme, next_payload
+                                if not next_html:
+                                    raise ValueError("切换资源环境后模板返回空内容")
+                                render_payload, html_content = next_payload, next_html
+                                active_environment = environment
+                                active_resources = resources
+                                active_font_mode = font_mode
+                            assert html_content is not None
+                            image_options, viewport_description = (
+                                self._resolve_t2i_viewport_options(
+                                    html_content, image_options
+                                )
                             )
-                            if not next_html:
-                                raise ValueError("切换资源环境后模板返回空内容")
-                            render_payload, html_content = next_payload, next_html
-                            active_environment = environment
-                            active_resources = resources
-                            active_font_mode = font_mode
-                        image_options, viewport_description = (
-                            self._resolve_t2i_viewport_options(
-                                html_content, image_options
-                            )
-                        )
-                        attempt_record["viewport"] = viewport_description
+                            attempt_record["viewport"] = viewport_description
 
-                        if image_options.get("type") == "png":
-                            image_options.pop("quality", None)
+                            if image_options.get("type") == "png":
+                                image_options.pop("quality", None)
 
-                        logger.debug(
-                            "正在尝试第 "
-                            f"{attempt} 轮渲染策略: environment={environment}, type={image_options.get('type', 'png')}, "
-                            f"full_page={image_options.get('full_page', True)}, "
-                            f"viewport={viewport_description}, "
-                            f"scale={image_options.get('device_scale_factor_level')}, "
-                            f"timeout={image_options.get('timeout')}"
-                            + (
-                                f", request_timeout={request_timeout_ms}, font_mode={font_mode}"
-                                if render_service == "custom"
-                                else ""
+                            logger.debug(
+                                "正在尝试第 "
+                                f"{attempt} 轮渲染策略: environment={environment}, type={image_options.get('type', 'png')}, "
+                                f"full_page={image_options.get('full_page', True)}, "
+                                f"viewport={viewport_description}, "
+                                f"scale={image_options.get('device_scale_factor_level')}, "
+                                f"timeout={image_options.get('timeout')}"
+                                + (
+                                    f", request_timeout={request_timeout_ms}, font_mode={font_mode}"
+                                    if render_service == "custom"
+                                    else ""
+                                )
                             )
-                        )
 
                         t2i_start_ts = time.perf_counter()
                         # 宿主或第三方包装器的运行时返回值仍需在接口边界检查。
                         attempt_timeout = asyncio.timeout_at(render_deadline)
                         async with attempt_timeout:
-                            if render_service == "custom":
+                            if render_service == "typst":
+                                image_data = await render_typst_report(
+                                    analysis_result,
+                                    self.config_manager,
+                                    self.data_dir,
+                                    self._avatar_service,
+                                    self._profile_asset_manifest,
+                                    template_theme,
+                                    strategy,
+                                    avatar_url_getter,
+                                    nickname_getter,
+                                    avatar_cache_namespace,
+                                    hide_user_names,
+                                    allow_alphanumeric_user_ids,
+                                )
+                            elif render_service == "custom":
+                                assert html_content is not None
                                 image_data = await render_custom_t2i(
                                     service_endpoint,
                                     html_content,
@@ -638,6 +673,9 @@ class ReportGenerator(IReportGenerator):
                             self._inspect_render_result, image_data, response_info
                         )
                         if is_valid and isinstance(image_data, (str, bytes)):
+                            if render_service == "typst":
+                                html_content = None
+                                template_render_ms = html_size_kb = 0.0
                             attempt_status = "success"
                             if render_span is not None:
                                 payload = render_span.setdefault("payload", {})
@@ -666,7 +704,7 @@ class ReportGenerator(IReportGenerator):
                                         "titles_rendered": len(titles_raw),
                                         "quotes_rendered": len(golden_quotes_raw),
                                         "avatars_processed": len(
-                                            render_payload.get(
+                                            (render_payload or {}).get(
                                                 "avatar_reuse_registry", {}
                                             )
                                         ),
@@ -712,7 +750,9 @@ class ReportGenerator(IReportGenerator):
                                 f"本次图片渲染已达到总等待上限（{_RENDER_TOTAL_TIMEOUT_SECONDS:g} 秒），"
                                 "已停止后续方案。"
                             )
-                        elif isinstance(e, TimeoutError) and render_service != "custom":
+                        elif (
+                            isinstance(e, TimeoutError) and render_service == "astrbot"
+                        ):
                             render_error += (
                                 "\n排查建议：请先确认 AstrBot 能否连接 T2I 服务，并查看"
                                 "同一时间的服务日志。如果日志显示页面资源加载超时，"
