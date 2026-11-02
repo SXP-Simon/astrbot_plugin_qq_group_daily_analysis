@@ -27,6 +27,8 @@ import {
 } from "../../../entities/config/api/configApi";
 import { FieldRenderer } from "./FieldRenderer";
 import { T2iProbe } from "../../../features/test-t2i/ui/T2iProbe";
+import { TypstFonts } from "../../../features/manage-typst-fonts/ui/TypstFonts";
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
 
 const { Text } = Typography;
 
@@ -349,13 +351,18 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                   })}
                 </div>
                 {fieldKey === "t2i_rendering_strategies" && (
+                  <>
+                  {itemTemplateKey === "typst" && <TypstFonts cdnBaseUrl={String((item.cdn_base_url === "__custom__" ? item.custom_cdn_base_url : item.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL)} />}
                   <T2iProbe input={{
-                    render_service: itemTemplateKey === "custom" ? "custom" : "astrbot",
+                    render_service: itemTemplateKey === "typst" ? "typst" : itemTemplateKey === "custom" ? "custom" : "astrbot",
                     service_endpoint: item.service_endpoint,
                     service_token: item.service_token,
                     timeout: item.timeout,
                     request_timeout: item.request_timeout,
+                    typst_width: item.typst_width,
+                    typst_ppi: item.typst_ppi,
                   }} />
+                  </>
                 )}
               </Card>
             );
