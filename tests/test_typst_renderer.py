@@ -88,3 +88,19 @@ def test_worker_is_dead_before_timeout_or_cancel_returns(tmp_path, monkeypatch, 
     asyncio.run(check())
 
 
+@pytest.mark.asyncio
+async def test_cancellation_does_not_start_recovery(native, monkeypatch):
+    directory = native.data_dir / "typst/fonts"
+    directory.mkdir(parents=True)
+    (directory / "test.ttf").write_bytes(b"font")
+    worker = AsyncMock(side_effect=asyncio.CancelledError())
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await native.generate_image_report(create_analysis_result(), "test", None)
+        worker.assert_awaited_once()
+        assert not list((native.data_dir / "typst/jobs").iterdir())
+    finally:
+        await native.close()
+
+

@@ -6,7 +6,7 @@ import os
 import shutil
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -16,6 +16,7 @@ from test_template_section_conditional_rendering import create_analysis_result
 from src.domain.value_objects import GoldenQuote, QualityDimension, QualityReview, UserTitle
 from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.reporting import typst_renderer
+from src.infrastructure.reporting.dispatcher import ReportDispatcher
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.typst_resources import TypstAssets
 from src.shared.trace_context import TraceContext
@@ -109,12 +110,13 @@ async def test_real_compilation_accepts_report_content(compiler, theme, case):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fallback", [False, True])
-async def test_real_syntax_error_only_uses_explicit_fallback(compiler, tmp_path, monkeypatch, fallback):
+async def test_only_exhausted_recovery_uses_explicit_host_fallback(compiler, tmp_path, monkeypatch, fallback):
     config, generator, png = compiler
     root = tmp_path / "templates"
     (root / "HatsuneMiku").mkdir(parents=True)
     (root / "HatsuneMiku/report.typ").write_text("#let broken = (", encoding="utf-8")
     shutil.copyfile(typst_renderer.REPORT_TEMPLATES / "common.typ", root / "common.typ")
+    (root / "recovery.typ").write_text("#let also_broken = (", encoding="utf-8")
     monkeypatch.setattr(typst_renderer, "REPORT_TEMPLATES", root)
     worker = AsyncMock(wraps=typst_renderer.run_typst_worker)
     monkeypatch.setattr(typst_renderer, "run_typst_worker", worker)
@@ -126,10 +128,73 @@ async def test_real_syntax_error_only_uses_explicit_fallback(compiler, tmp_path,
     prepare_html = AsyncMock(wraps=generator._prepare_render_data)
     monkeypatch.setattr(generator, "_prepare_render_data", prepare_html)
     image, html = await generator.generate_image_report(create_analysis_result(), "test", host)
-    assert worker.await_count == 1
+    assert worker.await_count == 2
     assert host.await_count == prepare_html.await_count == int(fallback)
     assert bool(image) is fallback
     assert bool(html) is fallback
+    assert not list((generator.data_dir / "typst/jobs").iterdir())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", ["theme", "common", "image", "timeout"])
+async def test_real_failure_recovers_complete_report_and_dispatches_image(compiler, tmp_path, monkeypatch, fault):
+    config, generator, _ = compiler
+    root = tmp_path / "templates"
+    shutil.copytree(typst_renderer.REPORT_TEMPLATES / "HatsuneMiku", root / "HatsuneMiku")
+    for name in ("common.typ", "recovery.typ"):
+        shutil.copyfile(typst_renderer.REPORT_TEMPLATES / name, root / name)
+    if fault in ("theme", "common"):
+        (root / ("HatsuneMiku/report.typ" if fault == "theme" else "common.typ")).write_text(
+            "#let broken = (", encoding="utf-8",
+        )
+    monkeypatch.setattr(typst_renderer, "REPORT_TEMPLATES", root)
+    snapshots = []
+    real_worker = typst_renderer.run_typst_worker
+
+    async def record_worker(job, fonts, timeout):
+        snapshots.append(json.loads((job / "data.json").read_text(encoding="utf-8")))
+        if len(snapshots) == 1:
+            if fault == "image":
+                for path in job.glob("*.png"):
+                    path.write_bytes(b"broken image")
+            if fault == "timeout":
+                timeout = min(timeout, .05)
+        await real_worker(job, fonts, timeout)
+
+    worker = AsyncMock(side_effect=record_worker)
+    monkeypatch.setattr(typst_renderer, "run_typst_worker", worker)
+    trace = TraceContext(trace_id=f"recover-{fault}", group_id="test")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    config.config["basic"]["output_format"] = ["image"]
+    config.config["basic"]["show_report_caption"] = False
+    config.config["t2i_rendering"]["t2i_rendering_strategies"][0]["typst_width"] = 1280
+    sender = MagicMock()
+    sender.bot_manager.get_adapter.return_value = None
+    sender.send_image_smart = AsyncMock(return_value=True)
+    dispatcher = ReportDispatcher(config, generator, sender)
+    dispatcher._dispatch_text = AsyncMock(side_effect=AssertionError("应发送恢复后的图片报告"))
+    dispatcher._try_upload_image = AsyncMock()
+    data = create_analysis_result()
+    data["chat_quality_review"] = QualityReview(
+        title="今日交流", subtitle="讨论记录", summary="所有结论都应保留。",
+        dimensions=[QualityDimension(name="技术", percentage=100, comment="有具体问题。")],
+    )
+    assert await dispatcher.dispatch("test", data)
+    assert worker.await_count == 2
+    assert snapshots[0]["width"] == 1280 and snapshots[1]["width"] == 940
+    assert {k: v for k, v in snapshots[0].items() if k != "width"} == {
+        k: v for k, v in snapshots[1].items() if k != "width"
+    }
+    assert all(snapshots[1][key] for key in ("topics", "portraits", "quotes", "review"))
+    sender.send_image_smart.assert_awaited_once()
+    image = sender.send_image_smart.await_args.args[1]
+    with Image.open(BytesIO(base64.b64decode(image.removeprefix("base64://")))) as output:
+        assert output.format == "PNG" and output.width == 940
+        output.verify()
+    saved = list((generator.data_dir / "reports").glob("*.jpg"))
+    assert saved and saved[-1].read_bytes() == base64.b64decode(image.removeprefix("base64://"))
+    assert trace.metadata["typst_recovery"]["mode"] == "basic"
+    dispatcher._dispatch_text.assert_not_called()
     assert not list((generator.data_dir / "typst/jobs").iterdir())
 
 

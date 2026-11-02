@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 import aiohttp
 from PIL import Image
 
+from ...shared.trace_context import TraceContext
+from ...utils.logger import logger
 from .typst_data import TypstDataPreparer
 from .typst_resources import TypstAssets
 
@@ -192,7 +194,9 @@ async def render_typst_report(
     cdn = resources["cdn_base_url"] if resources else config.get_t2i_cdn_base_url()
     environment = options.get("resource_environment")
     base = config.get_template_assets_base_url(environment, cdn_base_url=cdn)
-    async with asyncio.timeout(options.get("timeout", 30000) / 1000):
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + options.get("timeout", 30000) / 1000
+    async with asyncio.timeout_at(deadline):
         with TemporaryDirectory(prefix="report-", dir=jobs) as directory:
             job_dir = Path(directory)
             async with aiohttp.ClientSession(
@@ -230,9 +234,34 @@ async def render_typst_report(
             for resource in template.parent.iterdir():
                 if resource.suffix in (".svg", ".typ") and resource != template:
                     shutil.copyfile(resource, job_dir / resource.name)
-            await run_typst_worker(
-                job_dir, font_dir, options.get("timeout", 30000) / 1000
-            )
+            # 为恢复版预留少量预算；超时进程退出后才可复用任务目录。
+            remaining = max(0.0, deadline - loop.time())
+            try:
+                await run_typst_worker(
+                    job_dir, font_dir, remaining - min(2.0, remaining / 5)
+                )
+            except (RuntimeError, TimeoutError) as error:
+                logger.warning(
+                    f"Typst 主题 {theme} 渲染失败，自动改用基础排版保留报告内容：{error}"
+                )
+                trace = TraceContext.current()
+                if trace:
+                    trace.metadata["typst_recovery"] = {
+                        "theme": theme,
+                        "reason": str(error)[:1800] or type(error).__name__,
+                        "mode": "basic",
+                    }
+                    trace.metadata["has_warnings"] = True
+                # 独立入口不导入主题或公共组件，不读取图片；不删除任何分析文字。
+                shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job_dir / "main.typ")
+                payload["width"] = min(940, payload["width"])
+                (job_dir / "data.json").write_text(
+                    json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+                )
+                (job_dir / "report.png").unlink(missing_ok=True)
+                await run_typst_worker(
+                    job_dir, font_dir, max(0.0, deadline - loop.time())
+                )
             image = await asyncio.to_thread((job_dir / "report.png").read_bytes)
             if options.get("type", "png") == "jpeg":
                 image = await asyncio.to_thread(
