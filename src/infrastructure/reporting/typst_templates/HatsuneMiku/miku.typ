@@ -252,7 +252,7 @@
   t.insert("fonts",if t.english {("Inter","Outfit",font,"Noto Sans JP")}else{(font,"Noto Sans SC","Noto Sans JP")})
   t.insert("title-font",if t.english {("Outfit","Inter",font)}else{(font,"Noto Sans SC")})
   set page(width:940*t.u,height:auto,margin:0pt,fill:soft)
-  set text(font:t.fonts,size:16*t.u,fill:ink,cjk-latin-spacing:none,overhang:false,lang:if d.language=="ja" {"ja"}else if d.language=="en" {"en"}else{"zh"})
+  set text(font:t.fonts,size:16*t.u,fill:ink,cjk-latin-spacing:none,overhang:false,lang:if d.language=="ja" {"ja"}else if d.language=="en" {"en"}else{"zh"},region:if d.language=="ja" {"JP"}else if d.font_language=="zh-Hant" {"TW"}else{"CN"})
   set par(spacing:0pt,leading:0pt)
   let paper=tiling(size:(24*t.u,24*t.u))[
     #rect(width:24*t.u,height:24*t.u,fill:white,stroke:none)
