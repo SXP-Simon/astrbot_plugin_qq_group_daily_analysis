@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from .avatar_service import AvatarService
 
 
-TYPST_TEMPLATES = Path(__file__).parent / "typst_templates"
+REPORT_TEMPLATES = Path(__file__).parent / "templates"
 # 发布包不含开发目录的图片，所有装饰只通过配置的 CDN 获取并持久缓存。
 THEME_DECORATIONS: dict[str, tuple[str, ...]] = {
     "HatsuneMiku": tuple(
@@ -173,9 +173,9 @@ async def render_typst_report(
         RuntimeError: 编译失败。
         TimeoutError: 准备或编译超过本轮超时。
     """
-    template = TYPST_TEMPLATES / theme / "report.typ"
+    template = REPORT_TEMPLATES / theme / "report.typ"
     if (
-        theme not in {path.name for path in TYPST_TEMPLATES.iterdir() if path.is_dir()}
+        theme not in {path.name for path in REPORT_TEMPLATES.iterdir() if path.is_dir()}
         or not template.is_file()
     ):
         raise ValueError(f"Typst 暂不支持模板 {theme}，请使用内置主题")
@@ -226,7 +226,7 @@ async def render_typst_report(
                 json.dumps(payload, ensure_ascii=False), encoding="utf-8"
             )
             shutil.copyfile(template, job_dir / "main.typ")
-            shutil.copyfile(TYPST_TEMPLATES / "common.typ", job_dir / "common.typ")
+            shutil.copyfile(REPORT_TEMPLATES / "common.typ", job_dir / "common.typ")
             for resource in template.parent.iterdir():
                 if resource.suffix in (".svg", ".typ") and resource != template:
                     shutil.copyfile(resource, job_dir / resource.name)
