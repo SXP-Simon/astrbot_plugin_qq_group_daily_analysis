@@ -94,7 +94,7 @@ async def run_typst_worker(
         await asyncio.shield(communication)
         raise
     if process.returncode:
-        raise RuntimeError((stderr or b"").decode("utf-8", errors="replace")[-1800:])
+        raise RuntimeError((stderr or b"").decode("utf-8", errors="replace")[:1800])
 
 
 async def render_typst_probe(
