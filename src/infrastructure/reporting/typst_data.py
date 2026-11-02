@@ -238,9 +238,7 @@ class TypstDataPreparer:
                     "name": "" if self.hide_names else portrait.name,
                     "title": self.plain(portrait.title),
                     "profile": self.plain(str(profile["profile_display"])),
-                    "reason": await self.rich_text(portrait.reason)
-                    if self.hide_names
-                    else [{"text": portrait.reason, "avatar": ""}],
+                    "reason": [{"text": self.plain(portrait.reason), "avatar": ""}],
                     "avatar": await self.avatar(str(portrait.user_id)),
                     "image": await self.assets.localize(
                         str(profile["profile_image"]),
