@@ -64,3 +64,27 @@ def test_bad_font_response_leaves_no_partial_files(tmp_path, monkeypatch):
         finally:
             await runner.cleanup()
     asyncio.run(check())
+
+
+@pytest.mark.parametrize("status", [200, 503])
+def test_bad_optional_image_is_replaced_with_empty_resource(tmp_path, status):
+    async def check():
+        app = web.Application()
+        async def broken_image(request):
+            return web.Response(status=status, text="<html>CDN error</html>")
+        app.router.add_get("/role.png", broken_image)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        await web.TCPSite(runner, "127.0.0.1", 0).start()
+        job = tmp_path / "job"
+        job.mkdir()
+        try:
+            async with aiohttp.ClientSession() as session:
+                assets = typst_resources.TypstAssets(tmp_path, job, session)
+                url = f"http://127.0.0.1:{runner.addresses[0][1]}/role.png"
+                assert await assets.localize(url) == ""
+                assert not list(job.iterdir())
+                assert not list((tmp_path / "typst/assets").glob("*.png"))
+        finally:
+            await runner.cleanup()
+    asyncio.run(check())
