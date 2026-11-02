@@ -6,6 +6,12 @@ import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../configCon
 import { renderingRuntimeSchema, renderingStrategySchema } from "../renderingConfig";
 import { validateSingleFieldWithZod } from "../validation";
 
+it("Typst 宽度上限可保存，超过上限时在编辑端拒绝", () => {
+  const plan = { __template_key: "typst", typst_width: 1280 };
+  expect(renderingStrategySchema.safeParse(plan).success).toBe(true);
+  expect(renderingStrategySchema.safeParse({ ...plan, typst_width: 1281 }).success).toBe(false);
+});
+
 describe("可扩展渲染方案", () => {
   it("真实配置提供海外优先、内地备用两项默认方案", () => {
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.type).toBe("template_list");

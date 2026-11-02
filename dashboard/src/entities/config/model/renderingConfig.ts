@@ -85,7 +85,7 @@ export const renderingStrategySchema = z.object({
   google_fonts: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   gstatic: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   render_service: z.enum(["astrbot", "custom", "typst"], { error: "请选择有效的渲染方案类型" }).optional(),
-  typst_width: z.number().int().min(640).max(1920).optional(),
+  typst_width: z.number().int().min(640).max(1280).optional(),
   typst_ppi: z.number().int().min(72).max(288).optional(),
   service_endpoint: z.string({ error: "服务地址必须是文字" }).trim().optional(),
   service_token: z.string({ error: "服务 Token 必须是文字" }).max(4096, "服务 Token 不能超过 4096 个字符").regex(/^[\x20-\x7e]*$/, "服务 Token 请使用英文、数字或常用符号，不能换行").transform((value) => value.trim()).default(""),
