@@ -59,6 +59,17 @@ HatsuneMiku/
 
 Typst 方案直接把分析结果准备成结构化 JSON，将 CDN 图片下载、缓存并本地化后，复制排版文件到临时任务目录，由独立子进程编译 PNG。字体统一使用插件数据目录的 `typst/fonts/`，通过 WebUI 的字体下载入口管理。该链路不解析 HTML，也不调用 AstrBot 的图片渲染接口；产物继续接入现有图片校验、发送和诊断流程。下面的 Jinja2 变量契约适用于 HTML 文件，Typst 的输入结构见 `typst_data.py`。
 
+修改 Typst 排版后，应运行真实编译测试，检查完整内容、空模块、只有质量总结、长文本、匿名内容，以及包含 Typst 特殊符号的普通文字：
+
+```powershell
+$env:TYPST_TEST_FONTS = "<插件数据目录>/typst/fonts"
+uv run pytest tests/test_typst_compilation.py -q
+```
+
+Linux/macOS 可使用 `TYPST_TEST_FONTS="<插件数据目录>/typst/fonts" uv run pytest tests/test_typst_compilation.py -q`。本地未设置字体目录时，这组测试明确跳过；设置了不存在的目录则失败。CI 下载并缓存受管理字体，固定启用真实编译。
+
+测试直接启动独立 Typst 编译进程，使用本地头像并模拟装饰 CDN 不可用，避免每次测试依赖外部图片服务。还会验证模板语法错误时只使用明确配置的后备策略、任务目录得到清理、首条错误保留源码位置，以及超出像素预算时在输出 PNG 前失败。编译成功不能证明视觉一致，调整版式仍须与相同数据的 HTML 样张逐项对照。
+
 ## 3. 渲染变量契约
 
 ### 3.1 主骨架（`image_template.html` / `html_template.html`）
