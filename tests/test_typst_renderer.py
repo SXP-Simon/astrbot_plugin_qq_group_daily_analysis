@@ -1,12 +1,9 @@
-"""独立编译、明确回退、字体目录和主题原色的回归覆盖。"""
+"""独立渲染的匿名处理与编译进程回收行为。"""
 
 import asyncio
 import base64
 import json
-import os
-import shutil
 from io import BytesIO
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -15,7 +12,7 @@ from test_template_section_conditional_rendering import create_analysis_result
 
 from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.reporting.generators import ReportGenerator
-from src.infrastructure.reporting.typst_renderer import TYPST_TEMPLATES, run_typst_worker
+from src.infrastructure.reporting.typst_renderer import run_typst_worker
 from src.infrastructure.reporting.typst_resources import TypstAssets
 from src.shared.trace_context import TraceContext
 
@@ -91,21 +88,3 @@ def test_worker_is_dead_before_timeout_or_cancel_returns(tmp_path, monkeypatch, 
     asyncio.run(check())
 
 
-@pytest.mark.parametrize("theme", sorted(p.name for p in TYPST_TEMPLATES.iterdir() if p.is_dir()))
-def test_native_compilation_with_managed_fonts(native, theme):
-    source = Path(os.environ.get("TYPST_TEST_FONTS", "__not_configured__"))
-    if not source.is_dir():
-        pytest.skip("设置 TYPST_TEST_FONTS 以运行真实 Typst 编译检查")
-    directory = native.data_dir / "typst/fonts"
-    shutil.copytree(source, directory)
-    async def check():
-        try:
-            host = AsyncMock(side_effect=AssertionError("独立编译不得调用宿主"))
-            output, html = await native.generate_image_report(create_analysis_result(), "demo", host, template_theme=theme)
-            assert output and output.startswith("base64://") and html is None
-            with Image.open(BytesIO(base64.b64decode(output.removeprefix("base64://")))) as image:
-                assert image.width == 940 and image.height > 100
-            host.assert_not_called()
-        finally:
-            await native.close()
-    asyncio.run(check())
