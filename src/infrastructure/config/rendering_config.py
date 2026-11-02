@@ -56,7 +56,6 @@ class RenderingStrategyOptions(ScreenshotOptions, total=False):
     render_service: Literal["astrbot", "custom", "typst"]
     typst_width: int
     typst_ppi: int
-    typst_font_dir: str
     service_endpoint: str
     service_token: str
     request_timeout: int
@@ -93,7 +92,6 @@ class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     render_service: Literal["astrbot", "custom", "typst"]
     typst_width: NotRequired[int]
     typst_ppi: NotRequired[int]
-    typst_font_dir: NotRequired[str]
     service_endpoint: str
     service_token: str
     type: Literal["png", "jpeg"]
@@ -313,14 +311,6 @@ def parse_rendering_strategies(
                         f"第 {index} 个方案的 {key} 必须是 {lower} 到 {upper} 的整数"
                     )
                 plan[key] = number
-            font_dir = item.get("typst_font_dir", "")
-            if (
-                not isinstance(font_dir, str)
-                or len(font_dir) > 2048
-                or any(not char.isprintable() for char in font_dir)
-            ):
-                raise ValueError(f"第 {index} 个方案的字体目录无效")
-            plan["typst_font_dir"] = font_dir.strip()
         if render_service == "custom" or "request_timeout" in item:
             request_timeout = item.get(
                 "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS

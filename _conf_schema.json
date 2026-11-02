@@ -758,7 +758,7 @@
                     "typst": {
                         "name": "Typst 本地排版",
                         "display_item": "name",
-                        "description": "独立编译 Miku 图片报告，不调用 AstrBot 或浏览器。请将报告模板设为 HatsuneMiku，安装 requirements.txt，并准备中文字体。",
+                        "description": "独立编译图片报告，不调用 AstrBot 或浏览器；字体统一由插件数据目录 typst/fonts 管理，可在 WebUI 下载。",
                         "items": {
                             "name": {
                                 "type": "string",
@@ -786,12 +786,6 @@
                                 "min": 72,
                                 "max": 288,
                                 "hint": "同一宽度下，提高 PPI 会增加文字和装饰的细节；页面尺寸由像素宽度与 PPI 换算。"
-                            },
-                            "typst_font_dir": {
-                                "type": "string",
-                                "description": "本地字体目录（可选）",
-                                "default": "",
-                                "hint": "填写 AstrBot 所在机器可读取的 TTF/OTF 字体目录；留空使用插件数据目录 typst/fonts 和系统字体。建议安装 Noto Sans SC/TC/JP、Outfit、Share Tech Mono。"
                             },
                             "type": {
                                 "type": "string",

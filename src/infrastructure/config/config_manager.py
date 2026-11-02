@@ -450,7 +450,6 @@ class ConfigManager:
                 plan.update(
                     typst_width=item.get("typst_width", 940),
                     typst_ppi=item.get("typst_ppi", 144),
-                    typst_font_dir=item.get("typst_font_dir", ""),
                 )
             plans.append(plan)
         return plans
