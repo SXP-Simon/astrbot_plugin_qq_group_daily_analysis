@@ -32,11 +32,12 @@ FONT_SOURCES = {
     "ZCOOLKuaiLe.ttf": "gh/google/fonts@main/ofl/zcoolkuaile/ZCOOLKuaiLe-Regular.ttf",
     "ZCOOLXiaoWei.ttf": "gh/google/fonts@main/ofl/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf",
     "MaShanZheng.ttf": "gh/google/fonts@main/ofl/mashanzheng/MaShanZheng-Regular.ttf",
-    "NotoSerifSC-Regular.otf": "gh/notofonts/noto-cjk@main/Serif/SubsetOTF/SC/NotoSerifSC-Regular.otf",
-    "NotoSerifSC-Bold.otf": "gh/notofonts/noto-cjk@main/Serif/SubsetOTF/SC/NotoSerifSC-Bold.otf",
+    # 完整可变宋体提供与 HTML 一致的字体名和全部字重，文件超过 CDN 体积限制。
+    "NotoSerifSC.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/NotoSerifSC[wght].ttf",
     "NotoSerifTC.ttf": "gh/google/fonts@main/ofl/notoseriftc/NotoSerifTC[wght].ttf",
     "Cinzel.ttf": "gh/google/fonts@main/ofl/cinzel/Cinzel[wght].ttf",
     "CormorantGaramond.ttf": "gh/google/fonts@main/ofl/cormorantgaramond/CormorantGaramond[wght].ttf",
+    "CormorantGaramond-Italic.ttf": "gh/google/fonts@main/ofl/cormorantgaramond/CormorantGaramond-Italic[wght].ttf",
     # 与原 ATRI 字体相同的 1.522 版；单文件超过 CDN 体积限制，直接读取固定官方源。
     "LXGWWenKai.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKai-Regular.ttf",
     "LXGWWenKaiMono.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKaiMono-Regular.ttf",
