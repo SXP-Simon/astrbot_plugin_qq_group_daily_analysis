@@ -25,6 +25,21 @@ FONT_SOURCES = {
     "NotoSansJP.ttf": "gh/google/fonts@main/ofl/notosansjp/NotoSansJP[wght].ttf",
     "Outfit.ttf": "gh/google/fonts@main/ofl/outfit/Outfit[wght].ttf",
     "ShareTechMono.ttf": "gh/google/fonts@main/ofl/sharetechmono/ShareTechMono-Regular.ttf",
+    "Inter.ttf": "gh/google/fonts@main/ofl/inter/Inter[opsz,wght].ttf",
+    "JetBrainsMono.ttf": "gh/google/fonts@main/ofl/jetbrainsmono/JetBrainsMono[wght].ttf",
+    "Oswald.ttf": "gh/google/fonts@main/ofl/oswald/Oswald[wght].ttf",
+    "PatrickHand.ttf": "gh/google/fonts@main/ofl/patrickhand/PatrickHand-Regular.ttf",
+    "ZCOOLKuaiLe.ttf": "gh/google/fonts@main/ofl/zcoolkuaile/ZCOOLKuaiLe-Regular.ttf",
+    "ZCOOLXiaoWei.ttf": "gh/google/fonts@main/ofl/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf",
+    "MaShanZheng.ttf": "gh/google/fonts@main/ofl/mashanzheng/MaShanZheng-Regular.ttf",
+    "NotoSerifSC-Regular.otf": "gh/notofonts/noto-cjk@main/Serif/SubsetOTF/SC/NotoSerifSC-Regular.otf",
+    "NotoSerifSC-Bold.otf": "gh/notofonts/noto-cjk@main/Serif/SubsetOTF/SC/NotoSerifSC-Bold.otf",
+    "NotoSerifTC.ttf": "gh/google/fonts@main/ofl/notoseriftc/NotoSerifTC[wght].ttf",
+    "Cinzel.ttf": "gh/google/fonts@main/ofl/cinzel/Cinzel[wght].ttf",
+    "CormorantGaramond.ttf": "gh/google/fonts@main/ofl/cormorantgaramond/CormorantGaramond[wght].ttf",
+    # 与原 ATRI 字体相同的 1.522 版；单文件超过 CDN 体积限制，直接读取固定官方源。
+    "LXGWWenKai.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKai-Regular.ttf",
+    "LXGWWenKaiMono.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKaiMono-Regular.ttf",
 }
 
 
@@ -84,9 +99,13 @@ async def download_typst_fonts(data_dir: Path, cdn_base_url: str) -> TypstFontSt
             target = directory / name
             temporary = directory / f".{name}.{uuid.uuid4().hex}.part"
             try:
-                async with session.get(
-                    f"{cdn_base_url.rstrip('/')}/{FONT_SOURCES[name]}"
-                ) as response:
+                source = FONT_SOURCES[name]
+                url = (
+                    source
+                    if source.startswith("https://")
+                    else f"{cdn_base_url.rstrip('/')}/{source}"
+                )
+                async with session.get(url) as response:
                     response.raise_for_status()
                     payload = bytearray()
                     async for chunk in response.content.iter_chunked(65536):
