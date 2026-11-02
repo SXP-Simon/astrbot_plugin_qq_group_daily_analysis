@@ -1,5 +1,5 @@
 // Miku 长图的独立布局：逐项保留原版的尺寸、层级、图标、底纹和气泡关系。
-#import "common.typ": words
+#import "common.typ": words, shadow
 #let base = rgb("39c5bb")
 #let dark = rgb("2a9d95")
 #let light = rgb("a7e7e3")
@@ -48,15 +48,6 @@
     }
   }
 }
-// 原版各卡片共用柔和投影；阴影用本地矢量滤镜绘制，不引入截图或网络资源。
-#let shadow(t,body,radius:12,dy:8,blur:24,color:dark.transparentize(96%)) = layout(size=>{
-  let measured=measure(body,width:size.width)
-  let w=measured.width/t.u
-  let h=measured.height/t.u
-  let pad=blur*2+calc.abs(dy)
-  let svg="<svg xmlns='http://www.w3.org/2000/svg' width='"+str(w+2*pad)+"' height='"+str(h+2*pad)+"' viewBox='0 0 "+str(w+2*pad)+" "+str(h+2*pad)+"'><defs><filter id='s' x='-100%' y='-100%' width='300%' height='300%'><feGaussianBlur stdDeviation='"+str(blur/2)+"'/></filter></defs><rect x='"+str(pad)+"' y='"+str(pad+dy)+"' width='"+str(w)+"' height='"+str(h)+"' rx='"+str(radius)+"' fill='"+color.to-hex()+"' filter='url(#s)'/></svg>"
-  [#place(top+left,dx:-pad*t.u,dy:-pad*t.u,image(bytes(svg),format:"svg",width:(w+2*pad)*t.u,height:(h+2*pad)*t.u))#body]
-})
 #let frame(t,body,inset:30,fill:white,radius:12,stroke:border,height:auto) = shadow(t,block(width:100%,height:height,fill:fill,radius:radius*t.u,inset:inset*t.u,outset:-0.5*t.u,stroke:1*t.u+stroke,breakable:false)[#body])
 #let face(t,path,size:48,portrait:false,name:"") = {
   let picture=box(width:size*t.u,height:size*t.u,radius:50%,clip:true,fill:white,stroke:if portrait {none}else{4*t.u+light},inset:3*t.u)[

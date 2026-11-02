@@ -6,6 +6,15 @@
   "ja": (title: "グループチャット日報", log: "分析ログ", messages: "今日のメッセージ数", members: "アクティブメンバー数", emoji: "絵文字リアクション", characters: "今日の累計文字数", peak: "ピーク時間帯", activity: "24時間のアクティビティ", topics: "トピックまとめ", portraits: "メンバープロフィール", quotes: "今日の聖書", review: "グループ辛口レビュー", verdict: "ミクの総評", participants: "参加メンバー", reason: "AI コメント"),
 )
 #let words(d) = labels.at(d.language, default: labels.at("zh-Hans"))
+// 卡片投影复用本地 SVG 滤镜；尺寸来自实际排版测量，不影响正文的流式高度。
+#let shadow(t,body,radius:12,dy:8,blur:24,color:rgb("2a9d95").transparentize(96%)) = layout(size=>{
+  let measured=measure(body,width:size.width)
+  let w=measured.width/t.u
+  let h=measured.height/t.u
+  let pad=blur*2+calc.abs(dy)
+  let svg="<svg xmlns='http://www.w3.org/2000/svg' width='"+str(w+2*pad)+"' height='"+str(h+2*pad)+"' viewBox='0 0 "+str(w+2*pad)+" "+str(h+2*pad)+"'><defs><filter id='s' x='-100%' y='-100%' width='300%' height='300%'><feGaussianBlur stdDeviation='"+str(blur/2)+"'/></filter></defs><rect x='"+str(pad)+"' y='"+str(pad+dy)+"' width='"+str(w)+"' height='"+str(h)+"' rx='"+str(radius)+"' fill='"+color.to-hex()+"' filter='url(#s)'/></svg>"
+  [#place(top+left,dx:-pad*t.u,dy:-pad*t.u,image(bytes(svg),format:"svg",width:(w+2*pad)*t.u,height:(h+2*pad)*t.u))#body]
+})
 #let deco(d, index, width: 80pt, height: 65pt) = {
   let path = d.decorations.at(index, default: "")
   if path != "" { image(path, width: width, height: height, fit: "contain") }
