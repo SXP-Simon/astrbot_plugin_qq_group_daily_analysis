@@ -6,7 +6,7 @@ export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
   return <Space direction="vertical" style={{ width: "100%", marginTop: 12 }}>
     <Typography.Text strong>Typst 字体</Typography.Text>
     <Typography.Text type="secondary">
-      预设含简体、繁体、日文字体及 Miku 数字字体，下载到本插件数据目录，可跨报告复用。
+      预设包含简体、繁体、日文及内置主题使用的字体，下载到本插件数据目录，可跨报告复用。
     </Typography.Text>
     {vm.status && <>
       <Alert type={vm.status.ready ? "success" : "info"} showIcon
@@ -20,7 +20,7 @@ export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
       </Button>
       <Button disabled={vm.loading} onClick={() => void vm.run(false)}>刷新字体状态</Button>
     </Space>
-    <Typography.Text type="secondary">使用本方案的资源 CDN 下载；已下载的文件会保留，失败后可更换 CDN 重试。</Typography.Text>
+    <Typography.Text type="secondary">常规字体使用本方案 CDN；大体积文楷字体从官方源下载。已下载的文件会保留，失败后可重试。</Typography.Text>
     {vm.error && <Alert type="error" showIcon message={vm.error} />}
   </Space>;
 }
