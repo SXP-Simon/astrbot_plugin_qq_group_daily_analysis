@@ -2,8 +2,7 @@
 
 本指南面向想要为「群聊日常分析」插件贡献或自建**报告视觉模板**的作者。
 
-模板 = 一组 Jinja2 HTML 文件，用于把分析结果（统计、话题、群友画像、金句、活跃图等）
-渲染成长图海报（`image` 格式）或可交互网页（`html` 格式）。
+模板用于把分析结果（统计、话题、群友画像、金句、活跃图等）渲染成长图海报（`image` 格式）或可交互网页（`html` 格式）。HTML 使用 Jinja2；已适配的内置主题还可提供独立 Typst 长图实现。
 
 ---
 
@@ -42,6 +41,23 @@
 
 各模板目录的 **HTML 文件名与 Jinja2 变量契约完全相同**（第 3 节），
 内置模板之间可以直接复制改色改版。
+
+### 2.1 与 HTML 并列的 Typst 长图文件
+
+Typst 文件也放在 `src/infrastructure/reporting/templates/<模板名>/`，便于对照同一主题的两种实现：
+
+```text
+HatsuneMiku/
+├── image_template.html
+├── html_template.html
+├── report.typ             Typst 长图入口
+├── miku.typ               本主题的原生排版
+└── icon-*.svg             原生排版使用的矢量图标
+```
+
+公共 Typst 代码放在 `templates/common.typ`。独立编译入口读取内置主题的 `report.typ`；缺少入口时会明确提示不支持该主题。
+
+Typst 方案直接把分析结果准备成结构化 JSON，将 CDN 图片下载、缓存并本地化后，复制排版文件到临时任务目录，由独立子进程编译 PNG。字体统一使用插件数据目录的 `typst/fonts/`，通过 WebUI 的字体下载入口管理。该链路不解析 HTML，也不调用 AstrBot 的图片渲染接口；产物继续接入现有图片校验、发送和诊断流程。下面的 Jinja2 变量契约适用于 HTML 文件，Typst 的输入结构见 `typst_data.py`。
 
 ## 3. 渲染变量契约
 
