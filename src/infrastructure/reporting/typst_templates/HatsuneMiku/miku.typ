@@ -90,7 +90,7 @@
   v(30*t.u)
 }
 #let peak(t,d) = {
-  shadow(t,dy:6,blur:15,color:base.transparentize(85%),block(width:100%,height:120*t.u,fill:gradient.linear(base,light,angle:315deg),radius:12*t.u,inset:(x:35*t.u),clip:true)[
+  shadow(t,dy:6,blur:15,color:base.transparentize(85%),block(width:100%,height:120*t.u,fill:gradient.linear(base,light,angle:45deg),radius:12*t.u,inset:(x:35*t.u),clip:true)[
     #place(right+horizon,dx:20*t.u,dy:-6*t.u,skew(ax:-12deg,copy(t,text(tracking:-3*t.u)[MIKU],size:160,weight:900,fill:white.transparentize(80%),font:"Share Tech Mono",lh:0.73)))
     #grid(columns:(1fr,150*t.u),rows:120*t.u,align:horizon,
       [#grid(columns:(auto,1fr),gutter:8*t.u,align:horizon,icon(t,"trending-up",size:20,color:white),fitted(t,text(tracking:if t.english {0.045em}else{0pt},if t.english {upper(words(d).peak)}else{words(d).peak}),570,size:16,weight:700,fill:white))#v(4*t.u)#copy(t,text(tracking:1*t.u,d.peak),size:44.8,weight:800,fill:white,font:"Outfit",lh:1.27)],
@@ -225,7 +225,7 @@
       ])
     ]))
     #v(30*t.u)
-    #shadow(t,dy:4,blur:15,color:base.transparentize(80%),block(width:100%,fill:gradient.linear(dark,base,angle:315deg),inset:25*t.u,radius:12*t.u)[
+    #shadow(t,dy:4,blur:15,color:base.transparentize(80%),block(width:100%,fill:gradient.linear(dark,base,angle:45deg),inset:25*t.u,radius:12*t.u)[
       #grid(columns:(1fr,auto),gutter:20*t.u,align:bottom,
         [#grid(columns:(20*t.u,1fr),gutter:8*t.u,align:horizon,icon(t,"mic",size:20,color:white),copy(t,words(d).verdict,size:17.6,weight:700,fill:white))#v(12*t.u)#copy(t,runs(t,r.summary),fill:white.transparentize(5%),lh:1.8)],
         art(t,d,1,100))
