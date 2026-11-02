@@ -123,6 +123,75 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                 },
             },
+            "/config/typst-fonts": {
+                "get": {
+                    "summary": "读取受管理的 Typst 字体状态",
+                    "operationId": "getTypstFonts",
+                    "responses": {
+                        "200": {
+                            "description": "字体状态",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/TypstFontStatus"
+                                            },
+                                        },
+                                        "required": ["status", "data"],
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/config/typst-fonts/download": {
+                "post": {
+                    "summary": "下载固定字体预设到插件自己的 data 目录",
+                    "operationId": "downloadTypstFonts",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "cdn_base_url": {
+                                            "type": "string",
+                                            "maxLength": 2048,
+                                        }
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "字体状态",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/TypstFontStatus"
+                                            },
+                                        },
+                                        "required": ["status", "data"],
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "无效 CDN 地址"},
+                        "409": {"description": "字体正在下载"},
+                        "502": {"description": "下载未完成，已成功的文件会保留"},
+                    },
+                }
+            },
             "/config/test-t2i": {
                 "post": {
                     "summary": "按当前渲染方案测试 AstrBot 或自定义 T2I，不生成分析报告",
@@ -785,15 +854,35 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                     "required": ["group_id", "group_name", "platform"],
                 },
+                "TypstFontStatus": {
+                    "type": "object",
+                    "properties": {
+                        "directory": {"type": "string"},
+                        "files": {"type": "array", "items": {"type": "string"}},
+                        "missing": {"type": "array", "items": {"type": "string"}},
+                        "ready": {"type": "boolean"},
+                    },
+                    "required": ["directory", "files", "missing", "ready"],
+                },
                 "T2iProbeRequest": {
                     "type": "object",
                     "properties": {
                         "render_service": {
                             "type": "string",
-                            "enum": ["astrbot", "custom"],
+                            "enum": ["astrbot", "custom", "typst"],
                             "default": "custom",
                         },
                         "group_id": {"type": "string", "maxLength": 256},
+                        "typst_width": {
+                            "type": "integer",
+                            "minimum": 640,
+                            "maximum": 1920,
+                        },
+                        "typst_ppi": {
+                            "type": "integer",
+                            "minimum": 72,
+                            "maximum": 288,
+                        },
                         "platform_id": {"type": "string", "maxLength": 256},
                         "service_endpoint": {
                             "type": "string",

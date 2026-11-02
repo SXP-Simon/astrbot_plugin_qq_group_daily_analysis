@@ -285,6 +285,18 @@ class PluginPageWebUIBridge:
                 "Test AstrBot or custom T2I with a fixed HTML page without saving configuration",
             ),
             (
+                f"/{PLUGIN_NAME}/config/typst-fonts",
+                self.config_routes.api_typst_fonts,
+                ["GET"],
+                "读取插件数据目录中的 Typst 字体状态",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/typst-fonts/download",
+                self.config_routes.api_download_typst_fonts,
+                ["POST"],
+                "从配置的 CDN 下载固定 Typst 字体预设",
+            ),
+            (
                 f"/{PLUGIN_NAME}/config/test-template-cdn",
                 self.config_routes.api_test_template_cdn,
                 ["POST"],

@@ -22,6 +22,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/config/typst-fonts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取受管理的 Typst 字体状态 */
+        get: operations["getTypstFonts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/typst-fonts/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 下载固定字体预设到插件自己的 data 目录 */
+        post: operations["downloadTypstFonts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config/test-t2i": {
         parameters: {
             query?: never;
@@ -354,13 +388,21 @@ export interface components {
             group_name: string;
             platform: string;
         };
+        TypstFontStatus: {
+            directory: string;
+            files: string[];
+            missing: string[];
+            ready: boolean;
+        };
         T2iProbeRequest: {
             /**
              * @default custom
              * @enum {string}
              */
-            render_service: "astrbot" | "custom";
+            render_service: "astrbot" | "custom" | "typst";
             group_id?: string;
+            typst_width?: number;
+            typst_ppi?: number;
             platform_id?: string;
             /** @description 自定义方案的服务地址，省略时使用 http://127.0.0.1:8999/text2img */
             service_endpoint?: string;
@@ -824,6 +866,79 @@ export interface operations {
             };
             /** @description 配置保存失败 */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getTypstFonts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 字体状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["TypstFontStatus"];
+                    };
+                };
+            };
+        };
+    };
+    downloadTypstFonts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cdn_base_url?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 字体状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["TypstFontStatus"];
+                    };
+                };
+            };
+            /** @description 无效 CDN 地址 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 字体正在下载 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 下载未完成，已成功的文件会保留 */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -16,7 +16,10 @@ from collections.abc import Iterable
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING
 
-from ....shared.constants import PLUGIN_NAME
+from astrbot.api.star import StarTools
+
+from ....shared.constants import DEFAULT_CDN_HOST, PLUGIN_NAME
+from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
 from ...config.config_migrator import LEGACY_RENDERING_RESOURCE_KEYS
 from ...config.rendering_config import (
@@ -29,6 +32,8 @@ from ...config.rendering_config import (
 from ...reporting.cdn_probe import probe_template_cdn
 from ...reporting.custom_t2i_client import render_custom_t2i, validate_t2i_image
 from ...reporting.html_renderer import bind_group_html_renderer
+from ...reporting.typst_renderer import render_typst_probe
+from ...reporting.typst_resources import download_typst_fonts, typst_font_status
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
@@ -228,6 +233,50 @@ class ConfigRoutes:
         self.report_dispatcher = report_dispatcher
         self.context = context
         self.auto_scheduler = auto_scheduler
+        self._typst_font_lock = asyncio.Lock()
+
+    async def api_typst_fonts(self) -> WebApiResponse:
+        """读取插件 data 目录中可用的 Typst 字体状态。
+
+        Returns:
+            已安装文件和仍需下载的预设字体，不扫描宿主系统。
+        """
+        return json_response(
+            {
+                "status": "ok",
+                "data": typst_font_status(Path(StarTools.get_data_dir(PLUGIN_NAME))),
+            }
+        )
+
+    async def api_download_typst_fonts(self) -> WebApiResponse:
+        """从选定 CDN 下载固定字体预设到插件自己的数据目录。
+
+        Returns:
+            下载后的字体状态；错误地址返回 400，重复请求返回 409。
+        """
+        try:
+            body = await request.json()
+            if type(body) is not dict:
+                raise ValueError("无效请求")
+            raw_cdn = body.get("cdn_base_url", DEFAULT_CDN_HOST)
+            if not isinstance(raw_cdn, str):
+                raise ValueError("CDN 必须是字符串")
+            cdn = normalize_cdn_base_url(raw_cdn)
+        except (ValueError, TypeError):
+            return error_response("请选择有效的字体下载 CDN", status_code=400)
+        if self._typst_font_lock.locked():
+            return error_response("字体正在下载，请等待完成后刷新", status_code=409)
+        try:
+            async with self._typst_font_lock, asyncio.timeout(180):
+                status = await download_typst_fonts(
+                    Path(StarTools.get_data_dir(PLUGIN_NAME)), cdn or DEFAULT_CDN_HOST
+                )
+            return json_response({"status": "ok", "data": status})
+        except Exception:
+            logger.warning("Typst 字体下载未完成，已下载文件保留，可更换 CDN 后重试")
+            return error_response(
+                "字体下载未完成，请检查 CDN 后重试；已下载的字体会保留", status_code=502
+            )
 
     async def api_get_config(self) -> WebApiResponse:
         """获取插件当前配置数据与完整 Schema 结构定义"""
@@ -343,7 +392,7 @@ class ConfigRoutes:
             if type(body) is not dict:
                 raise ValueError("请提供有效的 T2I 测试配置")
             service = body.get("render_service", "custom")
-            if service not in ("astrbot", "custom"):
+            if service not in ("astrbot", "custom", "typst"):
                 raise ValueError("请选择有效的渲染服务")
             group_id = body.get("group_id", "")
             platform_id = body.get("platform_id", "")
@@ -366,6 +415,8 @@ class ConfigRoutes:
                                 "service_token",
                                 "timeout",
                                 "request_timeout",
+                                "typst_width",
+                                "typst_ppi",
                             )
                             if key in body
                         },
@@ -393,7 +444,16 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
 <body><strong>T2I 渲染测试</strong><p>这是一张测试图片。</p>
 <p>HTML → PNG · 0123456789</p></body></html>"""
         try:
-            if service == "custom":
+            if service == "typst":
+                image = await render_typst_probe(
+                    Path(StarTools.get_data_dir(PLUGIN_NAME)),
+                    {
+                        "render_service": "typst",
+                        "timeout": plan["timeout"],
+                        "typst_ppi": plan.get("typst_ppi", 144),
+                    },
+                )
+            elif service == "custom":
                 image = await render_custom_t2i(
                     plan["service_endpoint"],
                     html,
@@ -451,7 +511,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
         except TimeoutError as exc:
             message = (
                 str(exc)
-                if service == "custom"
+                if service in ("custom", "typst")
                 else "T2I 服务响应超时，请检查服务状态和网络，并查看 AstrBot 日志。"
             )
             return error_response(message, status_code=502)
@@ -459,7 +519,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
             # 宿主和第三方包装器的异常可能含服务地址或凭据，不直接回显。
             message = (
                 str(exc)
-                if service == "custom"
+                if service in ("custom", "typst")
                 else (
                     "AstrBot 没有返回可用的测试图片，请查看 AstrBot 和 T2I 服务日志。"
                 )
