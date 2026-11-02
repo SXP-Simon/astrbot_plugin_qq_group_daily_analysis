@@ -191,8 +191,9 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
     with Image.open(BytesIO(base64.b64decode(image.removeprefix("base64://")))) as output:
         assert output.format == "PNG" and output.width == 940
         output.verify()
-    saved = list((generator.data_dir / "reports").glob("*.jpg"))
-    assert saved and saved[-1].read_bytes() == base64.b64decode(image.removeprefix("base64://"))
+    saved = list((generator.data_dir / "reports").glob(f"*_{trace.trace_id}.jpg"))
+    assert len(saved) == 1
+    assert saved[0].read_bytes() == base64.b64decode(image.removeprefix("base64://"))
     assert trace.metadata["typst_recovery"]["mode"] == "basic"
     dispatcher._dispatch_text.assert_not_called()
     assert not list((generator.data_dir / "typst/jobs").iterdir())
