@@ -302,10 +302,13 @@ def parse_rendering_strategies(
         }
         if render_service == "typst":
             for key, default, lower, upper in (
-                ("typst_width", 940, 640, 1920),
+                ("typst_width", 940, 640, 1280),
                 ("typst_ppi", 144, 72, 288),
             ):
                 number = item.get(key, default)
+                if key == "typst_width" and type(number) is int:
+                    # 旧配置的超宽图片自动收敛，避免升级后整组渲染方案失效。
+                    number = min(number, upper)
                 if type(number) is not int or not lower <= number <= upper:
                     raise ValueError(
                         f"第 {index} 个方案的 {key} 必须是 {lower} 到 {upper} 的整数"

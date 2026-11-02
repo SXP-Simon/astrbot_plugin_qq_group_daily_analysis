@@ -777,7 +777,8 @@
                                 "description": "图片宽度（像素）",
                                 "default": 940,
                                 "min": 640,
-                                "max": 1920
+                                "max": 1280,
+                                "hint": "默认 940px，最大 1280px；提高宽度会显著增加长图渲染耗时。"
                             },
                             "typst_ppi": {
                                 "type": "int",
