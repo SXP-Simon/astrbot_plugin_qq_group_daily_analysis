@@ -39,6 +39,7 @@ class TypstPortrait(TypedDict):
     reason: list[TextRun]
     avatar: str
     image: str
+    image_fit: str
     opacity: float
 
 
@@ -244,6 +245,7 @@ class TypstDataPreparer:
                         str(profile["profile_image"]),
                         min(1.0, max(0.0, float(profile["profile_image_opacity"]))),
                     ),
+                    "image_fit": str(profile["profile_image_size_mode"]),
                     "opacity": min(
                         1.0, max(0.0, float(profile["profile_image_opacity"]))
                     ),

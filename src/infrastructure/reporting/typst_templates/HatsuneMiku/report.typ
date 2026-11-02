@@ -1,5 +1,5 @@
-// HatsuneMiku 原生排版；复用展示组件，主题布局独立定义。
+// 图片宽度缩放同一份长图版式，避免字号和固定宽度卡片相互挤压。
 #import "miku.typ": render
 #let d = json("data.json")
-#let t = (bg: rgb("f0fafa"), paper: rgb("ffffff"), card: rgb("ffffff"), ink: rgb("2c3e50"), muted: rgb("7f8c8d"), accent: rgb("39c5bb"), secondary: rgb("a7e7e3"), soft: rgb("e0f2f1"), border: rgb("d2eeeb"), radius: 12, pattern: "grid", u: 72/d.ppi*1pt)
+#let t = (u: 72/d.ppi*d.width/940*1pt)
 #render(d,t)
