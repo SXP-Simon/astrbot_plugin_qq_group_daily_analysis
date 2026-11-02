@@ -5,7 +5,7 @@ export const renderAttemptSchema = z.object({
   attempt: z.number().optional().catch(undefined),
   strategy_name: z.string().optional().catch(undefined),
   priority: z.number().nullable().optional().catch(undefined),
-  service_type: z.enum(["astrbot", "custom"]).optional().catch(undefined),
+  service_type: z.enum(["astrbot", "custom", "typst"]).optional().catch(undefined),
   font_mode: z.enum(["network", "local"]).optional().catch(undefined),
   resource_environment: z.string().optional().catch(undefined),
   resource_urls: z.object({

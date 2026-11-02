@@ -58,8 +58,8 @@ export const RenderAttemptsTable: React.FC<RenderAttemptsTableProps> = ({ attemp
           const details = [
             att.strategy_name,
             att.priority != null ? `优先级 ${att.priority}` : undefined,
-            att.service_type === "custom" ? "自定义 T2I" : att.service_type === "astrbot" ? "AstrBot T2I" : undefined,
-            att.font_mode === "local" ? "字体：本地已安装字体" : att.font_mode === "network" ? "字体：在线加载" : undefined,
+              att.service_type === "typst" ? "Typst 本地排版" : att.service_type === "custom" ? "自定义 T2I" : att.service_type === "astrbot" ? "AstrBot T2I" : undefined,
+              att.service_type === "typst" ? "字体：插件数据目录" : att.font_mode === "local" ? "字体：本地已安装字体" : att.font_mode === "network" ? "字体：在线加载" : undefined,
             typeof att.duration_ms === "number" ? `耗时：${att.duration_ms === 0 ? "0ms" : formatDuration(att.duration_ms)}` : undefined,
             typeof att.render_timeout_ms === "number" ? `渲染超时：${formatDuration(att.render_timeout_ms)}` : undefined,
             typeof att.request_timeout_ms === "number" ? `请求等待上限：${formatDuration(att.request_timeout_ms)}` : undefined,
