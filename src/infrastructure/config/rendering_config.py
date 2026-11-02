@@ -53,7 +53,10 @@ class RenderingStrategyOptions(ScreenshotOptions, total=False):
 
     resource_environment: Literal["Mainland", "Overseas"]
     resource_urls: RenderingResourceConfig
-    render_service: Literal["astrbot", "custom"]
+    render_service: Literal["astrbot", "custom", "typst"]
+    typst_width: int
+    typst_ppi: int
+    typst_font_dir: str
     service_endpoint: str
     service_token: str
     request_timeout: int
@@ -64,7 +67,7 @@ class RenderingStrategyOptions(ScreenshotOptions, total=False):
 
 RenderingTemplateMarker = TypedDict(
     "RenderingTemplateMarker",
-    {"__template_key": Literal["strategy", "mainland", "custom"]},
+    {"__template_key": Literal["strategy", "mainland", "custom", "typst"]},
 )
 
 
@@ -87,7 +90,10 @@ class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     name: str
     priority: int
     environment: Literal["Mainland", "Overseas"]
-    render_service: Literal["astrbot", "custom"]
+    render_service: Literal["astrbot", "custom", "typst"]
+    typst_width: NotRequired[int]
+    typst_ppi: NotRequired[int]
+    typst_font_dir: NotRequired[str]
     service_endpoint: str
     service_token: str
     type: Literal["png", "jpeg"]
@@ -175,7 +181,9 @@ def parse_rendering_strategies(
         )
         render_service = item.get(
             "render_service",
-            "custom" if item.get("__template_key") == "custom" else "astrbot",
+            item.get("__template_key")
+            if item.get("__template_key") in ("custom", "typst")
+            else "astrbot",
         )
         endpoint = item.get(
             "service_endpoint",
@@ -188,8 +196,8 @@ def parse_rendering_strategies(
             raise ValueError(f"第 {index} 个渲染方案的名称必须是文字")
         if environment not in ("Mainland", "Overseas"):
             raise ValueError(f"第 {index} 个渲染方案请选择内地或海外环境")
-        if render_service not in ("astrbot", "custom"):
-            raise ValueError(f"第 {index} 个渲染方案请选择跟随 AstrBot 或自定义服务")
+        if render_service not in ("astrbot", "custom", "typst"):
+            raise ValueError(f"第 {index} 个渲染方案请选择 AstrBot、自定义服务或 Typst")
         if not isinstance(endpoint, str):
             raise ValueError(f"第 {index} 个渲染方案的服务地址必须是文字")
         if (
@@ -272,7 +280,9 @@ def parse_rendering_strategies(
             integers[key] = number
         plan: RenderingStrategyConfig = {
             "__template_key": (
-                "custom"
+                "typst"
+                if render_service == "typst"
+                else "custom"
                 if render_service == "custom"
                 else "mainland"
                 if environment == "Mainland"
@@ -292,6 +302,25 @@ def parse_rendering_strategies(
             "device_scale": scale,
             "timeout": integers["timeout"],
         }
+        if render_service == "typst":
+            for key, default, lower, upper in (
+                ("typst_width", 940, 640, 1920),
+                ("typst_ppi", 144, 72, 288),
+            ):
+                number = item.get(key, default)
+                if type(number) is not int or not lower <= number <= upper:
+                    raise ValueError(
+                        f"第 {index} 个方案的 {key} 必须是 {lower} 到 {upper} 的整数"
+                    )
+                plan[key] = number
+            font_dir = item.get("typst_font_dir", "")
+            if (
+                not isinstance(font_dir, str)
+                or len(font_dir) > 2048
+                or any(not char.isprintable() for char in font_dir)
+            ):
+                raise ValueError(f"第 {index} 个方案的字体目录无效")
+            plan["typst_font_dir"] = font_dir.strip()
         if render_service == "custom" or "request_timeout" in item:
             request_timeout = item.get(
                 "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS

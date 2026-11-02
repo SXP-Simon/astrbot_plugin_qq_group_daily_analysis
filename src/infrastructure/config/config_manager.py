@@ -420,8 +420,9 @@ class ConfigManager:
     def get_t2i_rendering_strategies(self) -> list[RenderingStrategyOptions]:
         """将方案转换为T2I参数，资源环境由插件消费，不传给 T2I。"""
         group = self._get_group("t2i_rendering")
-        return [
-            {
+        plans: list[RenderingStrategyOptions] = []
+        for item in self.get_t2i_rendering_strategy_config():
+            plan: RenderingStrategyOptions = {
                 "full_page": True,
                 "strategy_name": item["name"],
                 "strategy_priority": item["priority"],
@@ -445,8 +446,14 @@ class ConfigManager:
                     "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
                 ),
             }
-            for item in self.get_t2i_rendering_strategy_config()
-        ]
+            if item["render_service"] == "typst":
+                plan.update(
+                    typst_width=item.get("typst_width", 940),
+                    typst_ppi=item.get("typst_ppi", 144),
+                    typst_font_dir=item.get("typst_font_dir", ""),
+                )
+            plans.append(plan)
+        return plans
 
     def get_t2i_font_source(self) -> str:
         """获取第一优先级方案的环境，独立 HTML 报告也使用此环境。"""
