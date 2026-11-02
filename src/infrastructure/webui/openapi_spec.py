@@ -876,7 +876,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "typst_width": {
                             "type": "integer",
                             "minimum": 640,
-                            "maximum": 1920,
+                            "maximum": 1280,
                         },
                         "typst_ppi": {
                             "type": "integer",
