@@ -84,7 +84,9 @@ export const renderingStrategySchema = z.object({
   cdn_base_url: z.union([cdnBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   google_fonts: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   gstatic: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
-  render_service: z.enum(["astrbot", "custom"], { error: "请选择有效的渲染方案类型" }).optional(),
+  render_service: z.enum(["astrbot", "custom", "typst"], { error: "请选择有效的渲染方案类型" }).optional(),
+  typst_width: z.number().int().min(640).max(1920).optional(),
+  typst_ppi: z.number().int().min(72).max(288).optional(),
   service_endpoint: z.string({ error: "服务地址必须是文字" }).trim().optional(),
   service_token: z.string({ error: "服务 Token 必须是文字" }).max(4096, "服务 Token 不能超过 4096 个字符").regex(/^[\x20-\x7e]*$/, "服务 Token 请使用英文、数字或常用符号，不能换行").transform((value) => value.trim()).default(""),
   type: z.enum(["png", "jpeg"], { error: "请选择 PNG 或 JPEG 格式" }).default("png"),
@@ -99,7 +101,7 @@ export const renderingStrategySchema = z.object({
     const parsed = (key === "cdn_base_url" ? cdnBaseUrlSchema : fontBaseUrlSchema).safeParse(raw);
     if (!parsed.success || !parsed.data) ctx.addIssue({ code: "custom", path: [`custom_${key}`], message: "请填写完整的自定义资源地址" });
   }
-  const service = value.render_service ?? (value.__template_key === "custom" ? "custom" : "astrbot");
+  const service = value.render_service ?? (value.__template_key === "typst" ? "typst" : value.__template_key === "custom" ? "custom" : "astrbot");
   if (service === "custom") {
     const endpoint = t2iEndpointSchema.safeParse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT);
     if (!endpoint.success) ctx.addIssue({ code: "custom", path: ["service_endpoint"], message: endpoint.error.issues[0].message });
@@ -112,15 +114,16 @@ export const renderingStrategySchema = z.object({
       value[`custom_${key}`] = address;
     }
   }
-  const service = value.render_service ?? (value.__template_key === "custom" ? "custom" as const : "astrbot" as const);
+  const service = value.render_service ?? (value.__template_key === "typst" ? "typst" as const : value.__template_key === "custom" ? "custom" as const : "astrbot" as const);
   const environment = value.environment ?? (value.__template_key === "mainland" ? "Mainland" as const : "Overseas" as const);
   // 旧调用方式只用于迁移，保存后由条目类型唯一决定服务。
   const { render_service: _legacyService, font_mode: _fontMode, ...plan } = value;
   return Object.assign(plan, {
     environment,
     ...(service === "custom" ? { request_timeout: value.request_timeout ?? DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS, font_mode: value.font_mode ?? "network" } : {}),
+    ...(service === "typst" ? { typst_width: value.typst_width ?? 940, typst_ppi: value.typst_ppi ?? 144 } : {}),
     service_endpoint: service === "custom" ? t2iEndpointSchema.parse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT) : value.service_endpoint ?? "",
-    __template_key: service === "custom" ? "custom" : environment === "Mainland" ? "mainland" : "strategy",
+    __template_key: service === "typst" ? "typst" : service === "custom" ? "custom" : environment === "Mainland" ? "mainland" : "strategy",
   });
 });
 

@@ -12,6 +12,8 @@ export interface T2iProbeInput {
   service_token?: unknown;
   timeout?: unknown;
   request_timeout?: unknown;
+  typst_width?: unknown;
+  typst_ppi?: unknown;
   group_id?: unknown;
   platform_id?: unknown;
 }
@@ -22,7 +24,12 @@ const targetSchema = z.object({
 }).refine((value) => Boolean(value.group_id) === Boolean(value.platform_id), "请选择完整的群聊和平台");
 
 export const t2iProbeRequestSchema = renderingStrategySchema.and(targetSchema)
-  .transform((plan): T2iProbeRequest => plan.__template_key === "custom" ? {
+  .transform((plan): T2iProbeRequest => plan.__template_key === "typst" ? {
+    render_service: "typst",
+    timeout: plan.timeout,
+    typst_width: plan.typst_width ?? 940,
+    typst_ppi: plan.typst_ppi ?? 144,
+  } : plan.__template_key === "custom" ? {
     render_service: "custom",
     service_endpoint: plan.service_endpoint,
     service_token: plan.service_token,
