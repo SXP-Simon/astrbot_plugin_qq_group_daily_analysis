@@ -809,6 +809,43 @@
                                 "default": 30000,
                                 "min": 1000,
                                 "max": 300000
+                            },
+                            "cdn_base_url": {
+                                "type": "string",
+                                "description": "模板资源 CDN",
+                                "default": "",
+                                "hint": "用于字体预设、角色装饰和人格素材下载；首次下载后会缓存在插件数据目录。",
+                                "options": [
+                                    "",
+                                    "https://cdn.jsdmirror.com",
+                                    "https://cdn.jsdmirror.cn",
+                                    "https://jsd.cdn.noisework.cn",
+                                    "https://cdn.bili33.top",
+                                    "https://cdn.jsdelivr.net",
+                                    "https://fastly.jsdelivr.net",
+                                    "https://gcore.jsdelivr.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "跟随资源环境预设",
+                                    "JSDMirror（默认） · https://cdn.jsdmirror.com",
+                                    "JSDMirror CN · https://cdn.jsdmirror.cn",
+                                    "NOISE · https://jsd.cdn.noisework.cn",
+                                    "哔哩 CDN · https://cdn.bili33.top",
+                                    "jsDelivr · https://cdn.jsdelivr.net",
+                                    "Fastly · https://fastly.jsdelivr.net",
+                                    "Gcore · https://gcore.jsdelivr.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_cdn_base_url": {
+                                "type": "string",
+                                "description": "自定义模板资源 CDN",
+                                "default": "",
+                                "condition": {
+                                    "cdn_base_url": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
                             }
                         }
                     }
