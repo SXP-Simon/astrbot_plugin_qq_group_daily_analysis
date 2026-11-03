@@ -142,7 +142,26 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
 
 it("Typst演示覆盖本地缓存、下载、超时、恢复、失败和取消，活跃详情保持一致", () => {
   const native = mockTraces.filter(trace => trace.trace_id.startsWith("trace-typst-"));
-  expect(native).toHaveLength(6);
+  expect(native).toHaveLength(10);
+  for (const trace of native) {
+    for (const span of trace.spans || []) {
+      const measured = ["font_setup_ms", "layout_ms", "raster_ms"].reduce((sum, key) => sum + (typeof span.payload?.[key] === "number" ? Number(span.payload[key]) : 0), 0);
+      if (span.duration_ms != null) expect(measured).toBeLessThanOrEqual(span.duration_ms);
+    }
+    const byId = new Map(trace.spans?.map(span => [span.span_id, span]));
+    expect(byId.size).toBe(trace.spans?.length);
+    for (const span of trace.spans || []) {
+      if (!span.stage_name.startsWith("TYPST_")) continue;
+      const parent = byId.get(String(span.payload?.parent_span_id));
+      expect(parent?.stage_name).toBe("IMAGE_RENDER_ATTEMPT");
+      expect(byId.get(String(parent?.payload?.parent_span_id))?.stage_name).toBe("RENDER_REPORT");
+    }
+  }
+  for (const id of ["fonts", "theme", "fallback", "html-native"]) {
+    const trace = native.find(item => item.trace_id === `trace-typst-${id}`);
+    expect(trace?.spans?.filter(span => span.stage_name === "IMAGE_RENDER_ATTEMPT")).toHaveLength(2);
+    expect(trace?.spans?.at(-1)?.stage_name).toBe("DISPATCH_REPORT");
+  }
   const recovered = native.find(trace => trace.trace_id === "trace-typst-recovered");
   expect(recovered?.status).toBe("warning");
   expect(recovered?.spans?.find(span => span.stage_name === "TYPST_COMPILE")?.status).toBe("warning");

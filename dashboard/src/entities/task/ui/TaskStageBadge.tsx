@@ -11,7 +11,7 @@ export const TaskStageBadge: React.FC<TaskStageBadgeProps> = ({ stage }) => {
   let color = "processing";
   let label = stage;
 
-  if (stage.toUpperCase().startsWith("TYPST_")) {
+  if ((stage.toUpperCase().startsWith("TYPST_") || stage.toUpperCase().startsWith("IMAGE_"))) {
     color = "orange";
     label = formatStageName(stage);
   } else if (stage.includes("FETCH")) {

@@ -11,6 +11,7 @@ import {
 } from "@ant-design/icons";
 import { TraceRecord, TraceSpan } from "../model/types";
 import { formatStageName, formatDuration } from "../../../shared/lib/formatters";
+import { buildSpanTree, spanGroupKey } from "../model/spanTree";
 import { useTheme } from "../../../shared/lib/useTheme";
 
 const { Text } = Typography;
@@ -53,10 +54,10 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     >();
 
     for (const span of spans) {
-      const existing = stats.get(span.stage_name);
+      const existing = stats.get(spanGroupKey(span));
       const dur = span.duration_ms ?? 0;
       if (!existing) {
-        stats.set(span.stage_name, {
+        stats.set(spanGroupKey(span), {
           attempts: [span],
           totalDuration: dur,
           retryOverhead: 0,
@@ -84,10 +85,10 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
   const retrySummary = useMemo(() => {
     let totalOverheadMs = 0;
     const retriedStages: string[] = [];
-    for (const [stage, stat] of stageStats) {
+    for (const [, stat] of stageStats) {
       if (stat.attempts.length > 1) {
         totalOverheadMs += stat.retryOverhead;
-        retriedStages.push(`${formatStageName(stage)} (${stat.attempts.length}次)`);
+        retriedStages.push(`${formatStageName(stat.attempts[0].stage_name)} (${stat.attempts.length}次)`);
       }
     }
     return {
@@ -100,18 +101,21 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
   // 全量阶段明细（按时间顺序消歧，避免 ECharts 同名 category 重叠碰撞）
   const processedAllSpans: ProcessedSpanItem[] = useMemo(() => {
     const stageAttemptCounters = new Map<string, number>();
+    const labels = new Map<string, number>();
 
     return spans.map((span) => {
-      const stat = stageStats.get(span.stage_name);
+      const stat = stageStats.get(spanGroupKey(span));
       const totalAttempts = stat?.attempts.length || 1;
-      const currentAttemptIdx = (stageAttemptCounters.get(span.stage_name) || 0) + 1;
-      stageAttemptCounters.set(span.stage_name, currentAttemptIdx);
+      const currentAttemptIdx = (stageAttemptCounters.get(spanGroupKey(span)) || 0) + 1;
+      stageAttemptCounters.set(spanGroupKey(span), currentAttemptIdx);
 
       const isRetry = currentAttemptIdx > 1;
       const isFinal = currentAttemptIdx === totalAttempts;
       const baseFormatted = formatStageName(span.stage_name);
 
-      let displayName = baseFormatted;
+      const ordinal = (labels.get(span.stage_name) || 0) + 1;
+      labels.set(span.stage_name, ordinal);
+      let displayName = baseFormatted + (typeof span.payload?.parent_span_id === "string" && ordinal > 1 ? ` #${ordinal}` : "");
       if (totalAttempts > 1) {
         if (currentAttemptIdx === 1) {
           displayName = `${baseFormatted} #1 (初次${span.status === "failed" ? "·失败" : ""})`;
@@ -138,15 +142,16 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
   // 精简有效流水线（每个阶段仅展示最终有效 Span，并汇总前序重试耗时）
   const effectiveSpans: ProcessedSpanItem[] = useMemo(() => {
     const list: ProcessedSpanItem[] = [];
+    const byId = new Map(processedAllSpans.map(item => [item.rawSpan.span_id, item]));
 
-    for (const [stageName, stat] of stageStats) {
+    for (const [, stat] of stageStats) {
       const latestSpan = stat.attempts[stat.attempts.length - 1];
       const totalAttempts = stat.attempts.length;
-      const baseFormatted = formatStageName(stageName);
+      const baseFormatted = formatStageName(latestSpan.stage_name);
 
       list.push({
         rawSpan: latestSpan,
-        displayName: baseFormatted,
+        displayName: byId.get(latestSpan.span_id)?.displayName || baseFormatted,
         stageNameFormatted: baseFormatted,
         durationMs: latestSpan.duration_ms ?? 0,
         attemptIndex: totalAttempts,
@@ -156,8 +161,17 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
       });
     }
 
-    return list;
-  }, [stageStats]);
+    const eligible = new Set(list.map(item => item.rawSpan.span_id));
+    const stack = buildSpanTree(spans).filter(node => eligible.has(node.span.span_id));
+    const visible = new Set<string>();
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (!eligible.has(node.span.span_id)) continue;
+      visible.add(node.span.span_id);
+      stack.push(...node.children);
+    }
+    return list.filter(item => visible.has(item.rawSpan.span_id));
+  }, [stageStats, spans, processedAllSpans]);
 
   // 当前激活展示的 Span 列表
   const currentSpans = useMemo(() => {
@@ -192,7 +206,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
           const dur = item.durationMs;
           const pct = ((dur / totalMs) * 100).toFixed(1);
 
-          const stat = stageStats.get(s.stage_name);
+          const stat = stageStats.get(spanGroupKey(s));
           const attemptsCount = stat?.attempts.length || 1;
           const retryOverhead = stat?.retryOverhead || 0;
 
@@ -281,7 +295,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     const labels: string[] = ["起点 (Init)"];
     const memValues: number[] = [perf?.init_memory_mb || 0];
 
-    const sourceSpans = pipelineMode === "effective" ? effectiveSpans : processedAllSpans;
+    const sourceSpans = [...(pipelineMode === "effective" ? effectiveSpans : processedAllSpans)].sort((a, b) => (a.rawSpan.started_at * 1000 + a.durationMs) - (b.rawSpan.started_at * 1000 + b.durationMs));
 
     sourceSpans.forEach((item) => {
       labels.push(item.displayName);

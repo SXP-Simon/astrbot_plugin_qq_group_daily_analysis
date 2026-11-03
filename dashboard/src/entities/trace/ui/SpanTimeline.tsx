@@ -5,8 +5,10 @@ import {
   CloseCircleOutlined,
   SyncOutlined,
   ExclamationCircleOutlined,
+  StopOutlined,
 } from "@ant-design/icons";
 import { TraceSpan } from "../model/types";
+import { resolveSpanOutcome } from "../model/spanOutcome";
 import { buildSpanTree, type SpanTreeNode } from "../model/spanTree";
 import { getStageSlaThreshold } from "../model/sla";
 import { StageMetricsBadges } from "./StageMetricsBadges";
@@ -101,21 +103,14 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
 
     const { thresholdMs } = getStageSlaThreshold(span.stage_name);
     const isSlaExceeded = !isRunning && duration > thresholdMs;
-    const isFailed =
-      span.status === "failed" ||
-      span.status === "error" ||
-      Boolean(span.payload?.error);
-
-    const isWarning =
-      !isFailed &&
-      (span.status === "warning" ||
-        span.status === "partial_success" ||
-        span.payload?.success === false ||
-        Boolean(span.payload?.warning) ||
-        (Array.isArray(span.payload?.subtask_errors) && span.payload.subtask_errors.length > 0));
+    const outcome = resolveSpanOutcome(span.status, span.payload);
+    const isFailed = outcome === "failed";
+    const isWarning = outcome === "warning";
 
     let icon = <CheckCircleOutlined style={{ color: "#52c41a" }} />;
-    if (isFailed) {
+    if (outcome === "cancelled") {
+      icon = <StopOutlined style={{ color: token.colorTextDisabled }} />;
+    } else if (isFailed) {
       icon = <CloseCircleOutlined style={{ color: "#ff4d4f" }} />;
     } else if (isRunning) {
       icon = <SyncOutlined spin style={{ color: "#1677ff" }} />;

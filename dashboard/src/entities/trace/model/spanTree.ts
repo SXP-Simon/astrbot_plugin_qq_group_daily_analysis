@@ -29,3 +29,9 @@ export function buildSpanTree(spans: TraceSpan[]): SpanTreeNode[] {
   }
   return roots;
 }
+
+
+/** Child steps belong to their attempt and are not retries of another parent. */
+export function spanGroupKey(span: TraceSpan): string {
+  return typeof span.payload?.parent_span_id === "string" ? `span:${span.span_id}` : `stage:${span.stage_name}`;
+}

@@ -1,74 +1,12 @@
 import React from "react";
+import { MetricPill } from "../../../shared/ui/MetricPill";
+import { RenderingStageMetrics } from "./RenderingStageMetrics";
 import { useTheme } from "../../../shared/lib/useTheme";
 
 interface StageMetricsBadgesProps {
   stageName: string;
   payload?: Record<string, unknown>;
 }
-
-interface MetricPillProps {
-  label: string;
-  value: React.ReactNode;
-  isMono?: boolean;
-  status?: "default" | "success" | "error" | "warning";
-  isDark: boolean;
-}
-
-const MetricPill: React.FC<MetricPillProps> = ({
-  label,
-  value,
-  isMono = true,
-  status = "default",
-  isDark,
-}) => {
-  let statusColor = isDark ? "#c9d1d9" : "#334155";
-  let statusBg = isDark ? "#21262d" : "#f8fafc";
-  let borderColor = isDark ? "#30363d" : "#e2e8f0";
-
-  if (status === "success") {
-    statusColor = isDark ? "#4ade80" : "#16a34a";
-    statusBg = isDark ? "rgba(22, 163, 74, 0.12)" : "#f0fdf4";
-    borderColor = isDark ? "rgba(22, 163, 74, 0.25)" : "#bbf7d0";
-  } else if (status === "error") {
-    statusColor = isDark ? "#f87171" : "#dc2626";
-    statusBg = isDark ? "rgba(220, 38, 38, 0.12)" : "#fef2f2";
-    borderColor = isDark ? "rgba(220, 38, 38, 0.25)" : "#fecaca";
-  } else if (status === "warning") {
-    statusColor = isDark ? "#fbbf24" : "#d97706";
-    statusBg = isDark ? "rgba(217, 119, 6, 0.12)" : "#fffbeb";
-    borderColor = isDark ? "rgba(217, 119, 6, 0.25)" : "#fde68a";
-  }
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "2px 7px",
-        fontSize: 11,
-        borderRadius: 4,
-        background: statusBg,
-        border: `1px solid ${borderColor}`,
-        color: statusColor,
-        lineHeight: "16px",
-      }}
-    >
-      <span style={{ color: isDark ? "#8b949e" : "#64748b" }}>{label}:</span>
-      <span
-        style={{
-          fontWeight: 600,
-          fontFamily: isMono
-            ? "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace"
-            : "inherit",
-          color: status !== "default" ? statusColor : isDark ? "#f0f6fc" : "#0f172a",
-        }}
-      >
-        {value}
-      </span>
-    </span>
-  );
-};
 
 export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
   stageName,
@@ -85,8 +23,8 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
       return (
         <MetricPill
           isDark={isDark}
-          label="内存RSS"
-          value={`${isIncrease ? `+${delta.toFixed(1)}` : delta.toFixed(1)} MB`}
+          label="宿主 RSS 变化"
+          value={`${isIncrease ? `+${delta.toFixed(1)}` : delta.toFixed(1)} MiB`}
           status={delta > 15 ? "warning" : "default"}
         />
       );
@@ -96,35 +34,8 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
 
   const normStage = (stageName || "").toUpperCase().replace(/-/g, "_");
 
-  if (normStage.startsWith("TYPST_")) {
-    const metrics = [
-      ["width", "固定宽度", "px"],
-      ["topics", "话题", "项"],
-      ["portraits", "画像", "项"],
-      ["quotes", "金句", "项"],
-      ["local_resources", "本地原素材复用", "次"],
-      ["image_cache_hits", "图片缓存复用", "次"],
-      ["downloaded_resources", "本次下载", "个"],
-      ["missing_resources", "占位图标", "个"],
-      ["missing_images", "缺失图片来源", "个"],
-      ["font_setup_ms", "字体初始化", "ms"],
-      ["layout_ms", "布局测量", "ms"],
-      ["raster_ms", "栅格导出", "ms"],
-      ["worker_peak_rss_mb", "编译进程峰值", "MiB"],
-      ["image_bytes", "图片字节", "B"],
-    ] as const;
-    return (
-      <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {metrics.map(([key, label, unit]) => {
-          const value = payload[key];
-          if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
-          return <MetricPill key={key} isDark={isDark} label={label} value={`${value.toLocaleString()} ${unit}`} status={key.startsWith("missing_") && value > 0 ? "warning" : "default"} />;
-        })}
-        {payload.network_budget_exhausted === true && <MetricPill isDark={isDark} label="网络预算" value="已耗尽，保留正文" status="warning" isMono={false} />}
-        {payload.mode === "basic" && <MetricPill isDark={isDark} label="恢复方案" value="基础排版" isMono={false} />}
-        {renderMemoryPill()}
-      </div>
-    );
+  if (normStage.startsWith("TYPST_") || normStage.startsWith("IMAGE_")) {
+    return <RenderingStageMetrics payload={payload}>{renderMemoryPill()}</RenderingStageMetrics>;
   }
 
   switch (normStage) {
