@@ -9,7 +9,7 @@ from aiohttp import web
 from PIL import Image
 import pytest
 
-from src.infrastructure.reporting import typst_resources
+from src.infrastructure.reporting import typst_fonts, typst_resources
 
 
 def test_oval_avatar_keeps_normal_avatar_and_cache_separate(tmp_path):
@@ -70,7 +70,7 @@ def test_cdn_cache_works_without_development_assets(tmp_path):
 
 
 def test_bad_font_response_leaves_no_partial_files(tmp_path, monkeypatch):
-    monkeypatch.setattr(typst_resources, "FONT_SOURCES", {"Noto.ttf": "font.ttf"})
+    monkeypatch.setattr(typst_fonts, "FONT_SOURCES", {"Noto.ttf": "font.ttf"})
     async def check():
         app = web.Application()
         async def not_a_font(request):
