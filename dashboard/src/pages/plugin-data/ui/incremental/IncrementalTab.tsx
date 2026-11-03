@@ -1,4 +1,8 @@
-import React from "react";
+import { ManagedRecordDialog } from "../ManagedRecordDialog";
+import { RecordSelectionActions } from "../RecordSelectionActions";
+import { useRecordSelection, recordKey } from "../../model/useRecordSelection";
+import type { RecordLocator } from "../../../../entities/plugin-data/api/managedRecordsApi";
+import React, { useEffect, useState } from "react";
 import {
   Card,
   Row,
@@ -36,6 +40,8 @@ interface IncrementalTabProps {
 }
 
 export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
+  const [managedLocator, setManagedLocator] = useState<RecordLocator | null>(null);
+  const [importing, setImporting] = useState(false);
   const { token } = theme.useToken();
   const {
     incrGroups,
@@ -45,6 +51,9 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
     loadingIncremental,
   } = vm;
 
+  const selection = useRecordSelection(vm.incrBatches.map(item => ({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id })), () => { void vm.refreshIncrGroups(); void vm.loadIncrementalData(vm.selectedIncrGroup); });
+  const clearSelection = selection.clear;
+  useEffect(() => { clearSelection(); }, [vm.selectedIncrGroup, clearSelection]);
   const batchColumns = [
     {
       title: "批次 ID",
@@ -174,6 +183,7 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
           >
             详情
           </Button>
+          <Button size="small" type="link" onClick={() => setManagedLocator({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id })}>管理</Button>
           <Popconfirm
             title="确认删除该增量批次？"
             description="删除后该批次的话题与统计数据将不再参与汇总计算。"
@@ -289,9 +299,14 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
           </Space>
         }
       >
-        {selectedIncrGroup ? (
-          <Table<IncrementalBatchItem>
-            rowKey="batch_id"
+        <Button style={{ marginBottom: 12 }} onClick={() => setImporting(true)}>导入 / 新建增量批次</Button>
+      <ManagedRecordDialog locator={managedLocator} importKind={importing ? "batch" : undefined} onClose={() => { setManagedLocator(null); setImporting(false); }} onChanged={() => { void vm.refreshIncrGroups(); void vm.loadIncrementalData(vm.selectedIncrGroup); }} />
+        {selectedIncrGroup ? (<>
+          <Space direction="vertical" style={{ width: "100%", marginBottom: 12 }}>
+        <RecordSelectionActions vm={selection} label="增量批次" />
+      </Space>
+      <Table<IncrementalBatchItem>
+            rowKey={item => recordKey({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id })} rowSelection={{ selectedRowKeys: selection.keys, onChange: selection.select, preserveSelectedRowKeys: true, getCheckboxProps: () => ({ disabled: selection.busy }) }}
             columns={batchColumns}
             dataSource={incrBatches}
             pagination={false}
@@ -307,6 +322,7 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
               ),
             }}
           />
+          </>
         ) : (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}

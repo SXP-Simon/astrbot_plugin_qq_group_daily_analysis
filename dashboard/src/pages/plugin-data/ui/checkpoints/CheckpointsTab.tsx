@@ -1,4 +1,8 @@
-import React from "react";
+import { ManagedRecordDialog } from "../ManagedRecordDialog";
+import { RecordSelectionActions } from "../RecordSelectionActions";
+import { useRecordSelection, recordKey } from "../../model/useRecordSelection";
+import type { RecordLocator } from "../../../../entities/plugin-data/api/managedRecordsApi";
+import React, { useEffect, useState } from "react";
 import {
   Card,
   Table,
@@ -29,6 +33,7 @@ interface CheckpointsTabProps {
 }
 
 export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
+  const [managedLocator, setManagedLocator] = useState<RecordLocator | null>(null);
   const { token } = theme.useToken();
   const {
     checkpoints,
@@ -41,6 +46,9 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
     ckptFilterStage,
   } = vm;
 
+  const selection = useRecordSelection(vm.checkpoints.map(item => ({ kind: "checkpoint", group_id: item.group_id, date_str: item.date_str, stage_name: item.stage_name, trace_id: item.trace_id || "" })), () => { void vm.loadCheckpoints(); void vm.refreshCheckpointGroups(); });
+  const clearSelection = selection.clear;
+  useEffect(() => { clearSelection(); }, [vm.ckptFilterGroup, vm.ckptFilterDate, vm.ckptFilterStage, clearSelection]);
   const ckptColumns = [
     {
       title: "群聊号码",
@@ -159,6 +167,7 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
           >
             产物 JSON
           </Button>
+          <Button size="small" type="link" onClick={() => setManagedLocator({ kind: "checkpoint", group_id: item.group_id, date_str: item.date_str, stage_name: item.stage_name, trace_id: item.trace_id || "" })}>管理</Button>
           <Popconfirm
             title="确认删除该阶段快照？"
             description="删除后将无法基于此阶段进行断点续跑或零Token重绘。"
@@ -210,11 +219,13 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
           </Space>
         }
       >
-        <Table<CheckpointItem>
-          rowKey={(r) =>
-            r.checkpoint_id ||
-            `${r.group_id}_${r.date_str}_${r.stage_name}_${r.trace_id || ""}`
-          }
+        <Space direction="vertical" style={{ width: "100%", marginBottom: 12 }}>
+        <RecordSelectionActions vm={selection} label="阶段快照" />
+      </Space>
+      <ManagedRecordDialog locator={managedLocator} onClose={() => { setManagedLocator(null); }} onChanged={() => { void vm.loadCheckpoints(); void vm.refreshCheckpointGroups(); }} />
+      <Table<CheckpointItem>
+          rowKey={item => recordKey({ kind: "checkpoint", group_id: item.group_id, date_str: item.date_str, stage_name: item.stage_name, trace_id: item.trace_id || "" })}
+          rowSelection={{ selectedRowKeys: selection.keys, onChange: selection.select, preserveSelectedRowKeys: true, getCheckboxProps: () => ({ disabled: selection.busy }) }}
           columns={ckptColumns}
           dataSource={checkpoints}
           loading={loadingCheckpoints}

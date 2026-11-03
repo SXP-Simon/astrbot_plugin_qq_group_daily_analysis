@@ -1,4 +1,5 @@
-import { managedFileMockHandlers } from "./data/managedFiles";
+import { managedRecordMockHandlers } from "./data/managedRecords";
+import { managedMockFiles, putManagedMockFile, managedFileMockHandlers } from "./data/managedFiles";
 import { mockTemplateResources, mockTypstFonts } from "./data/templateResources";
 import { supportsTemplate } from "../entities/report/model/templates";
 import { renderingRuntimeSchema } from "../entities/config/model/renderingConfig";
@@ -31,6 +32,7 @@ export interface MockHandlerResponse<T = unknown> {
 
 export const mockHandlers = {
   ...managedFileMockHandlers,
+  ...managedRecordMockHandlers,
   "POST config/test-t2i": () => ({
     status: "error",
     message: "演示模式不进行真实渲染，请连接 AstrBot 插件后再试。",
@@ -47,14 +49,23 @@ export const mockHandlers = {
       return { status: "error", message: "演示：当前 CDN 的角色图片请求超时，可更换 CDN 后重试" };
     }
     file.available = true;
+    if (file.name.endsWith(".svg")) putManagedMockFile("template_resources", file.name, '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><circle cx="50" cy="50" r="45" fill="#39c5bb"/></svg>');
+    else putManagedMockFile("template_resources", file.name, null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
     return { status: "ok", data: { ...file } };
   },
-  "GET config/typst-fonts": () => ({ status: "ok", data: mockTypstFonts }),
+  "GET config/typst-fonts": () => {
+    mockTypstFonts.files = [...(managedMockFiles.get("typst_fonts")?.keys() || [])];
+    mockTypstFonts.groups?.forEach(group => { group.missing = group.required.filter(file => !mockTypstFonts.files.includes(file)); group.ready = !group.missing.length; });
+    mockTypstFonts.missing = [...new Set(mockTypstFonts.groups?.flatMap(group => group.missing) || [])];
+    mockTypstFonts.ready = !mockTypstFonts.missing.length;
+    return { status: "ok", data: mockTypstFonts };
+  },
   "POST config/typst-fonts/download": (body?: Record<string, unknown>) => {
     const theme = body?.theme;
     const selected = mockTypstFonts.groups?.find(group => group.theme === theme);
     if (theme != null && !selected) return { status: "error", message: "未知 Typst 模板" };
     const names = selected?.missing || mockTypstFonts.missing;
+    names.forEach(name => putManagedMockFile("typst_fonts", name, null, "AAEAAAAA"));
     mockTypstFonts.files = [...new Set([...mockTypstFonts.files, ...names])];
     mockTypstFonts.missing = mockTypstFonts.missing.filter(file => !names.includes(file));
     mockTypstFonts.ready = !mockTypstFonts.missing.length;
@@ -245,7 +256,7 @@ export const mockHandlers = {
   "POST plugin-data/:section/clear": () => ({ status: "ok", data: { deleted: 10 } }),
   "GET data/incremental/groups": () => ({
     status: "ok",
-    data: { groups: ["123456789", "8899001122", "987654321", "-1001987654321"] },
+    data: { groups: [...new Set(["123456789", "8899001122", "987654321", "-1001987654321", ...mockIncrementalBatches.batches.map(item => item.group_id)])] },
   }),
   "GET data/incremental/batches": () => ({ status: "ok", data: mockIncrementalBatches }),
   "GET data/incremental/batch/detail": () => ({

@@ -6,13 +6,14 @@ import {
   SaveOutlined,
 } from "@ant-design/icons";
 import { usePluginDataViewModel } from "../model/usePluginDataViewModel";
+import { StoredRecordsTab } from "./StoredRecordsTab";
 import { ManagedFilesPanel } from "./partitions/ManagedFilesPanel";
 import { IncrementalTab } from "./incremental/IncrementalTab";
 import { BatchDetailModal } from "./incremental/BatchDetailModal";
 import { CheckpointsTab } from "./checkpoints/CheckpointsTab";
 import { CheckpointDetailModal } from "./checkpoints/CheckpointDetailModal";
 
-export const PluginDataPage: React.FC = () => {
+export const PluginDataPage: React.FC<{ onNavigate?: (page: "reports" | "config" | "traces") => void }> = ({ onNavigate }) => {
   const vm = usePluginDataViewModel();
   const [activeTab, setActiveTab] = useState<string>("partitions");
 
@@ -53,6 +54,7 @@ export const PluginDataPage: React.FC = () => {
                 </span>
               ),
             },
+            { key: "records", label: <span><SaveOutlined /> 分析存档与头像</span> },
             {
               key: "incremental",
               label: (
@@ -74,7 +76,9 @@ export const PluginDataPage: React.FC = () => {
       </Card>
 
       {/* 1. 存储空间全景 */}
-      {activeTab === "partitions" && <ManagedFilesPanel />}
+      {activeTab === "partitions" && <ManagedFilesPanel onNavigate={onNavigate} />}
+
+      {activeTab === "records" && <StoredRecordsTab />}
 
       {/* 2. 增量分析批次管理 */}
       {activeTab === "incremental" && <IncrementalTab vm={vm} />}

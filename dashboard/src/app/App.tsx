@@ -248,7 +248,7 @@ export const App: React.FC = () => {
           <HddOutlined /> 数据管理
         </span>
       ),
-      children: <PluginDataPage />,
+      children: <PluginDataPage onNavigate={handleTabChange} />,
     },
   ];
 

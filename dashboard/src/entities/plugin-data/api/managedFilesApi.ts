@@ -14,6 +14,7 @@ const partitionSchema: z.ZodType<ManagedPartition> = z.object({
 const fileSchema: z.ZodType<ManagedFile> = z.object({
   name: z.string(), size_bytes: z.number(), modified_at: z.number(), media_type: z.string(),
   editable: z.boolean(), downloadable: z.boolean(),
+  revision: z.string(),
 });
 const contentSchema: z.ZodType<ManagedFileContent> = z.object({
   name: z.string(), content_base64: z.string(), text: z.string().nullable(), revision: z.string(), media_type: z.string(),
@@ -32,9 +33,9 @@ export async function fetchManagedPartitions() {
   return z.object({ items: z.array(partitionSchema) }).parse(checkedData(await apiGet("plugin-data/partitions"))).items;
 }
 
-export async function fetchManagedFiles(partition: string, search: string, page: number) {
+export async function fetchManagedFiles(partition: string, search: string, page: number, extensions = "") {
   return z.object({ items: z.array(fileSchema), total: z.number() }).parse(checkedData(
-    await apiGet("plugin-data/files", { partition, search, page, page_size: 20 })));
+    await apiGet("plugin-data/files", { partition, search, page, page_size: 20, extensions })));
 }
 
 export async function fetchManagedContent(partition: string, name: string) {
@@ -44,4 +45,9 @@ export async function fetchManagedContent(partition: string, name: string) {
 export async function mutateManagedFile(body: ManagedFileMutation) {
   const result = checkedData(await apiPost("plugin-data/files/mutate", body));
   if (!z.object({ success: z.literal(true) }).safeParse(result).success) throw new Error("文件操作未完成，请刷新后重试");
+}
+
+export async function deleteManagedFiles(partition: string, files: Pick<ManagedFile, "name" | "revision">[]) {
+  const result = checkedData(await apiPost("plugin-data/files/delete-many", { partition, files }));
+  return z.object({ deleted: z.array(z.string()), failed: z.array(z.object({ name: z.string(), message: z.string() })) }).parse(result);
 }

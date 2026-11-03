@@ -26,7 +26,7 @@ export function putManagedMockFile(partition: string, name: string, text: string
   const content: ManagedFileContent = {
     name, text, content_base64: encoded ?? btoa(Array.from(new TextEncoder().encode(text || ""), byte => String.fromCharCode(byte)).join("")),
     revision: String(++revision).padStart(64, "0"),
-    media_type: name.endsWith(".svg") ? "image/svg+xml" : name.endsWith(".html") ? "text/html" : name.endsWith(".json") ? "application/json" : "text/plain",
+    media_type: /\.(png|jpg|jpeg)$/.test(name) ? "image/" + (name.endsWith(".png") ? "png" : "jpeg") : name.endsWith(".svg") ? "image/svg+xml" : name.endsWith(".html") ? "text/html" : name.endsWith(".json") ? "application/json" : "text/plain",
   };
   files.set(name, content);
   return content;
@@ -35,6 +35,8 @@ export function putManagedMockFile(partition: string, name: string, text: string
 putManagedMockFile("custom_templates", "my_miku/report.typ", '#set text(size: 12pt)\n= 群聊日报\n你好，初音未来！');
 putManagedMockFile("custom_templates", "my_miku/template.json", '{"name":"我的初音模板"}');
 putManagedMockFile("reports", "123456789_2026-11-03.html", '<!doctype html><html><body style="font-family:sans-serif;color:#238b86"><h1>群聊日报</h1><p>今天共 384 条消息，12 位活跃成员。</p></body></html>');
+putManagedMockFile("reports", "123456789_2026-11-03_miku.png", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
+putManagedMockFile("reports", "987654321_2026-11-02_maria.jpg", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
 putManagedMockFile("config_backups", "plugin_config_5.6.4_20261103.json", '{"plugin_version":"5.6.4","config":{"rendering":{"service":"typst"}}}');
 putManagedMockFile("template_resources", "hack/globe.svg", svg);
 putManagedMockFile("config_files", "character.svg", svg);
@@ -56,13 +58,26 @@ export const managedFileMockHandlers = {
   "GET plugin-data/partitions": () => ({ status: "ok", data: { items: managedMockPartitions() } }),
   "GET plugin-data/files": (query?: Record<string, unknown>) => {
     const partition = String(query?.partition);
-    const items = [...(managedMockFiles.get(partition)?.values() || [])].filter(file => file.name.toLowerCase().includes(String(query?.search || "").toLowerCase()));
+    const extensions = String(query?.extensions || "").split(",").filter(Boolean);
+    const items = [...(managedMockFiles.get(partition)?.values() || [])].filter(file => file.name.toLowerCase().includes(String(query?.search || "").toLowerCase()) && (!extensions.length || extensions.includes(file.name.split(".").pop()!.toLowerCase())));
     const start = (Number(query?.page || 1) - 1) * 20;
-    return { status: "ok", data: { items: items.slice(start, start + 20).map(file => ({ name: file.name, media_type: file.media_type, size_bytes: atob(file.content_base64).length, modified_at: 1793692800, editable: partition === "custom_templates", downloadable: !["state", "avatar_storage"].includes(partition) })), total: items.length } };
+    return { status: "ok", data: { items: items.slice(start, start + 20).map(file => ({ name: file.name, revision: file.revision, media_type: file.media_type, size_bytes: atob(file.content_base64).length, modified_at: 1793692800, editable: partition === "custom_templates", downloadable: !["state", "avatar_storage"].includes(partition) })), total: items.length } };
   },
   "GET plugin-data/files/content": (query?: Record<string, unknown>) => {
     const file = managedMockFiles.get(String(query?.partition))?.get(String(query?.name));
     return file ? { status: "ok", data: file } : { status: "error", message: "文件已不存在" };
+  },
+  "POST plugin-data/files/delete-many": (body?: Record<string, unknown>) => {
+    const files = managedMockFiles.get(String(body?.partition));
+    const deleted: string[] = [], failed: { name: string; message: string }[] = [];
+    const selected = body?.files;
+    if (!Array.isArray(selected)) return { status: "error", message: "请选择文件" };
+    for (const item of selected) {
+      const name = String(item.name);
+      if (files?.get(name)?.revision !== item.revision) failed.push({ name, message: "文件已变更，请刷新后重选" });
+      else { files?.delete(name); deleted.push(name); }
+    }
+    return { status: "ok", data: { deleted, failed } };
   },
   "POST plugin-data/files/mutate": (body?: Record<string, unknown>) => {
     const partition = String(body?.partition), name = String(body?.name), operation = body?.operation;
