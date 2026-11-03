@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock
 
+import asyncio
+
 import aiohttp
 import pytest
 from aiohttp import web
@@ -28,7 +30,7 @@ async def test_download_is_local_first_across_cdn_changes(tmp_path, monkeypatch)
             installed = await store.ensure("hack/globe.svg", session)
             assert installed == tmp_path / "typst/resources/hack/globe.svg"
         await runner.cleanup()
-        store = template_resources.TemplateResourceStore(tmp_path, "http://127.0.0.1:1/unavailable")
+        store = template_resources.TemplateResourceStore(tmp_path, "http://127.0.0.1:1/unavailable", network_deadline=asyncio.get_running_loop().time() - 1)
         async with aiohttp.ClientSession() as session:
             assert await store.ensure("hack/globe.svg", session) == installed
         assert calls == ["/hack/globe.svg"]
@@ -80,9 +82,8 @@ async def test_missing_vector_uses_blank_without_caching_placeholder(tmp_path, m
 
 
 @pytest.mark.asyncio
-async def test_render_uses_downloaded_raw_image_after_processed_cache_expires(tmp_path, monkeypatch):
+async def test_render_uses_downloaded_raw_image_after_processed_cache_is_missing(tmp_path, monkeypatch):
     from io import BytesIO
-    import os
     from PIL import Image
     from src.infrastructure.reporting.typst_resources import TypstAssets
 
@@ -102,7 +103,7 @@ async def test_render_uses_downloaded_raw_image_after_processed_cache_expires(tm
             if index:
                 await runner.cleanup()
                 for cached in (tmp_path / "typst/assets").glob("*.png"):
-                    os.utime(cached, (1, 1))
+                    cached.unlink()
             job = tmp_path / f"job-{index}"
             job.mkdir()
             store = template_resources.TemplateResourceStore(tmp_path, base)
@@ -116,3 +117,18 @@ async def test_render_uses_downloaded_raw_image_after_processed_cache_expires(tm
             assert store.local_hits == index
     finally:
         await runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_exhausted_network_budget_skips_requests_but_keeps_local_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(template_resources, "REPOSITORY_ASSETS", tmp_path / "release")
+    store = template_resources.TemplateResourceStore(tmp_path, "https://cdn.example", network_deadline=asyncio.get_running_loop().time() - 1)
+    session = AsyncMock()
+    with pytest.raises(TimeoutError, match="网络预算"):
+        await store.ensure("hack/globe.svg", session)
+    session.get.assert_not_called()
+    local = tmp_path / "typst/resources/hack/globe.svg"
+    local.parent.mkdir(parents=True)
+    local.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
+    assert await store.ensure("hack/globe.svg", session) == local
+    session.get.assert_not_called()

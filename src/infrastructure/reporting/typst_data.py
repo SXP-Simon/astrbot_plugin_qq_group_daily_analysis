@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -166,9 +167,14 @@ class TypstDataPreparer:
         """
         if not user_id:
             return ""
-        source = await self.avatars.get_user_avatar(
-            user_id, self.avatar_getter, self.namespace
-        )
+        try:
+            async with asyncio.timeout_at(self.assets.network_deadline):
+                source = await self.avatars.get_user_avatar(
+                    user_id, self.avatar_getter, self.namespace
+                )
+        except TimeoutError:
+            self.assets.network_budget_exhausted = True
+            return ""
         return await self.assets.localize(source, oval=oval)
 
     async def rich_text(self, text: str) -> list[TextRun]:
@@ -200,19 +206,7 @@ class TypstDataPreparer:
             runs.append(
                 {"text": self.plain(source[position : match.start()]), "avatar": ""}
             )
-            stats = users.get(uid)
-            name = (
-                str(stats.get("nickname") or stats.get("name") or "")
-                if isinstance(stats, dict)
-                else ""
-            )
-            if not name and self.nickname_getter and not self.hide_names:
-                try:
-                    name = str(await self.nickname_getter(uid) or "")
-                except Exception:
-                    name = ""
-            if RenderDataPreparer.is_placeholder_display_name(name, uid):
-                name = "群友" if self.extended_ids else uid
+            name = await self._user_name(uid)
             runs.append(
                 {
                     "text": "" if self.hide_names else name,
@@ -222,6 +216,33 @@ class TypstDataPreparer:
             position = match.end()
         runs.append({"text": self.plain(source[position:]), "avatar": ""})
         return runs
+
+    async def _user_name(self, uid: str) -> str:
+        """在可选网络预算内查询昵称，超时仍保留原有身份占位规则。
+
+        Args:
+            uid: 当前提及的成员编号。
+
+        Returns:
+            可展示昵称，或原有的群友/编号占位文字。
+        """
+        stats = self.result["user_analysis"].get(uid)
+        name = (
+            str(stats.get("nickname") or stats.get("name") or "")
+            if isinstance(stats, dict)
+            else ""
+        )
+        if not name and self.nickname_getter and not self.hide_names:
+            try:
+                async with asyncio.timeout_at(self.assets.network_deadline):
+                    name = str(await self.nickname_getter(uid) or "")
+            except TimeoutError:
+                self.assets.network_budget_exhausted = True
+            except Exception:
+                name = ""
+        if RenderDataPreparer.is_placeholder_display_name(name, uid):
+            return "群友" if self.extended_ids else uid
+        return name
 
     async def prepare(
         self, profile_manifest: dict[str, dict], cdn_base_url: str, theme: str = ""

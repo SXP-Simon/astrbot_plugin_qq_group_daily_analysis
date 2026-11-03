@@ -163,7 +163,12 @@ class TypstReportRenderer:
             with TemporaryDirectory(prefix="report-", dir=jobs) as directory:
                 job = Path(directory)
                 await self._prepare(
-                    result, template, job, options, identity or TypstIdentityOptions()
+                    result,
+                    template,
+                    job,
+                    options,
+                    identity or TypstIdentityOptions(),
+                    deadline,
                 )
                 await self._compile(job, deadline, template.parent.name)
                 image = await asyncio.to_thread((job / "report.png").read_bytes)
@@ -180,6 +185,7 @@ class TypstReportRenderer:
         job: Path,
         options: RenderingStrategyOptions,
         identity: TypstIdentityOptions,
+        deadline: float,
     ) -> None:
         """组装隔离任务输入：结构化数据、资源和主模板。
 
@@ -201,7 +207,10 @@ class TypstReportRenderer:
         base = self.config.get_template_assets_base_url(
             options.get("resource_environment"), cdn_base_url=cdn
         )
-        store = TemplateResourceStore(self.data_dir, base)
+        network_deadline = deadline - min(10.0, options.get("timeout", 30000) / 2000)
+        store = TemplateResourceStore(
+            self.data_dir, base, network_deadline=network_deadline
+        )
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=15), trust_env=True
         ) as session:
@@ -227,6 +236,14 @@ class TypstReportRenderer:
             # 保留相对导入，上传包不能覆盖运行时生成的数据和入口。
             shutil.copytree(template.parent, job, dirs_exist_ok=True)
             (job / CUSTOM_TEMPLATE_MARKER).touch()
+        if assets.network_budget_exhausted or store.network_budget_exhausted:
+            logger.warning(
+                "Typst 部分可选网络资源超时，保留正文并继续排版；可检查网络或在 WebUI 补齐主题素材"
+            )
+            trace = TraceContext.current()
+            if trace:
+                trace.metadata["has_warnings"] = True
+                trace.metadata["typst_network_budget_exhausted"] = True
         shutil.copyfile(template, job / "main.typ")
         (job / "data.json").write_text(
             json.dumps(data, ensure_ascii=False), encoding="utf-8"

@@ -6,7 +6,6 @@ import asyncio
 import base64
 import hashlib
 import shutil
-import time
 import uuid
 from io import BytesIO
 from typing import TYPE_CHECKING
@@ -39,6 +38,10 @@ class TypstAssets:
         self.job_dir = job_dir
         self.session = session
         self.resource_store = resource_store
+        self.network_deadline = (
+            resource_store.network_deadline if resource_store else None
+        )
+        self.network_budget_exhausted = False
         self.semaphore = asyncio.Semaphore(6)
         self.image_semaphore = asyncio.Semaphore(1)
         self.failed: set[str] = set()
@@ -56,7 +59,7 @@ class TypstAssets:
         Returns:
             相对编译根目录的路径；缺失图片由模板绘制占位。
         """
-        if not source or source in self.failed:
+        if not source:
             return ""
         variant = "oval:" if oval else ""
         key = hashlib.sha256(f"{variant}{opacity}:{source}".encode()).hexdigest()
@@ -66,26 +69,13 @@ class TypstAssets:
         cached = self.cache / f"{key}.png"
         async with self.semaphore:
             try:
-                if (
-                    cached.is_file()
-                    and time.time() - cached.stat().st_mtime < 7 * 86400
-                ):
+                if cached.is_file():
                     await asyncio.to_thread(shutil.copyfile, cached, target)
                     return target.name
+                if source in self.failed:
+                    return ""
                 payload = await self._read_source(source)
-                # 像素解码和 PNG 压缩逐图处理，网络仍保持六并发。
-                async with self.image_semaphore:
-                    processing = asyncio.create_task(
-                        asyncio.to_thread(
-                            self._save_image, payload, target, cached, opacity, oval
-                        )
-                    )
-                    try:
-                        await asyncio.shield(processing)
-                    except asyncio.CancelledError:
-                        # 线程结束后才释放像素预算和清理任务目录。
-                        await asyncio.shield(processing)
-                        raise
+                await self._process_image(payload, target, cached, opacity, oval)
                 return target.name
             except (
                 aiohttp.ClientError,
@@ -93,13 +83,47 @@ class TypstAssets:
                 ValueError,
                 OSError,
                 Image.DecompressionBombError,
-            ):
+            ) as error:
                 self.failed.add(source)
+                if (
+                    isinstance(error, TimeoutError)
+                    and self.network_deadline is not None
+                    and asyncio.get_running_loop().time() >= self.network_deadline
+                ):
+                    self.network_budget_exhausted = True
                 if cached.is_file():
                     await asyncio.to_thread(shutil.copyfile, cached, target)
                     return target.name
                 logger.warning("Typst 素材获取失败，本次使用占位装饰")
                 return ""
+
+    async def _process_image(
+        self, payload: bytes, target: Path, cached: Path, opacity: float, oval: bool
+    ) -> None:
+        """逐图持有像素预算，取消时等待解码结束并保留取消语义。
+
+        Args:
+            payload: 尚未解码的图片字节。
+            target: 本次任务的目标文件。
+            cached: 派生图片缓存路径。
+            opacity: 水印透明度。
+            oval: 是否需要椭圆裁切。
+
+        Raises:
+            asyncio.CancelledError: 图像线程退出后继续传递取消请求。
+        """
+        async with self.image_semaphore:
+            processing = asyncio.create_task(
+                asyncio.to_thread(
+                    self._save_image, payload, target, cached, opacity, oval
+                )
+            )
+            try:
+                await asyncio.shield(processing)
+            except asyncio.CancelledError:
+                # 解码错误不能覆盖取消请求，也不能在清理目录后继续写入。
+                await asyncio.shield(asyncio.gather(processing, return_exceptions=True))
+                raise
 
     async def _read_source(self, source: str) -> bytes:
         """解析图片来源，仓库装饰优先读取本地资源，头像保持独立缓存策略。
@@ -125,7 +149,15 @@ class TypstAssets:
             if name in RESOURCE_FILES:
                 path = await self.resource_store.ensure(name, self.session)
                 return await asyncio.to_thread(path.read_bytes)
-        async with self.session.get(source) as response:
+        if (
+            self.network_deadline is not None
+            and asyncio.get_running_loop().time() >= self.network_deadline
+        ):
+            raise TimeoutError("图片网络预算已耗尽")
+        async with (
+            asyncio.timeout_at(self.network_deadline),
+            self.session.get(source) as response,
+        ):
             response.raise_for_status()
             data = bytearray()
             async for chunk in response.content.iter_chunked(65536):

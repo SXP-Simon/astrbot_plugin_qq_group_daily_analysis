@@ -3,6 +3,7 @@
 import asyncio
 import base64
 from io import BytesIO
+from unittest.mock import MagicMock
 
 import aiohttp
 from aiohttp import web
@@ -34,7 +35,7 @@ def test_oval_avatar_keeps_normal_avatar_and_cache_separate(tmp_path):
     asyncio.run(check())
 
 
-def test_cdn_cache_works_without_development_assets(tmp_path):
+def test_cdn_cache_works_without_development_assets(tmp_path, monkeypatch):
     async def check():
         payload = BytesIO()
         Image.new("RGBA", (12, 12), (57, 197, 187, 200)).save(payload, format="PNG")
@@ -57,12 +58,19 @@ def test_cdn_cache_works_without_development_assets(tmp_path):
                 image = job / await assets.localize(url, .25)
                 assert Image.open(image).getpixel((0,0))[3] == 50
             await runner.cleanup()
+            import os
+            for file in (tmp_path / "typst/assets").glob("*.png"):
+                os.utime(file, (1, 1))
             async with aiohttp.ClientSession() as session:
+                network = MagicMock(side_effect=AssertionError("已有本地图片不应联网刷新"))
+                monkeypatch.setattr(session, "get", network)
                 job = tmp_path / "job-two"
                 job.mkdir()
                 assets = typst_resources.TypstAssets(tmp_path, job, session)
                 image = job / await assets.localize(url, .25)
                 assert Image.open(image).getpixel((0,0))[3] == 50
+                assert await assets.localize(url, .25) == image.name
+                network.assert_not_called()
             assert calls == ["/role.png"]
         finally:
             await runner.cleanup()
@@ -114,7 +122,8 @@ def test_bad_optional_image_is_replaced_with_empty_resource(tmp_path, status):
 
 
 @pytest.mark.asyncio
-async def test_cancelled_image_waits_for_decoder_before_releasing_job(tmp_path, monkeypatch):
+@pytest.mark.parametrize("decoder_fails", [False, True])
+async def test_cancelled_image_waits_for_decoder_before_releasing_job(tmp_path, monkeypatch, decoder_fails):
     import threading
 
     started, finish = threading.Event(), threading.Event()
@@ -122,6 +131,8 @@ async def test_cancelled_image_waits_for_decoder_before_releasing_job(tmp_path, 
     def process(*args, **kwargs):
         started.set()
         finish.wait(5)
+        if decoder_fails:
+            raise ValueError("取消清理时图片解码失败")
         original(*args, **kwargs)
     monkeypatch.setattr(typst_resources.TypstAssets, "_save_image", staticmethod(process))
     payload = BytesIO()
@@ -141,7 +152,7 @@ async def test_cancelled_image_waits_for_decoder_before_releasing_job(tmp_path, 
             finish.set()
         with pytest.raises(asyncio.CancelledError):
             await running
-        assert list(job.glob("*.png"))
+        assert bool(list(job.glob("*.png"))) is not decoder_fails
         assert not list((tmp_path / "typst/assets").glob("*.part"))
 
 

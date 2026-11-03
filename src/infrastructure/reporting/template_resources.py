@@ -36,11 +36,15 @@ class TemplateResourceGroup(TypedDict):
 class TemplateResourceStore:
     """开发仓库与插件 data 目录共用的资源读取规则。"""
 
-    def __init__(self, data_dir: Path, base_url: str) -> None:
+    def __init__(
+        self, data_dir: Path, base_url: str, *, network_deadline: float | None = None
+    ) -> None:
         self.directory = data_dir / "typst" / "resources"
         self.base_url = base_url.rstrip("/")
         self.local_hits = 0
         self.downloads = 0
+        self.network_deadline = network_deadline
+        self.network_budget_exhausted = False
         self.failed: set[str] = set()
 
     def local_path(self, name: str) -> Path | None:
@@ -103,6 +107,12 @@ class TemplateResourceStore:
         if existing:
             self.local_hits += 1
             return existing
+        if (
+            self.network_deadline is not None
+            and asyncio.get_running_loop().time() >= self.network_deadline
+        ):
+            self.network_budget_exhausted = True
+            raise TimeoutError("模板素材网络预算已耗尽")
         target = self.directory / name
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.resolve().is_relative_to(self.directory.resolve()):
@@ -110,7 +120,10 @@ class TemplateResourceStore:
         temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.part")
         try:
             size = 0
-            async with session.get(f"{self.base_url}/{name}") as response:
+            async with (
+                asyncio.timeout_at(self.network_deadline),
+                session.get(f"{self.base_url}/{name}") as response,
+            ):
                 response.raise_for_status()
                 with temporary.open("wb") as output:
                     async for chunk in response.content.iter_chunked(65536):
@@ -122,6 +135,12 @@ class TemplateResourceStore:
             temporary.replace(target)
             self.downloads += 1
             return target
+        except TimeoutError:
+            self.network_budget_exhausted = (
+                self.network_deadline is not None
+                and asyncio.get_running_loop().time() >= self.network_deadline
+            )
+            raise
         finally:
             temporary.unlink(missing_ok=True)
 

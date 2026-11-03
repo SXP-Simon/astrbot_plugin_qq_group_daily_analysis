@@ -146,3 +146,55 @@ async def test_custom_typst_keeps_relative_modules_and_isolated_root(native, tmp
         assert result == png_bytes()
     finally:
         await native.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary", ["avatar", "nickname"])
+async def test_optional_network_timeout_preserves_report_text(native, monkeypatch, boundary):
+    fonts = native.data_dir / "typst/fonts"
+    fonts.mkdir(parents=True)
+    (fonts / "test.ttf").write_bytes(b"font")
+    native.config_manager.config["t2i_rendering"]["t2i_rendering_strategies"][0]["timeout"] = 1000
+    async def unavailable(*args):
+        await asyncio.Event().wait()
+        return ""
+    if boundary == "avatar":
+        native._avatar_service.get_user_avatar.side_effect = unavailable
+    captured = {}
+    async def worker(job, font_dir, timeout):
+        captured.update(json.loads((job / "data.json").read_text(encoding="utf-8")))
+        assert list(job.glob("*.svg")), "网络预算过期后仍需使用本地图标"
+        (job / "report.png").write_bytes(png_bytes())
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
+    data = create_analysis_result()
+    data["topics"][0].detail = "要保留的完整正文 [999999] #text(不能执行)"
+    image, html = await native.generate_image_report(data, "optional-network", None, nickname_getter=unavailable if boundary == "nickname" else None)
+    assert image and html is None
+    assert "要保留的完整正文" in json.dumps(captured, ensure_ascii=False)
+    assert not list((native.data_dir / "typst/jobs").iterdir())
+    await native.close()
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_avatar_preparation_does_not_recover_or_send(native, monkeypatch):
+    fonts = native.data_dir / "typst/fonts"
+    fonts.mkdir(parents=True)
+    (fonts / "test.ttf").write_bytes(b"font")
+    entered = asyncio.Event()
+    async def wait_for_avatar(*args):
+        entered.set()
+        await asyncio.Event().wait()
+        return ""
+    native._avatar_service.get_user_avatar.side_effect = wait_for_avatar
+    worker = AsyncMock()
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
+    running = asyncio.create_task(native.generate_image_report(create_analysis_result(), "cancel-input", None))
+    try:
+        await entered.wait()
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        worker.assert_not_called()
+        assert not list((native.data_dir / "typst/jobs").iterdir())
+    finally:
+        await native.close()
