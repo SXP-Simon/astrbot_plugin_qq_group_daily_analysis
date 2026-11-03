@@ -1,6 +1,6 @@
 """文件分区管理的 OpenAPI 契约。"""
 
-FILE_SCHEMAS = {
+FILE_SCHEMAS: dict[str, object] = {
     "ManagedPartition": {
         "type": "object",
         "properties": {
@@ -174,7 +174,7 @@ for path, operation, data, parameters in (
         }
     FILE_PATHS[f"/plugin-data/{path}"] = {method: endpoint}
 
-RECORD_SCHEMAS = {
+RECORD_SCHEMAS: dict[str, object] = {
     "RecordLocator": {
         "type": "object",
         "properties": {

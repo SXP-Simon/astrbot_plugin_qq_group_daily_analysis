@@ -5,14 +5,22 @@
 
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from runpy import run_path
+from typing import Any, cast
 
-from src.infrastructure.webui.managed_data_spec import (
-    FILE_PATHS,
-    FILE_SCHEMAS,
-    RECORD_PATHS,
-    RECORD_SCHEMAS,
-)
+if __package__:
+    from .managed_data_spec import FILE_PATHS as _file_paths
+    from .managed_data_spec import FILE_SCHEMAS as _file_schemas
+    from .managed_data_spec import RECORD_PATHS as _record_paths
+    from .managed_data_spec import RECORD_SCHEMAS as _record_schemas
+else:
+    # 独立导出脚本不初始化插件包，避免依赖已启动的 AstrBot 宿主。
+    _managed_specs = run_path(str(Path(__file__).with_name("managed_data_spec.py")))
+    _file_paths = cast("dict[str, object]", _managed_specs["FILE_PATHS"])
+    _file_schemas = cast("dict[str, object]", _managed_specs["FILE_SCHEMAS"])
+    _record_paths = cast("dict[str, object]", _managed_specs["RECORD_PATHS"])
+    _record_schemas = cast("dict[str, object]", _managed_specs["RECORD_SCHEMAS"])
 
 
 def generate_openapi_spec() -> dict[str, Any]:
@@ -29,8 +37,8 @@ def generate_openapi_spec() -> dict[str, Any]:
             "description": "REST API and data contract specification for AstrBot QQ Group Daily Analysis Dashboard",
         },
         "paths": {
-            **FILE_PATHS,
-            **RECORD_PATHS,
+            **_file_paths,
+            **_record_paths,
             "/config": {
                 "get": {
                     "summary": "读取插件配置、表单定义和内容版本",
@@ -939,8 +947,8 @@ def generate_openapi_spec() -> dict[str, Any]:
         },
         "components": {
             "schemas": {
-                **FILE_SCHEMAS,
-                **RECORD_SCHEMAS,
+                **_file_schemas,
+                **_record_schemas,
                 "GroupItem": {
                     "type": "object",
                     "properties": {
