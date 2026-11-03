@@ -1,6 +1,7 @@
 """发布环境的 CDN 下载、缓存与受管理字体落盘。"""
 
 import asyncio
+import base64
 from io import BytesIO
 
 import aiohttp
@@ -9,6 +10,28 @@ from PIL import Image
 import pytest
 
 from src.infrastructure.reporting import typst_resources
+
+
+def test_oval_avatar_keeps_normal_avatar_and_cache_separate(tmp_path):
+    async def check():
+        payload = BytesIO()
+        Image.new("RGBA", (12, 12), (57, 197, 187, 255)).save(payload, format="PNG")
+        source = "data:image/png;base64," + base64.b64encode(payload.getvalue()).decode()
+        job = tmp_path / "job"
+        job.mkdir()
+        async with aiohttp.ClientSession() as session:
+            assets = typst_resources.TypstAssets(tmp_path, job, session)
+            normal = await assets.localize(source)
+            oval = await assets.localize(source, oval=True)
+            assert normal != oval
+            assert await assets.localize(source, oval=True) == oval
+            with Image.open(job / normal) as image:
+                assert image.size == (12, 12) and image.getpixel((0, 0))[3] == 255
+            with Image.open(job / oval) as image:
+                assert image.width / image.height == 5 / 6
+                assert image.getpixel((0, 0))[3] == 0
+                assert image.getpixel((image.width // 2, image.height // 2))[3] == 255
+    asyncio.run(check())
 
 
 def test_cdn_cache_works_without_development_assets(tmp_path):

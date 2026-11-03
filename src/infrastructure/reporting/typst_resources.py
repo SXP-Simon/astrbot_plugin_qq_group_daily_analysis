@@ -11,7 +11,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING, TypedDict
 
 import aiohttp
-from PIL import Image
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 from ...utils.logger import logger
 
@@ -137,19 +137,23 @@ class TypstAssets:
         self.semaphore = asyncio.Semaphore(6)
         self.failed: set[str] = set()
 
-    async def localize(self, source: str, opacity: float = 1.0) -> str:
+    async def localize(
+        self, source: str, opacity: float = 1.0, *, oval: bool = False
+    ) -> str:
         """将图片解码为本次任务内的 PNG，缺图返回空路径。
 
         Args:
             source: 可信配置或头像服务给出的 HTTP(S) 地址、Data URI。
             opacity: 人格水印的透明度，不影响头像或角色装饰。
+            oval: Maria 肖像需要与原版一致的 5:6 椭圆裁切。
 
         Returns:
             相对编译根目录的路径；缺失图片由模板绘制占位。
         """
         if not source or source in self.failed:
             return ""
-        key = hashlib.sha256(f"{opacity}:{source}".encode()).hexdigest()
+        variant = "oval:" if oval else ""
+        key = hashlib.sha256(f"{variant}{opacity}:{source}".encode()).hexdigest()
         target = self.job_dir / f"{key}.png"
         if target.is_file():
             return target.name
@@ -177,7 +181,7 @@ class TypstAssets:
                 else:
                     return ""
                 await asyncio.to_thread(
-                    self._save_image, payload, target, cached, opacity
+                    self._save_image, payload, target, cached, opacity, oval
                 )
                 return target.name
             except (aiohttp.ClientError, TimeoutError, ValueError, OSError):
@@ -190,7 +194,9 @@ class TypstAssets:
                 return ""
 
     @staticmethod
-    def _save_image(payload: bytes, target: Path, cached: Path, opacity: float) -> None:
+    def _save_image(
+        payload: bytes, target: Path, cached: Path, opacity: float, oval: bool = False
+    ) -> None:
         """在工作线程中检查图片像素并原子写入缓存和任务目录。
 
         Args:
@@ -198,6 +204,7 @@ class TypstAssets:
             target: 任务内图片路径。
             cached: 持久缓存路径。
             opacity: 人格水印的不透明度。
+            oval: 预先生成与浮雕框一致的透明椭圆头像。
 
         Raises:
             ValueError: 输入图片超出允许像素或字节范围。
@@ -214,6 +221,11 @@ class TypstAssets:
             image.thumbnail((1600, 1600), reducing_gap=None)
             if image.mode != "RGBA":
                 image = image.convert("RGBA")
+            if oval:
+                image = ImageOps.fit(image, (200, 240), method=Image.Resampling.LANCZOS)
+                mask = Image.new("L", image.size)
+                ImageDraw.Draw(mask).ellipse((0, 0, 199, 239), fill=255)
+                image.putalpha(ImageChops.multiply(image.getchannel("A"), mask))
             if opacity < 1:
                 image.putalpha(
                     image.getchannel("A").point(
