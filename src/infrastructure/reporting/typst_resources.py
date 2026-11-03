@@ -23,6 +23,7 @@ FONT_SOURCES = {
     "NotoSansSC.ttf": "gh/google/fonts@main/ofl/notosanssc/NotoSansSC[wght].ttf",
     "NotoSansTC.ttf": "gh/google/fonts@main/ofl/notosanstc/NotoSansTC[wght].ttf",
     "NotoSansJP.ttf": "gh/google/fonts@main/ofl/notosansjp/NotoSansJP[wght].ttf",
+    "NotoSansSymbols2.ttf": "gh/google/fonts@main/ofl/notosanssymbols2/NotoSansSymbols2-Regular.ttf",
     "Outfit.ttf": "gh/google/fonts@main/ofl/outfit/Outfit[wght].ttf",
     "ShareTechMono.ttf": "gh/google/fonts@main/ofl/sharetechmono/ShareTechMono-Regular.ttf",
     "Inter.ttf": "gh/google/fonts@main/ofl/inter/Inter[opsz,wght].ttf",

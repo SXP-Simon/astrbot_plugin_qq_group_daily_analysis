@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from PIL import Image, ImageDraw, ImageStat
+from PIL import Image, ImageChops, ImageDraw, ImageStat
 from test_template_section_conditional_rendering import create_analysis_result
 
 from src.domain.value_objects import GoldenQuote, QualityDimension, QualityReview, UserTitle
@@ -65,7 +65,7 @@ async def compiler(managed_fonts, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria", "ATRI", "deepseek_maid"])
+@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria", "ATRI", "deepseek_maid", "art_nouveau"])
 @pytest.mark.parametrize("case", ["complete", "empty", "summary_only", "plain_markup", "long_text", "anonymous"])
 async def test_real_compilation_accepts_report_content(compiler, monkeypatch, theme, case):
     _, generator, _ = compiler
@@ -151,6 +151,41 @@ def test_maid_composes_cached_layers_without_floating_eyes(tmp_path, pose, expec
     with Image.open(BytesIO(compiler.compile(format="png", ppi=72))) as image:
         assert image.size == (710, 1024)
         assert image.convert("RGB").getpixel((250, 400)) == expected
+
+
+def test_nouveau_oblique_does_not_shift_the_whole_paragraph(tmp_path, managed_fonts):
+    """验证长段落的中文斜体逐字倾斜，首行不会被推向卡片外侧。
+
+    Args:
+        tmp_path: 本次编译的隔离根目录。
+        managed_fonts: 已准备的插件受管理字体目录。
+    """
+    import typst
+
+    templates = Path(__file__).parents[1] / "src/infrastructure/reporting/templates"
+    shutil.copyfile(templates / "common.typ", tmp_path / "common.typ")
+    shutil.copyfile(templates / "art_nouveau/nouveau.typ", tmp_path / "nouveau.typ")
+    outputs = []
+    for oblique in (False, True):
+        (tmp_path / "main.typ").write_text(
+            '#import "nouveau.typ":copy\n'
+            '#set page(width:200pt,height:auto,margin:10pt)\n'
+            '#let t=(u:1pt,body:("Noto Serif SC",))\n'
+            f'#copy(t,{json.dumps("总能把讨论带往有趣的方向，愿意认真回应每一位群友。" * 5, ensure_ascii=False)},'
+            f'size:14,lh:1.55,italic:{str(oblique).lower()},oblique:{str(oblique).lower()})',
+            encoding="utf-8",
+        )
+        compiler = typst.Compiler(
+            str(tmp_path / "main.typ"), root=str(tmp_path),
+            font_paths=[str(managed_fonts / "typst/fonts")], ignore_system_fonts=True,
+        )
+        with Image.open(BytesIO(compiler.compile(format="png", ppi=72))) as image:
+            outputs.append(image.convert("RGB"))
+    assert outputs[0].size == outputs[1].size
+    assert ImageChops.difference(*outputs).getbbox() is not None
+    first_line = outputs[1].crop((10, 10, 190, 32)).convert("L").point(lambda value: 255 if value < 100 else 0)
+    bounds = first_line.getbbox()
+    assert bounds is not None and bounds[0] < 5
 
 
 def test_atri_glass_blurs_the_cached_background(tmp_path, managed_fonts):
