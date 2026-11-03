@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from ...domain.value_objects import AnalysisResultPayload
     from ..config.rendering_config import RenderingStrategyOptions, ScreenshotOptions
-    from .typst_data import TypstIdentityOptions
+    from .typst_contracts import TypstIdentityOptions
     from .typst_renderer import TypstReportRenderer
 
 

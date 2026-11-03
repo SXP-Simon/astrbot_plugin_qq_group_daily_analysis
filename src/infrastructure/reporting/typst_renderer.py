@@ -19,7 +19,8 @@ from .render_trace import render_span as _span
 from .template_asset_catalog import THEME_DECORATION_OPACITIES, THEME_DECORATIONS
 from .template_installer import is_path_within, validate_template_name
 from .template_resources import TemplateResourceStore
-from .typst_data import TypstDataPreparer, TypstIdentityOptions
+from .typst_contracts import TypstIdentityOptions
+from .typst_data import TypstDataPreparer
 from .typst_process import run_typst_worker
 from .typst_resources import TypstAssets
 from .typst_worker import CUSTOM_TEMPLATE_MARKER, REPORT_PPI, REPORT_WIDTH
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
     from ..config.config_manager import ConfigManager
     from ..config.rendering_config import RenderingStrategyOptions
     from .avatar_service import AvatarService
-    from .typst_data import TypstReportData
+    from .typst_contracts import TypstReportData
 
 
 REPORT_TEMPLATES = Path(__file__).parent / "templates"

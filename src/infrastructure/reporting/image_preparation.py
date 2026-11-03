@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 from .render_trace import render_span
-from .typst_data import TypstIdentityOptions
+from .typst_contracts import TypstIdentityOptions
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable

@@ -52,7 +52,7 @@ from .render_diagnostics import (
     summarize_render_error,
 )
 from .templates import HTMLTemplates
-from .typst_data import TypstIdentityOptions
+from .typst_contracts import TypstIdentityOptions
 from .typst_renderer import TypstReportRenderer
 
 # 产物内嵌追踪号的 meta 名称与匹配模式（注入与自愈共用同一套定义）
