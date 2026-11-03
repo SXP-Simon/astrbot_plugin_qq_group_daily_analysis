@@ -7,8 +7,8 @@
 #let sky=rgb("8fc5ff")
 #let copy(t,body,size:16,weight:400,fill:ink,lh:1.25,mono:false,tracking:0) = {
   set par(leading:0pt,spacing:0pt)
-  // 浏览器在原字体之上合成六百字重；细描边保留同样的标题厚度。
-  text(font:if mono {t.mono}else{t.font},size:size*t.u,weight:weight,fill:fill,stroke:if weight>=600 {.25*t.u+fill}else{none},tracking:tracking*1em,top-edge:(lh/2+.34)*1em,bottom-edge:-(lh/2-.34)*1em,body)
+  // 正文字体已有 Medium 字形；只有等宽字体需要随字号合成浏览器的粗体效果。
+  text(font:if mono {t.mono}else{t.font},size:size*t.u,weight:weight,fill:fill,stroke:if weight>=600 and mono {size*.03*t.u+fill}else{none},tracking:tracking*1em,top-edge:(lh/2+.34)*1em,bottom-edge:-(lh/2-.34)*1em,body)
 }
 #let icon(t,name,size:20,fill:sea,solid:false) = {
   let svg=read(name+".svg")
