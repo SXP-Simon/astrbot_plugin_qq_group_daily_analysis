@@ -57,11 +57,13 @@ HatsuneMiku/
 
 公共 Typst 代码放在 `templates/common.typ`。独立编译入口读取内置主题的 `report.typ`；缺少入口时会明确提示不支持该主题。
 
-当前已提供 HatsuneMiku、simple、hack、Maria、ATRI 和 DeepSeek 鲸鱼女仆娘（`deepseek_maid`）的独立排版。各主题保留自己的阅读顺序和主要组件，不通过更换通用模板的颜色来代替适配。Maria 使用宋体、Cinzel 和 Cormorant Garamond；ATRI 使用文楷与文楷等宽字体。新增字体可通过现有下载入口补齐，无需配置系统字体或自定义目录。
+当前已提供 HatsuneMiku、simple、hack、Maria、ATRI、DeepSeek 鲸鱼女仆娘（`deepseek_maid`）和 Art Nouveau（`art_nouveau`）的独立排版。各主题保留自己的阅读顺序和主要组件，不通过更换通用模板的颜色来代替适配。Maria、Art Nouveau 使用宋体、Cinzel 和 Cormorant Garamond；ATRI 使用文楷与文楷等宽字体。新增字体可通过现有下载入口补齐，无需配置系统字体或自定义目录。
 
 ATRI 的 GIF 装饰取首帧，输出仍为静态长图。页眉日期卡和英文小标题通过 SVG 对本地海景做局部模糊，玻璃区域随文字实测高度定位；其余玻璃卡片使用透明渐变，仍需继续校准细节。模板能正常编译与视觉复刻验收是两项检查，需对照相同数据的 HTML 样张分别验收。
 
 DeepSeek 鲸鱼女仆娘保留蓝白值班日志、内心便签、饭票账单、摸鱼雷达、图鉴、金句反应、铁盆锐评和交班区。角色沿用原 HTML 的消息数量规则：无消息时闭眼休息，达到 1000 条时戴铁盆，其余情况睁眼。七张角色图层通过当前配置的 CDN 下载并缓存，不依赖开发目录中的图片；主体图片缺失时保留角色区域留白，避免只显示悬空的眼睛。角色美术继续保留原主题的署名与许可说明。
+
+Art Nouveau 沿用双层金色页框、植物花饰、花茎活跃图、原配色的质量花窗条，以及绿金交替的卡片。质量洞察排在话题之前，画像按双列等高行排列。植物符号使用受管理的 Noto Sans Symbols 2 字体；已有 Typst 字体安装可在 WebUI 再次点击下载，补齐新增文件。
 
 Typst 方案直接把分析结果准备成结构化 JSON，将 CDN 图片下载、缓存并本地化后，复制排版文件到临时任务目录，由独立子进程编译 PNG。字体统一使用插件数据目录的 `typst/fonts/`，通过 WebUI 的字体下载入口管理。该链路不解析 HTML，也不调用 AstrBot 的图片渲染接口；产物继续接入现有图片校验、发送和诊断流程。下面的 Jinja2 变量契约适用于 HTML 文件，Typst 的输入结构见 `typst_data.py`。
 
