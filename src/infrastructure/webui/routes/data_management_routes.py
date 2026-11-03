@@ -95,7 +95,7 @@ class DataManagementRoutes:
             data_dir = self._get_plugin_data_dir()
 
             # 头像缓存
-            avatar_dir = data_dir / "cache" / "avatars" if data_dir else None
+            avatar_dir = data_dir / "avatar" if data_dir else None
             avatar_stats = (
                 self._dir_stats(avatar_dir)
                 if avatar_dir
@@ -131,25 +131,10 @@ class DataManagementRoutes:
             if self.report_output_dir and Path(self.report_output_dir).exists():
                 report_stats = self._dir_stats(Path(self.report_output_dir))
 
-            # 临时文件（AstrBot 全局 temp 目录下本插件生成的图片）
+            # 宿主 io_temp_img_* 不包含插件归属，不统计或清理共享临时文件。
             temp_stats: DirectoryStatsDTO = {"count": 0, "size_bytes": 0}
-            try:
-                from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-                temp_dir = Path(get_astrbot_temp_path())
-                if temp_dir.exists():
-                    count = 0
-                    size = 0
-                    for f in temp_dir.iterdir():
-                        if f.is_file() and f.name.startswith("io_temp_img_"):
-                            count += 1
-                            try:
-                                size += f.stat().st_size
-                            except OSError:
-                                pass
-                    temp_stats = {"count": count, "size_bytes": size}
-            except Exception:
-                pass
+            if data_dir:
+                temp_stats = self._dir_stats(data_dir / "template_preview_cache")
 
             return json_response(
                 {
@@ -172,17 +157,13 @@ class DataManagementRoutes:
         """清空头像缓存目录"""
         try:
             data_dir = self._get_plugin_data_dir()
-            avatar_dir = data_dir / "cache" / "avatars" if data_dir else None
+            avatar_dir = data_dir / "avatar" if data_dir else None
             if not avatar_dir or not avatar_dir.exists():
                 return json_response({"status": "ok", "data": {"deleted": 0}})
-            deleted = 0
-            for f in avatar_dir.iterdir():
-                if f.is_file():
-                    try:
-                        f.unlink()
-                        deleted += 1
-                    except OSError:
-                        pass
+            from diskcache import Cache
+
+            with Cache(str(avatar_dir)) as cache:
+                deleted = await asyncio.to_thread(cache.clear)
             logger.info(f"[plugin-data] 已清空头像缓存，删除 {deleted} 个文件")
             return json_response({"status": "ok", "data": {"deleted": deleted}})
         except Exception as e:
@@ -219,25 +200,10 @@ class DataManagementRoutes:
 
     async def api_clear_temp_files(self) -> WebApiResponse:
         """清空由本插件产生的临时图片文件（io_temp_img_* 前缀）"""
-        try:
-            from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-            temp_dir = Path(get_astrbot_temp_path())
-            if not temp_dir.exists():
-                return json_response({"status": "ok", "data": {"deleted": 0}})
-            deleted = 0
-            for f in temp_dir.iterdir():
-                if f.is_file() and f.name.startswith("io_temp_img_"):
-                    try:
-                        f.unlink()
-                        deleted += 1
-                    except OSError:
-                        pass
-            logger.info(f"[plugin-data] 已清空临时文件，删除 {deleted} 个文件")
-            return json_response({"status": "ok", "data": {"deleted": deleted}})
-        except Exception as e:
-            logger.error(f"清空临时文件异常: {e}", exc_info=True)
-            return error_response(str(e), status_code=500)
+        return error_response(
+            "宿主临时文件无法按插件区分，请在文件与素材管理中逐项清理插件预览缓存",
+            status_code=400,
+        )
 
     async def api_clear_custom_templates(self) -> WebApiResponse:
         """清空用户自定义报告模板目录"""

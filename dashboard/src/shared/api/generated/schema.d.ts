@@ -4,6 +4,74 @@
  */
 
 export interface paths {
+    "/plugin-data/partitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getManagedPartitions */
+        get: operations["getManagedPartitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getManagedFiles */
+        get: operations["getManagedFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getManagedFileContent */
+        get: operations["getManagedFileContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files/mutate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** mutateManagedFile */
+        post: operations["mutateManagedFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config": {
         parameters: {
             query?: never;
@@ -417,6 +485,41 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ManagedPartition: {
+            key: string;
+            name: string;
+            directory: string;
+            description: string;
+            impact: string;
+            writable: boolean;
+            deletable: boolean;
+            count: number;
+            size_bytes: number;
+        };
+        ManagedFile: {
+            name: string;
+            size_bytes: number;
+            modified_at: number;
+            media_type: string;
+            editable: boolean;
+            downloadable: boolean;
+        };
+        ManagedFileContent: {
+            name: string;
+            content_base64: string;
+            revision: string;
+            media_type: string;
+            text: string | null;
+        };
+        ManagedFileMutation: {
+            partition: string;
+            name: string;
+            revision?: string;
+            content_base64?: string;
+            new_name?: string;
+            /** @enum {string} */
+            operation: "create" | "replace" | "rename" | "delete";
+        };
         GroupItem: {
             group_id: string;
             group_name: string;
@@ -827,6 +930,229 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getManagedPartitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            items: components["schemas"]["ManagedPartition"][];
+                        };
+                    };
+                };
+            };
+            /** @description 不支持的操作或非法文件 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件已变更或目标已存在 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 目录读取或文件操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getManagedFiles: {
+        parameters: {
+            query: {
+                partition: string;
+                search?: string;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            items: components["schemas"]["ManagedFile"][];
+                            total: number;
+                        };
+                    };
+                };
+            };
+            /** @description 不支持的操作或非法文件 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件已变更或目标已存在 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 目录读取或文件操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getManagedFileContent: {
+        parameters: {
+            query: {
+                partition: string;
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["ManagedFileContent"];
+                    };
+                };
+            };
+            /** @description 不支持的操作或非法文件 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件已变更或目标已存在 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 目录读取或文件操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mutateManagedFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedFileMutation"];
+            };
+        };
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            success: boolean;
+                        };
+                    };
+                };
+            };
+            /** @description 不支持的操作或非法文件 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件已变更或目标已存在 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 目录读取或文件操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getPluginConfig: {
         parameters: {
             query?: never;

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.infrastructure.webui.managed_data_spec import FILE_PATHS, FILE_SCHEMAS
+
 
 def generate_openapi_spec() -> dict[str, Any]:
     """生成插件 Web API 的 OpenAPI 3.1 契约规范字典。
@@ -22,6 +24,7 @@ def generate_openapi_spec() -> dict[str, Any]:
             "description": "REST API and data contract specification for AstrBot QQ Group Daily Analysis Dashboard",
         },
         "paths": {
+            **FILE_PATHS,
             "/config": {
                 "get": {
                     "summary": "读取插件配置、表单定义和内容版本",
@@ -930,6 +933,7 @@ def generate_openapi_spec() -> dict[str, Any]:
         },
         "components": {
             "schemas": {
+                **FILE_SCHEMAS,
                 "GroupItem": {
                     "type": "object",
                     "properties": {

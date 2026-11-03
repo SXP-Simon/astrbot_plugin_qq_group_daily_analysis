@@ -22,6 +22,7 @@ from .routes import (
     TraceRoutes,
 )
 from .routes.config_routes import _config_key_to_folder, _sanitize_path_segment
+from .routes.managed_file_routes import ManagedFileRoutes
 from .routes.template_resource_routes import TemplateResourceRoutes
 from .web_compat import (
     WebApiResponse,
@@ -115,6 +116,7 @@ class PluginPageWebUIBridge:
             analysis_service=self.analysis_service,
             report_output_dir=self.report_output_dir,
         )
+        self.managed_file_routes = ManagedFileRoutes(self.report_output_dir)
 
     def register_routes(self) -> None:
         """向 AstrBot 注册所有 Web API 端点"""
@@ -329,6 +331,30 @@ class PluginPageWebUIBridge:
                 "Get thumbnail or content of a config file path",
             ),
             # 6. 插件数据管理（存储分区清理）
+            (
+                f"/{PLUGIN_NAME}/plugin-data/partitions",
+                self.managed_file_routes.api_partitions,
+                ["GET"],
+                "List managed file partitions",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files",
+                self.managed_file_routes.api_files,
+                ["GET"],
+                "Search files in a managed partition",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/content",
+                self.managed_file_routes.api_content,
+                ["GET"],
+                "Read managed file content",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/mutate",
+                self.managed_file_routes.api_mutate,
+                ["POST"],
+                "Create, replace, rename or delete a managed file",
+            ),
             (
                 f"/{PLUGIN_NAME}/plugin-data/overview",
                 self.data_management_routes.api_get_plugin_data_overview,

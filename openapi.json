@@ -6,6 +6,270 @@
     "description": "REST API and data contract specification for AstrBot QQ Group Daily Analysis Dashboard"
   },
   "paths": {
+    "/plugin-data/partitions": {
+      "get": {
+        "operationId": "getManagedPartitions",
+        "summary": "getManagedPartitions",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ManagedPartition"
+                          }
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "不支持的操作或非法文件"
+          },
+          "404": {
+            "description": "文件不存在"
+          },
+          "409": {
+            "description": "文件已变更或目标已存在"
+          },
+          "500": {
+            "description": "目录读取或文件操作失败"
+          }
+        }
+      }
+    },
+    "/plugin-data/files": {
+      "get": {
+        "operationId": "getManagedFiles",
+        "summary": "getManagedFiles",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ManagedFile"
+                          }
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "total"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "不支持的操作或非法文件"
+          },
+          "404": {
+            "description": "文件不存在"
+          },
+          "409": {
+            "description": "文件已变更或目标已存在"
+          },
+          "500": {
+            "description": "目录读取或文件操作失败"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "partition",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/plugin-data/files/content": {
+      "get": {
+        "operationId": "getManagedFileContent",
+        "summary": "getManagedFileContent",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ManagedFileContent"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "不支持的操作或非法文件"
+          },
+          "404": {
+            "description": "文件不存在"
+          },
+          "409": {
+            "description": "文件已变更或目标已存在"
+          },
+          "500": {
+            "description": "目录读取或文件操作失败"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "partition",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/plugin-data/files/mutate": {
+      "post": {
+        "operationId": "mutateManagedFile",
+        "summary": "mutateManagedFile",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "success"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "不支持的操作或非法文件"
+          },
+          "404": {
+            "description": "文件不存在"
+          },
+          "409": {
+            "description": "文件已变更或目标已存在"
+          },
+          "500": {
+            "description": "目录读取或文件操作失败"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedFileMutation"
+              }
+            }
+          }
+        }
+      }
+    },
     "/config": {
       "get": {
         "summary": "读取插件配置、表单定义和内容版本",
@@ -1135,6 +1399,145 @@
   },
   "components": {
     "schemas": {
+      "ManagedPartition": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string"
+          },
+          "writable": {
+            "type": "boolean"
+          },
+          "deletable": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "size_bytes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "directory",
+          "description",
+          "impact",
+          "writable",
+          "deletable",
+          "count",
+          "size_bytes"
+        ]
+      },
+      "ManagedFile": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "modified_at": {
+            "type": "number"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "downloadable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "size_bytes",
+          "modified_at",
+          "media_type",
+          "editable",
+          "downloadable"
+        ]
+      },
+      "ManagedFileContent": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "content_base64": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "content_base64",
+          "text",
+          "revision",
+          "media_type"
+        ]
+      },
+      "ManagedFileMutation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "partition": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "content_base64": {
+            "type": "string"
+          },
+          "new_name": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "create",
+              "replace",
+              "rename",
+              "delete"
+            ]
+          }
+        },
+        "required": [
+          "partition",
+          "name",
+          "operation"
+        ]
+      },
       "GroupItem": {
         "type": "object",
         "properties": {
