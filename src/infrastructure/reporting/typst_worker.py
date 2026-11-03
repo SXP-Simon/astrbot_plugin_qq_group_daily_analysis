@@ -8,8 +8,11 @@ import sys
 import time
 from io import BytesIO
 from pathlib import Path
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 from xml.etree import ElementTree
+
+if TYPE_CHECKING:
+    from typst import Compiler
 
 REPORT_WIDTH = 940
 REPORT_PPI = 144
@@ -51,6 +54,48 @@ def _custom_page_size(svg: bytes | list[bytes] | None) -> tuple[float, float]:
         raise RuntimeError("无法读取 Typst 自定义模板的实际画布尺寸") from error
 
 
+def _check_canvas(compiler: Compiler, *, custom: bool) -> None:
+    """在分配像素面之前测量真实版心并校验静态报告预算。
+
+    Args:
+        compiler: 已加载模板与字体的编译器。
+        custom: 自定义模板使用实际矢量画布，不信任尺寸元数据。
+
+    Raises:
+        RuntimeError: 模板语法、宽度、页数或像素预算不符合要求。
+    """
+    from typst import TypstError
+
+    try:
+        if custom:
+            pixel_width, pixel_height = _custom_page_size(
+                compiler.compile(format="svg")
+            )
+        else:
+            try:
+                measured = json.loads(
+                    compiler.query("<report-size>", field="value", one=True)
+                )
+            except RuntimeError:
+                # query 的错误没有定位信息，用矢量编译取得源码位置，仍不分配像素面。
+                compiler.compile(format="svg")
+                raise
+            pixel_width = REPORT_WIDTH
+            pixel_height = float(measured["height"]) * REPORT_PPI / 72
+    except TypstError as error:
+        raise RuntimeError(error.diagnostic) from error
+    if not all(
+        math.isfinite(value) and value > 0 for value in (pixel_width, pixel_height)
+    ):
+        raise RuntimeError("Typst 报告画布尺寸无效")
+    if abs(pixel_width - REPORT_WIDTH) > 1:
+        raise RuntimeError(
+            f"Typst 自定义模板须固定为 {REPORT_WIDTH}px 宽，当前为 {pixel_width:g}px"
+        )
+    if pixel_height > 30000 or pixel_height * pixel_width > 40_000_000:
+        raise RuntimeError("Typst 报告超过单图像素预算，请减少展示条数")
+
+
 def compile_report(
     job_dir: Path, font_dir: Path, metrics: TypstWorkerMetrics | None = None
 ) -> None:
@@ -82,34 +127,7 @@ def compile_report(
     if metrics is not None:
         metrics["font_setup_ms"] = round((time.perf_counter() - phase_start) * 1000, 2)
     phase_start = time.perf_counter()
-    try:
-        if (job_dir / CUSTOM_TEMPLATE_MARKER).is_file():
-            pixel_width, pixel_height = _custom_page_size(
-                compiler.compile(format="svg")
-            )
-        else:
-            try:
-                measured = json.loads(
-                    compiler.query("<report-size>", field="value", one=True)
-                )
-            except RuntimeError:
-                # query 的错误没有定位信息，用矢量编译取得源码位置，仍不分配像素面。
-                compiler.compile(format="svg")
-                raise
-            pixel_width = REPORT_WIDTH
-            pixel_height = float(measured["height"]) * REPORT_PPI / 72
-    except typst.TypstError as error:
-        raise RuntimeError(error.diagnostic) from error
-    if not all(
-        math.isfinite(value) and value > 0 for value in (pixel_width, pixel_height)
-    ):
-        raise RuntimeError("Typst 报告画布尺寸无效")
-    if abs(pixel_width - REPORT_WIDTH) > 1:
-        raise RuntimeError(
-            f"Typst 自定义模板须固定为 {REPORT_WIDTH}px 宽，当前为 {pixel_width:g}px"
-        )
-    if pixel_height > 30000 or pixel_height * pixel_width > 40_000_000:
-        raise RuntimeError("Typst 报告超过单图像素预算，请减少展示条数")
+    _check_canvas(compiler, custom=(job_dir / CUSTOM_TEMPLATE_MARKER).is_file())
     if metrics is not None:
         metrics["layout_ms"] = round((time.perf_counter() - phase_start) * 1000, 2)
     phase_start = time.perf_counter()

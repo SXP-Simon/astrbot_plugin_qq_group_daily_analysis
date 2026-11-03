@@ -64,7 +64,19 @@ async def run_typst_worker(
         raise
     if process.returncode:
         raise RuntimeError((stderr or b"").decode("utf-8", errors="replace")[:1800])
-    if not collect_metrics or not stdout or len(stdout) > 4096:
+    return _parse_worker_metrics(stdout) if collect_metrics else None
+
+
+def _parse_worker_metrics(stdout: bytes | None) -> TypstWorkerMetrics | None:
+    """在进程边界校验可选遥测，异常数据不影响已完成的图片。
+
+    Args:
+        stdout: 隔离进程的标准输出。
+
+    Returns:
+        只含非负有限数值的已知指标；无效响应返回空。
+    """
+    if not stdout or len(stdout) > 4096:
         return None
     try:
         raw: object = json.loads(stdout)
