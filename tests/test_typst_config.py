@@ -54,3 +54,12 @@ def test_legacy_layout_options_are_removed_and_persisted():
     assert "typst_width" not in manager.get_t2i_rendering_strategies()[0]
     assert not migrator.migrate_legacy_configs()
     manager.save_config.assert_called_once()
+
+
+@pytest.mark.parametrize("key,value", [("t2i_viewport_width", "invalid"), ("t2i_viewport_height", None)])
+def test_native_runtime_never_reads_browser_layout(key, value):
+    manager = object.__new__(ConfigManager)
+    manager.config = {"t2i_rendering": {key: value, "t2i_rendering_strategies": [{"__template_key": "typst", "device_scale": "legacy", "request_timeout": "unused", "google_fonts": "unused", "gstatic": "unused"}]}}
+    runtime = manager.get_t2i_rendering_strategies()[0]
+    assert runtime["render_service"] == "typst"
+    assert not {"full_page", "device_scale_factor_level", "viewport_width", "viewport_height", "request_timeout"}.intersection(runtime)

@@ -423,15 +423,11 @@ class ConfigManager:
         plans: list[RenderingStrategyOptions] = []
         for item in self.get_t2i_rendering_strategy_config():
             plan: RenderingStrategyOptions = {
-                "full_page": True,
                 "strategy_name": item["name"],
                 "strategy_priority": item["priority"],
                 "type": item["type"],
                 "quality": item["quality"],
-                "device_scale_factor_level": item["device_scale"],
                 "timeout": item["timeout"],
-                "viewport_width": max(1, int(group.get("t2i_viewport_width", 1440))),
-                "viewport_height": max(1, int(group.get("t2i_viewport_height", 900))),
                 "resource_environment": item["environment"],
                 "resource_urls": {
                     "cdn_base_url": item["cdn_base_url"],
@@ -446,6 +442,21 @@ class ConfigManager:
                     "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
                 ),
             }
+            if item["render_service"] != "typst":
+                plan.update(
+                    full_page=True,
+                    device_scale_factor_level=item["device_scale"],
+                    viewport_width=max(1, int(group.get("t2i_viewport_width", 1440))),
+                    viewport_height=max(1, int(group.get("t2i_viewport_height", 900))),
+                )
+            else:
+                for key in (
+                    "service_endpoint",
+                    "service_token",
+                    "request_timeout",
+                    "font_mode",
+                ):
+                    plan.pop(key, None)
             plans.append(plan)
         return plans
 

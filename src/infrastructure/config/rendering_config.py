@@ -185,7 +185,9 @@ def parse_rendering_strategies(
         )
         token = item.get("service_token", "")
         image_type = item.get("type", "png")
-        scale = item.get("device_scale", "high")
+        scale = (
+            "high" if render_service == "typst" else item.get("device_scale", "high")
+        )
         if not isinstance(name, str):
             raise ValueError(f"第 {index} 个渲染方案的名称必须是文字")
         if environment not in ("Mainland", "Overseas"):
@@ -217,6 +219,9 @@ def parse_rendering_strategies(
             ("google_fonts", "Google Fonts 地址"),
             ("gstatic", "字体文件地址"),
         ):
+            if render_service == "typst" and key != "cdn_base_url":
+                resources[key] = defaults[key]
+                continue
             candidate = item.get(key)
             if candidate == CUSTOM_RESOURCE_OPTION:
                 candidate = item.get(f"custom_{key}")
@@ -296,7 +301,9 @@ def parse_rendering_strategies(
             "device_scale": scale,
             "timeout": integers["timeout"],
         }
-        if render_service == "custom" or "request_timeout" in item:
+        if render_service == "custom" or (
+            render_service != "typst" and "request_timeout" in item
+        ):
             request_timeout = item.get(
                 "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
             )
