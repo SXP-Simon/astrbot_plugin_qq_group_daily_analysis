@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Timeline, Typography, Space, theme } from "antd";
+import { Timeline, Typography, Space, theme, type TimelineItemProps } from "antd";
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -7,6 +7,7 @@ import {
   ExclamationCircleOutlined,
 } from "@ant-design/icons";
 import { TraceSpan } from "../model/types";
+import { buildSpanTree, type SpanTreeNode } from "../model/spanTree";
 import { getStageSlaThreshold } from "../model/sla";
 import { StageMetricsBadges } from "./StageMetricsBadges";
 import { PromptsInspector, PromptDetail } from "./PromptsInspector";
@@ -86,14 +87,10 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
     );
   };
 
-  const spansById = new Map(mergedSpans.map(span => [span.span_id, span]));
-  const parentIds = new Set(mergedSpans.map(span => span.payload?.parent_span_id));
-  const items = mergedSpans.map((span, idx) => {
-    const parentId = span.payload?.parent_span_id;
-    const candidateParent = typeof parentId === "string" ? spansById.get(parentId) : undefined;
-    const parent = candidateParent?.span_id !== span.span_id ? candidateParent : undefined;
+  const renderSpan = (node: SpanTreeNode, parent?: TraceSpan): TimelineItemProps => {
+    const span = node.span;
     const parentDuration = parent ? parent.duration_ms ?? Math.max(0, Date.now() - parent.started_at * 1000) : totalDurationMs;
-    const spanKey = span.span_id || `span_${idx}_${span.stage_name}`;
+    const spanKey = span.span_id;
     const isRunning = span.status === "running" && taskStatus === "running";
     const duration =
       span.duration_ms !== null && span.duration_ms !== undefined
@@ -145,7 +142,6 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
             background: isExpanded ? token.colorFillAlter : "transparent",
             borderRadius: 6,
             padding: isExpanded ? "8px 10px" : "0",
-            marginLeft: parent ? 24 : 0,
             transition: "all 0.2s ease",
           }}
         >
@@ -156,7 +152,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
             startedAt={span.started_at}
             totalDurationMs={parentDuration}
             parentStageName={parent?.stage_name}
-            hasChildren={parentIds.has(span.span_id)}
+            hasChildren={node.children.length > 0}
             status={span.status}
             isExpanded={isExpanded}
             onToggleExpand={() => toggleExpand(spanKey)}
@@ -198,17 +194,21 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
               <SpanPayloadViewer
                 payload={span.payload as Record<string, unknown> | undefined}
               />
+              {node.children.length > 0 && <Timeline
+                items={node.children.map(child => renderSpan(child, span))}
+                style={{ marginTop: 16, paddingLeft: 12 }}
+              />}
             </div>
           )}
         </div>
       ),
     };
-  });
+  };
 
   return (
     <Timeline
       mode="left"
-      items={items}
+      items={buildSpanTree(mergedSpans).map(node => renderSpan(node))}
       style={{ marginTop: 8, paddingLeft: 4 }}
     />
   );
