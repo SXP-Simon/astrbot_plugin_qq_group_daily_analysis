@@ -169,7 +169,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
 
   // 1. 阶段耗时瀑布 / 柱状图 Option
   const durationChartOption = useMemo(() => {
-    const stageNames = currentSpans.map((s) => s.displayName);
+    const stageNames = currentSpans.map((s) => `${typeof s.rawSpan.payload?.parent_span_id === "string" ? "↳ " : ""}${s.displayName}`);
     const durations = currentSpans.map((s) => s.durationMs);
     const totalMs = trace.duration_ms || durations.reduce((acc, v) => acc + v, 0) || 1;
 
@@ -210,7 +210,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
               ${item.displayName}
             </div>
             <div style="font-size: 12px; color: #2563eb; margin-bottom: 2px;">
-              ${pipelineMode === "effective" && attemptsCount > 1 ? "有效耗时" : "阶段耗时"}: <b style="font-family: monospace;">${dur.toLocaleString()} ms</b> (${pct}%)
+              ${pipelineMode === "effective" && attemptsCount > 1 ? "有效耗时" : "阶段耗时"}: <b style="font-family: monospace;">${dur.toLocaleString()} ms</b> (占任务总耗时 ${pct}%)
             </div>
             <div style="font-size: 11px; color: ${isDark ? "#8b949e" : "#64748b"};">
               执行状态: <b>${s.status}</b> ${pipelineMode === "all" && item.totalAttempts > 1 ? `(第 ${item.attemptIndex}/${item.totalAttempts} 次尝试)` : ""}

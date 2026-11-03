@@ -86,7 +86,13 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
     );
   };
 
+  const spansById = new Map(mergedSpans.map(span => [span.span_id, span]));
+  const parentIds = new Set(mergedSpans.map(span => span.payload?.parent_span_id));
   const items = mergedSpans.map((span, idx) => {
+    const parentId = span.payload?.parent_span_id;
+    const candidateParent = typeof parentId === "string" ? spansById.get(parentId) : undefined;
+    const parent = candidateParent?.span_id !== span.span_id ? candidateParent : undefined;
+    const parentDuration = parent ? parent.duration_ms ?? Math.max(0, Date.now() - parent.started_at * 1000) : totalDurationMs;
     const spanKey = span.span_id || `span_${idx}_${span.stage_name}`;
     const isRunning = span.status === "running" && taskStatus === "running";
     const duration =
@@ -139,6 +145,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
             background: isExpanded ? token.colorFillAlter : "transparent",
             borderRadius: 6,
             padding: isExpanded ? "8px 10px" : "0",
+            marginLeft: parent ? 24 : 0,
             transition: "all 0.2s ease",
           }}
         >
@@ -147,7 +154,9 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
             stageName={span.stage_name}
             durationMs={span.duration_ms}
             startedAt={span.started_at}
-            totalDurationMs={totalDurationMs}
+            totalDurationMs={parentDuration}
+            parentStageName={parent?.stage_name}
+            hasChildren={parentIds.has(span.span_id)}
             status={span.status}
             isExpanded={isExpanded}
             onToggleExpand={() => toggleExpand(spanKey)}

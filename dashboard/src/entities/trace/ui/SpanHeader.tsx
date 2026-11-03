@@ -18,6 +18,8 @@ interface SpanHeaderProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   payload?: Record<string, unknown>;
+  parentStageName?: string;
+  hasChildren?: boolean;
 }
 
 export const SpanHeader: React.FC<SpanHeaderProps> = ({
@@ -29,6 +31,8 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   isExpanded,
   onToggleExpand,
   payload,
+  parentStageName,
+  hasChildren = false,
 }) => {
   const { token } = theme.useToken();
 
@@ -40,7 +44,10 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
 
   const durationPct = isRunning
     ? 100
-    : Math.min(100, Math.max(2, Math.round((duration / Math.max(1, totalDurationMs)) * 100)));
+    : Math.min(100, Math.max(0, (duration / Math.max(1, totalDurationMs)) * 100));
+  const durationPercentLabel = durationPct > 0 && durationPct < 0.1
+    ? "<0.1"
+    : durationPct.toFixed(1).replace(/\.0$/, "");
 
   const { thresholdMs, description: slaDesc } = getStageSlaThreshold(stageName);
   const isSlaExceeded = !isRunning && duration > thresholdMs;
@@ -91,6 +98,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           <span style={{ fontWeight: 600, fontSize: 13, color: token.colorText }}>
             {formatStageName(stageName)}
           </span>
+          {hasChildren && <Tag style={{ margin: 0, fontSize: 10 }}>含子阶段</Tag>}
           {isSlaExceeded && (
             <Tooltip title={`该阶段耗时已超出预期的健康基线 (${slaDesc})`}>
               <Tag
@@ -106,9 +114,11 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
 
         <Space size={6}>
           {!isRunning && (
-            <span style={{ fontSize: 11, color: token.colorTextSecondary }}>
-              占 {durationPct}%
-            </span>
+            <Tooltip title={parentStageName ? `相对于「${formatStageName(parentStageName)}」的耗时，父子阶段不能重复累加` : "相对于本次任务的总耗时"}>
+              <span style={{ fontSize: 11, color: token.colorTextSecondary, whiteSpace: "nowrap" }}>
+                {parentStageName ? "占父阶段" : "占总耗时"} {durationPercentLabel}%
+              </span>
+            </Tooltip>
           )}
           <Tag
             color={tagColor}

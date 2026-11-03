@@ -18,7 +18,7 @@ export const mockTypstTraces: TraceRecord[] = scenes.map((scene, index) => {
     spans.push({ span_id: `${traceId}-${stage}`, trace_id: traceId, stage_name: stage, status,
       started_at: started + elapsed / 1000, duration_ms: status === "running" ? null : duration,
       start_memory_mb: 88.2, end_memory_mb: status === "running" ? null : 88.6, delta_memory_mb: status === "running" ? null : 0.4,
-      payload });
+      payload: stage.startsWith("TYPST_") ? { ...payload, parent_span_id: `${traceId}-render` } : payload });
     elapsed += duration;
   };
   addSpan("CHECKPOINT_RESTORE", 80, "success", { resumed_from: "mock-report-checkpoint" });
