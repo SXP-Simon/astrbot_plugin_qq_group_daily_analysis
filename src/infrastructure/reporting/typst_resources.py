@@ -200,7 +200,13 @@ class TypstAssets:
                         await asyncio.shield(processing)
                         raise
                 return target.name
-            except (aiohttp.ClientError, TimeoutError, ValueError, OSError):
+            except (
+                aiohttp.ClientError,
+                TimeoutError,
+                ValueError,
+                OSError,
+                Image.DecompressionBombError,
+            ):
                 self.failed.add(source)
                 if cached.is_file():
                     await asyncio.to_thread(shutil.copyfile, cached, target)

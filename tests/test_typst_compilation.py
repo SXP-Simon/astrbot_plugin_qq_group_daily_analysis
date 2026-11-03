@@ -12,6 +12,7 @@ import pytest
 import pytest_asyncio
 from PIL import Image, ImageChops, ImageDraw, ImageStat
 from test_template_section_conditional_rendering import create_analysis_result
+from test_typst_resources import oversized_avatar_uri as oversized_avatar_uri
 
 from src.domain.value_objects import GoldenQuote, QualityDimension, QualityReview, UserTitle
 from src.infrastructure.config.config_manager import ConfigManager
@@ -397,3 +398,14 @@ async def test_compile_error_keeps_first_source_location(compiler, tmp_path):
     )
     with pytest.raises(RuntimeError, match=r"main\.typ:1:"):
         await typst_renderer.run_typst_worker(tmp_path, generator.data_dir / "typst/fonts", 30)
+
+
+@pytest.mark.asyncio
+async def test_huge_avatar_still_generates_native_report_without_recovery(compiler, monkeypatch, oversized_avatar_uri):
+    _, generator, _ = compiler
+    generator._avatar_service.get_user_avatar.return_value = oversized_avatar_uri
+    worker = AsyncMock(wraps=typst_renderer.run_typst_worker)
+    monkeypatch.setattr(typst_renderer, "run_typst_worker", worker)
+    image, html = await generator.generate_image_report(create_analysis_result(), "safe-image", None)
+    assert image and image.startswith("base64://") and html is None
+    worker.assert_awaited_once()

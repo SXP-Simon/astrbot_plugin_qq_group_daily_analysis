@@ -147,10 +147,13 @@ class TemplateResourceStore:
             if root.tag.rsplit("}", 1)[-1] != "svg":
                 raise ValueError("CDN 返回的内容不是 SVG")
             return
-        with Image.open(path) as image:
-            if image.width * image.height > 16_000_000:
-                raise ValueError("模板图片超过像素预算")
-            image.verify()
+        try:
+            with Image.open(path) as image:
+                if image.width * image.height > 16_000_000:
+                    raise ValueError("模板图片超过像素预算")
+                image.verify()
+        except Image.DecompressionBombError as error:
+            raise ValueError("模板图片超过像素预算") from error
 
     async def stage_vectors(self, theme: str, job_dir: Path) -> None:
         """将图标复制到隔离任务；网络缺图只留白，不中断整份报告。

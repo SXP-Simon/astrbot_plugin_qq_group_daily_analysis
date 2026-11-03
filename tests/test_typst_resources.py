@@ -143,3 +143,34 @@ async def test_cancelled_image_waits_for_decoder_before_releasing_job(tmp_path, 
             await running
         assert list(job.glob("*.png"))
         assert not list((tmp_path / "typst/assets").glob("*.part"))
+
+
+@pytest.fixture
+def oversized_avatar_uri():
+    """构造只有小体积载荷、但声明巨大像素面的 PNG，不分配大图。"""
+    import struct
+    import zlib
+
+    payload = BytesIO()
+    Image.new("RGB", (1, 1), "white").save(payload, format="PNG")
+    png = bytearray(payload.getvalue())
+    png[16:24] = struct.pack(">II", 40000, 40000)
+    png[29:33] = struct.pack(">I", zlib.crc32(png[12:29]))
+    return "data:image/png;base64," + base64.b64encode(png).decode()
+
+
+@pytest.mark.asyncio
+async def test_oversized_image_falls_back_and_download_validation_rejects(tmp_path, oversized_avatar_uri):
+    from src.infrastructure.reporting.template_resources import TemplateResourceStore
+
+    job = tmp_path / "job"
+    job.mkdir()
+    async with aiohttp.ClientSession() as session:
+        assets = typst_resources.TypstAssets(tmp_path, job, session)
+        assert await assets.localize(oversized_avatar_uri) == ""
+        assert not list(job.iterdir())
+        assert not list((tmp_path / "typst/assets").iterdir())
+    downloaded = tmp_path / "oversized.png"
+    downloaded.write_bytes(base64.b64decode(oversized_avatar_uri.split(",", 1)[1]))
+    with pytest.raises(ValueError, match="像素预算"):
+        TemplateResourceStore._validate(downloaded, "scrapbook/assistant.jpg")
