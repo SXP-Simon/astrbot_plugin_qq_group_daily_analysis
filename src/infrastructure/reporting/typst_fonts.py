@@ -151,7 +151,11 @@ def typst_font_status(data_dir: Path) -> TypstFontStatus:
 
 
 async def download_typst_fonts(
-    data_dir: Path, cdn_base_url: str, theme: str | None = None
+    data_dir: Path,
+    cdn_base_url: str,
+    theme: str | None = None,
+    *,
+    name: str | None = None,
 ) -> TypstFontStatus:
     """将固定预设字体下载到插件目录，校验头部并原子替换。
 
@@ -159,6 +163,7 @@ async def download_typst_fonts(
         data_dir: 插件数据根目录。
         cdn_base_url: 当前配置的 CDN 根地址。
         theme: 仅补齐该内置主题的字体；空值下载完整预设。
+        name: Optional preset file for observable per-file download queues.
 
     Returns:
         下载后的字体状态；已存在的预设不会重复下载。
@@ -170,8 +175,12 @@ async def download_typst_fonts(
     if theme is not None and theme not in THEME_FONTS:
         raise ValueError("未知 Typst 模板，请刷新字体列表后重试")
     required = THEME_FONTS[theme] if theme is not None else tuple(FONT_SOURCES)
+    if name is not None:
+        if name not in required:
+            raise ValueError("未知字体或该字体不属于所选模板")
+        required = (name,)
     missing = [
-        name for name in typst_font_status(data_dir)["missing"] if name in required
+        file for file in typst_font_status(data_dir)["missing"] if file in required
     ]
     directory = data_dir / "typst" / "fonts"
     directory.mkdir(parents=True, exist_ok=True)
