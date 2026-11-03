@@ -62,8 +62,30 @@ class TypstAssets:
         """
         if not source:
             return ""
+        source_revision = ""
+        managed_path: Path | None = None
+        if self.resource_store and source.startswith(
+            self.resource_store.base_url + "/"
+        ):
+            name = source.removeprefix(self.resource_store.base_url + "/")
+            if name in RESOURCE_FILES:
+                try:
+                    path = await self.resource_store.ensure(name, self.session)
+                    managed_path = path
+                    stat = path.stat()
+                    source_revision = (
+                        f":{path.resolve()}:{stat.st_mtime_ns}:{stat.st_size}"
+                    )
+                except (aiohttp.ClientError, TimeoutError, ValueError, OSError):
+                    self.network_budget_exhausted = (
+                        self.resource_store.network_budget_exhausted
+                    )
+                    logger.warning("Typst 原始素材获取失败，本次使用占位装饰")
+                    return ""
         variant = "oval:" if oval else ""
-        key = hashlib.sha256(f"{variant}{opacity}:{source}".encode()).hexdigest()
+        key = hashlib.sha256(
+            f"{variant}{opacity}:{source}{source_revision}".encode()
+        ).hexdigest()
         target = self.job_dir / f"{key}.png"
         if target.is_file():
             self.cache_hits += 1
@@ -77,7 +99,11 @@ class TypstAssets:
                     return target.name
                 if source in self.failed:
                     return ""
-                payload = await self._read_source(source)
+                payload = (
+                    await asyncio.to_thread(managed_path.read_bytes)
+                    if managed_path
+                    else await self._read_source(source)
+                )
                 await self._process_image(payload, target, cached, opacity, oval)
                 return target.name
             except (

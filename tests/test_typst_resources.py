@@ -13,11 +13,44 @@ import pytest
 from src.infrastructure.reporting import typst_fonts, typst_resources
 
 
+@pytest.mark.asyncio
+async def test_replacing_managed_original_invalidates_derived_image(
+    tmp_path, monkeypatch
+):
+    from src.infrastructure.reporting import template_resources
+    from src.infrastructure.reporting.template_asset_catalog import RESOURCE_FILES
+
+    name = next(name for name in RESOURCE_FILES if name.endswith(".png"))
+    original = tmp_path / "typst/resources" / name
+    original.parent.mkdir(parents=True)
+    monkeypatch.setattr(
+        template_resources, "REPOSITORY_ASSETS", tmp_path / "no-repository"
+    )
+    store = template_resources.TemplateResourceStore(
+        tmp_path, "https://cdn.test/assets"
+    )
+    async with aiohttp.ClientSession() as session:
+        pixels = []
+        for index, color in enumerate(("red", "blue")):
+            Image.new("RGB", (12, 12), color).save(original)
+            job = tmp_path / f"job-{index}"
+            job.mkdir()
+            assets = typst_resources.TypstAssets(
+                tmp_path, job, session, resource_store=store
+            )
+            localized = await assets.localize(f"https://cdn.test/assets/{name}")
+            with Image.open(job / localized) as image:
+                pixels.append(image.getpixel((0, 0)))
+        assert pixels[0] != pixels[1]
+
+
 def test_oval_avatar_keeps_normal_avatar_and_cache_separate(tmp_path):
     async def check():
         payload = BytesIO()
         Image.new("RGBA", (12, 12), (57, 197, 187, 255)).save(payload, format="PNG")
-        source = "data:image/png;base64," + base64.b64encode(payload.getvalue()).decode()
+        source = (
+            "data:image/png;base64," + base64.b64encode(payload.getvalue()).decode()
+        )
         job = tmp_path / "job"
         job.mkdir()
         async with aiohttp.ClientSession() as session:
@@ -32,6 +65,7 @@ def test_oval_avatar_keeps_normal_avatar_and_cache_separate(tmp_path):
                 assert image.width / image.height == 5 / 6
                 assert image.getpixel((0, 0))[3] == 0
                 assert image.getpixel((image.width // 2, image.height // 2))[3] == 255
+
     asyncio.run(check())
 
 
@@ -40,9 +74,11 @@ def test_cdn_cache_works_without_development_assets(tmp_path, monkeypatch):
         payload = BytesIO()
         Image.new("RGBA", (12, 12), (57, 197, 187, 200)).save(payload, format="PNG")
         calls = []
+
         async def resource(request):
             calls.append(request.path)
             return web.Response(body=payload.getvalue(), content_type="image/png")
+
         app = web.Application()
         app.router.add_get("/role.png", resource)
         runner = web.AppRunner(app)
@@ -55,45 +91,57 @@ def test_cdn_cache_works_without_development_assets(tmp_path, monkeypatch):
                 job = tmp_path / "job-one"
                 job.mkdir()
                 assets = typst_resources.TypstAssets(tmp_path, job, session)
-                image = job / await assets.localize(url, .25)
-                assert Image.open(image).getpixel((0,0))[3] == 50
+                image = job / await assets.localize(url, 0.25)
+                assert Image.open(image).getpixel((0, 0))[3] == 50
             await runner.cleanup()
             import os
+
             for file in (tmp_path / "typst/assets").glob("*.png"):
                 os.utime(file, (1, 1))
             async with aiohttp.ClientSession() as session:
-                network = MagicMock(side_effect=AssertionError("已有本地图片不应联网刷新"))
+                network = MagicMock(
+                    side_effect=AssertionError("已有本地图片不应联网刷新")
+                )
                 monkeypatch.setattr(session, "get", network)
                 job = tmp_path / "job-two"
                 job.mkdir()
                 assets = typst_resources.TypstAssets(tmp_path, job, session)
-                image = job / await assets.localize(url, .25)
-                assert Image.open(image).getpixel((0,0))[3] == 50
-                assert await assets.localize(url, .25) == image.name
+                image = job / await assets.localize(url, 0.25)
+                assert Image.open(image).getpixel((0, 0))[3] == 50
+                assert await assets.localize(url, 0.25) == image.name
                 network.assert_not_called()
             assert calls == ["/role.png"]
         finally:
             await runner.cleanup()
+
     asyncio.run(check())
 
 
 def test_bad_font_response_leaves_no_partial_files(tmp_path, monkeypatch):
     monkeypatch.setattr(typst_fonts, "FONT_SOURCES", {"Noto.ttf": "font.ttf"})
+
     async def check():
         app = web.Application()
+
         async def not_a_font(request):
             return web.Response(text="<html>CDN error</html>")
+
         app.router.add_get("/font.ttf", not_a_font)
         runner = web.AppRunner(app)
         await runner.setup()
         await web.TCPSite(runner, "127.0.0.1", 0).start()
         try:
             with pytest.raises(ValueError):
-                await typst_resources.download_typst_fonts(tmp_path, f"http://127.0.0.1:{runner.addresses[0][1]}")
+                await typst_resources.download_typst_fonts(
+                    tmp_path, f"http://127.0.0.1:{runner.addresses[0][1]}"
+                )
             assert list((tmp_path / "typst/fonts").iterdir()) == []
-            assert typst_resources.typst_font_status(tmp_path)["missing"] == ["Noto.ttf"]
+            assert typst_resources.typst_font_status(tmp_path)["missing"] == [
+                "Noto.ttf"
+            ]
         finally:
             await runner.cleanup()
+
     asyncio.run(check())
 
 
@@ -101,8 +149,10 @@ def test_bad_font_response_leaves_no_partial_files(tmp_path, monkeypatch):
 def test_bad_optional_image_is_replaced_with_empty_resource(tmp_path, status):
     async def check():
         app = web.Application()
+
         async def broken_image(request):
             return web.Response(status=status, text="<html>CDN error</html>")
+
         app.router.add_get("/role.png", broken_image)
         runner = web.AppRunner(app)
         await runner.setup()
@@ -118,23 +168,30 @@ def test_bad_optional_image_is_replaced_with_empty_resource(tmp_path, status):
                 assert not list((tmp_path / "typst/assets").glob("*.png"))
         finally:
             await runner.cleanup()
+
     asyncio.run(check())
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("decoder_fails", [False, True])
-async def test_cancelled_image_waits_for_decoder_before_releasing_job(tmp_path, monkeypatch, decoder_fails):
+async def test_cancelled_image_waits_for_decoder_before_releasing_job(
+    tmp_path, monkeypatch, decoder_fails
+):
     import threading
 
     started, finish = threading.Event(), threading.Event()
     original = typst_resources.TypstAssets._save_image
+
     def process(*args, **kwargs):
         started.set()
         finish.wait(5)
         if decoder_fails:
             raise ValueError("取消清理时图片解码失败")
         original(*args, **kwargs)
-    monkeypatch.setattr(typst_resources.TypstAssets, "_save_image", staticmethod(process))
+
+    monkeypatch.setattr(
+        typst_resources.TypstAssets, "_save_image", staticmethod(process)
+    )
     payload = BytesIO()
     Image.new("RGB", (12, 12), "white").save(payload, format="PNG")
     source = "data:image/png;base64," + base64.b64encode(payload.getvalue()).decode()
@@ -146,7 +203,7 @@ async def test_cancelled_image_waits_for_decoder_before_releasing_job(tmp_path, 
         try:
             assert await asyncio.to_thread(started.wait, 5)
             running.cancel()
-            await asyncio.sleep(.01)
+            await asyncio.sleep(0.01)
             assert not running.done()
         finally:
             finish.set()
@@ -171,7 +228,9 @@ def oversized_avatar_uri():
 
 
 @pytest.mark.asyncio
-async def test_oversized_image_falls_back_and_download_validation_rejects(tmp_path, oversized_avatar_uri):
+async def test_oversized_image_falls_back_and_download_validation_rejects(
+    tmp_path, oversized_avatar_uri
+):
     from src.infrastructure.reporting.template_resources import TemplateResourceStore
 
     job = tmp_path / "job"
@@ -188,7 +247,9 @@ async def test_oversized_image_falls_back_and_download_validation_rejects(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_theme_font_download_skips_other_themes_and_reuses_shared_files(tmp_path, monkeypatch):
+async def test_theme_font_download_skips_other_themes_and_reuses_shared_files(
+    tmp_path, monkeypatch
+):
     required = typst_fonts.THEME_FONTS["HatsuneMiku"]
     directory = tmp_path / "typst/fonts"
     directory.mkdir(parents=True)
@@ -197,19 +258,29 @@ async def test_theme_font_download_skips_other_themes_and_reuses_shared_files(tm
         if name != "Outfit.ttf":
             (directory / name).write_bytes(payload)
     calls = []
+
     async def font(request):
         calls.append(request.path)
         return web.Response(body=payload)
+
     app = web.Application()
     app.router.add_get("/outfit.ttf", font)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "127.0.0.1", 0).start()
-    monkeypatch.setattr(typst_fonts, "FONT_SOURCES", {**typst_fonts.FONT_SOURCES, "Outfit.ttf": "outfit.ttf"})
+    monkeypatch.setattr(
+        typst_fonts,
+        "FONT_SOURCES",
+        {**typst_fonts.FONT_SOURCES, "Outfit.ttf": "outfit.ttf"},
+    )
     try:
         cdn = f"http://127.0.0.1:{runner.addresses[0][1]}"
-        status = await typst_resources.download_typst_fonts(tmp_path, cdn, "HatsuneMiku")
-        selected = next(group for group in status["groups"] if group["theme"] == "HatsuneMiku")
+        status = await typst_resources.download_typst_fonts(
+            tmp_path, cdn, "HatsuneMiku"
+        )
+        selected = next(
+            group for group in status["groups"] if group["theme"] == "HatsuneMiku"
+        )
         assert selected["ready"] and not selected["missing"]
         assert not status["ready"] and "Cinzel.ttf" in status["missing"]
         await typst_resources.download_typst_fonts(tmp_path, cdn, "HatsuneMiku")
