@@ -7,10 +7,10 @@ import { FileContentDialog } from "./FileContentDialog";
 import { FileEditorDialog, type FileDraft } from "./FileEditorDialog";
 import { useManagedFiles } from "../../model/useManagedFiles";
 import { formatBytes } from "../../../../shared/lib/formatters";
-import { TypstFonts } from "../../../../features/manage-typst-fonts/ui/TypstFonts";
+import { FontManager } from "./FontManager";
 import { TemplateResources } from "../../../../features/manage-template-resources/ui/TemplateResources";
 import { TemplateInstallModal } from "../../../../features/install-template/ui/TemplateInstallModal";
-import { TEMPLATE_CDN_PRESETS } from "../../../../entities/config/model/renderingConfig";
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../../entities/config/model/renderingConfig";
 import type { ManagedFile, ManagedPartition } from "../../../../entities/plugin-data/api/managedFilesApi";
 
 export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports" | "config" | "traces") => void }) {
@@ -18,7 +18,6 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
   const [editor, setEditor] = useState<FileDraft | null>(null);
   const [uninstalling, setUninstalling] = useState(false);
   const [installing, setInstalling] = useState(false);
-  const [cdn, setCdn] = useState("https://cdn.jsdelivr.net");
   const totalBytes = vm.partitions.reduce((sum, item) => sum + item.size_bytes, 0);
   const totalFiles = vm.partitions.reduce((sum, item) => sum + item.count, 0);
 
@@ -37,7 +36,7 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
         { title: "文件", dataIndex: "count", align: "right", width: 65 },
         { title: "占用空间", width: 100, align: "right", render: (_, item) => formatBytes(item.size_bytes) },
         { title: "占比", width: 115, render: (_, item) => <Progress size="small" percent={totalBytes ? Math.round(item.size_bytes / totalBytes * 100) : 0} /> },
-        { title: "分区用途与能力", render: (_, item) => <Space direction="vertical" size={2}><Typography.Text>{item.description}</Typography.Text><Space size={0}><Tag color="blue">查看</Tag>{!["state", "avatar_storage"].includes(item.key) && <Tag>导出</Tag>}{item.writable && <Tag color="green">上传 / 替换</Tag>}{item.key === "custom_templates" && <Tag color="purple">源码编辑</Tag>}</Space></Space> },
+        { title: "分区用途与能力", render: (_, item) => <Space direction="vertical" size={2}><Typography.Text>{item.description}</Typography.Text><Space size={0}>{item.key === "typst_fonts" ? <><Tag color="blue">模板依赖</Tag><Tag color="green">补齐 / 替换 / 移除</Tag></> : <><Tag color="blue">查看</Tag>{!["state", "avatar_storage"].includes(item.key) && <Tag>导出</Tag>}{item.writable && <Tag color="green">上传 / 替换</Tag>}{item.key === "custom_templates" && <Tag color="purple">源码编辑</Tag>}</>}</Space></Space> },
         { title: "操作", fixed: "right", width: 85, render: (_, item) => <Button type="link" onClick={() => vm.select(item)}>管理</Button> },
       ]} />
     </Card>
@@ -46,7 +45,7 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
         <Descriptions size="small" column={1} items={[{ key: "path", label: "存储目录", children: <Typography.Text copyable>{activePartition.directory}</Typography.Text> }, { key: "use", label: "用途", children: activePartition.description }]} />
         <Alert showIcon type={activePartition.deletable ? "warning" : "info"} message={activePartition.impact} />
         {onNavigate && ["reports", "hosted_reports", "config_files", "state"].includes(activePartition.key) && <Button onClick={() => onNavigate(activePartition.key === "state" ? "traces" : activePartition.key === "config_files" ? "config" : "reports")}>{activePartition.key === "state" ? "查看分析记录与任务" : activePartition.key === "config_files" ? "打开配置中心维护引用" : "打开历史报告预览与重绘"}</Button>}
-        <Tabs defaultActiveKey={activePartition.key === "avatar_storage" ? "entries" : "files"} onChange={() => { void vm.load(); void vm.refresh(); }} items={[
+        {activePartition.key === "typst_fonts" ? <FontManager onChanged={() => { void vm.refresh(); }} /> : <Tabs defaultActiveKey={activePartition.key === "avatar_storage" ? "entries" : "files"} onChange={() => { void vm.load(); void vm.refresh(); }} items={[
           { key: "files", label: "文件列表", children: <Space direction="vertical" style={{ width: "100%" }}>
             <Space wrap>
               <Input.Search aria-label="搜索文件" placeholder="搜索文件名或相对路径" allowClear onSearch={vm.searchFiles} style={{ width: 260 }} />
@@ -79,11 +78,10 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
             ]} />
           </Space> },
           ...(activePartition.key === "avatar_storage" ? [{ key: "entries", label: "头像条目", children: <StoredRecordsTab onlyKind="avatar" /> }] : []),
-          ...(activePartition.key === "typst_fonts" ? [{ key: "download", label: "按模板下载", children: <><Select aria-label="字体下载 CDN" value={cdn} options={TEMPLATE_CDN_PRESETS} onChange={setCdn} style={{ width: "100%" }} /><TypstFonts cdnBaseUrl={cdn} /></> }] : []),
-          ...(activePartition.key === "template_resources" ? [{ key: "download", label: "按模板下载", children: <TemplateResources cdnBaseUrl={cdn} /> }] : []),
-        ]} />
+          ...(activePartition.key === "template_resources" ? [{ key: "download", label: "按模板下载", children: <TemplateResources cdnBaseUrl={DEFAULT_TEMPLATE_CDN_BASE_URL} /> }] : []),
+        ]} />}
       </Space>}
-    <FileContentDialog vm={vm} editor={editor} setEditor={setEditor} />
+    {activePartition?.key !== "typst_fonts" && <FileContentDialog vm={vm} editor={editor} setEditor={setEditor} />}
     {!vm.content && <FileEditorDialog vm={vm} editor={editor} setEditor={setEditor} />}
     <TemplateUninstallModal open={uninstalling} onClose={() => setUninstalling(false)} onUninstalled={() => { void vm.load(); void vm.refresh(); }} />
     <TemplateInstallModal open={installing} onClose={() => setInstalling(false)} onInstalled={() => { void vm.load(); void vm.refresh(); }} />
