@@ -681,6 +681,18 @@ def generate_openapi_spec() -> dict[str, Any]:
                 "get": {
                     "summary": "Get available report visual templates",
                     "operationId": "getReportTemplates",
+                    "parameters": [
+                        {
+                            "name": "render_format",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "enum": ["all", "configured", "image", "html"],
+                                "default": "all",
+                            },
+                            "description": "按当前首选渲染引擎与目标输出格式筛选；all 返回全部入口能力",
+                        }
+                    ],
                     "responses": {
                         "200": {
                             "description": "List of templates",
@@ -1305,6 +1317,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "can_uninstall": {"type": "boolean", "nullable": True},
                         "has_image": {"type": "boolean", "nullable": True},
                         "has_html": {"type": "boolean", "nullable": True},
+                        "has_typst": {"type": "boolean", "nullable": True},
                     },
                     "required": ["id", "label"],
                 },

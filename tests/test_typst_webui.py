@@ -56,3 +56,32 @@ async def test_font_download_rejects_url_credentials(probe, monkeypatch):
     request.json.return_value = {"cdn_base_url": "https://user:secret@example.com"}
     assert (await routes.api_download_typst_fonts())["status_code"] == 400
     download.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("engine,output,expected", [
+    ("typst", "image", ["native", "both"]),
+    ("astrbot", "image", ["web", "both"]),
+    ("typst", "html", ["web", "both"]),
+    ("typst", "configured", ["both"]),
+    ("typst", "all", ["web", "native", "both"]),
+])
+async def test_template_list_filters_actual_capabilities(monkeypatch, engine, output, expected):
+    from unittest.mock import MagicMock
+    from src.infrastructure.webui.routes import template_routes
+
+    service = MagicMock()
+    service.config_manager.get_output_format.return_value = ["image", "html"]
+    service.config_manager.get_t2i_rendering_strategies.return_value = [{"render_service": engine}]
+    manager = MagicMock()
+    manager.get_available_templates.return_value = [
+        {"id": "web", "has_image": True, "has_html": True, "has_typst": False},
+        {"id": "native", "has_image": False, "has_html": False, "has_typst": True},
+        {"id": "both", "has_image": True, "has_html": True, "has_typst": True},
+    ]
+    routes = template_routes.TemplateRoutes(service)
+    monkeypatch.setattr(routes, "_get_html_templates", lambda: manager)
+    monkeypatch.setattr(template_routes, "request", MagicMock(query={"render_format": output}))
+    monkeypatch.setattr(template_routes, "json_response", lambda value: value)
+    response = await routes.api_get_report_templates()
+    assert [item["id"] for item in response["data"]] == expected

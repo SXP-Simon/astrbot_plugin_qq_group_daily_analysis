@@ -65,25 +65,43 @@ class TemplateRoutes:
     async def api_get_report_templates(self) -> WebApiResponse:
         """获取系统内置及用户自定义的所有可用报告视觉模板"""
         try:
+            cfg_mgr = (
+                self.analysis_service.config_manager
+                if self.analysis_service
+                else self.report_dispatcher.config_manager
+                if self.report_dispatcher
+                else None
+            )
             html_tpls = self._get_html_templates()
-            if html_tpls:
-                templates = html_tpls.get_available_templates()
-            else:
-                from ...reporting.templates import HTMLTemplates
-
-                cfg_mgr = (
-                    self.analysis_service.config_manager
-                    if self.analysis_service
-                    else (
-                        self.report_dispatcher.config_manager
-                        if self.report_dispatcher
-                        else None
-                    )
-                )
+            if not html_tpls:
                 if not cfg_mgr:
                     return error_response("配置管理器未初始化", status_code=500)
-                tpl_mgr = HTMLTemplates(cfg_mgr)
-                templates = tpl_mgr.get_available_templates()
+                from ...reporting.templates import HTMLTemplates
+
+                html_tpls = HTMLTemplates(cfg_mgr)
+            templates = html_tpls.get_available_templates()
+            output = request.query.get("render_format", "all")
+            if output not in ("all", "configured", "image", "html"):
+                return error_response("不支持的模板输出格式", status_code=400)
+            if output != "all":
+                if not cfg_mgr:
+                    return error_response("配置管理器未初始化", status_code=500)
+                formats = (
+                    cfg_mgr.get_output_format() if output == "configured" else [output]
+                )
+                strategies = cfg_mgr.get_t2i_rendering_strategies()
+                native = bool(
+                    strategies and strategies[0].get("render_service") == "typst"
+                )
+                templates = [
+                    item
+                    for item in templates
+                    if ("html" not in formats or item["has_html"] or item["has_image"])
+                    and (
+                        "image" not in formats
+                        or (item["has_typst"] if native else item["has_image"])
+                    )
+                ]
             return json_response({"status": "ok", "data": templates})
         except Exception as e:
             logger.error(f"获取模板列表异常: {e}", exc_info=True)

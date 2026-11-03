@@ -605,6 +605,7 @@ export interface components {
             can_uninstall?: boolean | null;
             has_image?: boolean | null;
             has_html?: boolean | null;
+            has_typst?: boolean | null;
         };
         PluginLogItem: {
             id: string;
@@ -1335,7 +1336,10 @@ export interface operations {
     };
     getReportTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 按当前首选渲染引擎与目标输出格式筛选；all 返回全部入口能力 */
+                render_format?: "all" | "configured" | "image" | "html";
+            };
             header?: never;
             path?: never;
             cookie?: never;
