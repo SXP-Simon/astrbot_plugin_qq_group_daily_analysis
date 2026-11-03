@@ -57,8 +57,8 @@ export function ManagedFilesPanel({ onNavigate, onOpenDataTab }: { onNavigate?: 
           {onOpenDataTab && activePartition.key === "state" && <><Button onClick={() => { vm.select(null); onOpenDataTab("incremental"); }}>管理增量批次</Button><Button onClick={() => { vm.select(null); onOpenDataTab("checkpoints"); }}>管理阶段快照</Button></>}
           {activePartition.key === "config_backups" && <ConfigBackupsViewer />}
         </Space>
-        {activePartition.key === "custom_templates" && !vm.directory ? <TemplatePackages groups={vm.groups} loading={vm.loading} onSelect={vm.selectDirectory} onInstall={() => setInstalling(true)} onCreate={() => setEditor({ name: "", text: "" })} onRefresh={() => { void vm.load(); void vm.refresh(); }} /> : activePartition.key === "typst_fonts" ? <FontManager onChanged={() => { void vm.refresh(); }} /> : activePartition.key === "avatar_storage" ? <StoredRecordsTab onlyKind="avatar" /> : <>
-        {activePartition.key === "custom_templates" && <Space wrap><Button onClick={() => vm.selectDirectory("")}>返回模板列表</Button><Typography.Text strong>{vm.directory === "." ? "未归组文件" : `模板：${vm.directory}`}</Typography.Text><Typography.Text type="secondary">当前操作仅限此模板内的文件。</Typography.Text></Space>}
+        {activePartition.key === "custom_templates" && <TemplatePackages groups={vm.groups} directory={vm.directory} loading={vm.loading} busy={vm.busy} onSelect={vm.selectDirectory} onInstall={() => setInstalling(true)} onCreate={() => setEditor({ name: "", text: "" })} onRefresh={() => { void vm.load(); void vm.refresh(); }} />}
+        {activePartition.key === "custom_templates" && !vm.directory ? null : activePartition.key === "typst_fonts" ? <FontManager onChanged={() => { void vm.refresh(); }} /> : activePartition.key === "avatar_storage" ? <StoredRecordsTab onlyKind="avatar" /> : <>
         <Tabs key={`${activePartition.key}:${vm.directory}`} defaultActiveKey={activePartition.key === "template_resources" ? "download" : "files"} onChange={() => { void vm.load(); void vm.refresh(); }} items={[
           ...(activePartition.key === "template_resources" ? [{ key: "download", label: "主题素材状态", children: <TemplateResources cdnBaseUrl={DEFAULT_TEMPLATE_CDN_BASE_URL} onChanged={() => { void vm.load(); void vm.refresh(); }} /> }] : []),
           { key: "files", label: activePartition.key === "template_resources" ? "本地素材与替换" : activePartition.key === "state" ? "数据库与状态占用" : activePartition.key === "typst_jobs" ? "只读诊断文件" : "文件列表", children: <Space direction="vertical" style={{ width: "100%" }}>
@@ -95,7 +95,7 @@ export function ManagedFilesPanel({ onNavigate, onOpenDataTab }: { onNavigate?: 
       </Space>}
     {activePartition?.key !== "typst_fonts" && <FileContentDialog vm={vm} editor={editor} setEditor={setEditor} references={activePartition?.key === "config_files" && vm.content ? references.references.get(vm.content.name) : undefined} />}
     {!vm.content && <FileEditorDialog vm={vm} editor={editor} setEditor={setEditor} />}
-    <TemplateInstallModal open={installing} onClose={() => setInstalling(false)} onInstalled={() => { void vm.load(); void vm.refresh(); }} />
+    <TemplateInstallModal open={installing} onClose={() => setInstalling(false)} onInstalled={result => { vm.selectDirectory(result.name); void vm.refresh(); }} />
     </Drawer>
   </Space>;
 }

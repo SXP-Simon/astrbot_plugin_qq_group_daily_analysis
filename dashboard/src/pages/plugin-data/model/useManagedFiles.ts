@@ -48,7 +48,7 @@ export function useManagedFiles() {
 
   const select = (value: ManagedPartition | null) => {
     detailSequence.current++;
-    setPartition(value); setDirectory(""); setGroups([]); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setContent(null); setSelected([]); setDeleteResult(null); setListError("");
+    setPartition(value); setDirectory(""); setGroups([]); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setTotal(0); setLoading(false); setContent(null); setSelected([]); setDeleteResult(null); setListError("");
   };
   const inspect = async (name: string) => {
     if (!partition || busy) return;
@@ -102,7 +102,7 @@ export function useManagedFiles() {
   };
   return { partitions, partition, files, groups, directory, total, search, extensions, page, loading, busy, error, listError, content, selected, deleteResult,
     refresh, load, select, inspect, download, mutate, setContent, setPage,
-    selectDirectory: (value: string) => { detailSequence.current++; setDirectory(value); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setContent(null); setSelected([]); setDeleteResult(null); },
+    selectDirectory: (value: string) => { detailSequence.current++; setDirectory(value); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setTotal(0); setLoading(true); setListError(""); setContent(null); setSelected([]); setDeleteResult(null); },
     deleteSelected, selectFiles, clearSelection: () => setSelected([]),
     filterExtensions: (value: string) => { setExtensions(value); setPage(1); setSelected([]); setDeleteResult(null); },
     searchFiles: (value: string) => { setSearch(value); setPage(1); setSelected([]); setDeleteResult(null); } };

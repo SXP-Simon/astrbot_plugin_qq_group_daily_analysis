@@ -169,3 +169,11 @@ it("模板安装的两种入口均同步模板目录与能力列表，卸载后�
     expect(mockHandlers["GET reports/templates"]().data.some(item => item.id === name)).toBe(false);
   }
 });
+it("手动创建的模板可被识别，缺少入口的草稿也能整目录移除", () => {
+  for (const [name, entry] of [["mock_manual_remove", "report.typ"], ["mock_draft_remove", "template.json"]] as const) {
+    expect(mockHandlers["POST plugin-data/files/mutate"]({ partition: "custom_templates", operation: "create", name: `${name}/${entry}`, content_base64: btoa("test") }).status).toBe("ok");
+    if (entry === "report.typ") expect(mockHandlers["GET reports/templates"]().data.find(item => item.id === name)).toMatchObject({ has_typst: true, can_uninstall: true });
+    expect(mockHandlers["POST templates/uninstall"]({ name }).data).toEqual({ name, removed: true });
+    expect(mockHandlers["GET plugin-data/files"]({ partition: "custom_templates", directory: name }).data.total).toBe(0);
+  }
+});

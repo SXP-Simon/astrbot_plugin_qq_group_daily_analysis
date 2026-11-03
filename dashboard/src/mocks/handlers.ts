@@ -163,6 +163,17 @@ export const mockHandlers = {
     };
   },
   "GET reports/templates": (params?: Record<string, unknown>) => {
+    const files = managedMockFiles.get("custom_templates");
+    const directories = new Set([...(files?.keys() || [])].filter(name => name.includes("/")).map(name => name.split("/")[0]));
+    const templates = mockReportTemplates.filter(item => !item.is_custom || !directories.has(item.id));
+    for (const directory of directories) {
+      const has_typst = files?.has(`${directory}/report.typ`) || false;
+      const has_image = files?.has(`${directory}/image_template.html`) || false;
+      const has_html = files?.has(`${directory}/html_template.html`) || false;
+      if (!has_typst && !has_image && !has_html) continue;
+      const known = mockReportTemplates.find(item => item.id === directory && item.is_custom);
+      templates.push({ ...known, id: directory, label: known?.label || directory, is_custom: true, can_uninstall: true, has_typst, has_image, has_html });
+    }
     const output = params?.render_format;
     const runtime = renderingRuntimeSchema.safeParse(mockPluginConfig.config.t2i_rendering || {});
     const formats = output === "configured" ? mockPluginConfig.config.basic?.output_format : [output];
@@ -170,7 +181,7 @@ export const mockHandlers = {
       engine: runtime.success ? runtime.data.template_engine : "html" as const,
       formats: Array.isArray(formats) ? formats.filter((value): value is string => typeof value === "string") : ["image"],
     };
-    return { status: "ok", data: mockReportTemplates.filter((item) => supportsTemplate(item, requirements)) };
+    return { status: "ok", data: templates.filter((item) => supportsTemplate(item, requirements)) };
   },
   "GET templates/preview": () => ({
     status: "ok",
@@ -197,10 +208,10 @@ export const mockHandlers = {
   },
   "POST templates/uninstall": (body?: Record<string, unknown>) => {
     const name = String(body?.name || "");
-    const index = mockReportTemplates.findIndex(item => item.id === name && item.can_uninstall);
-    if (index < 0) return { status: "error", message: "此模板不支持安装器卸载" };
-    mockReportTemplates.splice(index, 1);
     const files = managedMockFiles.get("custom_templates");
+    if (!name || name.length > 50 || name.startsWith(".") || name.endsWith(".") || /[\\/:*?"<>|]/.test(name) || mockReportTemplates.some(item => item.id === name && !item.is_custom) || ![...(files?.keys() || [])].some(key => key.startsWith(name + "/"))) return { status: "error", message: "模板目录不存在或不允许移除" };
+    const index = mockReportTemplates.findIndex(item => item.id === name && item.is_custom);
+    if (index >= 0) mockReportTemplates.splice(index, 1);
     for (const key of files?.keys() || []) if (key.startsWith(name + "/")) files?.delete(key);
     return { status: "ok", data: { name, removed: true } };
   },

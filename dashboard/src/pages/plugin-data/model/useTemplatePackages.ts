@@ -5,7 +5,6 @@ import type { ManagedFileGroup } from "../../../entities/plugin-data/api/managed
 
 export function useTemplatePackages(groups: ManagedFileGroup[], onChanged: () => void) {
   const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -20,16 +19,16 @@ export function useTemplatePackages(groups: ManagedFileGroup[], onChanged: () =>
     } catch (cause) { if (sequence.current === request) setError(cause instanceof Error ? cause.message : "模板信息读取失败"); }
     finally { if (sequence.current === request) setLoading(false); }
   }, []);
-  useEffect(() => { const ref = sequence; void refresh(); return () => { ref.current++; }; }, [refresh]);
+  const groupSignature = groups.map(group => `${group.directory}:${group.count}:${group.size_bytes}`).join("|");
+  useEffect(() => { const ref = sequence; void refresh(); return () => { ref.current++; }; }, [refresh, groupSignature]);
   const rows = groups.map(group => ({ ...group, template: templates.find(item => item.id === group.directory) }))
-    .sort((a, b) => Number(!!b.template) - Number(!!a.template) || a.directory.localeCompare(b.directory))
-    .filter(item => [item.directory, item.template?.label, item.template?.desc].some(value => value?.toLowerCase().includes(search.toLowerCase())));
-  return { rows, search, setSearch, loading, busy, error, refresh,
+    .sort((a, b) => Number(!!b.template) - Number(!!a.template) || a.directory.localeCompare(b.directory));
+  return { rows, loading, busy, error, refresh,
     uninstall: async (name: string) => {
-      if (operating.current) return;
+      if (operating.current) return false;
       operating.current = true; setBusy(name); setError("");
-      try { await uninstallTemplate(name); onChanged(); await refresh(); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : "模板卸载失败"); }
+      try { await uninstallTemplate(name); onChanged(); await refresh(); return true; }
+      catch (cause) { setError(cause instanceof Error ? cause.message : "模板移除失败"); return false; }
       finally { operating.current = false; setBusy(""); }
     },
   };

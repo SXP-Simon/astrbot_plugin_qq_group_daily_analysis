@@ -173,7 +173,7 @@ const templateExamples: ReportTemplateItem[] = [
 
 export const mockReportTemplates: ReportTemplateItem[] = [
   { id: "my_miku", label: "我的初音模板 (my_miku)", display_name: "我的初音模板", desc: "自定义的 Miku 日报，源码和角色素材放在同一个模板包内。", is_custom: true, has_typst: true, can_uninstall: true },
-  { id: "my_maria", label: "我的 Maria 模板 (my_maria)", display_name: "我的 Maria 模板", desc: "手动维护的 Maria 模板。", is_custom: true, has_typst: true, can_uninstall: false },
+  { id: "my_maria", label: "我的 Maria 模板 (my_maria)", display_name: "我的 Maria 模板", desc: "手动维护的 Maria 模板。", is_custom: true, has_typst: true, can_uninstall: true },
   ...DEFAULT_REPORT_TEMPLATES.map((item) => ({ ...item, ...templateExamples.find((example) => example.id === item.id) })),
   ...templateExamples.filter((item) => item.is_custom),
 ];
