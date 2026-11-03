@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -200,8 +201,20 @@ class ImageReportSession:
         else:
             attempt.viewport = "Typst 固定 940px"
         started = time.perf_counter()
-        result = await attempt.backend.render(
-            attempt.strategy, content, attempt.options
+        context = (
+            render_span(
+                "IMAGE_SERVICE_RENDER",
+                {
+                    "service_type": attempt.record.get("service_type"),
+                    "viewport": attempt.viewport,
+                },
+            )
+            if attempt.backend.requires_html
+            else nullcontext()
         )
+        async with context:
+            result = await attempt.backend.render(
+                attempt.strategy, content, attempt.options
+            )
         attempt.render_ms = round((time.perf_counter() - started) * 1000, 2)
         return result

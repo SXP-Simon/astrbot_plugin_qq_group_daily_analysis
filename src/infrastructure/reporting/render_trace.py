@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from ...shared.trace_context import SpanRecord, TraceContext
+from .render_diagnostics import summarize_render_error
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -44,10 +45,18 @@ async def render_span(
     )
     if parent:
         details["parent_span_id"] = parent["span_id"]
-    async with trace.span_async(stage, details) as span:
-        try:
-            yield span
-        except asyncio.CancelledError:
-            span["status"] = "cancelled"
-            span["payload"]["cancelled"] = True
-            raise
+    span = None
+    try:
+        async with trace.span_async(stage, details) as span:
+            try:
+                yield span
+            except asyncio.CancelledError:
+                span["status"] = "cancelled"
+                span["payload"]["cancelled"] = True
+                raise
+    except Exception as error:
+        if span:
+            span["payload"]["error"] = (
+                summarize_render_error(str(error)) or type(error).__name__
+            )
+        raise
