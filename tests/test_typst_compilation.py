@@ -222,6 +222,33 @@ def test_retro_avatars_keep_css_grayscale_contrast_and_transparency(tmp_path):
         assert output.getpixel((70, 20)) == (255, 255, 255)
 
 
+def test_atri_section_dots_remain_beneath_the_translucent_gradient(tmp_path):
+    """验证分区花点被上层渐变柔化，避免遗漏纹理或把花点画得过深。
+
+    Args:
+        tmp_path: 本次编译的隔离根目录。
+    """
+    import typst
+
+    templates = Path(__file__).parents[1] / "src/infrastructure/reporting/templates"
+    shutil.copyfile(templates / "common.typ", tmp_path / "common.typ")
+    shutil.copyfile(templates / "ATRI/atri.typ", tmp_path / "atri.typ")
+    (tmp_path / "main.typ").write_text(
+        '#import "atri.typ":glass\n'
+        '#set page(width:300pt,height:auto,margin:0pt,fill:white)\n'
+        '#glass((u:1pt),padx:0,pady:0,stroke:2,'
+        'dots:rgb("82dcb9").transparentize(65%),'
+        'fill:gradient.linear(rgb("c8f5e6").transparentize(10%),'
+        'rgb("dcfaf0").transparentize(15%),angle:90deg,space:rgb),'
+        'block(width:100%,height:100pt)[])',
+        encoding="utf-8",
+    )
+    compiler = typst.Compiler(str(tmp_path / "main.typ"), root=str(tmp_path), ignore_system_fonts=True)
+    with Image.open(BytesIO(compiler.compile(format="png", ppi=72))) as image:
+        image = image.convert("RGB")
+        assert 3 <= image.getpixel((20, 14))[0] - image.getpixel((14, 14))[0] <= 12
+
+
 def test_atri_glass_blurs_the_cached_background(tmp_path, managed_fonts):
     """验证 SVG 使用任务内缓存图片，日期卡中的背景确实被模糊。
 

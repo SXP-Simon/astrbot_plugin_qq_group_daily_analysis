@@ -30,13 +30,20 @@
     }else{for (i,line) in part.text.split("\n").enumerate(){if i>0 {linebreak()};line}}
   }
 }
-#let glass(t,body,padx:24,pady:24,radius:20,fill:none,stroke:1.5,height:none,background:none,clip:true,dy:6,blur:16) = layout(size=>{
+#let glass(t,body,padx:24,pady:24,radius:20,fill:none,stroke:1.5,height:none,background:none,clip:true,dy:6,blur:16,dots:none) = layout(size=>{
   let inner=block(width:size.width,inset:(x:(padx+stroke)*t.u,y:(pady+stroke)*t.u))[#body]
   let h=calc.max(measure(inner).height,if height==none {0pt}else{height*t.u})
   let panel=block(width:size.width,height:h,radius:radius*t.u,fill:if fill==none {gradient.linear(white.transparentize(20%),white.transparentize(60%),angle:45deg,space:rgb)}else{fill},stroke:stroke*t.u+white.transparentize(10%),outset:-stroke/2*t.u,clip:clip)[
     #if background!=none {place(top+left,block(width:size.width,height:h)[#background])}
     #inner
   ]
+  // 原 HTML 将花点放在半透明渐变下面，保留顺序以免把浅色纹理画成深色斑点。
+  let panel=if dots==none {panel}else{block(width:size.width,height:h)[
+    #place(top+left,dx:stroke*t.u,dy:stroke*t.u,rect(width:size.width - 2*stroke*t.u,height:h - 2*stroke*t.u,radius:calc.max(0,radius - stroke)*t.u,stroke:none,fill:tiling(size:(24*t.u,24*t.u))[
+      #place(top+left,dx:10*t.u,dy:10*t.u,circle(radius:2*t.u,fill:dots,stroke:none))
+    ]))
+    #panel
+  ]}
   shadow(t,panel,radius:radius,blur:blur,dy:dy,color:rgb("557ea9").transparentize(96%))
 })
 #let label(t,d,title,subtitle,symbol,index) = box(inset:(left:8*t.u,right:24*t.u,y:8*t.u),fill:gradient.linear(white.transparentize(25%),white.transparentize(65%),angle:45deg,space:rgb),radius:20*t.u,stroke:1.5*t.u+white.transparentize(5%))[
@@ -46,8 +53,8 @@
       #v(4.1*t.u)#copy(t,subtitle,size:13,fill:muted)
       #place(top+right,dx:52*t.u,dy:-8*t.u,copy(t,"memo",size:11,fill:rgb("5ba0c9").transparentize(42%),mono:true,tracking:.08))])
 ]
-#let section(t,d,title,subtitle,badge,symbol,index,badge-index,fill,body) = {
-  glass(t,stroke:2,fill:fill,[
+#let section(t,d,title,subtitle,badge,symbol,index,badge-index,fill,body,dots:none) = {
+  glass(t,stroke:2,fill:fill,dots:dots,[
     #place(top+right,dx:8*t.u,dy:-8*t.u,copy(t,"✦",size:14,fill:rgb("5cadd9").transparentize(64%)))
     #grid(columns:(auto,1fr),gutter:16*t.u,align:horizon,label(t,d,title,subtitle,symbol,index),align(right)[
       #box(inset:(x:12*t.u,y:6*t.u),fill:rgb("74c8f3").transparentize(88%),radius:100*t.u)[#copy(t,[#badge#h(6*t.u)#box(width:22*t.u,height:22*t.u,baseline:20%)[#sticker(t,d,badge-index,size:22)]],size:12,fill:deep)]
@@ -144,7 +151,7 @@
       copy(t,str(s.at(1)),size:22,weight:600,mono:true,lh:1),box(copy(t,s.at(0),size:13,fill:muted)))
   ])))
 }
-#let activity(t,d) = section(t,d,"心跳潮汐","一整天的心跳节拍，由亚托莉为您完美记录","TIDE CHART","bar-chart-3",5,11,gradient.linear(rgb("c8f5e6").transparentize(10%),rgb("dcfaf0").transparentize(15%),angle:90deg,space:rgb),[
+#let activity(t,d) = section(t,d,"心跳潮汐","一整天的心跳节拍，由亚托莉为您完美记录","TIDE CHART","bar-chart-3",5,11,gradient.linear(rgb("c8f5e6").transparentize(10%),rgb("dcfaf0").transparentize(15%),angle:90deg,space:rgb),dots:rgb("82dcb9").transparentize(65%),[
   #v(32*t.u)
   #glass(t,padx:24,pady:24,[
     #block(width:100%,height:220*t.u,inset:(top:20*t.u,bottom:10*t.u))[
@@ -168,7 +175,7 @@
     ]
   ])
 ])
-#let topics(t,d) = section(t,d,"高亮记忆碎片","亚托莉捕获的最亮眼的记忆碎片！","TOPIC BOARD","flame",6,5,gradient.linear(rgb("ffd7e1").transparentize(10%),rgb("ffebf2").transparentize(15%),angle:90deg,space:rgb),[
+#let topics(t,d) = section(t,d,"高亮记忆碎片","亚托莉捕获的最亮眼的记忆碎片！","TOPIC BOARD","flame",6,5,gradient.linear(rgb("ffd7e1").transparentize(10%),rgb("ffebf2").transparentize(15%),angle:90deg,space:rgb),dots:rgb("ff96b4").transparentize(65%),[
   #let ranks=(("a9d8ff","8fc5ff","8aaeff"),("ffc8d8","ffb7cd","ffb2b2"),("ffe0ad","ffd29f","ffc3b8"),("c7efe7","bfe7ff","c8d8ff"))
   #for (i,topic) in d.topics.enumerate() {
     let colors=ranks.at(calc.rem(i,4)).map(x=>rgb(x))
@@ -209,7 +216,7 @@
     ]
     (body:body,background:background,height:measure(body,width:338*t.u).height/t.u+35)
   })
-  section(t,d,"神人名片颁发","颁发给各位的高性能称号！","SPOTLIGHT","badge-check",7,8,gradient.linear(rgb("fff0b4").transparentize(10%),rgb("fffad7").transparentize(15%),angle:90deg,space:rgb),[
+  section(t,d,"神人名片颁发","颁发给各位的高性能称号！","SPOTLIGHT","badge-check",7,8,gradient.linear(rgb("fff0b4").transparentize(10%),rgb("fffad7").transparentize(15%),angle:90deg,space:rgb),dots:rgb("ffdc64").transparentize(65%),[
     #for (i,row) in cards.chunks(2).enumerate() {
       let height=calc.max(..row.map(x=>x.height))
       grid(columns:(1fr,1fr),gutter:20*t.u,..row.map(x=>glass(t,x.body,padx:20,pady:16,height:height,background:x.background)))
@@ -217,7 +224,7 @@
     }
   ])
 }
-#let quotes(t,d) = section(t,d,"亚托莉的宝藏瓶","亚托莉偷偷记在小本子上的宝藏名言！","PRECIOUS WORDS","quote",9,10,gradient.linear(rgb("d7beff").transparentize(5%),rgb("e1cdff").transparentize(10%),angle:90deg,space:rgb),[
+#let quotes(t,d) = section(t,d,"亚托莉的宝藏瓶","亚托莉偷偷记在小本子上的宝藏名言！","PRECIOUS WORDS","quote",9,10,gradient.linear(rgb("d7beff").transparentize(5%),rgb("e1cdff").transparentize(10%),angle:90deg,space:rgb),dots:rgb("b48cff").transparentize(65%),[
   #for (i,q) in d.quotes.enumerate() {
     let even=calc.odd(i)
     let photo=box(width:44*t.u,height:44*t.u)[
@@ -242,7 +249,7 @@
 ])
 #let quality(t,d) = {
   let r=d.review
-  section(t,d,"亚托莉观测报告","来自高性能亚托莉的每日特别观测报告！","GROUP VIBE","flower-2",11,5,gradient.linear(rgb("ffcdaf").transparentize(5%),rgb("ffe1c3").transparentize(10%),angle:90deg,space:rgb),[
+  section(t,d,"亚托莉观测报告","来自高性能亚托莉的每日特别观测报告！","GROUP VIBE","flower-2",11,5,gradient.linear(rgb("ffcdaf").transparentize(5%),rgb("ffe1c3").transparentize(10%),angle:90deg,space:rgb),dots:rgb("ffb48c").transparentize(55%),[
     #v(24*t.u)
     #glass(t,padx:24,pady:24,radius:24,stroke:1,fill:gradient.linear(rgb("fff0e6").transparentize(5%),white.transparentize(2%),space:rgb),background:place(top+right,dx:-18*t.u,dy:14*t.u,copy(t,"锐评",size:46,weight:700,fill:rgb("53abdb").transparentize(92%),tracking:.087)),[
       #copy(t,r.title,size:28,weight:700,fill:rgb("2a6587"))#v(4*t.u)
@@ -270,7 +277,7 @@
   ])
 }
 #let energy(t,d) = block(width:66%)[
-  #section(t,d,"能量解析雷达","维持亚托莉运行与心跳的能量消耗~","ENERGY COST","sparkles",12,13,gradient.linear(rgb("b4e4ff").transparentize(5%),rgb("d2f0ff").transparentize(10%),angle:90deg,space:rgb),[
+  #section(t,d,"能量解析雷达","维持亚托莉运行与心跳的能量消耗~","ENERGY COST","sparkles",12,13,gradient.linear(rgb("b4e4ff").transparentize(5%),rgb("d2f0ff").transparentize(10%),angle:90deg,space:rgb),dots:rgb("78b9ff").transparentize(55%),[
     #v(6*t.u)
     #grid(columns:(1fr,1fr,1fr),gutter:14*t.u,..("总消耗","提示词 Token","生成内容 Token").enumerate().map(((i,s))=>glass(t,padx:16,pady:16,[
       #copy(t,s,size:13,fill:muted)#v(8*t.u)#copy(t,str(d.tokens.at(i)),size:24,fill:deep,mono:true)
@@ -278,7 +285,7 @@
   ])
 ]
 #let footer(t,d) = block(width:66%)[
-  #glass(t,padx:24,pady:24,stroke:2,fill:gradient.linear(rgb("b4e4ff").transparentize(5%),rgb("d2f0ff").transparentize(10%),angle:90deg,space:rgb),[
+  #glass(t,padx:24,pady:24,stroke:2,fill:gradient.linear(rgb("b4e4ff").transparentize(5%),rgb("d2f0ff").transparentize(10%),angle:90deg,space:rgb),dots:rgb("78b9ff").transparentize(55%),[
     #copy(t,[#box(width:14*t.u,height:14*t.u,baseline:20%)[#icon(t,"heart",size:14,fill:deep,solid:true)]#h(6*t.u)ATRI | Template by Liangyu-G],weight:600,fill:deep)
     #v(10*t.u)#copy(t,[#box(width:14*t.u,height:14*t.u,baseline:20%)[#icon(t,"github",size:14,fill:deep)]#h(6*t.u)SXP-Simon/astrbot_plugin_qq_group_daily_analysis],size:11,weight:600,fill:deep,mono:true)
     #v(6*t.u)#copy(t,"亚托莉会永远把大家珍贵的聊天记忆藏在海底哦。",size:13,fill:muted)
