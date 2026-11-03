@@ -185,3 +185,36 @@ async def test_oversized_image_falls_back_and_download_validation_rejects(tmp_pa
     downloaded.write_bytes(base64.b64decode(oversized_avatar_uri.split(",", 1)[1]))
     with pytest.raises(ValueError, match="像素预算"):
         TemplateResourceStore._validate(downloaded, "scrapbook/assistant.jpg")
+
+
+@pytest.mark.asyncio
+async def test_theme_font_download_skips_other_themes_and_reuses_shared_files(tmp_path, monkeypatch):
+    required = typst_fonts.THEME_FONTS["HatsuneMiku"]
+    directory = tmp_path / "typst/fonts"
+    directory.mkdir(parents=True)
+    payload = b"\x00\x01\x00\x00" + bytes(1024)
+    for name in required:
+        if name != "Outfit.ttf":
+            (directory / name).write_bytes(payload)
+    calls = []
+    async def font(request):
+        calls.append(request.path)
+        return web.Response(body=payload)
+    app = web.Application()
+    app.router.add_get("/outfit.ttf", font)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, "127.0.0.1", 0).start()
+    monkeypatch.setattr(typst_fonts, "FONT_SOURCES", {**typst_fonts.FONT_SOURCES, "Outfit.ttf": "outfit.ttf"})
+    try:
+        cdn = f"http://127.0.0.1:{runner.addresses[0][1]}"
+        status = await typst_resources.download_typst_fonts(tmp_path, cdn, "HatsuneMiku")
+        selected = next(group for group in status["groups"] if group["theme"] == "HatsuneMiku")
+        assert selected["ready"] and not selected["missing"]
+        assert not status["ready"] and "Cinzel.ttf" in status["missing"]
+        await typst_resources.download_typst_fonts(tmp_path, cdn, "HatsuneMiku")
+        assert calls == ["/outfit.ttf"]
+        with pytest.raises(ValueError, match="未知"):
+            await typst_resources.download_typst_fonts(tmp_path, cdn, "../../outside")
+    finally:
+        await runner.cleanup()

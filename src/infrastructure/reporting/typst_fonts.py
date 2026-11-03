@@ -42,6 +42,71 @@ FONT_SOURCES = {
     "BlueakaBeta2GBK-Bold.ttf": "gh/ApricotLemonTea/BA-style-homepage@d7e9acd5d716d46cee066c59ea323b15f279d217/src/assets/font/BlueakaBeta2GBK-Bold.ttf",
 }
 
+BASE_FONTS = (
+    "NotoSansSC.ttf",
+    "NotoSansTC.ttf",
+    "NotoSansJP.ttf",
+    "NotoSansSymbols2.ttf",
+    "NotoColorEmoji.ttf",
+)
+# 共享字库覆盖正文、特殊字符与基础恢复；其余文件保持各主题原有字体和字重。
+THEME_FONTS = {
+    theme: BASE_FONTS + fonts
+    for theme, fonts in {
+        "HatsuneMiku": ("Outfit.ttf", "ShareTechMono.ttf", "Inter.ttf"),
+        "simple": (),
+        # JetBrains Mono 的中文等宽回退需要保留，避免按需安装后改变字形。
+        "hack": ("Inter.ttf", "JetBrainsMono.ttf", "LXGWWenKaiMono.ttf"),
+        "maria": (
+            "NotoSerifSC.ttf",
+            "NotoSerifTC.ttf",
+            "Cinzel.ttf",
+            "CormorantGaramond.ttf",
+            "CormorantGaramond-Italic.ttf",
+            "JetBrainsMono.ttf",
+        ),
+        "ATRI": ("LXGWWenKai.ttf", "LXGWWenKai-Medium.ttf", "LXGWWenKaiMono.ttf"),
+        "deepseek_maid": ("JetBrainsMono.ttf",),
+        "art_nouveau": (
+            "NotoSerifSC.ttf",
+            "NotoSerifTC.ttf",
+            "Cinzel.ttf",
+            "CormorantGaramond.ttf",
+            "CormorantGaramond-Italic.ttf",
+            "JetBrainsMono.ttf",
+        ),
+        "scrapbook": (
+            "PatrickHand.ttf",
+            "ZCOOLKuaiLe.ttf",
+            "LXGWWenKai.ttf",
+            "LXGWWenKai-Medium.ttf",
+        ),
+        "format": ("Inter.ttf", "NotoSerifSC.ttf", "NotoSerifTC.ttf"),
+        "spring_festival": (
+            "ZCOOLXiaoWei.ttf",
+            "MaShanZheng.ttf",
+            "NotoSerifSC.ttf",
+            "NotoSerifTC.ttf",
+        ),
+        "retro_futurism": (
+            "Oswald.ttf",
+            "JetBrainsMono.ttf",
+            "NotoSerifSC.ttf",
+            "NotoSerifTC.ttf",
+        ),
+        "BlueArchive": ("BlueakaBeta2GBK-DemiBold.ttf", "BlueakaBeta2GBK-Bold.ttf"),
+    }.items()
+}
+
+
+class TypstFontGroup(TypedDict):
+    """单个内置主题所需的共享字体集合。"""
+
+    theme: str
+    required: list[str]
+    missing: list[str]
+    ready: bool
+
 
 class TypstFontStatus(TypedDict):
     """WebUI 使用的受管理字体状态。"""
@@ -50,6 +115,7 @@ class TypstFontStatus(TypedDict):
     files: list[str]
     missing: list[str]
     ready: bool
+    groups: list[TypstFontGroup]
 
 
 def typst_font_status(data_dir: Path) -> TypstFontStatus:
@@ -73,15 +139,27 @@ def typst_font_status(data_dir: Path) -> TypstFontStatus:
         "files": files,
         "missing": missing,
         "ready": not missing,
+        "groups": [
+            {
+                "theme": theme,
+                "required": list(required),
+                "missing": [name for name in required if name not in files],
+                "ready": all(name in files for name in required),
+            }
+            for theme, required in THEME_FONTS.items()
+        ],
     }
 
 
-async def download_typst_fonts(data_dir: Path, cdn_base_url: str) -> TypstFontStatus:
+async def download_typst_fonts(
+    data_dir: Path, cdn_base_url: str, theme: str | None = None
+) -> TypstFontStatus:
     """将固定预设字体下载到插件目录，校验头部并原子替换。
 
     Args:
         data_dir: 插件数据根目录。
         cdn_base_url: 当前配置的 CDN 根地址。
+        theme: 仅补齐该内置主题的字体；空值下载完整预设。
 
     Returns:
         下载后的字体状态；已存在的预设不会重复下载。
@@ -90,12 +168,18 @@ async def download_typst_fonts(data_dir: Path, cdn_base_url: str) -> TypstFontSt
         ValueError: CDN 返回的内容过大或不是字体。
         aiohttp.ClientError: 下载失败，已经成功的文件仍可复用。
     """
+    if theme is not None and theme not in THEME_FONTS:
+        raise ValueError("未知 Typst 模板，请刷新字体列表后重试")
+    required = THEME_FONTS[theme] if theme is not None else tuple(FONT_SOURCES)
+    missing = [
+        name for name in typst_font_status(data_dir)["missing"] if name in required
+    ]
     directory = data_dir / "typst" / "fonts"
     directory.mkdir(parents=True, exist_ok=True)
     async with aiohttp.ClientSession(
         timeout=aiohttp.ClientTimeout(total=180), trust_env=True
     ) as session:
-        for name in typst_font_status(data_dir)["missing"]:
+        for name in missing:
             target = directory / name
             temporary = directory / f".{name}.{uuid.uuid4().hex}.part"
             try:
