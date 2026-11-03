@@ -58,6 +58,7 @@ class ManagedFileInfo(TypedDict):
     media_type: str
     editable: bool
     downloadable: bool
+    revision: str
 
 
 class ManagedFiles:
@@ -197,6 +198,7 @@ class ManagedFiles:
             or any(
                 not piece
                 or piece.startswith(".")
+                or any(ord(char) < 32 for char in piece)
                 or any(char in piece for char in '\\:<>"|?*\x00')
                 or piece.endswith((" ", "."))
                 or piece.split(".")[0].upper()
@@ -259,6 +261,10 @@ class ManagedFiles:
                     and path.suffix.lower() in TEXT_SUFFIXES
                     and key != "template_resources",
                     "downloadable": key not in {"state", "avatar_storage"},
+                    "revision": "stat:"
+                    + hashlib.sha256(
+                        f"{stat.st_size}:{stat.st_mtime_ns}:{stat.st_ctime_ns}".encode()
+                    ).hexdigest(),
                 }
             )
         return sorted(items, key=lambda item: (-item["modified_at"], item["name"]))
@@ -336,8 +342,22 @@ class ManagedFiles:
             if path.exists():
                 raise FileExistsError("同名文件已存在，请选择替换并检查原文件")
         else:
-            current = self.read(key, name)
-            if not revision or revision != current["revision"]:
+            if not revision:
+                raise FileExistsError("缺少文件修订号，请刷新后重试")
+            stat = path.stat()
+            current_revision = (
+                "stat:"
+                + hashlib.sha256(
+                    f"{stat.st_size}:{stat.st_mtime_ns}:{stat.st_ctime_ns}".encode()
+                ).hexdigest()
+            )
+            if revision != current_revision:
+                digest = hashlib.sha256()
+                with path.open("rb") as original:
+                    for chunk in iter(lambda: original.read(65536), b""):
+                        digest.update(chunk)
+                current_revision = digest.hexdigest()
+            if revision != current_revision:
                 raise FileExistsError("文件已变更，请刷新并重新检查后操作")
         if operation == "delete":
             path.unlink()
@@ -353,9 +373,11 @@ class ManagedFiles:
             target.parent.mkdir(parents=True, exist_ok=True)
             path.rename(target)
             return
-        if not payload or len(payload) > MAX_FILE_BYTES:
-            raise ValueError("文件不能为空且不得超过 32 MiB")
         suffix = path.suffix.lower()
+        if len(payload) > MAX_FILE_BYTES or (
+            not payload and (key != "custom_templates" or suffix not in TEXT_SUFFIXES)
+        ):
+            raise ValueError("文件不能为空且不得超过 32 MiB")
         if key == "template_resources" and name not in RESOURCE_FILES:
             raise ValueError("请选择主题清单中的素材文件名")
         if key == "typst_fonts":

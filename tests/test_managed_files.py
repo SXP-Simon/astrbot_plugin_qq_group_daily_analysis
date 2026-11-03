@@ -96,3 +96,23 @@ def test_partition_totals_and_reports_do_not_touch_host_temp(tmp_path):
     assert sum(item["size_bytes"] for item in overview) == 12
     assert next(item for item in overview if item["key"] == "typst_fonts")["count"] == 1
     assert not any("io_temp_img" in item["directory"] for item in overview)
+
+
+def test_list_revision_allows_deletion_without_loading_file_content(
+    tmp_path, monkeypatch
+):
+    store = ManagedFiles(tmp_path)
+    directory = tmp_path / "reports"
+    directory.mkdir()
+    report = directory / "report.html"
+    report.write_text("first")
+    selected = store.files("reports")[0]
+    report.write_text("updated content")
+    with pytest.raises(FileExistsError):
+        store.mutate("reports", selected["name"], "delete", selected["revision"])
+    selected = store.files("reports")[0]
+    monkeypatch.setattr(
+        store, "read", lambda *_: pytest.fail("删除不应读取或 Base64 编码整份报告")
+    )
+    store.mutate("reports", selected["name"], "delete", selected["revision"])
+    assert not report.exists()
