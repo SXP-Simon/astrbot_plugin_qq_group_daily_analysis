@@ -32,8 +32,8 @@ async def test_font_download_is_serialized_and_uses_managed_directory(probe, tmp
     monkeypatch.setattr(config_routes.StarTools, "get_data_dir", lambda name: tmp_path)
     entered, finish = asyncio.Event(), asyncio.Event()
     calls = []
-    async def download(directory, cdn):
-        calls.append((directory, cdn))
+    async def download(directory, cdn, theme=None):
+        calls.append((directory, cdn, theme))
         entered.set()
         await finish.wait()
         return {"directory": str(directory / "typst/fonts"), "files": ["Noto.ttf"], "missing": [], "ready": True}
@@ -45,7 +45,7 @@ async def test_font_download_is_serialized_and_uses_managed_directory(probe, tmp
     assert duplicate["status_code"] == 409
     finish.set()
     assert (await task)["data"]["data"]["ready"] is True
-    assert calls == [(tmp_path, "https://cdn.jsdelivr.net")]
+    assert calls == [(tmp_path, "https://cdn.jsdelivr.net", None)]
 
 
 @pytest.mark.asyncio
@@ -85,3 +85,19 @@ async def test_template_list_filters_actual_capabilities(monkeypatch, engine, ou
     monkeypatch.setattr(template_routes, "json_response", lambda value: value)
     response = await routes.api_get_report_templates()
     assert [item["id"] for item in response["data"]] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("theme,valid", [("HatsuneMiku", True), ("../../outside", False), ([], False)])
+async def test_font_download_selects_only_known_theme(probe, tmp_path, monkeypatch, theme, valid):
+    routes, request, _ = probe
+    monkeypatch.setattr(config_routes.StarTools, "get_data_dir", lambda name: tmp_path)
+    download = AsyncMock(return_value={"ready": False})
+    monkeypatch.setattr(config_routes, "download_typst_fonts", download)
+    request.json.return_value = {"cdn_base_url": "https://cdn.jsdelivr.net", "theme": theme}
+    result = await routes.api_download_typst_fonts()
+    if valid:
+        download.assert_awaited_once_with(tmp_path, "https://cdn.jsdelivr.net", theme=theme)
+    else:
+        assert result["status_code"] == 400
+        download.assert_not_called()

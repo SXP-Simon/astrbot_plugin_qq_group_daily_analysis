@@ -32,6 +32,7 @@ from ...config.rendering_config import (
 from ...reporting.cdn_probe import probe_template_cdn
 from ...reporting.custom_t2i_client import render_custom_t2i, validate_t2i_image
 from ...reporting.html_renderer import bind_group_html_renderer
+from ...reporting.typst_fonts import THEME_FONTS
 from ...reporting.typst_renderer import render_typst_probe
 from ...reporting.typst_resources import download_typst_fonts, typst_font_status
 from ..web_compat import WebApiResponse, error_response, json_response, request
@@ -262,14 +263,21 @@ class ConfigRoutes:
             if not isinstance(raw_cdn, str):
                 raise ValueError("CDN 必须是字符串")
             cdn = normalize_cdn_base_url(raw_cdn)
+            theme = body.get("theme")
+            if theme is not None and (
+                not isinstance(theme, str) or theme not in THEME_FONTS
+            ):
+                raise ValueError("未知 Typst 模板")
         except (ValueError, TypeError):
-            return error_response("请选择有效的字体下载 CDN", status_code=400)
+            return error_response("请选择有效的模板和字体下载 CDN", status_code=400)
         if self._typst_font_lock.locked():
             return error_response("字体正在下载，请等待完成后刷新", status_code=409)
         try:
             async with self._typst_font_lock, asyncio.timeout(180):
                 status = await download_typst_fonts(
-                    Path(StarTools.get_data_dir(PLUGIN_NAME)), cdn or DEFAULT_CDN_HOST
+                    Path(StarTools.get_data_dir(PLUGIN_NAME)),
+                    cdn or DEFAULT_CDN_HOST,
+                    theme=theme,
                 )
             return json_response({"status": "ok", "data": status})
         except Exception:

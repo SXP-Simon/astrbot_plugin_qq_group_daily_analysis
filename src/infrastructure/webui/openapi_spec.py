@@ -217,7 +217,7 @@ def generate_openapi_spec() -> dict[str, Any]:
             },
             "/config/typst-fonts/download": {
                 "post": {
-                    "summary": "下载固定字体预设到插件自己的 data 目录",
+                    "summary": "按模板或完整预设下载字体到插件自己的 data 目录",
                     "operationId": "downloadTypstFonts",
                     "requestBody": {
                         "required": True,
@@ -229,7 +229,13 @@ def generate_openapi_spec() -> dict[str, Any]:
                                         "cdn_base_url": {
                                             "type": "string",
                                             "maxLength": 2048,
-                                        }
+                                        },
+                                        "theme": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64,
+                                            "description": "内置模板名称；省略则下载全部预设字体",
+                                        },
                                     },
                                 }
                             }
@@ -253,7 +259,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                                 }
                             },
                         },
-                        "400": {"description": "无效 CDN 地址"},
+                        "400": {"description": "无效模板或 CDN 地址"},
                         "409": {"description": "字体正在下载"},
                         "502": {"description": "下载未完成，已成功的文件会保留"},
                     },
@@ -974,8 +980,22 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "files": {"type": "array", "items": {"type": "string"}},
                         "missing": {"type": "array", "items": {"type": "string"}},
                         "ready": {"type": "boolean"},
+                        "groups": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/TypstFontGroup"},
+                        },
                     },
                     "required": ["directory", "files", "missing", "ready"],
+                },
+                "TypstFontGroup": {
+                    "type": "object",
+                    "properties": {
+                        "theme": {"type": "string"},
+                        "required": {"type": "array", "items": {"type": "string"}},
+                        "missing": {"type": "array", "items": {"type": "string"}},
+                        "ready": {"type": "boolean"},
+                    },
+                    "required": ["theme", "required", "missing", "ready"],
                 },
                 "T2iProbeRequest": {
                     "type": "object",

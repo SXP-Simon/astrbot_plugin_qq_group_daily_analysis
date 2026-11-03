@@ -82,7 +82,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 下载固定字体预设到插件自己的 data 目录 */
+        /** 按模板或完整预设下载字体到插件自己的 data 目录 */
         post: operations["downloadTypstFonts"];
         delete?: never;
         options?: never;
@@ -437,6 +437,13 @@ export interface components {
         TypstFontStatus: {
             directory: string;
             files: string[];
+            missing: string[];
+            ready: boolean;
+            groups?: components["schemas"]["TypstFontGroup"][];
+        };
+        TypstFontGroup: {
+            theme: string;
+            required: string[];
             missing: string[];
             ready: boolean;
         };
@@ -1021,6 +1028,8 @@ export interface operations {
             content: {
                 "application/json": {
                     cdn_base_url?: string;
+                    /** @description 内置模板名称；省略则下载全部预设字体 */
+                    theme?: string;
                 };
             };
         };
@@ -1037,7 +1046,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description 无效 CDN 地址 */
+            /** @description 无效模板或 CDN 地址 */
             400: {
                 headers: {
                     [name: string]: unknown;
