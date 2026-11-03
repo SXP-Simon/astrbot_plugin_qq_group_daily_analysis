@@ -21,7 +21,7 @@ from .template_resources import TemplateResourceStore
 from .typst_data import TypstDataPreparer, TypstIdentityOptions
 from .typst_process import run_typst_worker
 from .typst_resources import TypstAssets
-from .typst_worker import REPORT_PPI, REPORT_WIDTH
+from .typst_worker import CUSTOM_TEMPLATE_MARKER, REPORT_PPI, REPORT_WIDTH
 
 if TYPE_CHECKING:
     from ...domain.value_objects import AnalysisResultPayload
@@ -226,6 +226,7 @@ class TypstReportRenderer:
         else:
             # 保留相对导入，上传包不能覆盖运行时生成的数据和入口。
             shutil.copytree(template.parent, job, dirs_exist_ok=True)
+            (job / CUSTOM_TEMPLATE_MARKER).touch()
         shutil.copyfile(template, job / "main.typ")
         (job / "data.json").write_text(
             json.dumps(data, ensure_ascii=False), encoding="utf-8"
@@ -263,6 +264,7 @@ class TypstReportRenderer:
             # 恢复入口不导入主题、组件或图片，原始结构化文字保持完整。
             shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job / "main.typ")
             (job / "report.png").unlink(missing_ok=True)
+            (job / CUSTOM_TEMPLATE_MARKER).unlink(missing_ok=True)
             await run_typst_worker(job, fonts, max(0.0, deadline - loop.time()))
 
 

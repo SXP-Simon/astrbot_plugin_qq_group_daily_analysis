@@ -3,11 +3,41 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
+from io import BytesIO
 from pathlib import Path
+from xml.etree import ElementTree
 
 REPORT_WIDTH = 940
 REPORT_PPI = 144
+CUSTOM_TEMPLATE_MARKER = ".typst-custom"
+
+
+def _custom_page_size(svg: bytes | list[bytes] | None) -> tuple[float, float]:
+    """在栅格化前读取自定义模板实际画布，不信任模板自行声明的尺寸。
+
+    Args:
+        svg: Typst 矢量导出结果；多页结果会被拒绝。
+
+    Returns:
+        实际画布的像素宽度与高度。
+
+    Raises:
+        RuntimeError: 模板分页或无法解析真实画布尺寸。
+    """
+    if not isinstance(svg, bytes):
+        raise RuntimeError("Typst 自定义模板必须生成单张静态长图，不能分页")
+    try:
+        # 只读取根元素，不为整份 SVG 建立 XML 树或分配像素面。
+        with BytesIO(svg) as stream:
+            _, root = next(ElementTree.iterparse(stream, events=("start",)))
+            _, _, width, height = (
+                float(value) for value in root.attrib["viewBox"].split()
+            )
+        return width * REPORT_PPI / 72, height * REPORT_PPI / 72
+    except (ElementTree.ParseError, KeyError, ValueError, StopIteration) as error:
+        raise RuntimeError("无法读取 Typst 自定义模板的实际画布尺寸") from error
 
 
 def compile_report(job_dir: Path, font_dir: Path) -> None:
@@ -35,16 +65,32 @@ def compile_report(job_dir: Path, font_dir: Path) -> None:
         ignore_system_fonts=True,
     )
     try:
-        measured = json.loads(compiler.query("<report-size>", field="value", one=True))
-    except RuntimeError:
-        # query 的错误没有定位信息，失败时用矢量编译取得源码位置，仍不分配栅格图。
-        try:
-            compiler.compile(format="svg")
-        except typst.TypstError as error:
-            raise RuntimeError(error.diagnostic) from error
-        raise
-    pixel_height = float(measured["height"]) * REPORT_PPI / 72
-    if pixel_height > 30000 or pixel_height * REPORT_WIDTH > 40_000_000:
+        if (job_dir / CUSTOM_TEMPLATE_MARKER).is_file():
+            pixel_width, pixel_height = _custom_page_size(
+                compiler.compile(format="svg")
+            )
+        else:
+            try:
+                measured = json.loads(
+                    compiler.query("<report-size>", field="value", one=True)
+                )
+            except RuntimeError:
+                # query 的错误没有定位信息，用矢量编译取得源码位置，仍不分配像素面。
+                compiler.compile(format="svg")
+                raise
+            pixel_width = REPORT_WIDTH
+            pixel_height = float(measured["height"]) * REPORT_PPI / 72
+    except typst.TypstError as error:
+        raise RuntimeError(error.diagnostic) from error
+    if not all(
+        math.isfinite(value) and value > 0 for value in (pixel_width, pixel_height)
+    ):
+        raise RuntimeError("Typst 报告画布尺寸无效")
+    if abs(pixel_width - REPORT_WIDTH) > 1:
+        raise RuntimeError(
+            f"Typst 自定义模板须固定为 {REPORT_WIDTH}px 宽，当前为 {pixel_width:g}px"
+        )
+    if pixel_height > 30000 or pixel_height * pixel_width > 40_000_000:
         raise RuntimeError("Typst 报告超过单图像素预算，请减少展示条数")
     compiler.compile(output=str(job_dir / "report.png"), format="png", ppi=REPORT_PPI)
     if (job_dir / "report.png").stat().st_size > 32 * 1024 * 1024:

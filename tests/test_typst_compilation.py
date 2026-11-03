@@ -409,3 +409,28 @@ async def test_huge_avatar_still_generates_native_report_without_recovery(compil
     image, html = await generator.generate_image_report(create_analysis_result(), "safe-image", None)
     assert image and image.startswith("base64://") and html is None
     worker.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case,attempts", [("valid", 1), ("huge_canvas", 2), ("pages", 2)])
+async def test_custom_canvas_is_measured_before_rasterization(compiler, tmp_path, monkeypatch, case, attempts):
+    """错误自定义画布在分配巨幅PNG前恢复，正常模板无需尺寸元数据。"""
+    config, generator, _ = compiler
+    custom = tmp_path / "custom/native_geometry"
+    custom.mkdir(parents=True)
+    width, height = (50000, 50000) if case == "huge_canvas" else (470, 100)
+    source = f'#set page(width:{width}pt,height:{height}pt,margin:0pt)\n#set text(font:"Noto Sans SC")\n自定义报告\n'
+    if case == "huge_canvas":
+        source += '#metadata((height:1))<report-size>\n'
+    if case == "pages":
+        source += '#pagebreak()\n第二页\n'
+    (custom / "report.typ").write_text(source, encoding="utf-8")
+    monkeypatch.setattr(config, "get_custom_report_template_dir", lambda name: custom)
+    worker = AsyncMock(wraps=typst_renderer.run_typst_worker)
+    monkeypatch.setattr(typst_renderer, "run_typst_worker", worker)
+    image, html = await generator.generate_image_report(create_analysis_result(), "custom-canvas", None, template_theme="native_geometry")
+    assert image and image.startswith("base64://") and html is None
+    worker.assert_awaited()
+    assert worker.await_count == attempts
+    with Image.open(BytesIO(base64.b64decode(image.removeprefix("base64://")))) as output:
+        assert output.width == 940
