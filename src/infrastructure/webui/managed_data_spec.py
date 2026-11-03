@@ -1,6 +1,15 @@
 """文件分区管理的 OpenAPI 契约。"""
 
 FILE_SCHEMAS: dict[str, object] = {
+    "ManagedFileGroup": {
+        "type": "object",
+        "properties": {
+            "directory": {"type": "string"},
+            "count": {"type": "integer"},
+            "size_bytes": {"type": "integer"},
+        },
+        "required": ["directory", "count", "size_bytes"],
+    },
     "ManagedPartition": {
         "type": "object",
         "properties": {
@@ -106,10 +115,14 @@ for path, operation, data, parameters in (
                     "items": {"$ref": "#/components/schemas/ManagedFile"},
                 },
                 "total": {"type": "integer"},
+                "groups": {
+                    "type": "array",
+                    "items": {"$ref": "#/components/schemas/ManagedFileGroup"},
+                },
             },
             "required": ["items", "total"],
         },
-        ["partition", "search", "page", "page_size", "extensions"],
+        ["partition", "search", "page", "page_size", "extensions", "directory"],
     ),
     (
         "files/content",

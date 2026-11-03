@@ -6,7 +6,7 @@ import asyncio
 import base64
 import binascii
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from astrbot.api.star import StarTools
 
@@ -16,6 +16,14 @@ from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+class ManagedFileGroup(TypedDict):
+    """模板包目录及其完整文件统计。"""
+
+    directory: str
+    count: int
+    size_bytes: int
 
 
 class ManagedFileRoutes:
@@ -52,10 +60,32 @@ class ManagedFileRoutes:
             items = await asyncio.to_thread(
                 self.store().files, query.get("partition", "")
             )
+            directory = query.get("directory", "")
+            if directory and query.get("partition") != "custom_templates":
+                raise ValueError("只有自定义模板分区支持按模板目录筛选")
+            groups: dict[str, ManagedFileGroup] = {}
+            if query.get("partition") == "custom_templates":
+                for item in items:
+                    folder = (
+                        item["name"].split("/", 1)[0] if "/" in item["name"] else "."
+                    )
+                    group = groups.setdefault(
+                        folder, {"directory": folder, "count": 0, "size_bytes": 0}
+                    )
+                    group["count"] += 1
+                    group["size_bytes"] += item["size_bytes"]
             filtered = [
                 item
                 for item in items
                 if search in item["name"].casefold()
+                and (
+                    not directory
+                    or (
+                        "/" not in item["name"]
+                        if directory == "."
+                        else item["name"].startswith(directory + "/")
+                    )
+                )
                 and (
                     not extensions
                     or PurePosixPath(item["name"]).suffix.lower().lstrip(".")
@@ -68,6 +98,7 @@ class ManagedFileRoutes:
                     "data": {
                         "items": filtered[(page - 1) * size : page * size],
                         "total": len(filtered),
+                        "groups": [groups[key] for key in sorted(groups)],
                     },
                 }
             )

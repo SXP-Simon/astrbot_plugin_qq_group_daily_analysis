@@ -85,6 +85,12 @@
                         },
                         "total": {
                           "type": "integer"
+                        },
+                        "groups": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ManagedFileGroup"
+                          }
                         }
                       },
                       "required": [
@@ -150,6 +156,14 @@
           {
             "in": "query",
             "name": "extensions",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "directory",
             "required": false,
             "schema": {
               "type": "string"
@@ -1702,6 +1716,25 @@
   },
   "components": {
     "schemas": {
+      "ManagedFileGroup": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "size_bytes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "directory",
+          "count",
+          "size_bytes"
+        ]
+      },
       "ManagedPartition": {
         "type": "object",
         "properties": {

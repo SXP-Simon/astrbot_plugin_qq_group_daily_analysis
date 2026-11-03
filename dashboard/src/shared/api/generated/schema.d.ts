@@ -553,6 +553,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ManagedFileGroup: {
+            directory: string;
+            count: number;
+            size_bytes: number;
+        };
         ManagedPartition: {
             key: string;
             name: string;
@@ -1100,6 +1105,7 @@ export interface operations {
                 page?: number;
                 page_size?: number;
                 extensions?: string;
+                directory?: string;
             };
             header?: never;
             path?: never;
@@ -1118,6 +1124,7 @@ export interface operations {
                         data: {
                             items: components["schemas"]["ManagedFile"][];
                             total: number;
+                            groups?: components["schemas"]["ManagedFileGroup"][];
                         };
                     };
                 };
