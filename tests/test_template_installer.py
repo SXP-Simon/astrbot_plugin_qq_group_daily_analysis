@@ -510,7 +510,8 @@ def test_available_templates_meta_fields(tmp_path):
     assert meta["tag_color"] == "pink"
 
 
-def test_list_available_templates_includes_custom(tmp_path, monkeypatch):
+@pytest.mark.parametrize("entry", ["image_template.html", "report.typ"])
+def test_list_available_templates_includes_custom(tmp_path, monkeypatch, entry):
     """/查看模板 的可用列表包含自定义模板目录。"""
     from src.application.services.template_command_service import (
         TemplateCommandService,
@@ -519,7 +520,7 @@ def test_list_available_templates_includes_custom(tmp_path, monkeypatch):
 
     custom_root = tmp_path / "custom"
     (custom_root / "gda_installed").mkdir(parents=True)
-    (custom_root / "gda_installed" / "image_template.html").write_text(
+    (custom_root / "gda_installed" / entry).write_text(
         "<html></html>", encoding="utf-8"
     )
     monkeypatch.setattr(
@@ -529,6 +530,7 @@ def test_list_available_templates_includes_custom(tmp_path, monkeypatch):
     service = TemplateCommandService(plugin_root=str(tmp_path))
     names = service.list_available_templates()
     assert "gda_installed" in names
+    assert asyncio.run(service.template_exists("gda_installed"))
 
 
 def test_resolve_template_preview_path_prefers_template_dir(tmp_path, monkeypatch):

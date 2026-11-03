@@ -148,6 +148,7 @@ class TemplateCommandService:
                     os.path.isfile(os.path.join(item_path, "html_template.html"))
                     or os.path.isfile(os.path.join(item_path, "image_template.html"))
                     or os.path.isfile(os.path.join(item_path, "template.html"))
+                    or os.path.isfile(os.path.join(item_path, "report.typ"))
                 ):
                     templates.add(item)
 
@@ -163,9 +164,11 @@ class TemplateCommandService:
                     or template_dir_has_symlink_entries(item_path)
                 ):
                     continue
-                if (item_path / "html_template.html").is_file() or (
-                    item_path / "image_template.html"
-                ).is_file():
+                if (
+                    (item_path / "html_template.html").is_file()
+                    or (item_path / "image_template.html").is_file()
+                    or (item_path / "report.typ").is_file()
+                ):
                     templates.add(item)
 
         return sorted(templates)
@@ -208,6 +211,7 @@ class TemplateCommandService:
                     os.path.isfile(os.path.join(base, "html_template.html"))
                     or os.path.isfile(os.path.join(base, "image_template.html"))
                     or os.path.isfile(os.path.join(base, "template.html"))
+                    or os.path.isfile(os.path.join(base, "report.typ"))
                 )
             )
             if valid:
