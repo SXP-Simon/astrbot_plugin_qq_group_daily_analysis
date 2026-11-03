@@ -446,11 +446,6 @@ class ConfigManager:
                     "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
                 ),
             }
-            if item["render_service"] == "typst":
-                plan.update(
-                    typst_width=item.get("typst_width", 940),
-                    typst_ppi=item.get("typst_ppi", 144),
-                )
             plans.append(plan)
         return plans
 

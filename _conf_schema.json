@@ -758,7 +758,7 @@
                     "typst": {
                         "name": "Typst 本地排版",
                         "display_item": "name",
-                        "description": "独立编译图片报告，不调用 AstrBot 或浏览器；字体统一由插件数据目录 typst/fonts 管理，可在 WebUI 下载。",
+                        "description": "独立生成固定 940px 宽度的静态长图，高度随内容延伸；不调用 AstrBot 或浏览器，字体和素材由插件数据目录管理。",
                         "items": {
                             "name": {
                                 "type": "string",
@@ -771,22 +771,6 @@
                                 "default": 10,
                                 "min": 0,
                                 "max": 10000
-                            },
-                            "typst_width": {
-                                "type": "int",
-                                "description": "图片宽度（像素）",
-                                "default": 940,
-                                "min": 640,
-                                "max": 1280,
-                                "hint": "默认 940px，最大 1280px；提高宽度会显著增加长图渲染耗时。"
-                            },
-                            "typst_ppi": {
-                                "type": "int",
-                                "description": "排版精度（PPI）",
-                                "default": 144,
-                                "min": 72,
-                                "max": 288,
-                                "hint": "同一宽度下，提高 PPI 会增加文字和装饰的细节；页面尺寸由像素宽度与 PPI 换算。"
                             },
                             "type": {
                                 "type": "string",

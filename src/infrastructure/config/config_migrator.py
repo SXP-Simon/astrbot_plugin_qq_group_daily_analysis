@@ -152,12 +152,11 @@ class ConfigMigrator:
                     if "render_service" in item:
                         del item["render_service"]
                         modified = True
-                    if (
-                        "typst_width" in plan
-                        and item.get("typst_width") != plan["typst_width"]
-                    ):
-                        item["typst_width"] = plan["typst_width"]
-                        modified = True
+                    if plan["render_service"] == "typst":
+                        for key in ("typst_width", "typst_ppi"):
+                            if key in item:
+                                del item[key]
+                                modified = True
                     if "font_mode" in plan:
                         if item.get("font_mode") != plan["font_mode"]:
                             item["font_mode"] = plan["font_mode"]
