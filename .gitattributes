@@ -12,15 +12,8 @@
 *.md text eol=lf
 pages/** text eol=lf
 
-### 模板预览图与设计资源 — 仅用于文档/仓库展示/CDN，插件运行时不需要
-assets/*.jpg              export-ignore
-assets/*.webp             export-ignore
-assets/*.png              export-ignore
-assets/HatsuneMiku/       export-ignore
-assets/ATRI/              export-ignore
-assets/deepseek_maid/     export-ignore
-assets/maria/             export-ignore
-assets/scrapbook/         export-ignore
+### 模板素材 — 统一由仓库/CDN分发，运行时按需保存到插件data目录
+assets/                  export-ignore
 
 ### 前端开发源码 — 运行时只需要已编译的 pages/ 单 Bundle 产物
 dashboard/                export-ignore
