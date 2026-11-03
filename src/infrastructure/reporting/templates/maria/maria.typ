@@ -15,9 +15,12 @@
   set par(leading:0pt,spacing:0pt)
   let fonts=if font=="display" {t.display}else if font=="mono" {("JetBrains Mono",..t.display)}else{t.body}
   let baseline=if font=="mono" {.36}else if font=="display" {.302}else{.3185}
-  let result=text(font:fonts,size:size*t.u,weight:weight,fill:fill,tracking:tracking*1em,style:if italic and not oblique {"italic"}else{"normal"},top-edge:(lh/2+baseline)*1em,bottom-edge:-(lh/2-baseline)*1em)[#body]
-  // 宋体没有斜体字形，模拟浏览器对中日文的倾斜；拉丁文字使用真实斜体。
-  if oblique {skew(ax:-12deg,origin:bottom+left,result)}else{result}
+  let result=text(font:fonts,size:size*t.u,weight:weight,fill:fill,tracking:tracking*1em,style:if italic {"italic"}else{"normal"},top-edge:(lh/2+baseline)*1em,bottom-edge:-(lh/2-baseline)*1em)[#body]
+  if oblique {
+    // 逐字合成宋体斜体，避免倾斜整个长段落后裁掉右侧文字；西文保留真实斜体。
+    show regex("[（「【]?[\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Hangul}][，。！？…、）」】]*"): it=>box(height:lh*1em,baseline:(at:top,shift:-(lh/2+baseline)*1em))[#skew(ax:-12deg,origin:bottom+left,it)]
+    result
+  }else{result}
 }
 #let art(t,d,i,width:60,height:none) = {
   let path=d.decorations.at(i,default:"")
@@ -209,11 +212,11 @@
       frame(t,padx:22,pady:18,corners:true,background:art(t,d,8+calc.rem(i,3),width:54,height:54),background-width:54,background-x:16,background-y:10,[
         #grid(columns:(auto,1fr,auto),gutter:10*t.u,align:top,
           copy(t,"“",size:35.2,fill:gold.transparentize(30%),font:"display",lh:1),
-          copy(t,runs(t,q.content),size:16.8,weight:600,fill:primary,lh:1.8,italic:true,oblique:not q.content.map(x=>x.text).join("").contains(regex("[A-Za-z]"))),
+          copy(t,runs(t,q.content),size:16.8,weight:600,fill:primary,lh:1.8,italic:true,oblique:true),
           copy(t,"”",size:35.2,fill:gold.transparentize(30%),font:"display",lh:1))
         #v(12*t.u)#line(length:100%,stroke:(paint:thin,thickness:1*t.u,dash:"dashed"))#v(10*t.u)
         #copy(t,[#box(width:26*t.u,height:26*t.u,fill:subtle,stroke:1*t.u+gold,radius:50%,clip:true,baseline:25%)[#if q.avatar!="" {image(q.avatar,width:100%,height:100%,fit:"cover")}else{align(center+horizon)[✿]}]#h(8*t.u)#text(font:t.display,weight:700,if q.sender=="" {"匿名群友"}else{q.sender})],size:14.4,fill:primary)
-        #if q.reason.map(x=>x.text).join("")!="" or q.reason.any(x=>x.avatar!="") {v(6*t.u);copy(t,[#text(fill:gold)[——]#h(4*t.u)#runs(t,q.reason)],size:13.12,fill:muted,italic:true,oblique:not q.reason.map(x=>x.text).join("").contains(regex("[A-Za-z]")))}
+        #if q.reason.map(x=>x.text).join("")!="" or q.reason.any(x=>x.avatar!="") {v(6*t.u);copy(t,[#text(fill:gold)[——]#h(4*t.u)#runs(t,q.reason)],size:13.12,fill:muted,italic:true,oblique:true)}
       ])
       if i < d.quotes.len()-1 {v(16*t.u)}
     }
