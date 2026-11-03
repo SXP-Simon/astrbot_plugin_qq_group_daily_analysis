@@ -314,7 +314,12 @@
     #place(top+left,dx:3.4*t.u,dy:4.6*t.u,circle(radius:2*t.u,fill:rgb("76c4f0").transparentize(90%),stroke:none))
   ]
   set page(background:block(width:100%,height:100%,radius:28*t.u,clip:true,fill:rgb("dff4ff"),stroke:1*t.u+white)[
-    #if d.decorations.at(0,default:"")!="" {place(top+left,image(d.decorations.at(0),width:100%,height:100%,fit:"cover"))}
+    #if d.decorations.at(0,default:"")!="" {place(top+left,layout(size=>{
+      // 长图只栅格化视口内的海景，避免 cover 按整页高度放大出数倍宽的隐藏位图。
+      let w=size.width/t.u;let h=size.height/t.u
+      let svg="<svg xmlns='http://www.w3.org/2000/svg' width='"+str(w)+"' height='"+str(h)+"'><image href='"+d.decorations.at(0)+"' width='100%' height='100%' preserveAspectRatio='xMidYMid slice'/></svg>"
+      image(bytes(svg),format:"svg",width:size.width,height:size.height)
+    }))}
     #place(top+left,rect(width:100%,height:100%,fill:gradient.linear(rgb("effaff").transparentize(28%),rgb("effaff").transparentize(8%),angle:90deg,space:rgb),stroke:none))
     #place(top+left,rect(width:100%,height:100%,fill:gradient.linear(white.transparentize(20%),rgb("f2fbff").transparentize(6%),angle:90deg,space:rgb),stroke:none))
     #place(top+left,rect(width:100%,height:100%,fill:dots,stroke:none))
