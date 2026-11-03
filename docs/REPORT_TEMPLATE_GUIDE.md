@@ -57,7 +57,7 @@ HatsuneMiku/
 
 公共 Typst 代码放在 `templates/common.typ`。独立编译入口读取内置主题的 `report.typ`；缺少入口时会明确提示不支持该主题。
 
-当前已提供 HatsuneMiku、simple、hack、Maria、ATRI、DeepSeek 鲸鱼女仆娘（`deepseek_maid`）、Art Nouveau（`art_nouveau`）、手账（`scrapbook`）和 Format（`format`）的独立排版。各主题保留自己的阅读顺序和主要组件，不通过更换通用模板的颜色来代替适配。Maria、Art Nouveau 使用宋体、Cinzel 和 Cormorant Garamond；ATRI 使用文楷与文楷等宽字体。新增字体可通过现有下载入口补齐，无需配置系统字体或自定义目录。
+当前已提供 HatsuneMiku、simple、hack、Maria、ATRI、DeepSeek 鲸鱼女仆娘（`deepseek_maid`）、Art Nouveau（`art_nouveau`）、手账（`scrapbook`）、Format（`format`）和春节特供（`spring_festival`）的独立排版。各主题保留自己的阅读顺序和主要组件，不通过更换通用模板的颜色来代替适配。Maria、Art Nouveau 使用宋体、Cinzel 和 Cormorant Garamond；ATRI 使用文楷与文楷等宽字体。新增字体可通过现有下载入口补齐，无需配置系统字体或自定义目录。
 
 ATRI 的 GIF 装饰取首帧，输出仍为静态长图。页眉日期卡和英文小标题通过 SVG 对本地海景做局部模糊，玻璃区域随文字实测高度定位；其余玻璃卡片使用透明渐变，仍需继续校准细节。模板能正常编译与视觉复刻验收是两项检查，需对照相同数据的 HTML 样张分别验收。
 
@@ -70,6 +70,8 @@ Art Nouveau 沿用双层金色页框、植物花饰、花茎活跃图、原配�
 手账的角色 JPG 统一存放在仓库 `assets/scrapbook/assistant.jpg`，HTML 和 Typst 均使用当前配置的 CDN 地址。Typst 在编译前下载并缓存，缺图时保留占位与总结文字；HTML 加载失败时隐藏破损图片。该素材不打入插件发布包，新增或更新图片需同步发布到配置的 CDN 来源。
 
 Format 沿用灰白编辑版面、宋体标题、横向 24 小时条形图、深色活跃时段卡和等高双栏话题及画像。质量分析仍排在话题之前，保留蓝色左边线、原八色质量条及 `EXECUTIVE SUMMARY` 标签。长昵称按原设计省略，斜体逐字处理；金句与点评可随长文本增高，不通过固定卡片高度裁掉正文。所需字体沿用现有受管理字体，无新增素材下载。
+
+春节特供保留红金纸面、书法牌匾、红包统计、木框图表、印章徽章与交错金句气泡。质量分析位于话题之前，柱状图保持底红顶金渐变，质量条仍用原来的六种暖色；画像按行等高且从顶部排正文，长昵称与长金句自动换行。字体使用受管理的 Ma Shan Zheng、ZCOOL XiaoWei 和宋体。emoji 直接用 Noto Color Emoji 排字，字形会与 HTML 所在系统的 emoji 字体不同，无需单独下载图标图片。
 
 Typst 方案直接把分析结果准备成结构化 JSON，将 CDN 图片下载、缓存并本地化后，复制排版文件到临时任务目录，由独立子进程编译 PNG。字体统一使用插件数据目录的 `typst/fonts/`，通过 WebUI 的字体下载入口管理。该链路不解析 HTML，也不调用 AstrBot 的图片渲染接口；产物继续接入现有图片校验、发送和诊断流程。下面的 Jinja2 变量契约适用于 HTML 文件，Typst 的输入结构见 `typst_data.py`。
 
