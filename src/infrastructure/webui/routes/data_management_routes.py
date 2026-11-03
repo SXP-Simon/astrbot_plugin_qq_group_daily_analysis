@@ -7,15 +7,19 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
+from ....application.services.task_guard import DuplicateGroupTaskError
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
 from ...config.config_backup_reader import ConfigBackupReader
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from ....application.dto.webui_dto import (
         CheckpointDeleteDTO,
         CheckpointDetailQueryDTO,
@@ -54,6 +58,27 @@ class DataManagementRoutes:
         self.trace_store = trace_store
         self.analysis_service = analysis_service
         self.report_output_dir = report_output_dir
+
+    @asynccontextmanager
+    async def _mutation_guard(self, group_id: str) -> AsyncIterator[None]:
+        """删除批次、重置游标和清理快照时，与群分析任务互斥。
+
+        Args:
+            group_id: 正在管理的存储群标识。
+
+        Yields:
+            None: 已持有相关群任务锁。
+
+        Raises:
+            DuplicateGroupTaskError: 群任务仍在执行。
+        """
+        async with AsyncExitStack() as stack:
+            if self.analysis_service:
+                for task_type in ("daily", "incremental", "final"):
+                    await stack.enter_async_context(
+                        self.analysis_service.group_lock(group_id, task_type)
+                    )
+            yield
 
     @property
     def _incremental_store(self) -> IIncrementalStore | None:
@@ -415,9 +440,10 @@ class DataManagementRoutes:
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            deleted = await store.delete_batch(
-                delete_dto["group_id"], delete_dto["batch_id"]
-            )
+            async with self._mutation_guard(group_id):
+                deleted = await store.delete_batch(
+                    delete_dto["group_id"], delete_dto["batch_id"]
+                )
             return json_response(
                 {
                     "status": "ok",
@@ -427,6 +453,10 @@ class DataManagementRoutes:
                         "batch_id": batch_id,
                     },
                 }
+            )
+        except DuplicateGroupTaskError:
+            return error_response(
+                "此群有任务正在执行，请结束后再修改业务数据", status_code=409
             )
         except Exception as e:
             logger.error(f"删除增量批次异常: {e}", exc_info=True)
@@ -453,7 +483,8 @@ class DataManagementRoutes:
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            deleted_count = await store.reset_group(reset_dto["group_id"])
+            async with self._mutation_guard(group_id):
+                deleted_count = await store.reset_group(reset_dto["group_id"])
             return json_response(
                 {
                     "status": "ok",
@@ -463,6 +494,10 @@ class DataManagementRoutes:
                         "message": f"Successfully reset incremental state for group {group_id}",
                     },
                 }
+            )
+        except DuplicateGroupTaskError:
+            return error_response(
+                "此群有任务正在执行，请结束后再修改业务数据", status_code=409
             )
         except Exception as e:
             logger.error(f"重置增量状态异常: {e}", exc_info=True)
@@ -627,21 +662,22 @@ class DataManagementRoutes:
                     "CheckpointStore not initialized", status_code=503
                 )
 
-            if delete_dto.get("stage_name"):
-                deleted = await asyncio.to_thread(
-                    store.delete_checkpoint,
-                    delete_dto["group_id"],
-                    delete_dto["date_str"],
-                    delete_dto["stage_name"],
-                    trace_id=delete_dto["trace_id"],
-                )
-            else:
-                await asyncio.to_thread(
-                    store.clear_checkpoints,
-                    delete_dto["group_id"],
-                    delete_dto["date_str"],
-                )
-                deleted = True
+            async with self._mutation_guard(group_id):
+                if delete_dto.get("stage_name"):
+                    deleted = await asyncio.to_thread(
+                        store.delete_checkpoint,
+                        delete_dto["group_id"],
+                        delete_dto["date_str"],
+                        delete_dto["stage_name"],
+                        trace_id=delete_dto["trace_id"],
+                    )
+                else:
+                    await asyncio.to_thread(
+                        store.clear_checkpoints,
+                        delete_dto["group_id"],
+                        delete_dto["date_str"],
+                    )
+                    deleted = True
 
             return json_response(
                 {
@@ -654,6 +690,10 @@ class DataManagementRoutes:
                         "trace_id": trace_id or None,
                     },
                 }
+            )
+        except DuplicateGroupTaskError:
+            return error_response(
+                "此群有任务正在执行，请结束后再修改业务数据", status_code=409
             )
         except Exception as e:
             logger.error(f"删除 Checkpoint 异常: {e}", exc_info=True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from astrbot.api.star import StarTools
@@ -43,10 +44,24 @@ class ManagedFileRoutes:
             page = max(1, int(query.get("page", "1")))
             size = max(1, min(100, int(query.get("page_size", "20"))))
             search = query.get("search", "").casefold()
+            extensions = {
+                value.strip().lower().lstrip(".")
+                for value in query.get("extensions", "").split(",")
+                if value.strip()
+            }
             items = await asyncio.to_thread(
                 self.store().files, query.get("partition", "")
             )
-            filtered = [item for item in items if search in item["name"].casefold()]
+            filtered = [
+                item
+                for item in items
+                if search in item["name"].casefold()
+                and (
+                    not extensions
+                    or PurePosixPath(item["name"]).suffix.lower().lstrip(".")
+                    in extensions
+                )
+            ]
             return json_response(
                 {
                     "status": "ok",
@@ -81,6 +96,8 @@ class ManagedFileRoutes:
         """应用单文件变更，禁止未检查原内容即覆盖或删除。"""
         try:
             body = await request.json()
+            if type(body) is not dict:
+                raise ValueError("无效请求")
             fields = [
                 body.get(key, "")
                 for key in (
@@ -119,3 +136,48 @@ class ManagedFileRoutes:
             return error_response(str(error), status_code=400)
         except OSError:
             return error_response("文件操作失败，请检查目录权限后重试", status_code=500)
+
+    async def api_delete_many(self) -> WebApiResponse:
+        """只删除显式选择的文件，分别返回成功和失败项，不扩展到筛选外文件。"""
+        try:
+            body = await request.json()
+            if type(body) is not dict:
+                raise ValueError("无效请求")
+            partition, files = body.get("partition"), body.get("files")
+            if (
+                not isinstance(partition, str)
+                or not isinstance(files, list)
+                or not 1 <= len(files) <= 200
+            ):
+                raise ValueError("请选择 1 到 200 个文件")
+            selected: list[tuple[str, str]] = []
+            for item in files:
+                if (
+                    not isinstance(item, dict)
+                    or not isinstance(item.get("name"), str)
+                    or not isinstance(item.get("revision"), str)
+                    or not item["revision"]
+                ):
+                    raise ValueError("每个文件都需要名称和选中时的修订号")
+                selected.append((item["name"], item["revision"]))
+            if len({name for name, _ in selected}) != len(selected):
+                raise ValueError("所选文件存在重复项")
+            store = self.store()
+            if not store.partition(partition).deletable:
+                raise ValueError("此分区不允许删除文件")
+            deleted: list[str] = []
+            failed: list[dict[str, str]] = []
+            async with self._lock:
+                for name, revision in selected:
+                    try:
+                        await asyncio.to_thread(
+                            store.mutate, partition, name, "delete", revision
+                        )
+                        deleted.append(name)
+                    except (ValueError, OSError) as error:
+                        failed.append({"name": name, "message": str(error)})
+            return json_response(
+                {"status": "ok", "data": {"deleted": deleted, "failed": failed}}
+            )
+        except ValueError as error:
+            return error_response(str(error), status_code=400)

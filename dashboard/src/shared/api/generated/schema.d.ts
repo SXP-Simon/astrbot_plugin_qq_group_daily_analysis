@@ -72,6 +72,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugin-data/files/delete-many": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete only selected files with revisions */
+        post: operations["deleteManagedFiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** listManagedRecords */
+        get: operations["listManagedRecords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/records/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getManagedRecord */
+        get: operations["getManagedRecord"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/records/mutate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** mutateManagedRecord */
+        post: operations["mutateManagedRecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config": {
         parameters: {
             query?: never;
@@ -498,6 +566,7 @@ export interface components {
         };
         ManagedFile: {
             name: string;
+            revision: string;
             size_bytes: number;
             modified_at: number;
             media_type: string;
@@ -519,6 +588,46 @@ export interface components {
             new_name?: string;
             /** @enum {string} */
             operation: "create" | "replace" | "rename" | "delete";
+        };
+        ManagedFileDeleteMany: {
+            partition: string;
+            files: {
+                name: string;
+                revision: string;
+            }[];
+        };
+        ManagedFileDeleteResult: {
+            deleted: string[];
+            failed: {
+                name: string;
+                message: string;
+            }[];
+        };
+        RecordLocator: {
+            kind: string;
+            key?: string;
+            group_id?: string;
+            batch_id?: string;
+            date_str?: string;
+            stage_name?: string;
+            trace_id?: string;
+        };
+        ManagedRecord: {
+            locator: components["schemas"]["RecordLocator"];
+            data: components["schemas"]["BackupJsonValue"];
+            revision: string;
+        };
+        ManagedRecordEntry: {
+            locator: components["schemas"]["RecordLocator"];
+            name: string;
+            size_bytes: number;
+        };
+        ManagedRecordMutation: {
+            locator: components["schemas"]["RecordLocator"];
+            /** @enum {string} */
+            operation: "create" | "replace" | "delete";
+            data?: components["schemas"]["BackupJsonValue"];
+            revision?: string;
         };
         GroupItem: {
             group_id: string;
@@ -990,6 +1099,7 @@ export interface operations {
                 search?: string;
                 page?: number;
                 page_size?: number;
+                extensions?: string;
             };
             header?: never;
             path?: never;
@@ -1146,6 +1256,235 @@ export interface operations {
             };
             /** @description 目录读取或文件操作失败 */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteManagedFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedFileDeleteMany"];
+            };
+        };
+        responses: {
+            /** @description 逐项操作结果，允许部分成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["ManagedFileDeleteResult"];
+                    };
+                };
+            };
+            /** @description 非法分区或选择列表 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listManagedRecords: {
+        parameters: {
+            query: {
+                kind: string;
+                search?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            items: components["schemas"]["ManagedRecordEntry"][];
+                            total: number;
+                        };
+                    };
+                };
+            };
+            /** @description 非法记录或不支持的操作 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录不存在或已过期 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录冲突或群任务正在执行 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储暂不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getManagedRecord: {
+        parameters: {
+            query: {
+                kind: string;
+                key?: string;
+                group_id?: string;
+                batch_id?: string;
+                date_str?: string;
+                stage_name?: string;
+                trace_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["ManagedRecord"];
+                    };
+                };
+            };
+            /** @description 非法记录或不支持的操作 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录不存在或已过期 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录冲突或群任务正在执行 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储暂不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mutateManagedRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedRecordMutation"];
+            };
+        };
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            success: boolean;
+                        };
+                    };
+                };
+            };
+            /** @description 非法记录或不支持的操作 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录不存在或已过期 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录冲突或群任务正在执行 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储暂不可用 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

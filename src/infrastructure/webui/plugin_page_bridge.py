@@ -23,6 +23,7 @@ from .routes import (
 )
 from .routes.config_routes import _config_key_to_folder, _sanitize_path_segment
 from .routes.managed_file_routes import ManagedFileRoutes
+from .routes.managed_record_routes import ManagedRecordRoutes
 from .routes.template_resource_routes import TemplateResourceRoutes
 from .web_compat import (
     WebApiResponse,
@@ -117,6 +118,9 @@ class PluginPageWebUIBridge:
             report_output_dir=self.report_output_dir,
         )
         self.managed_file_routes = ManagedFileRoutes(self.report_output_dir)
+        self.managed_record_routes = ManagedRecordRoutes(
+            self.analysis_service, self.active_task_manager
+        )
 
     def register_routes(self) -> None:
         """向 AstrBot 注册所有 Web API 端点"""
@@ -331,6 +335,30 @@ class PluginPageWebUIBridge:
                 "Get thumbnail or content of a config file path",
             ),
             # 6. 插件数据管理（存储分区清理）
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/delete-many",
+                self.managed_file_routes.api_delete_many,
+                ["POST"],
+                "Delete explicitly selected managed files",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/records",
+                self.managed_record_routes.api_list,
+                ["GET"],
+                "List plugin history or avatar entries",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/records/detail",
+                self.managed_record_routes.api_detail,
+                ["GET"],
+                "Read a business record with revision",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/records/mutate",
+                self.managed_record_routes.api_mutate,
+                ["POST"],
+                "Import, revise or delete a business record",
+            ),
             (
                 f"/{PLUGIN_NAME}/plugin-data/partitions",
                 self.managed_file_routes.api_partitions,

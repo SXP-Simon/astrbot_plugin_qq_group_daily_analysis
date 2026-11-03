@@ -146,6 +146,14 @@
             "schema": {
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "extensions",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ]
       }
@@ -264,6 +272,301 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ManagedFileMutation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plugin-data/files/delete-many": {
+      "post": {
+        "operationId": "deleteManagedFiles",
+        "summary": "Delete only selected files with revisions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedFileDeleteMany"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "逐项操作结果，允许部分成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ManagedFileDeleteResult"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法分区或选择列表"
+          }
+        }
+      }
+    },
+    "/plugin-data/records": {
+      "get": {
+        "operationId": "listManagedRecords",
+        "summary": "listManagedRecords",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ManagedRecordEntry"
+                          }
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "total"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法记录或不支持的操作"
+          },
+          "404": {
+            "description": "记录不存在或已过期"
+          },
+          "409": {
+            "description": "记录冲突或群任务正在执行"
+          },
+          "500": {
+            "description": "存储操作失败"
+          },
+          "503": {
+            "description": "存储暂不可用"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/plugin-data/records/detail": {
+      "get": {
+        "operationId": "getManagedRecord",
+        "summary": "getManagedRecord",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ManagedRecord"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法记录或不支持的操作"
+          },
+          "404": {
+            "description": "记录不存在或已过期"
+          },
+          "409": {
+            "description": "记录冲突或群任务正在执行"
+          },
+          "500": {
+            "description": "存储操作失败"
+          },
+          "503": {
+            "description": "存储暂不可用"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "batch_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_str",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage_name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trace_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/plugin-data/records/mutate": {
+      "post": {
+        "operationId": "mutateManagedRecord",
+        "summary": "mutateManagedRecord",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "success"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法记录或不支持的操作"
+          },
+          "404": {
+            "description": "记录不存在或已过期"
+          },
+          "409": {
+            "description": "记录冲突或群任务正在执行"
+          },
+          "500": {
+            "description": "存储操作失败"
+          },
+          "503": {
+            "description": "存储暂不可用"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedRecordMutation"
               }
             }
           }
@@ -1448,6 +1751,9 @@
           "name": {
             "type": "string"
           },
+          "revision": {
+            "type": "string"
+          },
           "size_bytes": {
             "type": "integer"
           },
@@ -1465,6 +1771,7 @@
           }
         },
         "required": [
+          "revision",
           "name",
           "size_bytes",
           "modified_at",
@@ -1535,6 +1842,164 @@
         "required": [
           "partition",
           "name",
+          "operation"
+        ]
+      },
+      "ManagedFileDeleteMany": {
+        "type": "object",
+        "properties": {
+          "partition": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "revision"
+              ]
+            }
+          }
+        },
+        "required": [
+          "partition",
+          "files"
+        ]
+      },
+      "ManagedFileDeleteResult": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "deleted",
+          "failed"
+        ]
+      },
+      "RecordLocator": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "group_id": {
+            "type": "string"
+          },
+          "batch_id": {
+            "type": "string"
+          },
+          "date_str": {
+            "type": "string"
+          },
+          "stage_name": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "ManagedRecord": {
+        "type": "object",
+        "properties": {
+          "locator": {
+            "$ref": "#/components/schemas/RecordLocator"
+          },
+          "data": {
+            "$ref": "#/components/schemas/BackupJsonValue"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "locator",
+          "data",
+          "revision"
+        ]
+      },
+      "ManagedRecordEntry": {
+        "type": "object",
+        "properties": {
+          "locator": {
+            "$ref": "#/components/schemas/RecordLocator"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "locator",
+          "name",
+          "size_bytes"
+        ]
+      },
+      "ManagedRecordMutation": {
+        "type": "object",
+        "properties": {
+          "locator": {
+            "$ref": "#/components/schemas/RecordLocator"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "create",
+              "replace",
+              "delete"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/BackupJsonValue"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "locator",
           "operation"
         ]
       },

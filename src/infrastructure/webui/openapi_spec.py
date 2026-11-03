@@ -7,7 +7,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.infrastructure.webui.managed_data_spec import FILE_PATHS, FILE_SCHEMAS
+from src.infrastructure.webui.managed_data_spec import (
+    FILE_PATHS,
+    FILE_SCHEMAS,
+    RECORD_PATHS,
+    RECORD_SCHEMAS,
+)
 
 
 def generate_openapi_spec() -> dict[str, Any]:
@@ -25,6 +30,7 @@ def generate_openapi_spec() -> dict[str, Any]:
         },
         "paths": {
             **FILE_PATHS,
+            **RECORD_PATHS,
             "/config": {
                 "get": {
                     "summary": "读取插件配置、表单定义和内容版本",
@@ -934,6 +940,7 @@ def generate_openapi_spec() -> dict[str, Any]:
         "components": {
             "schemas": {
                 **FILE_SCHEMAS,
+                **RECORD_SCHEMAS,
                 "GroupItem": {
                     "type": "object",
                     "properties": {
