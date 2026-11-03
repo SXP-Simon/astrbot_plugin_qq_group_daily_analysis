@@ -83,10 +83,10 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
           ...(activePartition.key === "template_resources" ? [{ key: "download", label: "按模板下载", children: <TemplateResources cdnBaseUrl={cdn} /> }] : []),
         ]} />
       </Space>}
-    </Drawer>
-    <FileContentDialog vm={vm} onEdit={setEditor} />
-    <FileEditorDialog vm={vm} editor={editor} setEditor={setEditor} />
+    <FileContentDialog vm={vm} editor={editor} setEditor={setEditor} />
+    {!vm.content && <FileEditorDialog vm={vm} editor={editor} setEditor={setEditor} />}
     <TemplateUninstallModal open={uninstalling} onClose={() => setUninstalling(false)} onUninstalled={() => { void vm.load(); void vm.refresh(); }} />
     <TemplateInstallModal open={installing} onClose={() => setInstalling(false)} onInstalled={() => { void vm.load(); void vm.refresh(); }} />
+    </Drawer>
   </Space>;
 }
