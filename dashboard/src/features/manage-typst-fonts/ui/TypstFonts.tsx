@@ -20,7 +20,7 @@ export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
       </Button>
       <Button disabled={vm.loading} onClick={() => void vm.run(false)}>刷新字体状态</Button>
     </Space>
-    <Typography.Text type="secondary">常规字体使用本方案 CDN；大体积文楷字体从官方源下载。已下载的文件会保留，失败后可重试。</Typography.Text>
+    <Typography.Text type="secondary">常规字体使用本方案 CDN；超出 CDN 体积限制的字体从官方源下载。已下载的文件会保留，失败后可重试。</Typography.Text>
     {vm.error && <Alert type="error" showIcon message={vm.error} />}
   </Space>;
 }
