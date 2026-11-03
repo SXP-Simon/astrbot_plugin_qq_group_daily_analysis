@@ -21,7 +21,7 @@ from .template_installer import is_path_within, validate_template_name
 from .template_resources import TemplateResourceStore
 from .typst_contracts import TypstIdentityOptions
 from .typst_data import TypstDataPreparer
-from .typst_process import run_typst_worker
+from .typst_process import TypstWorkerError, run_typst_worker
 from .typst_resources import TypstAssets
 from .typst_worker import CUSTOM_TEMPLATE_MARKER, REPORT_PPI, REPORT_WIDTH
 
@@ -333,6 +333,8 @@ class TypstReportRenderer:
                 if compile_span and metrics:
                     compile_span["payload"].update(metrics)
         except (RuntimeError, TimeoutError) as error:
+            if compile_span and isinstance(error, TypstWorkerError) and error.metrics:
+                compile_span["payload"].update(error.metrics)
             logger.warning(
                 f"Typst 主题 {theme} 渲染失败，自动改用基础排版保留报告内容：{error}"
             )

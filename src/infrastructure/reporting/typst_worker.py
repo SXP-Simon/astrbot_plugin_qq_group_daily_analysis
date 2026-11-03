@@ -113,54 +113,78 @@ def compile_report(
         import typst
     except ImportError as exc:
         raise RuntimeError("请安装插件 requirements.txt 中的 typst 依赖") from exc
-    phase_start = time.perf_counter()
-    fonts = typst.Fonts(include_system_fonts=False, font_paths=[str(font_dir)])
-    families = fonts.families()
-    if not any("Noto Sans CJK" in name or "Noto Sans SC" in name for name in families):
-        raise RuntimeError("Typst 缺少中文字体，请在 WebUI 下载预设字体到插件数据目录")
-    compiler = typst.Compiler(
-        str(job_dir / "main.typ"),
-        root=str(job_dir),
-        font_paths=fonts,
-        ignore_system_fonts=True,
-    )
-    if metrics is not None:
-        metrics["font_setup_ms"] = round((time.perf_counter() - phase_start) * 1000, 2)
-    phase_start = time.perf_counter()
-    _check_canvas(compiler, custom=(job_dir / CUSTOM_TEMPLATE_MARKER).is_file())
-    if metrics is not None:
-        metrics["layout_ms"] = round((time.perf_counter() - phase_start) * 1000, 2)
-    phase_start = time.perf_counter()
-    compiler.compile(output=str(job_dir / "report.png"), format="png", ppi=REPORT_PPI)
-    if (job_dir / "report.png").stat().st_size > 32 * 1024 * 1024:
-        raise RuntimeError("Typst 报告超过 32 MiB，无法发送")
-    if metrics is not None:
-        metrics["raster_ms"] = round((time.perf_counter() - phase_start) * 1000, 2)
-        # Windows 使用进程峰值工作集，POSIX 使用内核记录的历史最大 RSS。
+    try:
+        phase_start = time.perf_counter()
+        fonts = typst.Fonts(include_system_fonts=False, font_paths=[str(font_dir)])
+        families = fonts.families()
+        if not any(
+            "Noto Sans CJK" in name or "Noto Sans SC" in name for name in families
+        ):
+            raise RuntimeError(
+                "Typst 缺少中文字体，请在 WebUI 下载预设字体到插件数据目录"
+            )
+        compiler = typst.Compiler(
+            str(job_dir / "main.typ"),
+            root=str(job_dir),
+            font_paths=fonts,
+            ignore_system_fonts=True,
+        )
+        if metrics is not None:
+            metrics["font_setup_ms"] = round(
+                (time.perf_counter() - phase_start) * 1000, 2
+            )
+        phase_start = time.perf_counter()
         try:
-            if sys.platform == "win32":
-                import psutil
-
-                peak = psutil.Process().memory_info()._asdict()["peak_wset"] / 1024**2
-            else:
-                import resource
-
-                peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (
-                    1024**2 if sys.platform == "darwin" else 1024
+            _check_canvas(compiler, custom=(job_dir / CUSTOM_TEMPLATE_MARKER).is_file())
+        finally:
+            if metrics is not None:
+                metrics["layout_ms"] = round(
+                    (time.perf_counter() - phase_start) * 1000, 2
                 )
-            metrics["worker_peak_rss_mb"] = round(peak, 2)
-        except (ImportError, OSError, KeyError):
-            pass
+        phase_start = time.perf_counter()
+        compiler.compile(
+            output=str(job_dir / "report.png"), format="png", ppi=REPORT_PPI
+        )
+        if (job_dir / "report.png").stat().st_size > 32 * 1024 * 1024:
+            raise RuntimeError("Typst 报告超过 32 MiB，无法发送")
+        if metrics is not None:
+            metrics["raster_ms"] = round((time.perf_counter() - phase_start) * 1000, 2)
+    finally:
+        _collect_peak(metrics)
+
+
+def _collect_peak(metrics: TypstWorkerMetrics | None) -> None:
+    """Record peak worker RSS even when template compilation fails.
+
+    Args:
+        metrics: Optional telemetry destination, never mixed with host RSS.
+    """
+    if metrics is None:
+        return
+    # Windows 使用进程峰值工作集，POSIX 使用内核记录的历史最大 RSS。
+    try:
+        if sys.platform == "win32":
+            import psutil
+
+            peak = psutil.Process().memory_info()._asdict()["peak_wset"] / 1024**2
+        else:
+            import resource
+
+            peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (
+                1024**2 if sys.platform == "darwin" else 1024
+            )
+        metrics["worker_peak_rss_mb"] = round(peak, 2)
+    except (ImportError, OSError, KeyError):
+        pass
 
 
 if __name__ == "__main__":
+    telemetry: TypstWorkerMetrics | None = {} if "--metrics" in sys.argv[3:] else None
     try:
-        telemetry: TypstWorkerMetrics | None = (
-            {} if "--metrics" in sys.argv[3:] else None
-        )
         compile_report(Path(sys.argv[1]), Path(sys.argv[2]), telemetry)
-        if telemetry is not None:
-            sys.stdout.write(json.dumps(telemetry))
     except Exception as error:
         sys.stderr.buffer.write(f"Typst 编译失败：{error}\n".encode())
         sys.exit(1)
+    finally:
+        if telemetry is not None:
+            sys.stdout.write(json.dumps(telemetry))

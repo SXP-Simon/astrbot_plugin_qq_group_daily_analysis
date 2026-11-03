@@ -17,6 +17,19 @@ if TYPE_CHECKING:
     from .typst_worker import TypstWorkerMetrics
 
 
+class TypstWorkerError(RuntimeError):
+    """Compilation error with validated diagnostics from the terminated worker.
+
+    Args:
+        message: Bounded compiler diagnostic text.
+        metrics: Optional validated measurements produced before failure.
+    """
+
+    def __init__(self, message: str, metrics: TypstWorkerMetrics | None) -> None:
+        super().__init__(message)
+        self.metrics = metrics
+
+
 async def run_typst_worker(
     job_dir: Path, font_dir: Path, timeout_seconds: float
 ) -> TypstWorkerMetrics | None:
@@ -62,9 +75,12 @@ async def run_typst_worker(
                 pass
         await asyncio.shield(asyncio.gather(communication, return_exceptions=True))
         raise
+    metrics = _parse_worker_metrics(stdout) if collect_metrics else None
     if process.returncode:
-        raise RuntimeError((stderr or b"").decode("utf-8", errors="replace")[:1800])
-    return _parse_worker_metrics(stdout) if collect_metrics else None
+        raise TypstWorkerError(
+            (stderr or b"").decode("utf-8", errors="replace")[:1800], metrics
+        )
+    return metrics
 
 
 def _parse_worker_metrics(stdout: bytes | None) -> TypstWorkerMetrics | None:

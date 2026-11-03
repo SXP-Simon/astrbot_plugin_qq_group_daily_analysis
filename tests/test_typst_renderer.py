@@ -15,6 +15,7 @@ from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.typst_renderer import run_typst_worker
 from src.infrastructure.reporting.typst_resources import TypstAssets
+from src.infrastructure.reporting.typst_process import TypstWorkerError
 from src.shared.trace_context import TraceContext
 
 
@@ -22,6 +23,24 @@ def png_bytes():
     stream = BytesIO()
     Image.new("RGB", (12, 12), "#39c5bb").save(stream, format="PNG")
     return stream.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_failed_worker_preserves_validated_metrics(tmp_path, monkeypatch):
+    trace = TraceContext(trace_id="failed-worker-metrics")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    monkeypatch.setattr(TraceContext, "_enable_metrics", True)
+
+    class Process:
+        returncode = 1
+
+        async def communicate(self):
+            return b'{"layout_ms":17,"worker_peak_rss_mb":103,"unexpected":999}', b"invalid template"
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", AsyncMock(return_value=Process()))
+    with pytest.raises(TypstWorkerError) as error:
+        await run_typst_worker(tmp_path, tmp_path / "fonts", 1)
+    assert error.value.metrics == {"layout_ms": 17, "worker_peak_rss_mb": 103}
 
 
 @pytest.fixture
