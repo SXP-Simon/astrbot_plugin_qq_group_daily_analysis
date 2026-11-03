@@ -111,3 +111,35 @@ def test_bad_optional_image_is_replaced_with_empty_resource(tmp_path, status):
         finally:
             await runner.cleanup()
     asyncio.run(check())
+
+
+@pytest.mark.asyncio
+async def test_cancelled_image_waits_for_decoder_before_releasing_job(tmp_path, monkeypatch):
+    import threading
+
+    started, finish = threading.Event(), threading.Event()
+    original = typst_resources.TypstAssets._save_image
+    def process(*args, **kwargs):
+        started.set()
+        finish.wait(5)
+        original(*args, **kwargs)
+    monkeypatch.setattr(typst_resources.TypstAssets, "_save_image", staticmethod(process))
+    payload = BytesIO()
+    Image.new("RGB", (12, 12), "white").save(payload, format="PNG")
+    source = "data:image/png;base64," + base64.b64encode(payload.getvalue()).decode()
+    job = tmp_path / "job"
+    job.mkdir()
+    async with aiohttp.ClientSession() as session:
+        assets = typst_resources.TypstAssets(tmp_path, job, session)
+        running = asyncio.create_task(assets.localize(source))
+        try:
+            assert await asyncio.to_thread(started.wait, 5)
+            running.cancel()
+            await asyncio.sleep(.01)
+            assert not running.done()
+        finally:
+            finish.set()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        assert list(job.glob("*.png"))
+        assert not list((tmp_path / "typst/assets").glob("*.part"))

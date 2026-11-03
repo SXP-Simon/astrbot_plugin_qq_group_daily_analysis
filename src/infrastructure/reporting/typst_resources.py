@@ -153,6 +153,7 @@ class TypstAssets:
         self.session = session
         self.resource_store = resource_store
         self.semaphore = asyncio.Semaphore(6)
+        self.image_semaphore = asyncio.Semaphore(1)
         self.failed: set[str] = set()
 
     async def localize(
@@ -185,9 +186,19 @@ class TypstAssets:
                     await asyncio.to_thread(shutil.copyfile, cached, target)
                     return target.name
                 payload = await self._read_source(source)
-                await asyncio.to_thread(
-                    self._save_image, payload, target, cached, opacity, oval
-                )
+                # 像素解码和 PNG 压缩逐图处理，网络仍保持六并发。
+                async with self.image_semaphore:
+                    processing = asyncio.create_task(
+                        asyncio.to_thread(
+                            self._save_image, payload, target, cached, opacity, oval
+                        )
+                    )
+                    try:
+                        await asyncio.shield(processing)
+                    except asyncio.CancelledError:
+                        # 线程结束后才释放像素预算和清理任务目录。
+                        await asyncio.shield(processing)
+                        raise
                 return target.name
             except (aiohttp.ClientError, TimeoutError, ValueError, OSError):
                 self.failed.add(source)
