@@ -18,6 +18,7 @@ from PIL import Image
 
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .template_installer import is_path_within, validate_template_name
 from .typst_data import TypstDataPreparer
 from .typst_resources import TypstAssets
 from .typst_worker import REPORT_PPI, REPORT_WIDTH
@@ -202,7 +203,7 @@ async def render_typst_report(
         data_dir: 插件数据根目录。
         avatars: 现有平台隔离头像服务。
         profile_manifest: 人格资源映射。
-        theme: 内置主题目录名。
+        theme: 内置或已安装的自定义主题目录名。
         options: 本轮 Typst 方案参数。
         avatar_getter: 平台头像回调。
         nickname_getter: 平台昵称回调。
@@ -218,12 +219,25 @@ async def render_typst_report(
         RuntimeError: 编译失败。
         TimeoutError: 准备或编译超过本轮超时。
     """
-    template = REPORT_TEMPLATES / theme / "report.typ"
-    if (
-        theme not in {path.name for path in REPORT_TEMPLATES.iterdir() if path.is_dir()}
-        or not template.is_file()
-    ):
-        raise ValueError(f"Typst 暂不支持模板 {theme}，请使用内置主题")
+    theme = validate_template_name(theme)
+    template_dir = REPORT_TEMPLATES / theme
+    is_builtin = template_dir.is_dir()
+    if not is_builtin:
+        custom = config.get_custom_report_template_dir(theme)
+        if (
+            not custom
+            or custom.is_symlink()
+            or not is_path_within(custom, custom.parent)
+        ):
+            raise ValueError(f"未找到 Typst 主题「{theme}」，请重新安装或选择其他模板")
+        template_dir = custom
+        if any(path.is_symlink() for path in template_dir.rglob("*")):
+            raise ValueError("Typst 自定义模板包含符号链接，请重新上传独立文件")
+    template = template_dir / "report.typ"
+    if not template.is_file():
+        raise ValueError(
+            f"主题「{theme}」没有 Typst 模板，请选择支持 Typst 的主题或切换渲染方案"
+        )
     font_dir = data_dir / "typst" / "fonts"
     if not font_dir.is_dir() or not any(
         p.suffix.lower() in (".ttf", ".otf", ".ttc") for p in font_dir.iterdir()
@@ -273,15 +287,20 @@ async def render_typst_report(
                         for index, name in enumerate(THEME_DECORATIONS.get(theme, ()))
                     )
                 )
+            shutil.copyfile(REPORT_TEMPLATES / "common.typ", job_dir / "common.typ")
+            if is_builtin:
+                for resource in template.parent.iterdir():
+                    if resource.suffix in (".svg", ".typ") and resource != template:
+                        shutil.copyfile(resource, job_dir / resource.name)
+            else:
+                # 自定义模板保留相对目录；编译根目录不包含宿主配置或历史记录。
+                shutil.copytree(template_dir, job_dir, dirs_exist_ok=True)
+            # 上传包不能覆盖本次数据或编译入口。
+            shutil.copyfile(template, job_dir / "main.typ")
             payload = data
             (job_dir / "data.json").write_text(
                 json.dumps(payload, ensure_ascii=False), encoding="utf-8"
             )
-            shutil.copyfile(template, job_dir / "main.typ")
-            shutil.copyfile(REPORT_TEMPLATES / "common.typ", job_dir / "common.typ")
-            for resource in template.parent.iterdir():
-                if resource.suffix in (".svg", ".typ") and resource != template:
-                    shutil.copyfile(resource, job_dir / resource.name)
             # 为恢复版预留少量预算；超时进程退出后才可复用任务目录。
             remaining = max(0.0, deadline - loop.time())
             try:

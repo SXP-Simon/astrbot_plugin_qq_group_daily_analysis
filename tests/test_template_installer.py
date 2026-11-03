@@ -757,3 +757,26 @@ def test_get_env_validates_template_name():
         "image_template.html", template_theme="non_existent_template_xyz"
     )
     assert rendered == ""
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_install_typst_template_and_discover_capabilities(tmp_path, mixed):
+    """原生模板可独立安装，HTML 入口能力保持独立。"""
+    from unittest.mock import MagicMock
+    from src.infrastructure.reporting.templates import HTMLTemplates
+
+    files = {"report.typ": "#text(json(\"data.json\").date)", "parts/card.typ": "#let card = [hello]"}
+    if mixed:
+        files["image_template.html"] = "<html>hello</html>"
+    installed = install_template_from_zip(build_zip(files, leading_root="native"), tmp_path)
+    assert installed["has_typst"] is True
+    assert installed["has_image"] is mixed
+    config = MagicMock()
+    config.get_custom_report_template_dir.side_effect = lambda name: tmp_path / name
+    manager = HTMLTemplates(config)
+    item = next(item for item in manager.get_available_templates() if item["id"] == "native")
+    assert item["has_typst"] is True and item["has_image"] is mixed
+    assert item["has_html"] is False
+    if not mixed:
+        with pytest.raises(ValueError, match="仅支持 Typst"):
+            manager._get_env_sync("native")

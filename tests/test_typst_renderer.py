@@ -117,3 +117,31 @@ async def test_cancellation_does_not_start_recovery(native, monkeypatch):
         await native.close()
 
 
+
+
+@pytest.mark.asyncio
+async def test_custom_typst_keeps_relative_modules_and_isolated_root(native, tmp_path, monkeypatch):
+    """自定义主模板和子目录导入一起进入隔离任务目录。"""
+    from src.infrastructure.reporting.typst_renderer import render_typst_report
+
+    fonts = native.data_dir / "typst/fonts"
+    fonts.mkdir(parents=True)
+    (fonts / "test.ttf").write_bytes(b"font")
+    custom = tmp_path / "custom/native"
+    (custom / "parts").mkdir(parents=True)
+    (custom / "report.typ").write_text('#import "parts/card.typ": card', encoding="utf-8")
+    (custom / "data.json").write_text("invalid", encoding="utf-8")
+    (custom / "main.typ").write_text("invalid", encoding="utf-8")
+    (custom / "parts/card.typ").write_text('#let card = [hello]', encoding="utf-8")
+    monkeypatch.setattr(native.config_manager, "get_custom_report_template_dir", lambda _: custom)
+    async def worker(job, font_dir, timeout):
+        assert (job / "main.typ").read_text(encoding="utf-8") == '#import "parts/card.typ": card'
+        assert (job / "parts/card.typ").is_file()
+        assert json.loads((job / "data.json").read_text(encoding="utf-8"))["message_count"] >= 0
+        (job / "report.png").write_bytes(png_bytes())
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
+    try:
+        result = await render_typst_report(create_analysis_result(), native.config_manager, native.data_dir, native._avatar_service, {}, "native", {})
+        assert result == png_bytes()
+    finally:
+        await native.close()
