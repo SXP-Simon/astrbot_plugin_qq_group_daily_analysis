@@ -101,7 +101,7 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
   it("提供 3 套覆盖完整业务场景的高保真 Golden Mocks (正常分析/超时中断/多模态漫画)", () => {
     expect(mockTraces.length).toBeGreaterThanOrEqual(3);
     const successTrace = mockTraces.find((t) => t.status === "succeeded" && !t.extra?.comic_enabled);
-    const failedTrace = mockTraces.find((t) => t.status === "failed");
+    const failedTrace = mockTraces.find((t) => t.trace_id === "trace-20260926-004-timeout");
     const comicTrace = mockTraces.find((t) => t.extra?.comic_enabled);
 
     expect(successTrace).toBeDefined();
@@ -137,4 +137,20 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
     const resolved = getTracesDef?.resolver({ query: { status: "succeeded" } });
     expect(resolved?.status).toBe("ok");
   });
+});
+
+
+it("Typst演示覆盖本地缓存、下载、超时、恢复、失败和取消，活跃详情保持一致", () => {
+  const native = mockTraces.filter(trace => trace.trace_id.startsWith("trace-typst-"));
+  expect(native).toHaveLength(6);
+  const recovered = native.find(trace => trace.trace_id === "trace-typst-recovered");
+  expect(recovered?.status).toBe("warning");
+  expect(recovered?.spans?.find(span => span.stage_name === "TYPST_COMPILE")?.status).toBe("warning");
+  expect(recovered?.spans?.find(span => span.stage_name === "TYPST_RECOVERY")?.payload?.worker_peak_rss_mb).toBeGreaterThan(0);
+  expect(recovered?.spans?.at(-1)?.stage_name).toBe("DISPATCH_REPORT");
+  for (const trace of native.filter(trace => trace.status === "failed" || trace.status === "aborted")) {
+    expect(trace.spans?.some(span => span.stage_name === "DISPATCH_REPORT")).toBe(false);
+  }
+  const live = mockHandlers["GET tasks/active"]().data.find(task => task.task_id === "trace-typst-live");
+  expect(live?.current_stage).toBe("TYPST_RESOURCES");
 });

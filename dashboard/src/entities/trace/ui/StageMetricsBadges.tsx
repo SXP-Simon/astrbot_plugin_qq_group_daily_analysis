@@ -96,6 +96,37 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
 
   const normStage = (stageName || "").toUpperCase().replace(/-/g, "_");
 
+  if (normStage.startsWith("TYPST_")) {
+    const metrics = [
+      ["width", "固定宽度", "px"],
+      ["topics", "话题", "项"],
+      ["portraits", "画像", "项"],
+      ["quotes", "金句", "项"],
+      ["local_resources", "本地原素材复用", "次"],
+      ["image_cache_hits", "图片缓存复用", "次"],
+      ["downloaded_resources", "本次下载", "个"],
+      ["missing_resources", "占位图标", "个"],
+      ["missing_images", "缺失图片来源", "个"],
+      ["font_setup_ms", "字体初始化", "ms"],
+      ["layout_ms", "布局测量", "ms"],
+      ["raster_ms", "栅格导出", "ms"],
+      ["worker_peak_rss_mb", "编译进程峰值", "MiB"],
+      ["image_bytes", "图片字节", "B"],
+    ] as const;
+    return (
+      <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {metrics.map(([key, label, unit]) => {
+          const value = payload[key];
+          if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+          return <MetricPill key={key} isDark={isDark} label={label} value={`${value.toLocaleString()} ${unit}`} status={key.startsWith("missing_") && value > 0 ? "warning" : "default"} />;
+        })}
+        {payload.network_budget_exhausted === true && <MetricPill isDark={isDark} label="网络预算" value="已耗尽，保留正文" status="warning" isMono={false} />}
+        {payload.mode === "basic" && <MetricPill isDark={isDark} label="恢复方案" value="基础排版" isMono={false} />}
+        {renderMemoryPill()}
+      </div>
+    );
+  }
+
   switch (normStage) {
     case "FETCH_MESSAGES":
     case "DATA_FETCHING":

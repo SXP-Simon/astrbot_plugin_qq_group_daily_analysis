@@ -44,7 +44,10 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
   onClose,
 }) => {
   const { token } = theme.useToken();
-  const [trace, setTrace] = useState<TraceRecord | null>(null);
+  const [storedTrace, setTrace] = useState<TraceRecord | null>(null);
+  const trace = storedTrace?.status === "running" && storedTrace.duration_ms == null
+    ? { ...storedTrace, duration_ms: Math.max(0, Date.now() - storedTrace.started_at * 1000) }
+    : storedTrace;
   const [logs, setLogs] = useState<PluginLogItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [resuming, setResuming] = useState(false);

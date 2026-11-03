@@ -1,3 +1,4 @@
+import { mockTypstTraces } from "./typstTraces";
 import type { TraceRecord } from "../../entities/trace/model/types";
 
 /**
@@ -6,6 +7,7 @@ import type { TraceRecord } from "../../entities/trace/model/types";
  * Discord 社区总结、QQ 官方机器人原生链路、增量定时汇总等真实多态场景
  */
 export const mockTraces: TraceRecord[] = [
+  ...mockTypstTraces,
   // 1. 标准成功链路：按实际分析阶段和追踪字段展示
   {
     trace_id: "trace-20260926-001",

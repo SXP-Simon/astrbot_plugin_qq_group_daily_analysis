@@ -171,7 +171,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
   const durationChartOption = useMemo(() => {
     const stageNames = currentSpans.map((s) => s.displayName);
     const durations = currentSpans.map((s) => s.durationMs);
-    const totalMs = durations.reduce((acc, v) => acc + v, 0) || trace.duration_ms || 1;
+    const totalMs = trace.duration_ms || durations.reduce((acc, v) => acc + v, 0) || 1;
 
     return {
       backgroundColor: "transparent",
