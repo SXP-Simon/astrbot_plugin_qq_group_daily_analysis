@@ -112,7 +112,10 @@ const ConfigImageThumbnail: React.FC<{
   );
 };
 
+import type { TemplateRequirements } from "../../../entities/report/model/templates";
+
 interface FieldRendererProps {
+  templateRequirements?: TemplateRequirements;
   templateCdnBaseUrl?: string | null;
   fieldKey: string;
   fieldSchema: SchemaFieldItem;
@@ -128,6 +131,7 @@ interface FieldRendererProps {
 
 export const FieldRenderer: React.FC<FieldRendererProps> = ({
   templateCdnBaseUrl,
+  templateRequirements,
   fieldKey,
   fieldSchema,
   value,
@@ -253,6 +257,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                 fieldSchema={subField}
                 value={subValue}
                 templateCdnBaseUrl={templateCdnBaseUrl}
+                templateRequirements={templateRequirements}
                 providers={providers}
                 personas={personas}
                 isSubField={true}
@@ -403,6 +408,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       return (
         <TemplateSelectorRenderer
           cdnBaseUrl={templateCdnBaseUrl}
+          requirements={templateRequirements}
           value={value}
           options={options}
           defaultValue={defaultValue}

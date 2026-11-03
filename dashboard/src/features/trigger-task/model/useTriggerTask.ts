@@ -38,7 +38,7 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
       const [platList, provList, tmplList] = await Promise.allSettled([
         fetchConnectedPlatforms(),
         fetchProviderList(),
-        fetchReportTemplates(),
+        fetchReportTemplates("configured"),
       ]);
       if (platList.status === "fulfilled") setConnectedPlatforms(platList.value);
       if (provList.status === "fulfilled") setProviders(provList.value);

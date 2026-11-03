@@ -156,7 +156,7 @@ const renderingResolvedSchema = renderingConfigSchema.transform((value) => Objec
 
 export const renderingRuntimeSchema = renderingResolvedSchema.transform((value) => {
   const first = [...(value.t2i_rendering_strategies || [])].sort((a, b) => a.priority - b.priority)[0];
-  return { t2i_cdn_base_url: first?.cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL };
+  return { t2i_cdn_base_url: first?.cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL, template_engine: first?.__template_key === "typst" ? "typst" as const : "html" as const };
 });
 
 export const renderingSaveSchema = renderingResolvedSchema.transform((value) => {

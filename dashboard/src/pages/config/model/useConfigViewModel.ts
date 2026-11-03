@@ -289,7 +289,13 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
 
   const renderingConfig = renderingRuntimeSchema.safeParse(formData.t2i_rendering ?? {});
 
+  const templateRequirements = {
+    engine: renderingConfig.success ? renderingConfig.data.template_engine : "html" as const,
+    formats: Array.isArray(formData.basic?.output_format) ? formData.basic.output_format.filter((value): value is string => typeof value === "string") : ["image"],
+  };
+
   return {
+    templateRequirements,
     templateCdnBaseUrl: renderingConfig.success ? renderingConfig.data.t2i_cdn_base_url : null,
     loading,
     configLoaded,

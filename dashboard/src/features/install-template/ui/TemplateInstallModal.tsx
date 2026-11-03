@@ -216,7 +216,7 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
             ),
             children: (
               <Form form={fileForm} layout="vertical">
-                <Form.Item label="zip 压缩包（需包含 image_template.html 或 html_template.html）">
+                <Form.Item label="zip 压缩包（需包含 image_template.html、html_template.html 或 report.typ）">
                   <Dragger
                     accept=".zip"
                     maxCount={1}
@@ -231,7 +231,7 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
                     </p>
                     <p className="ant-upload-text">点击或拖拽 zip 到此处</p>
                     <p className="ant-upload-hint">
-                      单个文件，打包时请保留模板根目录（建议仅包含 7 个 HTML 模板文件与可选 template.json）
+                      单个文件，打包时请保留模板根目录（可包含 HTML 或 Typst 主文件、相对导入组件、资源与可选 template.json）
                     </p>
                   </Dragger>
                 </Form.Item>

@@ -21,34 +21,33 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
   onSuccess,
 }) => {
   const [form] = Form.useForm();
+  const renderFormat = Form.useWatch<"image" | "html">("render_format", form) || "image";
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setLoadingTemplates(true);
-      fetchReportTemplates()
-        .then((list) => setTemplates(list))
-        .catch(() => {
-          message.warning("模板列表获取失败，已回退显示内置模板");
-          setTemplates(DEFAULT_REPORT_TEMPLATES);
-        })
-        .finally(() => setLoadingTemplates(false));
-    }
-    if (open && report) {
-      form.setFieldsValue({
-        template_name: "HatsuneMiku",
-        render_format: report.is_html ? "html" : "image",
-      });
-    }
+    if (open && report) form.setFieldsValue({ template_name: "HatsuneMiku", render_format: report.is_html ? "html" : "image" });
   }, [open, report, form]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoadingTemplates(true);
+    fetchReportTemplates(renderFormat).then((list) => {
+      if (!cancelled) setTemplates(list);
+    }).catch(() => {
+      if (!cancelled) { message.warning("模板列表获取失败，已回退显示内置模板"); setTemplates(DEFAULT_REPORT_TEMPLATES); }
+    }).finally(() => { if (!cancelled) setLoadingTemplates(false); });
+    return () => { cancelled = true; };
+  }, [open, renderFormat]);
 
   const handleSubmit = async () => {
     if (!report) return;
     try {
       const values = await form.validateFields();
       setLoading(true);
+      if (!templates.some((item) => item.id === values.template_name)) { message.warning("该主题不支持当前输出格式，请重新选择"); return; }
       const res = await rerenderReport({
         group_id: report.group_id || "",
         template_name: values.template_name,

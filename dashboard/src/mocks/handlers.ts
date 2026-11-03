@@ -1,3 +1,5 @@
+import { supportsTemplate } from "../entities/report/model/templates";
+import { renderingRuntimeSchema } from "../entities/config/model/renderingConfig";
 import { mockMetricsSummary, mockAnalyticsTrends } from "./data/metrics";
 import { mockActiveTasks, mockConnectedPlatforms } from "./data/tasks";
 import { mockTraces } from "./data/traces";
@@ -121,7 +123,16 @@ export const mockHandlers = {
       },
     };
   },
-  "GET reports/templates": () => ({ status: "ok", data: mockReportTemplates }),
+  "GET reports/templates": (params?: Record<string, unknown>) => {
+    const output = params?.render_format;
+    const runtime = renderingRuntimeSchema.safeParse(mockPluginConfig.config.t2i_rendering || {});
+    const formats = output === "configured" ? mockPluginConfig.config.basic?.output_format : [output];
+    const requirements = !output || output === "all" ? undefined : {
+      engine: runtime.success ? runtime.data.template_engine : "html" as const,
+      formats: Array.isArray(formats) ? formats.filter((value): value is string => typeof value === "string") : ["image"],
+    };
+    return { status: "ok", data: mockReportTemplates.filter((item) => supportsTemplate(item, requirements)) };
+  },
   "GET templates/preview": () => ({
     status: "ok",
     data: {

@@ -105,6 +105,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "orange",
     is_custom: false,
     has_image: true,
+    has_typst: true,
     has_html: true,
   },
   {
@@ -116,6 +117,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "red",
     is_custom: false,
     has_image: true,
+    has_typst: true,
     has_html: true,
   },
   {
@@ -127,6 +129,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "lime",
     is_custom: false,
     has_image: true,
+    has_typst: true,
     has_html: true,
   },
   {
@@ -138,6 +141,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "purple",
     is_custom: false,
     has_image: true,
+    has_typst: true,
   },
   {
     id: "ATRI",
@@ -148,6 +152,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "blue",
     is_custom: false,
     has_image: true,
+    has_typst: true,
   },
   {
     id: "custom_hacker",
@@ -159,5 +164,8 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     is_custom: true,
     can_uninstall: true,
     has_image: true,
+    has_typst: false,
   },
+  { id: "custom_native", label: "原生极简示例", is_custom: true, can_uninstall: true,
+    has_image: false, has_html: false, has_typst: true, desc: "仅支持 Typst 图片，用于检查引擎筛选与能力标签" },
 ];

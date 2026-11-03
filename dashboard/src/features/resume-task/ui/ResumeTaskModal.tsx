@@ -35,7 +35,7 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
         .then((list) => setProviders(list))
         .catch(() => {})
         .finally(() => setLoadingProviders(false));
-      fetchReportTemplates()
+      fetchReportTemplates("configured")
         .then((list) => setTemplates(list))
         .catch(() => {
           message.warning("模板列表获取失败，已回退显示内置模板");

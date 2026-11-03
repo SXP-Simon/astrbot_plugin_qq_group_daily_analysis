@@ -1,3 +1,4 @@
+import { templateCapabilities } from "../../../entities/report/model/templates";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
@@ -154,13 +155,8 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
                     }
                     description={
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        {item.desc
-                          ? item.desc
-                          : item.has_image && item.has_html
-                          ? "长图 + 网页 双模式"
-                          : item.has_image
-                          ? "长图模式"
-                          : "网页模式"}
+                        {item.desc || templateCapabilities(item).join(" / ")}
+                        <span>{templateCapabilities(item).map((capability) => <Tag key={capability}>{capability}</Tag>)}</span>
                       </Text>
                     }
                   />

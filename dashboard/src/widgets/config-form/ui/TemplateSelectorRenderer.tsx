@@ -24,6 +24,7 @@ import {
 import { useTheme } from "../../../shared/lib/useTheme";
 import {
   KNOWN_TEMPLATES,
+  DEFAULT_REPORT_TEMPLATES, supportsTemplate, templateCapabilities, type TemplateRequirements,
   getTemplateCdnUrl,
   ReportTemplateItem,
 } from "../../../entities/report/model/templates";
@@ -72,6 +73,7 @@ const { Text, Paragraph } = Typography;
 interface TemplateSelectorRendererProps {
   cdnBaseUrl?: string | null;
   value: unknown;
+  requirements?: TemplateRequirements;
   options?: unknown[];
   defaultValue?: unknown;
   onChange: (val: string) => void;
@@ -80,7 +82,8 @@ interface TemplateSelectorRendererProps {
 export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> = ({
   cdnBaseUrl = DEFAULT_TEMPLATE_CDN_BASE_URL,
   value,
-  options,
+  options: _options,
+  requirements,
   defaultValue,
   onChange,
 }) => {
@@ -126,50 +129,24 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
     setPreviewVisible(false);
   }, [currentTemplate]);
 
-  // 下拉选项：schema options（内置）为基底，追加 API 返回的自定义模板；
-  // 展示名为 API 元信息（display_name/tag/desc）优先，KNOWN_TEMPLATES 兜底
-  const templateOptions = useMemo(() => {
-    const baseKeys =
-      Array.isArray(options) && options.length > 0
-        ? options.map((opt) => String(opt))
-        : KNOWN_TEMPLATES.map((t) => t.key);
-    const remoteCustom = (remoteTemplates || []).filter(
-      (t) => t.is_custom === true && !baseKeys.includes(t.id)
-    );
-    return [...baseKeys, ...remoteCustom.map((t) => t.id)].map((key) => {
-      const remote = (remoteTemplates || []).find((t) => t.id === key);
-      const known = KNOWN_TEMPLATES.find((t) => t.key === key);
-      const displayName = remote?.display_name || known?.name || key;
-      const tag = remote?.tag || known?.tag || "";
-      return {
-        label: tag ? `${displayName} [${tag}]` : displayName,
-        value: key,
-        title: remote?.desc || known?.desc || "",
-      };
-    });
-  }, [options, remoteTemplates]);
-
-  // 画廊条目：API 全量（内置+自定义）为基底，并集 KNOWN_TEMPLATES（覆盖 format 等
-  // 未被 API 列出的内置模板），元信息 API 优先、KNOWN 兜底
-  const galleryItems = useMemo(() => {
-    const items: ReportTemplateItem[] = [...remoteTemplates];
-    KNOWN_TEMPLATES.forEach((k) => {
-      if (!items.some((t) => t.id === k.key)) {
-        items.push({ id: k.key, is_custom: false } as ReportTemplateItem);
-      }
-    });
-    return items.map((remote) => {
-      const known = KNOWN_TEMPLATES.find((t) => t.key === remote.id);
-      return {
-        key: remote.id,
-        isCustom: Boolean(remote.is_custom),
-        name: remote.display_name || known?.name || remote.id,
-        desc: remote.desc || known?.desc || "",
-        tag: remote.tag || known?.tag || "",
-        tagColor: remote.tag_color || known?.tagColor || "default",
-      };
-    });
-  }, [remoteTemplates]);
+  const availableTemplates = useMemo(() =>
+    (remoteTemplates.length ? remoteTemplates : DEFAULT_REPORT_TEMPLATES)
+      .filter((item) => supportsTemplate(item, requirements)), [remoteTemplates, requirements]);
+  const templateOptions = useMemo(() => availableTemplates.map((item) => ({
+    label: `${item.display_name || item.label || item.id} [${templateCapabilities(item).join(" / ")}]`,
+    value: item.id,
+  })), [availableTemplates]);
+  const galleryItems = useMemo(() => availableTemplates.map((remote) => {
+    const known = KNOWN_TEMPLATES.find((item) => item.key === remote.id);
+    return {
+      key: remote.id, isCustom: Boolean(remote.is_custom),
+      name: remote.display_name || known?.name || remote.id,
+      desc: remote.desc || known?.desc || "",
+      tag: remote.tag || known?.tag || "", tagColor: remote.tag_color || known?.tagColor || "default",
+      capabilities: templateCapabilities(remote),
+    };
+  }), [availableTemplates]);
+  const currentSupported = availableTemplates.some((item) => item.id === currentTemplate);
 
   // 当前选中模板的展示信息：与画廊/下拉同源的元信息合并（API 优先、KNOWN 兜底）
   const currentMeta =
@@ -180,12 +157,14 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       desc: "自定义或外部模板",
       tag: "模板",
       tagColor: "blue",
+      capabilities: [],
     };
 
   const currentCdnUrl = getTemplateCdnUrl(currentTemplate, cdnBaseUrl);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
+      {!currentSupported && <Text type="warning">当前主题不支持所选渲染引擎或输出格式，请选择兼容主题。切换不会自动覆盖你的配置。</Text>}
       {cdnBaseUrl === null && (
         <Text type="danger">CDN 地址没填对，请先到「图片渲染策略」改一下，再来看模板预览。</Text>
       )}
@@ -201,6 +180,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
         />
         <Button
           icon={<EyeOutlined />}
+          disabled={!currentSupported}
           onClick={() => setPreviewVisible(true)}
         >
           预览当前效果
@@ -244,7 +224,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       />
 
       {/* 选定模板的实时缩略图与简介卡片 */}
-      <div
+      {currentSupported && <div
         style={{
           display: "flex",
           gap: 14,
@@ -316,7 +296,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
             点击缩略图可全屏缩放预览完整长图，或点击上方「浏览全部模板画廊」进行对比选型。
           </Text>
         </div>
-      </div>
+      </div>}
 
       {/* 全部模板画廊弹窗 */}
       <Modal
@@ -393,6 +373,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
                         type="secondary"
                         style={{ fontSize: 11, display: "block", marginTop: 4, minHeight: 32 }}
                       >
+                        <span>{tmpl.capabilities.map((capability) => <Tag key={capability}>{capability}</Tag>)}</span>
                         {tmpl.desc}
                       </Text>
                     </div>

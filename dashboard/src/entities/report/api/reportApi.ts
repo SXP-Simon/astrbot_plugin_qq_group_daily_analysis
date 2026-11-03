@@ -39,10 +39,10 @@ export async function fetchReportContent(filename: string): Promise<ReportItem |
   return data || null;
 }
 
-export async function fetchReportTemplates(): Promise<ReportTemplateItem[]> {
-  const res = await apiGet<ReportTemplateItem[]>("reports/templates");
+export async function fetchReportTemplates(renderFormat: "all" | "configured" | "image" | "html" = "all"): Promise<ReportTemplateItem[]> {
+  const res = await apiGet<ReportTemplateItem[]>("reports/templates", { render_format: renderFormat });
   const data = extractData<ReportTemplateItem[]>(res);
-  if (Array.isArray(data) && data.length > 0) return data;
+  if (Array.isArray(data)) return data;
   // 不再静默降级：失败交由调用方提示（避免自定义模板无声消失）
   throw new Error("模板列表获取失败");
 }
@@ -85,6 +85,7 @@ export interface TemplateInstallResult {
   desc?: string;
   has_image: boolean;
   has_html: boolean;
+  has_typst?: boolean;
   files: string[];
 }
 
