@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { fetchPluginConfig } from "../../../../entities/config/api/configApi";
-import { useConfigFileReferences } from "../useConfigFileReferences";
+import { useConfigFileReferences } from "../../../../features/manage-stored-files/model/useConfigFileReferences";
 
 vi.mock("../../../../entities/config/api/configApi", () => ({ fetchPluginConfig: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });

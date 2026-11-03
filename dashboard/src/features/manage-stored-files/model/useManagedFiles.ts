@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { message } from "antd";
+import { readUploadFile } from "../../../shared/lib/fileUpload";
+import type { FileDraft } from "./fileDraft";
 import {
   fetchManagedContent, fetchManagedFiles, fetchManagedPartitions, mutateManagedFile, deleteManagedFiles,
   type ManagedFileContent, type ManagedFileMutation, type ManagedPartition, type ManagedFile, type ManagedFileGroup,
@@ -8,6 +10,7 @@ import {
 export function useManagedFiles() {
   const [partitions, setPartitions] = useState<ManagedPartition[]>([]);
   const [partition, setPartition] = useState<ManagedPartition | null>(null);
+  const [editor, setEditor] = useState<FileDraft | null>(null);
   const [files, setFiles] = useState<ManagedFile[]>([]);
   const [groups, setGroups] = useState<ManagedFileGroup[]>([]);
   const [directory, setDirectory] = useState("");
@@ -48,6 +51,7 @@ export function useManagedFiles() {
 
   const select = (value: ManagedPartition | null) => {
     detailSequence.current++;
+    setEditor(null);
     setPartition(value); setDirectory(""); setGroups([]); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setTotal(0); setLoading(false); setContent(null); setSelected([]); setDeleteResult(null); setListError("");
   };
   const inspect = async (name: string) => {
@@ -100,9 +104,28 @@ export function useManagedFiles() {
     const known = new Map([...selected, ...files].map(file => [file.name, file]));
     setSelected(keys.slice(0, 200).flatMap(key => known.get(String(key)) ? [known.get(String(key))!] : []));
   };
-  return { partitions, partition, files, groups, directory, total, search, extensions, page, loading, busy, error, listError, content, selected, deleteResult,
+  const prepareUpload = async (file: File, replacement = false) => {
+    const sequence = detailSequence.current;
+    try {
+      const encoded = await readUploadFile(file);
+      if (sequence !== detailSequence.current) return;
+      if (replacement) setEditor(current => current && { ...current, encoded });
+      else {
+        const prefix = partition?.key === "custom_templates" && directory && directory !== "." ? `${directory}/` : "";
+        setEditor({ name: prefix + file.name, text: "", encoded });
+      }
+    } catch (cause) { if (sequence === detailSequence.current) void message.error(cause instanceof Error ? cause.message : "无法读取上传文件"); }
+  };
+  const saveEditor = async () => {
+    if (!editor) return;
+    const encoded = editor.encoded ?? btoa(Array.from(new TextEncoder().encode(editor.text), byte => String.fromCharCode(byte)).join(""));
+    if (await mutate({ name: editor.name, operation: editor.revision ? "replace" : "create", revision: editor.revision, content_base64: encoded })) setEditor(null);
+  };
+  const totals = partitions.reduce((value, item) => ({ totalBytes: value.totalBytes + item.size_bytes, totalFiles: value.totalFiles + item.count,
+    assetBytes: value.assetBytes + (["typst_fonts", "template_resources"].includes(item.key) ? item.size_bytes : 0) }), { totalBytes: 0, totalFiles: 0, assetBytes: 0 });
+  return { partitions, partition, files, groups, directory, total, totals, search, extensions, page, loading, busy, error, listError, content, selected, deleteResult, editor, setEditor, prepareUpload, saveEditor,
     refresh, load, select, inspect, download, mutate, setContent, setPage,
-    selectDirectory: (value: string) => { detailSequence.current++; setDirectory(value); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setTotal(0); setLoading(true); setListError(""); setContent(null); setSelected([]); setDeleteResult(null); },
+    selectDirectory: (value: string) => { detailSequence.current++; setEditor(null); setDirectory(value); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setTotal(0); setLoading(true); setListError(""); setContent(null); setSelected([]); setDeleteResult(null); },
     deleteSelected, selectFiles, clearSelection: () => setSelected([]),
     filterExtensions: (value: string) => { setExtensions(value); setPage(1); setSelected([]); setDeleteResult(null); },
     searchFiles: (value: string) => { setSearch(value); setPage(1); setSelected([]); setDeleteResult(null); } };

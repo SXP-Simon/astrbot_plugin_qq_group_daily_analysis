@@ -4,6 +4,20 @@ const imageFilters = [
 ];
 const jsonFilters = [{ value: "json", label: "JSON" }];
 
+export type PartitionNavigation = { kind: "page"; destination: "reports" | "config" | "traces"; label: string }
+  | { kind: "data"; destination: "records" | "incremental" | "checkpoints"; label: string };
+
+const currentRecords: PartitionNavigation = { kind: "data", destination: "records", label: "管理当前分析存档" };
+const executionTasks: PartitionNavigation = { kind: "page", destination: "traces", label: "查看分析执行任务" };
+const reportHistory: PartitionNavigation = { kind: "page", destination: "reports", label: "打开历史报告预览与重绘" };
+export const partitionNavigation: Record<string, PartitionNavigation[]> = {
+  reports: [reportHistory], hosted_reports: [reportHistory],
+  config_files: [{ kind: "page", destination: "config", label: "在配置中心新增图片与维护引用" }],
+  config_backups: [{ kind: "page", destination: "config", label: "打开配置中心" }],
+  state: [executionTasks, currentRecords, { kind: "data", destination: "incremental", label: "管理增量批次" }, { kind: "data", destination: "checkpoints", label: "管理阶段快照" }],
+  typst_jobs: [executionTasks], legacy_history: [currentRecords],
+};
+
 export const partitionPresentation: Record<string, {
   capabilities: string[];
   filters: { value: string; label: string }[];

@@ -1,8 +1,9 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { Alert, Button, Image, Input, Modal, Popconfirm, Space, Tabs, Typography } from "antd";
 import { DownloadOutlined, EditOutlined } from "@ant-design/icons";
-import { useManagedFiles } from "../../model/useManagedFiles";
-import { FileEditorDialog, type FileDraft } from "./FileEditorDialog";
+import { useManagedFiles } from "../model/useManagedFiles";
+import { FileEditorDialog } from "./FileEditorDialog";
+import type { FileDraft } from "../model/fileDraft";
 
 export function FileContentDialog({ vm, editor, setEditor, references }: { vm: ReturnType<typeof useManagedFiles>; editor: FileDraft | null; setEditor: Dispatch<SetStateAction<FileDraft | null>>; references?: string[] }) {
   const [rename, setRename] = useState<string | null>(null);

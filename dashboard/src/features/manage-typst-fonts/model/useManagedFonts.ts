@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readUploadFile } from "../../../shared/lib/fileUpload";
 import { downloadTypstFonts, fetchTypstFonts } from "../../../entities/config/api/configApi";
 import type { TypstFontStatus } from "../../../entities/config/model/typstFonts";
 import { deleteManagedFiles, fetchManagedFiles, mutateManagedFile, type ManagedFile } from "../../../entities/plugin-data/api/managedFilesApi";
@@ -64,12 +65,7 @@ export function useManagedFonts(onChanged: () => void) {
       return false;
     }
     const success = await run(async () => {
-      const encoded = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result.split(",")[1]) : reject(new Error("无法读取字体文件"));
-        reader.onerror = () => reject(new Error("无法读取字体文件"));
-        reader.readAsDataURL(file);
-      });
+      const encoded = await readUploadFile(file);
       await mutateManagedFile({ partition: "typst_fonts", name: existing?.name || file.name, operation: existing ? "replace" : "create", revision: existing?.revision, content_base64: encoded });
     });
     if (success && !existing && mounted.current) setTheme("__all__");

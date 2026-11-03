@@ -1,9 +1,9 @@
 import { Alert, Button, Empty, Popconfirm, Select, Space, Tag, Typography } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
-import { templateCapabilities } from "../../../../entities/report/model/templates";
-import type { ManagedFileGroup } from "../../../../entities/plugin-data/api/managedFilesApi";
-import { formatBytes } from "../../../../shared/lib/formatters";
-import { useTemplatePackages } from "../../model/useTemplatePackages";
+import { templateCapabilities } from "../../../entities/report/model/templates";
+import type { ManagedFileGroup } from "../../../entities/plugin-data/api/managedFilesApi";
+import { formatBytes } from "../../../shared/lib/formatters";
+import { useTemplatePackages } from "../model/useTemplatePackages";
 
 export function TemplatePackages({ groups, directory, loading, busy, onSelect, onInstall, onCreate, onRefresh }: {
   groups: ManagedFileGroup[]; directory: string; loading: boolean; busy: boolean; onSelect: (directory: string) => void;

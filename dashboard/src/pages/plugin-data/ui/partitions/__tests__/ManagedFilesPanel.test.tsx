@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ConfigProvider } from "antd";
 import { ManagedFilesPanel } from "../ManagedFilesPanel";
-import { TemplatePackages } from "../TemplatePackages";
+import { TemplatePackages } from "../../../../../features/install-template/ui/TemplatePackages";
 import { fetchManagedContent, fetchManagedFiles, fetchManagedPartitions, mutateManagedFile } from "../../../../../entities/plugin-data/api/managedFilesApi";
 import { fetchReportTemplates, uninstallTemplate } from "../../../../../entities/report/api/reportApi";
 

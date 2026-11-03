@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ConfigProvider } from "antd";
-import { FontManager } from "../FontManager";
+import { FontManager } from "../../../../../features/manage-typst-fonts/ui/FontManager";
 import { downloadTypstFonts, fetchTypstFonts } from "../../../../../entities/config/api/configApi";
 import { deleteManagedFiles, fetchManagedContent, fetchManagedFiles, mutateManagedFile, type ManagedFile } from "../../../../../entities/plugin-data/api/managedFilesApi";
 

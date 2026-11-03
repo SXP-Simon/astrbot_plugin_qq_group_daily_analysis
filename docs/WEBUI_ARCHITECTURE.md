@@ -141,6 +141,10 @@
 
 ## 6. 数据管理文件边界
 
+存储管理页面只做特征组合：`ManagedFilesPanel` 组合无网络请求的 `StorageOverview` 与 `ManagedPartitionDrawer`，`usePartitionManager` 负责分区选择和页面导航。通用文件查询、选择、上传及编辑属于 `features/manage-stored-files`；字体管理属于 `features/manage-typst-fonts`；自定义模板管理属于 `features/install-template`。特征不得反向导入 pages，上传读取由 ViewModel 调用共享文件读取器完成，弹窗继续保留抽屉内的父子上下文。
+
+分区说明、筛选和跳转目标集中声明于 `entities/plugin-data/model/partitionPresentation.ts`。新增沿用文件管理能力的分区只需增加能力数据；专用业务视图在页面的管理器映射中组合，不把字体、模板和头像操作堆入通用文件列表。
+
 `plugin-data/partitions` 返回插件专属分区的实际路径、文件数、字节数和操作能力。文件列表支持分页搜索；内容接口仅按分区内相对路径读取，单文件上限 32 MiB。创建不覆盖同名文件；替换、重命名和删除必须携带读取时的 SHA256 修订号，冲突返回 409。
 
 模板源码可创建和编辑，字体及固定清单内的素材支持上传替换；报告、备份和派生缓存只支持查看、下载及单项删除。字体仍从插件 data/typst/fonts 加载，资源优先使用 data/typst/resources。数据库、内部状态和编译任务目录不提供直接写入。宿主全局 io_temp_img_* 没有插件归属，不能通过本插件清理。头像缓存通过 DiskCache API 清理，不删除仍在使用的数据库文件。
