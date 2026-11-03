@@ -177,11 +177,12 @@ class TypstReportRenderer:
                 async with _span(
                     "TYPST_ENCODE", {"format": options.get("type", "png")}
                 ) as span:
-                    image = await asyncio.to_thread((job / "report.png").read_bytes)
                     if options.get("type", "png") == "jpeg":
                         image = await asyncio.to_thread(
-                            _encode_jpeg, image, options.get("quality", 90)
+                            _encode_jpeg, job / "report.png", options.get("quality", 90)
                         )
+                    else:
+                        image = await asyncio.to_thread((job / "report.png").read_bytes)
                     if span:
                         span["payload"]["image_bytes"] = len(image)
                 return image
@@ -365,7 +366,7 @@ class TypstReportRenderer:
                 )
 
 
-def _encode_jpeg(payload: bytes, quality: int) -> bytes:
+def _encode_jpeg(payload: bytes | Path, quality: int) -> bytes:
     """在工作线程中将编译结果转为 JPEG，避免压缩阻塞事件循环。
 
     Args:
@@ -375,7 +376,9 @@ def _encode_jpeg(payload: bytes, quality: int) -> bytes:
     Returns:
         JPEG 文件字节。
     """
-    with Image.open(BytesIO(payload)) as image:
+    with Image.open(
+        BytesIO(payload) if isinstance(payload, bytes) else payload
+    ) as image:
         output = BytesIO()
         image.convert("RGB").save(output, format="JPEG", quality=quality)
         return output.getvalue()

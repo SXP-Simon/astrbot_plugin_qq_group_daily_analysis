@@ -79,6 +79,7 @@ class TypstAssets:
                     self.network_budget_exhausted = (
                         self.resource_store.network_budget_exhausted
                     )
+                    self.failed.add(source)
                     logger.warning("Typst 原始素材获取失败，本次使用占位装饰")
                     return ""
         variant = "oval:" if oval else ""
@@ -229,34 +230,33 @@ class TypstAssets:
         """
         if len(payload) > 8 * 1024 * 1024:
             raise ValueError("图片超过 8 MiB")
-        with Image.open(BytesIO(payload)) as image:
-            if image.width * image.height > 16_000_000:
-                raise ValueError("素材图片像素过多")
-            # 先缩小原生 RGB/RGBA，避免复制完整大图；调色板及透明色先解析。
-            if image.mode not in ("RGB", "RGBA") or "transparency" in image.info:
-                image = image.convert("RGBA")
-            # 保持原 RGBA 分支的一次重采样，不使用 JPEG draft 或整倍缩小。
-            image.thumbnail((1600, 1600), reducing_gap=None)
-            if image.mode != "RGBA":
-                image = image.convert("RGBA")
-            if oval:
-                image = ImageOps.fit(image, (200, 240), method=Image.Resampling.LANCZOS)
-                mask = Image.new("L", image.size)
-                ImageDraw.Draw(mask).ellipse((0, 0, 199, 239), fill=255)
-                image.putalpha(ImageChops.multiply(image.getchannel("A"), mask))
-            if opacity < 1:
-                image.putalpha(
-                    image.getchannel("A").point(
-                        lambda alpha: int(alpha * max(0, opacity))
-                    )
-                )
-            output = BytesIO()
-            image.save(output, format="PNG")
-        result = output.getvalue()
         temporary = cached.with_name(f".{cached.stem}.{uuid.uuid4().hex}.part")
         try:
-            temporary.write_bytes(result)
+            with Image.open(BytesIO(payload)) as image:
+                if image.width * image.height > 16_000_000:
+                    raise ValueError("素材图片像素过多")
+                # 先缩小原生 RGB/RGBA，避免复制完整大图；调色板及透明色先解析。
+                if image.mode not in ("RGB", "RGBA") or "transparency" in image.info:
+                    image = image.convert("RGBA")
+                # 保持原 RGBA 分支的一次重采样，不使用 JPEG draft 或整倍缩小。
+                image.thumbnail((1600, 1600), reducing_gap=None)
+                if image.mode != "RGBA":
+                    image = image.convert("RGBA")
+                if oval:
+                    image = ImageOps.fit(
+                        image, (200, 240), method=Image.Resampling.LANCZOS
+                    )
+                    mask = Image.new("L", image.size)
+                    ImageDraw.Draw(mask).ellipse((0, 0, 199, 239), fill=255)
+                    image.putalpha(ImageChops.multiply(image.getchannel("A"), mask))
+                if opacity < 1:
+                    image.putalpha(
+                        image.getchannel("A").point(
+                            lambda alpha: int(alpha * max(0, opacity))
+                        )
+                    )
+                image.save(temporary, format="PNG")
             temporary.replace(cached)
-            target.write_bytes(result)
+            shutil.copyfile(cached, target)
         finally:
             temporary.unlink(missing_ok=True)

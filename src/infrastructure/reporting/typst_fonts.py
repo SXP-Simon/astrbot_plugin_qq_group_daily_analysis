@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from typing import TYPE_CHECKING, TypedDict
 
@@ -209,18 +208,18 @@ async def _download_font(
     try:
         async with session.get(url) as response:
             response.raise_for_status()
-            payload = bytearray()
-            async for chunk in response.content.iter_chunked(65536):
-                payload.extend(chunk)
-                if len(payload) > 32 * 1024 * 1024:
-                    raise ValueError("字体下载超过 32 MiB，请检查 CDN 响应")
-        if len(payload) < 1024 or bytes(payload[:4]) not in (
-            b"ttcf",
-            b"OTTO",
-            b"\x00\x01\x00\x00",
-        ):
+            size = 0
+            header = bytearray()
+            with temporary.open("wb") as output:
+                async for chunk in response.content.iter_chunked(65536):
+                    size += len(chunk)
+                    if size > 32 * 1024 * 1024:
+                        raise ValueError("字体下载超过 32 MiB，请检查 CDN 响应")
+                    if len(header) < 4:
+                        header.extend(chunk[: 4 - len(header)])
+                    output.write(chunk)
+        if size < 1024 or bytes(header) not in (b"ttcf", b"OTTO", b"\x00\x01\x00\x00"):
             raise ValueError("CDN 返回的内容不是有效字体")
-        await asyncio.to_thread(temporary.write_bytes, payload)
         temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)
