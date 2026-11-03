@@ -1,3 +1,4 @@
+import { mockTemplateResources, mockTypstFonts } from "./data/templateResources";
 import { supportsTemplate } from "../entities/report/model/templates";
 import { renderingRuntimeSchema } from "../entities/config/model/renderingConfig";
 import { mockMetricsSummary, mockAnalyticsTrends } from "./data/metrics";
@@ -36,6 +37,23 @@ export const mockHandlers = {
     status: "error",
     message: "演示模式不进行真实网络检测，请连接 AstrBot 插件后再试。",
   }),
+  "GET config/template-resources": () => ({ status: "ok", data: mockTemplateResources }),
+  "POST config/template-resources/download": (body?: Record<string, unknown>) => {
+    const file = mockTemplateResources.groups.flatMap((group) => group.files).find((item) => item.name === body?.name);
+    if (!file) return { status: "error", message: "演示素材不在清单中" };
+    if (file.name === "scrapbook/assistant.jpg" && String(body?.cdn_base_url).includes("jsdmirror")) {
+      return { status: "error", message: "演示：当前 CDN 的角色图片请求超时，可更换 CDN 后重试" };
+    }
+    file.available = true;
+    return { status: "ok", data: { ...file } };
+  },
+  "GET config/typst-fonts": () => ({ status: "ok", data: mockTypstFonts }),
+  "POST config/typst-fonts/download": () => {
+    mockTypstFonts.files = [...mockTypstFonts.files, ...mockTypstFonts.missing];
+    mockTypstFonts.missing = [];
+    mockTypstFonts.ready = true;
+    return { status: "ok", data: mockTypstFonts };
+  },
   // 1. 大盘指标与趋势
   "GET metrics/summary": () => ({ status: "ok", data: mockMetricsSummary }),
   "GET metrics/trends": () => ({ status: "ok", data: mockAnalyticsTrends }),

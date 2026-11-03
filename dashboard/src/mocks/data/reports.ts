@@ -1,5 +1,5 @@
 import { ReportItem } from "../../entities/report/model/types";
-import { ReportTemplateItem } from "../../entities/report/model/templates";
+import { DEFAULT_REPORT_TEMPLATES, ReportTemplateItem } from "../../entities/report/model/templates";
 
 /**
  * 历史产物报告 Mock 数据矩阵
@@ -95,7 +95,7 @@ export const mockReportHistory: ReportItem[] = [
   },
 ];
 
-export const mockReportTemplates: ReportTemplateItem[] = [
+const templateExamples: ReportTemplateItem[] = [
   {
     id: "scrapbook",
     label: "Scrapbook (默认手账风)",
@@ -168,4 +168,10 @@ export const mockReportTemplates: ReportTemplateItem[] = [
   },
   { id: "custom_native", label: "原生极简示例", is_custom: true, can_uninstall: true,
     has_image: false, has_html: false, has_typst: true, desc: "仅支持 Typst 图片，用于检查引擎筛选与能力标签" },
+];
+
+
+export const mockReportTemplates: ReportTemplateItem[] = [
+  ...DEFAULT_REPORT_TEMPLATES.map((item) => ({ ...item, ...templateExamples.find((example) => example.id === item.id) })),
+  ...templateExamples.filter((item) => item.is_custom),
 ];

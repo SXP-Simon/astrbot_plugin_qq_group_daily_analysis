@@ -1,3 +1,4 @@
+import { renderingConfigSchema } from "../../entities/config/model/renderingConfig";
 import { describe, it, expect } from "vitest";
 import { mockHandlers } from "../handlers";
 import { createMswHandlerDefinitions } from "../mswHandlers";
@@ -8,13 +9,15 @@ import { resolve } from "node:path";
 import configSchema from "../../../../_conf_schema.json";
 
 describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => {
-  it("演示配置使用真实配置结构和默认值", () => {
+  it("演示配置使用真实结构并提供Typst与默认HTML后备", () => {
     const { config, schema } = mockHandlers["GET config"]().data;
     expect(Object.keys(schema).sort()).toEqual(Object.keys(configSchema).sort());
     expect(Object.keys(config).sort()).toEqual(Object.keys(configSchema).sort());
-    expect(config.t2i_rendering.t2i_rendering_strategies).toEqual(
-      configSchema.t2i_rendering.items.t2i_rendering_strategies.default,
-    );
+    const plans = renderingConfigSchema.parse(config.t2i_rendering).t2i_rendering_strategies || [];
+    expect(plans[0].__template_key).toBe("typst");
+    expect(plans.slice(1)).toEqual(renderingConfigSchema.parse({
+      t2i_rendering_strategies: configSchema.t2i_rendering.items.t2i_rendering_strategies.default,
+    }).t2i_rendering_strategies);
     expect(config.prompts).toHaveProperty("topic_analysis_prompts");
   });
 

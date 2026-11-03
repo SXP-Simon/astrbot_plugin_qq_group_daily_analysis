@@ -26,6 +26,13 @@ export const mockPluginConfig: PluginConfigData = {
   schema,
 };
 
+// 演示原生渲染与 HTML 后备，生产默认值仍由配置契约管理。
+const rendering = mockPluginConfig.config.t2i_rendering;
+if (rendering) rendering.t2i_rendering_strategies = [
+  { __template_key: "typst", name: "Typst 本地排版", priority: 5, timeout: 30000, type: "png", quality: 90, cdn_base_url: "https://cdn.jsdmirror.com" },
+  ...(Array.isArray(rendering.t2i_rendering_strategies) ? rendering.t2i_rendering_strategies : []),
+];
+
 export const mockProviders: AvailableProvider[] = [
   { id: "deepseek-chat", name: "DeepSeek Chat (V3)", type: "openai_compatible", label: "DeepSeek Official" },
   { id: "openai", name: "OpenAI GPT-4o", type: "openai", label: "OpenAI Main" },
