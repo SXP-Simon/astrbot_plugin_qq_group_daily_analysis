@@ -125,7 +125,7 @@ def typst_font_status(data_dir: Path) -> TypstFontStatus:
         data_dir: 插件数据根目录。
 
     Returns:
-        已安装的字体和仍需下载的预设文件。
+        已安装字体、全局缺失文件和各内置主题的字体依赖状态。
     """
     directory = data_dir / "typst" / "fonts"
     files = sorted(
@@ -165,7 +165,7 @@ async def download_typst_fonts(
         下载后的字体状态；已存在的预设不会重复下载。
 
     Raises:
-        ValueError: CDN 返回的内容过大或不是字体。
+        ValueError: 模板未知、CDN 返回的内容过大或不是字体。
         aiohttp.ClientError: 下载失败，已经成功的文件仍可复用。
     """
     if theme is not None and theme not in THEME_FONTS:
@@ -180,30 +180,47 @@ async def download_typst_fonts(
         timeout=aiohttp.ClientTimeout(total=180), trust_env=True
     ) as session:
         for name in missing:
-            target = directory / name
-            temporary = directory / f".{name}.{uuid.uuid4().hex}.part"
-            try:
-                source = FONT_SOURCES[name]
-                url = (
-                    source
-                    if source.startswith("https://")
-                    else f"{cdn_base_url.rstrip('/')}/{source}"
-                )
-                async with session.get(url) as response:
-                    response.raise_for_status()
-                    payload = bytearray()
-                    async for chunk in response.content.iter_chunked(65536):
-                        payload.extend(chunk)
-                        if len(payload) > 32 * 1024 * 1024:
-                            raise ValueError("字体下载超过 32 MiB，请检查 CDN 响应")
-                if len(payload) < 1024 or bytes(payload[:4]) not in (
-                    b"ttcf",
-                    b"OTTO",
-                    b"\x00\x01\x00\x00",
-                ):
-                    raise ValueError("CDN 返回的内容不是有效字体")
-                await asyncio.to_thread(temporary.write_bytes, payload)
-                temporary.replace(target)
-            finally:
-                temporary.unlink(missing_ok=True)
+            source = FONT_SOURCES[name]
+            url = (
+                source
+                if source.startswith("https://")
+                else f"{cdn_base_url.rstrip('/')}/{source}"
+            )
+            await _download_font(session, url, directory / name)
     return typst_font_status(data_dir)
+
+
+async def _download_font(
+    session: aiohttp.ClientSession, url: str, target: Path
+) -> None:
+    """校验并原子保存一个预设字体，失败时清理临时文件。
+
+    Args:
+        session: 批次共用的下载会话。
+        url: 由固定字体清单与已选 CDN 解析的来源。
+        target: 插件受管理目录中的固定目标文件。
+
+    Raises:
+        ValueError: 响应过大或不是字体。
+        aiohttp.ClientError: 来源下载失败。
+        OSError: 临时文件无法写入或替换。
+    """
+    temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.part")
+    try:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            payload = bytearray()
+            async for chunk in response.content.iter_chunked(65536):
+                payload.extend(chunk)
+                if len(payload) > 32 * 1024 * 1024:
+                    raise ValueError("字体下载超过 32 MiB，请检查 CDN 响应")
+        if len(payload) < 1024 or bytes(payload[:4]) not in (
+            b"ttcf",
+            b"OTTO",
+            b"\x00\x01\x00\x00",
+        ):
+            raise ValueError("CDN 返回的内容不是有效字体")
+        await asyncio.to_thread(temporary.write_bytes, payload)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
