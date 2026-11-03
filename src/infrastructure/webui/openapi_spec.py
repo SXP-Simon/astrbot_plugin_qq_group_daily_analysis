@@ -873,16 +873,6 @@ def generate_openapi_spec() -> dict[str, Any]:
                             "default": "custom",
                         },
                         "group_id": {"type": "string", "maxLength": 256},
-                        "typst_width": {
-                            "type": "integer",
-                            "minimum": 640,
-                            "maximum": 1280,
-                        },
-                        "typst_ppi": {
-                            "type": "integer",
-                            "minimum": 72,
-                            "maximum": 288,
-                        },
                         "platform_id": {"type": "string", "maxLength": 256},
                         "service_endpoint": {
                             "type": "string",

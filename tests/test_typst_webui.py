@@ -22,7 +22,7 @@ async def test_typst_probe_uses_plugin_data_and_no_host(probe, tmp_path, monkeyp
     request.json.return_value = {"render_service": "typst", "typst_ppi": 120, "timeout": 30000}
     result = await routes.api_test_t2i()
     assert result["data"]["status"] == "ok"
-    assert renderer.await_args.args == (tmp_path, {"render_service": "typst", "timeout": 30000, "typst_ppi": 120})
+    assert renderer.await_args.args == (tmp_path, {"render_service": "typst", "timeout": 30000})
     routes.analysis_service.html_render.assert_not_called()
 
 

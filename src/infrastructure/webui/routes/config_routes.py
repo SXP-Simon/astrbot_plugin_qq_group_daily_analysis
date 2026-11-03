@@ -415,8 +415,6 @@ class ConfigRoutes:
                                 "service_token",
                                 "timeout",
                                 "request_timeout",
-                                "typst_width",
-                                "typst_ppi",
                             )
                             if key in body
                         },
@@ -450,7 +448,6 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     {
                         "render_service": "typst",
                         "timeout": plan["timeout"],
-                        "typst_ppi": plan.get("typst_ppi", 144),
                     },
                 )
             elif service == "custom":
