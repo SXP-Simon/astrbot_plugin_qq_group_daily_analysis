@@ -58,7 +58,7 @@ def test_end_marker_matches_actual_png_height(tmp_path, managed_fonts, theme):
     shutil.copyfile(source, tmp_path / "main.typ")
     if theme != "recovery":
         shutil.copyfile(templates / "common.typ", tmp_path / "common.typ")
-        for resource in source.parent.iterdir():
+        for resource in [*source.parent.iterdir(), *(Path(__file__).parents[1] / "assets" / theme).glob("*.svg")]:
             if resource.suffix in (".typ", ".svg") and resource != source:
                 shutil.copyfile(resource, tmp_path / resource.name)
     if theme == "ATRI":

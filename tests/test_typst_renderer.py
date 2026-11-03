@@ -71,8 +71,8 @@ def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch, t
         native._prepare_render_data.assert_not_called()
         if theme == "BlueArchive":
             sources = {call.args[0] for call in TypstAssets.localize.await_args_list}
-            assert "https://img.dkdun.cn/v1/2026/17/7170c8669dad05dd.png" in sources
-            assert "https://img.dkdun.cn/v1/2026/17/314653a2aa301144.png" in sources
+            assert any(source.endswith("/BlueArchive/arona.png") for source in sources)
+            assert any(source.endswith("/BlueArchive/arona-review.png") for source in sources)
         await native.close()
     asyncio.run(check())
 

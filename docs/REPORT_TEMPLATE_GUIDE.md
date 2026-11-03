@@ -593,3 +593,10 @@ with Image.open(source) as original:
 Typst 只输出静态图片，固定 940px 宽、144 PPI，高度自然增长；主模板需提供 `<report-size>` 元数据供编译器检查像素预算，可参考内置 `simple/report.typ`。任务根目录只包含模板、素材与本次数据，不包含宿主目录。禁止符号链接。编译失败后仍会尝试保留全部分析文字的基础排版。
 
 HTML 图片、HTML 网页和 Typst 图片是独立能力。仅有 Typst 的主题不能用于 HTML 渲染，避免无声套用另一主题的主模板。HTML 自定义模板的局部组件仍保留既有手账兜底。
+
+
+### 内置 Typst 素材
+
+独立 SVG 和角色图片统一存放在仓库 `assets/<主题>/`，不随 release 打包。`template_asset_catalog.py` 保持模板装饰索引顺序，并供下载列表与渲染器共用。不要从 Emoji 字体提取图片。
+
+Typst 优先使用插件数据目录 `typst/resources/<主题>/` 中的资源，再读取开发仓库资源；缺失文件从当前方案 CDN 获取并原子保存。处理后的 PNG 仍放在独立缓存中，过期时复用本地原图。HTML 使用 CDN URL，远程 T2I 不依赖机器人所在机器的文件路径。缺失 SVG 留白并记录警告，不将占位图写入长期资源目录。

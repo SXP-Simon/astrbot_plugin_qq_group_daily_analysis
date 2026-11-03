@@ -18,7 +18,9 @@ from PIL import Image
 
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .template_asset_catalog import THEME_DECORATIONS
 from .template_installer import is_path_within, validate_template_name
+from .template_resources import TemplateResourceStore
 from .typst_data import TypstDataPreparer
 from .typst_resources import TypstAssets
 from .typst_worker import REPORT_PPI, REPORT_WIDTH
@@ -33,77 +35,6 @@ if TYPE_CHECKING:
 
 
 REPORT_TEMPLATES = Path(__file__).parent / "templates"
-# 发布包不含开发目录的图片；仓库素材使用配置的 CDN，上游外链沿用原模板来源。
-THEME_DECORATIONS: dict[str, tuple[str, ...]] = {
-    "HatsuneMiku": tuple(
-        f"HatsuneMiku/retouch_{name}.png"
-        for name in (
-            "2026032802083201",
-            "2026032810150449",
-            "2026032810143720",
-            "2026032810151717",
-            "2026032810153327",
-            "2026032810145078",
-        )
-    ),
-    "ATRI": (
-        "ATRI/file/1775130588385_1774881257527_bg1.webp",
-        "ATRI/file/1775130626446_1774881312214_atri1.webp",
-        "ATRI/file/1775130623112_1774881319340_atri4.webp",
-        "ATRI/file/1775130613783_1774881310058_atri3.webp",
-        "ATRI/file/1775130600453_1774881268554_可爱.webp",
-        "ATRI/file/1775130585446_1774881263342_观察.webp",
-        "ATRI/file/1775130581843_1774881262835_疑惑.webp",
-        "ATRI/file/1775130598778_1774881267181_得意.webp",
-        "ATRI/file/1775130599184_1774881267385_得意-1.webp",
-        "ATRI/file/1775130605165_1774881270686_爱心.webp",
-        "ATRI/file/1775130588642_1774881263748_可爱-3.webp",
-        "ATRI/file/1775130609119_1774881269400_可爱-1.webp",
-        "ATRI/file/1775130591277_1774881264350_睡觉.webp",
-        "ATRI/file/1775130591487_1774881264336_不要.webp",
-        "ATRI/file/1775132804506_1774881263342_观察.gif",
-        "ATRI/file/1775132805081_1774881262835_疑惑.gif",
-        "ATRI/file/1775132815504_1774881268554_可爱.gif",
-        "ATRI/file/1775132817115_1774881269400_可爱-1.gif",
-        "ATRI/file/1775132805485_1774881263748_可爱-3.gif",
-        "ATRI/file/1775132813334_1774881267181_得意.gif",
-        "ATRI/file/1775132808652_1774881267385_得意-1.gif",
-        "ATRI/file/1775132811492_1774881264336_不要.gif",
-        "ATRI/file/1775132814629_1774881270686_爱心.gif",
-        "ATRI/file/1775132809943_1774881264350_睡觉.gif",
-        "ATRI/file/1775175892953_1774881267664_舔屏幕.gif",
-    ),
-    "deepseek_maid": tuple(
-        f"deepseek_maid/layers/{name}.png"
-        for name in (
-            "front",
-            "eye-0",
-            "eye-1",
-            "mouth",
-            "closed-eye-0",
-            "closed-eye-1",
-            "basin-v3",
-        )
-    ),
-    "scrapbook": ("scrapbook/assistant.jpg",),
-    "BlueArchive": (
-        "https://img.dkdun.cn/v1/2026/17/7170c8669dad05dd.png",
-        "https://img.dkdun.cn/v1/2026/17/314653a2aa301144.png",
-    ),
-    "maria": (
-        "maria/statue_virgin_mary.png",
-        "maria/rose_red.png",
-        "maria/rose_white.png",
-        "maria/rose_yellow.png",
-        "maria/rosa_gigantea_sei_shimako.png",
-        "maria/rosa_chinensis_sachiko_yumi.png",
-        "maria/sei_window_observation.png",
-        "maria/rosa_foetida_yoshino_rei.png",
-        "maria/rose_red.png",
-        "maria/rose_white.png",
-        "maria/rose_yellow.png",
-    ),
-}
 
 
 async def run_typst_worker(
@@ -259,7 +190,10 @@ async def render_typst_report(
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=15), trust_env=True
             ) as session:
-                assets = TypstAssets(data_dir, job_dir, session)
+                resource_store = TemplateResourceStore(data_dir, base)
+                assets = TypstAssets(
+                    data_dir, job_dir, session, resource_store=resource_store
+                )
                 preparer = TypstDataPreparer(
                     config,
                     avatars,
@@ -297,6 +231,8 @@ async def render_typst_report(
                 shutil.copytree(template_dir, job_dir, dirs_exist_ok=True)
             # 上传包不能覆盖本次数据或编译入口。
             shutil.copyfile(template, job_dir / "main.typ")
+            if is_builtin:
+                await resource_store.stage_vectors(theme, job_dir)
             payload = data
             (job_dir / "data.json").write_text(
                 json.dumps(payload, ensure_ascii=False), encoding="utf-8"

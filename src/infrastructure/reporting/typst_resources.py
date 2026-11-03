@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import shutil
 import time
 import uuid
 from io import BytesIO
@@ -14,9 +15,12 @@ import aiohttp
 from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 from ...utils.logger import logger
+from .template_asset_catalog import RESOURCE_FILES
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from .template_resources import TemplateResourceStore
 
 # 字体始终写入插件 data 目录；来源是固定上游，不接受任意下载 URL 或目标路径。
 FONT_SOURCES = {
@@ -135,11 +139,19 @@ async def download_typst_fonts(data_dir: Path, cdn_base_url: str) -> TypstFontSt
 class TypstAssets:
     """单次任务的图片本地化，CDN 缓存与编译目录彼此隔离。"""
 
-    def __init__(self, data_dir: Path, job_dir: Path, session: aiohttp.ClientSession):
+    def __init__(
+        self,
+        data_dir: Path,
+        job_dir: Path,
+        session: aiohttp.ClientSession,
+        *,
+        resource_store: TemplateResourceStore | None = None,
+    ):
         self.cache = data_dir / "typst" / "assets"
         self.cache.mkdir(parents=True, exist_ok=True)
         self.job_dir = job_dir
         self.session = session
+        self.resource_store = resource_store
         self.semaphore = asyncio.Semaphore(6)
         self.failed: set[str] = set()
 
@@ -166,26 +178,13 @@ class TypstAssets:
         cached = self.cache / f"{key}.png"
         async with self.semaphore:
             try:
-                if source.startswith("data:"):
-                    payload = base64.b64decode(source.split(",", 1)[1], validate=True)
-                elif source.startswith(("https://", "http://")):
-                    if (
-                        cached.is_file()
-                        and time.time() - cached.stat().st_mtime < 7 * 86400
-                    ):
-                        cached_data = await asyncio.to_thread(cached.read_bytes)
-                        await asyncio.to_thread(target.write_bytes, cached_data)
-                        return target.name
-                    async with self.session.get(source) as response:
-                        response.raise_for_status()
-                        data = bytearray()
-                        async for chunk in response.content.iter_chunked(65536):
-                            data.extend(chunk)
-                            if len(data) > 8 * 1024 * 1024:
-                                raise ValueError("图片超过 8 MiB")
-                        payload = bytes(data)
-                else:
-                    return ""
+                if (
+                    cached.is_file()
+                    and time.time() - cached.stat().st_mtime < 7 * 86400
+                ):
+                    await asyncio.to_thread(shutil.copyfile, cached, target)
+                    return target.name
+                payload = await self._read_source(source)
                 await asyncio.to_thread(
                     self._save_image, payload, target, cached, opacity, oval
                 )
@@ -193,11 +192,43 @@ class TypstAssets:
             except (aiohttp.ClientError, TimeoutError, ValueError, OSError):
                 self.failed.add(source)
                 if cached.is_file():
-                    cached_data = await asyncio.to_thread(cached.read_bytes)
-                    await asyncio.to_thread(target.write_bytes, cached_data)
+                    await asyncio.to_thread(shutil.copyfile, cached, target)
                     return target.name
                 logger.warning("Typst 素材获取失败，本次使用占位装饰")
                 return ""
+
+    async def _read_source(self, source: str) -> bytes:
+        """解析图片来源，仓库装饰优先读取本地资源，头像保持独立缓存策略。
+
+        Args:
+            source: 已由业务层解析的图片地址或 Data URI。
+
+        Returns:
+            待像素校验和转换的图片字节。
+
+        Raises:
+            ValueError: 来源类型无效或超过字节预算。
+            aiohttp.ClientError: 远程素材获取失败。
+        """
+        if source.startswith("data:"):
+            return base64.b64decode(source.split(",", 1)[1], validate=True)
+        if not source.startswith(("https://", "http://")):
+            raise ValueError("不支持的图片来源")
+        if self.resource_store and source.startswith(
+            self.resource_store.base_url + "/"
+        ):
+            name = source.removeprefix(self.resource_store.base_url + "/")
+            if name in RESOURCE_FILES:
+                path = await self.resource_store.ensure(name, self.session)
+                return await asyncio.to_thread(path.read_bytes)
+        async with self.session.get(source) as response:
+            response.raise_for_status()
+            data = bytearray()
+            async for chunk in response.content.iter_chunked(65536):
+                data.extend(chunk)
+                if len(data) > 8 * 1024 * 1024:
+                    raise ValueError("图片超过 8 MiB")
+            return bytes(data)
 
     @staticmethod
     def _save_image(
