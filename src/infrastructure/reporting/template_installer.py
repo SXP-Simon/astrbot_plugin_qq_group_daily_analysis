@@ -584,11 +584,10 @@ def uninstall_template(
     name: str,
     store_dir: Path | None = None,
 ) -> dict[str, object]:
-    """卸载通过插件安装器下载的自定义模板。
+    """移除插件数据目录中的指定自定义模板，包括手动模板和未完成目录。
 
-    仅允许卸载带安装标记（.tpl_installed.json）的模板：
-    - 内置模板（位于插件内置 templates 目录）不在此目录下，且按名字直接拒绝；
-    - 手动放入数据目录、未经安装器安装的目录无标记，拒绝自动卸载。
+    安装标记只记录来源，不作为用户管理自己模板文件的权限条件。
+    内置模板名、非法路径及链接目标仍被拒绝，不访问内置模板目录。
 
     Args:
         name: 模板目录名。
@@ -596,6 +595,9 @@ def uninstall_template(
 
     Returns:
         卸载结果字典: name / removed。
+
+    Raises:
+        TemplateInstallError: 模板路径不合法、不存在、属于内置模板或删除失败。
     """
     template_name = validate_template_name(name)
     if template_name in builtin_template_names():
@@ -619,12 +621,6 @@ def uninstall_template(
         raise TemplateInstallError("模板名非法。")
     if not target.is_dir():
         raise TemplateInstallError(f"模板 '{template_name}' 不存在。")
-    if not (target / INSTALL_MARKER_FILENAME).is_file():
-        raise TemplateInstallError(
-            f"模板 '{template_name}' 不是通过插件安装器下载的，无法自动卸载；"
-            "如需移除请手动删除数据目录下的同名文件夹。"
-        )
-
     try:
         shutil.rmtree(target)
     except Exception as exc:

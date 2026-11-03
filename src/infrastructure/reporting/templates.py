@@ -17,7 +17,6 @@ from jinja2.sandbox import SandboxedEnvironment
 
 from ...utils.logger import logger
 from .template_installer import (
-    INSTALL_MARKER_FILENAME,
     template_dir_has_symlink_entries,
     validate_template_name,
 )
@@ -211,8 +210,7 @@ class HTMLTemplates:
                     "desc": meta.get("desc", ""),
                     "tag": meta.get("tag", ""),
                     "tag_color": meta.get("tag_color", ""),
-                    "can_uninstall": is_custom
-                    and (directory / INSTALL_MARKER_FILENAME).is_file(),
+                    "can_uninstall": is_custom,
                 }
         return sorted(
             found.values(), key=lambda item: (item["id"] != "HatsuneMiku", item["id"])

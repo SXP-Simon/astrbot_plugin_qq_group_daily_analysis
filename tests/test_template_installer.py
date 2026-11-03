@@ -437,15 +437,21 @@ def test_uninstall_rejects_builtin(tmp_path):
         uninstall_template("simple", store_dir=tmp_path)
 
 
-def test_uninstall_rejects_unmanaged_dir(tmp_path):
-    """手动放入数据目录（无安装标记）的模板不允许自动卸载。"""
+@pytest.mark.parametrize("entry", ["image_template.html", "report.typ", "template.json"])
+def test_uninstall_removes_manual_and_unfinished_dir(tmp_path, entry):
+    """手动模板和缺少入口的草稿都可整包移除，兄弟目录不受影响。"""
     manual = tmp_path / "manual_theme"
     manual.mkdir()
-    (manual / "image_template.html").write_text("<html></html>", encoding="utf-8")
-    with pytest.raises(TemplateInstallError, match="不是通过插件安装器"):
-        uninstall_template("manual_theme", store_dir=tmp_path)
-    # 目录未被删除
-    assert manual.is_dir()
+    (manual / entry).write_text("content", encoding="utf-8")
+    assets = manual / "assets"
+    assets.mkdir()
+    (assets / "character.png").write_bytes(b"asset")
+    sibling = tmp_path / "keep_theme"
+    sibling.mkdir()
+    result = uninstall_template("manual_theme", store_dir=tmp_path)
+    assert result == {"name": "manual_theme", "removed": True}
+    assert not manual.exists()
+    assert sibling.is_dir()
 
 
 def test_uninstall_rejects_nonexistent(tmp_path):
@@ -462,8 +468,8 @@ def test_uninstall_rejects_invalid_name(tmp_path, bad_name):
         uninstall_template(bad_name, store_dir=tmp_path)
 
 
-def test_uninstall_clears_only_marked(tmp_path):
-    """批量场景：带标记模板被卸载后，无标记的兄弟目录保留。"""
+def test_uninstall_clears_only_selected_directory(tmp_path):
+    """只移除显式指定的模板，其他目录不受影响。"""
     marked = tmp_path / "gda_keep"
     marked.mkdir()
     (marked / "image_template.html").write_text("<html></html>", encoding="utf-8")
@@ -583,7 +589,7 @@ def test_resolve_builtin_preview_prefers_webp_and_keeps_jpg_fallback(
 
 
 def test_available_templates_can_uninstall_flag(tmp_path):
-    """模板列表的 can_uninstall 仅对带安装标记的自定义目录为真。"""
+    """自定义模板均可移除，内置模板的能力仍为假。"""
     from unittest.mock import MagicMock
 
     from src.infrastructure.reporting.templates import HTMLTemplates
@@ -611,7 +617,7 @@ def test_available_templates_can_uninstall_flag(tmp_path):
 
     assert items["gda_managed"]["can_uninstall"] is True
     assert items["gda_managed"]["is_custom"] is True
-    assert items["manual_theme"]["can_uninstall"] is False
+    assert items["manual_theme"]["can_uninstall"] is True
     assert items["manual_theme"]["is_custom"] is True
     # 内置模板不可卸载且不是自定义模板
     assert items["scrapbook"]["can_uninstall"] is False
