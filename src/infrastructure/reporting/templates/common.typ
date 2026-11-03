@@ -7,15 +7,29 @@
 )
 #let words(d) = labels.at(d.language, default: labels.at("zh-Hans"))
 // 卡片投影复用本地 SVG 滤镜；尺寸来自实际排版测量，不影响正文的流式高度。
-#let shadow(t,body,radius:12,dy:8,blur:24,color:rgb("2a9d95").transparentize(96%)) = layout(size=>{
-  let measured=measure(body,width:size.width)
-  let w=measured.width/t.u
-  let h=measured.height/t.u
-  let pad=blur*2+calc.abs(dy)
-  // 滤镜只计算 SVG 画布内可见的像素，避免为大卡片分配三倍宽高的离屏区域。
-  let svg="<svg xmlns='http://www.w3.org/2000/svg' width='"+str(w+2*pad)+"' height='"+str(h+2*pad)+"' viewBox='0 0 "+str(w+2*pad)+" "+str(h+2*pad)+"'><defs><filter id='s' filterUnits='userSpaceOnUse' x='0' y='0' width='"+str(w+2*pad)+"' height='"+str(h+2*pad)+"'><feGaussianBlur stdDeviation='"+str(blur/2)+"'/></filter></defs><rect x='"+str(pad)+"' y='"+str(pad+dy)+"' width='"+str(w)+"' height='"+str(h)+"' rx='"+str(radius)+"' fill='"+color.to-hex()+"' filter='url(#s)'/></svg>"
-  [#place(top+left,dx:-pad*t.u,dy:-pad*t.u,image(bytes(svg),format:"svg",width:(w+2*pad)*t.u,height:(h+2*pad)*t.u))#body]
-})
+#let shadow(t,body,radius:12,dy:8,blur:24,color:rgb("2a9d95").transparentize(96%)) = {
+  let draw(measured) = {
+    let w=measured.width/t.u
+    let h=measured.height/t.u
+    let pad=blur*2+calc.abs(dy)
+    // 滤镜只计算 SVG 画布内可见的像素，避免为大卡片分配三倍宽高的离屏区域。
+    let svg="<svg xmlns='http://www.w3.org/2000/svg' width='"+str(w+2*pad)+"' height='"+str(h+2*pad)+"' viewBox='0 0 "+str(w+2*pad)+" "+str(h+2*pad)+"'><defs><filter id='s' filterUnits='userSpaceOnUse' x='0' y='0' width='"+str(w+2*pad)+"' height='"+str(h+2*pad)+"'><feGaussianBlur stdDeviation='"+str(blur/2)+"'/></filter></defs><rect x='"+str(pad)+"' y='"+str(pad+dy)+"' width='"+str(w)+"' height='"+str(h)+"' rx='"+str(radius)+"' fill='"+color.to-hex()+"' filter='url(#s)'/></svg>"
+    [#place(top+left,dx:-pad*t.u,dy:-pad*t.u,image(bytes(svg),format:"svg",width:(w+2*pad)*t.u,height:(h+2*pad)*t.u))#body]
+  }
+  // 固定尺寸直接绘制，避免嵌套测量复制整棵布局；自适应内容仍按原约束测量。
+  let fields=if body.func()==block or body.func()==box {body.fields()}else{(:)}
+  let width=fields.at("width",default:auto)
+  let height=fields.at("height",default:auto)
+  if type(width)==relative and width.ratio==0% and type(height)==relative and height.ratio==0% {
+    context draw((width:width.length.to-absolute(),height:height.length.to-absolute()))
+  }else if type(width)==relative and width.ratio==0% {
+    context draw(measure(body,width:width.length))
+  }else if type(width)==relative and type(height)==relative and height.ratio==0% {
+    layout(size=>draw((width:width.ratio*size.width+width.length.to-absolute(),height:height.length.to-absolute())))
+  }else{
+    layout(size=>draw(measure(body,width:size.width)))
+  }
+}
 #let deco(d, index, width: 80pt, height: 65pt) = {
   let path = d.decorations.at(index, default: "")
   if path != "" { image(path, width: width, height: height, fit: "contain") }
