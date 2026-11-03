@@ -46,13 +46,26 @@
   ]}
   shadow(t,panel,radius:radius,blur:blur,dy:dy,color:rgb("557ea9").transparentize(96%))
 })
-#let label(t,d,title,subtitle,symbol,index) = box(inset:(left:8*t.u,right:24*t.u,y:8*t.u),fill:gradient.linear(white.transparentize(25%),white.transparentize(65%),angle:45deg,space:rgb),radius:20*t.u,stroke:1.5*t.u+white.transparentize(5%))[
-  #grid(columns:(42*t.u,auto),gutter:12*t.u,align:horizon,
-    box(width:42*t.u,height:42*t.u,fill:gradient.linear(rgb("75c1f0").transparentize(82%),white.transparentize(8%),angle:45deg,space:rgb),radius:14*t.u)[#align(center+horizon,icon(t,symbol))],
-    [#copy(t,[#title#h(6*t.u)#box(width:28*t.u,height:28*t.u,baseline:20%)[#sticker(t,d,index,size:28)]],size:22,weight:600,fill:deep)
-      #v(4.1*t.u)#copy(t,subtitle,size:13,fill:muted)
-      #place(top+right,dx:52*t.u,dy:-8*t.u,copy(t,"memo",size:11,fill:rgb("5ba0c9").transparentize(42%),mono:true,tracking:.08))])
-]
+#let label(t,d,title,subtitle,symbol,index) = context {
+  let inner=box(inset:(left:8*t.u,right:24*t.u,y:8*t.u))[
+    #grid(columns:(42*t.u,auto),gutter:12*t.u,align:horizon,
+      box(width:42*t.u,height:42*t.u,fill:gradient.linear(rgb("75c1f0").transparentize(82%),white.transparentize(8%),angle:45deg,space:rgb),radius:14*t.u)[#align(center+horizon,icon(t,symbol))],
+      [#copy(t,[#title#h(6*t.u)#box(width:28*t.u,height:28*t.u,baseline:20%)[#sticker(t,d,index,size:28)]],size:22,weight:600,fill:deep)
+        #v(4.1*t.u)#copy(t,subtitle,size:13,fill:muted)
+        #place(top+right,dx:52*t.u,dy:-8*t.u,copy(t,"memo",size:11,fill:rgb("5ba0c9").transparentize(42%),mono:true,tracking:.08))])
+  ]
+  let m=measure(inner)
+  let w=m.width/t.u;let h=m.height/t.u
+  // 原版玻璃标题的内高光位于渐变上方、文字下方，外阴影独立覆盖卡片边缘。
+  let pad=56
+  let width=str(w+2*pad);let height=str(h+2*pad)
+  let shape="<rect x='56' y='56' width='"+str(w)+"' height='"+str(h)+"' rx='20' fill='white'"
+  let svg="<svg xmlns='http://www.w3.org/2000/svg' width='"+width+"' height='"+height+"'><defs><filter id='outer' filterUnits='userSpaceOnUse' x='0' y='0' width='"+width+"' height='"+height+"'><feGaussianBlur in='SourceAlpha' stdDeviation='12' result='blur'/><feOffset in='blur' dy='8' result='offset'/><feComposite in='offset' in2='SourceAlpha' operator='out' result='edge'/><feFlood flood-color='#466e96' flood-opacity='.06' result='paint'/><feComposite in='paint' in2='edge' operator='in'/></filter><filter id='rim' filterUnits='userSpaceOnUse' x='0' y='0' width='"+width+"' height='"+height+"'><feGaussianBlur in='SourceAlpha' stdDeviation='3' result='blur'/><feOffset in='blur' dy='2' result='offset'/><feComposite in='SourceAlpha' in2='offset' operator='out' result='edge'/><feFlood flood-color='white' flood-opacity='.6' result='paint'/><feComposite in='paint' in2='edge' operator='in'/></filter></defs>"+shape+" filter='url(#outer)'/>"+shape+" filter='url(#rim)'/></svg>"
+  box(width:m.width,height:m.height,fill:gradient.linear(white.transparentize(25%),white.transparentize(65%),angle:45deg,space:rgb),radius:20*t.u,stroke:1.5*t.u+white.transparentize(5%))[
+    #place(top+left,dx:-pad*t.u,dy:-pad*t.u,image(bytes(svg),format:"svg",width:(w+2*pad)*t.u,height:(h+2*pad)*t.u))
+    #inner
+  ]
+}
 #let section(t,d,title,subtitle,badge,symbol,index,badge-index,fill,body,dots:none) = {
   glass(t,stroke:2,fill:fill,dots:dots,[
     #place(top+right,dx:8*t.u,dy:-8*t.u,copy(t,"✦",size:14,fill:rgb("5cadd9").transparentize(64%)))
