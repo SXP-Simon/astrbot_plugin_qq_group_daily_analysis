@@ -491,8 +491,6 @@ class ReportGenerator(IReportGenerator):
                     request_timeout_ms = strategy_options.pop(
                         "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
                     )
-                    strategy_options.pop("typst_width", None)
-                    strategy_options.pop("typst_ppi", None)
                     image_options: ScreenshotOptions = strategy_options
                     service_url = urlsplit(service_endpoint)
                     renderer_info = host_renderer_info
@@ -568,7 +566,7 @@ class ReportGenerator(IReportGenerator):
                     attempt_timeout = asyncio.timeout_at(render_deadline)
                     try:
                         if render_service == "typst":
-                            viewport_description = f"Typst {strategy.get('typst_width', 940)}px / {strategy.get('typst_ppi', 144)}ppi"
+                            viewport_description = "Typst 固定 940px"
                         else:
                             if (
                                 html_content is None

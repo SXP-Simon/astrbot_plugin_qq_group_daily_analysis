@@ -345,7 +345,6 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
     config.config["basic"]["output_format"] = ["image"]
     config.config["basic"]["show_report_caption"] = False
-    config.config["t2i_rendering"]["t2i_rendering_strategies"][0]["typst_width"] = 1280
     sender = MagicMock()
     sender.bot_manager.get_adapter.return_value = None
     sender.send_image_smart = AsyncMock(return_value=True)
@@ -359,10 +358,8 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
     )
     assert await dispatcher.dispatch("test", data)
     assert worker.await_count == 2
-    assert snapshots[0]["width"] == 1280 and snapshots[1]["width"] == 940
-    assert {k: v for k, v in snapshots[0].items() if k != "width"} == {
-        k: v for k, v in snapshots[1].items() if k != "width"
-    }
+    assert snapshots[0] == snapshots[1]
+    assert "width" not in snapshots[0] and "ppi" not in snapshots[0]
     assert all(snapshots[1][key] for key in ("topics", "portraits", "quotes", "review"))
     sender.send_image_smart.assert_awaited_once()
     image = sender.send_image_smart.await_args.args[1]

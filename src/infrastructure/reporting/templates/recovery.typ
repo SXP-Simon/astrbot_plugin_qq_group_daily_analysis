@@ -1,11 +1,11 @@
 // 恢复版独立于主题、公共组件和图片，保留已准备的全部报告文字。
 #let d = json("data.json")
-#let u = 72/d.ppi*1pt
+#let u = .5pt
 #let words(parts) = parts.map(part => part.text).join("")
-#set page(width:d.width*u,height:auto,margin:0pt,fill:white)
+#set page(width:940*u,height:auto,margin:0pt,fill:white)
 #set text(font:if d.font_language=="zh-Hant" {("Noto Sans TC","Noto Sans SC","Noto Sans JP")}else{("Noto Sans SC","Noto Sans TC","Noto Sans JP")},size:16*u,fill:rgb("222222"))
 #set par(leading:5*u,spacing:10*u)
-#let body = block(width:d.width*u,inset:24*u)[
+#let body = block(width:940*u,inset:24*u)[
   #text(size:26*u,weight:"bold")[群聊日报 · #d.date]
   #parbreak()
   消息数：#d.message_count · 参与人数：#d.participant_count

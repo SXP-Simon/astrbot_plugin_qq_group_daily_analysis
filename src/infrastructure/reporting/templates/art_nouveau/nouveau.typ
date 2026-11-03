@@ -285,7 +285,7 @@
   }
 }
 #let render(d) = {
-  let u=72/d.ppi*d.width/940*1pt
+  let u=.5pt
   let cjk=if d.font_language=="zh-Hant" {("Noto Serif TC","Noto Serif SC")}else{("Noto Serif SC","Noto Serif TC")}
   let t=(u:u,display:("Cinzel",..cjk),body:("Cormorant Garamond",..cjk))
   set page(width:940*u,height:auto,margin:0pt,fill:bg)

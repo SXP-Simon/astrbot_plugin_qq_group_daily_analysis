@@ -298,7 +298,7 @@
   ])
 }
 #let render(d) = {
-  let u=72/d.ppi*d.width/940*1pt
+  let u=.5pt
   let body=if d.font_language=="zh-Hant" {("Noto Sans TC","Noto Sans SC","Noto Color Emoji")}else{("Noto Sans SC","Noto Sans TC","Noto Color Emoji")}
   let t=(u:u,body:body,hand:("Patrick Hand","KaiTi","STKaiti","LXGW WenKai",..body))
   set page(width:940*u,height:auto,margin:0pt,fill:bg)

@@ -74,10 +74,10 @@
   ])
 }
 #let render(d,t) = {
-  set page(width:d.width*t.u,height:auto,margin:0pt,fill:white)
+  set page(width:940*t.u,height:auto,margin:0pt,fill:white)
   set text(font:if d.font_language=="zh-Hant" {("Noto Sans TC","Noto Sans SC")}else{("Noto Sans SC",)},size:16*t.u,cjk-latin-spacing:none)
   set par(spacing:0pt,leading:0pt)
-  let body=block(width:d.width*t.u,inset:28*t.u)[
+  let body=block(width:940*t.u,inset:28*t.u)[
     #v(21.44*t.u)#copy(t,[群聊日报 - #d.date],size:32,weight:700,fill:rgb("333333"),lh:46/32)#v(21.44*t.u)
     #section(t,"基础统计",[
       #for line in ([消息数: #d.message_count],[参与人数: #d.participant_count],[总字符数: #d.characters],[表情数: #d.emoji_count],[最活跃时段: #d.peak]) {copy(t,line);v(16*t.u)}

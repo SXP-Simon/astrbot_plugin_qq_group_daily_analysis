@@ -6,6 +6,9 @@ import json
 import sys
 from pathlib import Path
 
+REPORT_WIDTH = 940
+REPORT_PPI = 144
+
 
 def compile_report(job_dir: Path, font_dir: Path) -> None:
     """先测量像素预算，再直接编译 PNG。
@@ -25,7 +28,6 @@ def compile_report(job_dir: Path, font_dir: Path) -> None:
     families = fonts.families()
     if not any("Noto Sans CJK" in name or "Noto Sans SC" in name for name in families):
         raise RuntimeError("Typst 缺少中文字体，请在 WebUI 下载预设字体到插件数据目录")
-    data = json.loads((job_dir / "data.json").read_text(encoding="utf-8"))
     compiler = typst.Compiler(
         str(job_dir / "main.typ"),
         root=str(job_dir),
@@ -41,12 +43,10 @@ def compile_report(job_dir: Path, font_dir: Path) -> None:
         except typst.TypstError as error:
             raise RuntimeError(error.diagnostic) from error
         raise
-    pixel_height = float(measured["height"]) * data["ppi"] / 72
-    if pixel_height > 30000 or pixel_height * data["width"] > 40_000_000:
-        raise RuntimeError("Typst 报告超过单图像素预算，请减少展示条数或图片宽度")
-    compiler.compile(
-        output=str(job_dir / "report.png"), format="png", ppi=float(data["ppi"])
-    )
+    pixel_height = float(measured["height"]) * REPORT_PPI / 72
+    if pixel_height > 30000 or pixel_height * REPORT_WIDTH > 40_000_000:
+        raise RuntimeError("Typst 报告超过单图像素预算，请减少展示条数")
+    compiler.compile(output=str(job_dir / "report.png"), format="png", ppi=REPORT_PPI)
     if (job_dir / "report.png").stat().st_size > 32 * 1024 * 1024:
         raise RuntimeError("Typst 报告超过 32 MiB，无法发送")
 

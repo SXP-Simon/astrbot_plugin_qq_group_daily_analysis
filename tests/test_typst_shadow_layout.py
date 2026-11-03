@@ -44,15 +44,13 @@ def test_shadow_keeps_existing_layout_dimensions(tmp_path, body, width, height):
     assert size["height"] == pytest.approx(height)
 
 
-@pytest.mark.parametrize("ppi", [72, 144, 288])
 @pytest.mark.parametrize("theme", ["recovery", "maria", "ATRI"])
-def test_end_marker_matches_actual_png_height(tmp_path, managed_fonts, ppi, theme):
+def test_end_marker_matches_actual_png_height(tmp_path, managed_fonts, theme):
     """验证末尾位置提供的像素预算与实际 PNG 高度一致。
 
     Args:
         tmp_path: 本次编译的隔离根目录。
         managed_fonts: 已准备的插件受管理字体目录。
-        ppi: 输出分辨率；各档均应保持配置的像素宽度。
         theme: 使用末尾位置测高的报告模板。
     """
     templates = Path(__file__).parents[1] / "src/infrastructure/reporting/templates"
@@ -64,10 +62,10 @@ def test_end_marker_matches_actual_png_height(tmp_path, managed_fonts, ppi, them
             if resource.suffix in (".typ", ".svg") and resource != source:
                 shutil.copyfile(resource, tmp_path / resource.name)
     if theme == "ATRI":
-        # 实际使用横向缓存海景，检查长图视口和不同 PPI 的尺寸换算。
+        # 实际使用横向缓存海景，检查静态长图的尺寸换算。
         Image.new("RGB", (320, 180), "#203060").save(tmp_path / "scene.png")
     (tmp_path / "data.json").write_text(json.dumps({
-        "width": 940, "ppi": ppi, "language": "zh-Hans", "font_language": "zh-Hans", "date": "2026-11-03",
+        "language": "zh-Hans", "font_language": "zh-Hans", "date": "2026-11-03",
         "generated_at": "2026-11-03 12:00:00", "message_count": 42, "participant_count": 8,
         "characters": 512, "emoji_count": 3, "peak": "12:00-13:00", "hours": [2] * 24,
         "topics": [{"title": "排版检查", "detail": [{"text": "讨论内容需要自动换行。" * 80, "avatar": ""}],
@@ -80,6 +78,6 @@ def test_end_marker_matches_actual_png_height(tmp_path, managed_fonts, ppi, them
         str(tmp_path / "main.typ"), root=str(tmp_path), font_paths=fonts, ignore_system_fonts=True,
     )
     measured = json.loads(compiler.query("<report-size>", field="value", one=True))
-    with Image.open(BytesIO(compiler.compile(format="png", ppi=ppi))) as output:
+    with Image.open(BytesIO(compiler.compile(format="png", ppi=144))) as output:
         assert output.width == 940
-        assert output.height == ceil(measured["height"] * ppi / 72)
+        assert output.height == ceil(measured["height"] * 144 / 72)

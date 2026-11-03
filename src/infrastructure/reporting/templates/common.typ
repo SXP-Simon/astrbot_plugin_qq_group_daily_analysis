@@ -198,7 +198,7 @@
   ]
 }
 #let document(d, t, body) = {
-  set page(width: d.width*t.u, height: auto, margin: 0pt, fill: t.bg)
+  set page(width: 940*t.u, height: auto, margin: 0pt, fill: t.bg)
   let fonts = if d.language == "ja" {("Noto Sans JP", "Noto Sans SC")} else if d.language == "zh-Hant" {("Noto Sans TC", "Noto Sans SC")} else {("Noto Sans SC",)}
   set text(font: fonts, size: 16*t.u, fill: t.ink, lang: if d.language == "ja" {"ja"} else if d.language == "en" {"en"} else {"zh"})
   set par(leading: 0.65em, spacing: 0pt)
@@ -206,7 +206,7 @@
     #if t.pattern == "dots" { circle(radius: 1*t.u,fill:t.border,stroke:none) } else if t.pattern == "grid" { rect(width:25*t.u,height:25*t.u,stroke:0.35*t.u+t.border) }
   ]
   set page(background: if t.pattern != "none" {rect(width:100%,height:100%,fill:pattern,stroke:none)} else {none})
-  let content = block(width:d.width*t.u,inset:(x:20*t.u,y:35*t.u))[
+  let content = block(width:940*t.u,inset:(x:20*t.u,y:35*t.u))[
     #block(width:100%,inset:35*t.u,fill:t.paper,radius:t.radius*t.u,stroke:1*t.u+t.border)[#body]
   ]
   context {

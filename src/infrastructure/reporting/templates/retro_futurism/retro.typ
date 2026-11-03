@@ -294,7 +294,7 @@
 }
 
 #let render(d) = {
-  let u=72/d.ppi*d.width/1400*1pt
+  let u=(470/1400)*1pt
   let body=if d.font_language=="zh-Hant" {("Noto Sans TC","Noto Sans SC")}else{("Noto Sans SC","Noto Sans TC")}
   let t=(u:u,body:body,mono:if d.font_language=="zh-Hant" {("Noto Serif TC","Noto Serif SC")}else{("Noto Serif SC","Noto Serif TC")})
   set page(width:1400*u,height:auto,margin:0pt,fill:paper)

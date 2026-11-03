@@ -20,6 +20,7 @@ from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from .typst_data import TypstDataPreparer
 from .typst_resources import TypstAssets
+from .typst_worker import REPORT_PPI, REPORT_WIDTH
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -160,12 +161,9 @@ async def render_typst_probe(
     jobs.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="probe-", dir=jobs) as directory:
         job_dir = Path(directory)
-        payload = {"width": 480, "ppi": options.get("typst_ppi", 144)}
-        (job_dir / "data.json").write_text(json.dumps(payload), encoding="utf-8")
         (job_dir / "main.typ").write_text(
-            """#let d = json("data.json")
-#let u = 72/d.ppi*1pt
-#set page(width:480*u,height:180*u,margin:28*u,fill:rgb("f0fafa"))
+            f"""#let u = {72 / REPORT_PPI}pt
+#set page(width:{REPORT_WIDTH}*u,height:180*u,margin:28*u,fill:rgb("f0fafa"))
 #set text(font:"Noto Sans SC",size:18*u,fill:rgb("2c3e50"))
 #text(weight:"bold",fill:rgb("2a9d95"))[Typst 独立排版测试]
 #v(12*u)
@@ -275,11 +273,7 @@ async def render_typst_report(
                         for index, name in enumerate(THEME_DECORATIONS.get(theme, ()))
                     )
                 )
-            payload = {
-                **data,
-                "width": options.get("typst_width", 940),
-                "ppi": options.get("typst_ppi", 144),
-            }
+            payload = data
             (job_dir / "data.json").write_text(
                 json.dumps(payload, ensure_ascii=False), encoding="utf-8"
             )
@@ -308,7 +302,6 @@ async def render_typst_report(
                     trace.metadata["has_warnings"] = True
                 # 独立入口不导入主题或公共组件，不读取图片；不删除任何分析文字。
                 shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job_dir / "main.typ")
-                payload["width"] = min(940, payload["width"])
                 (job_dir / "data.json").write_text(
                     json.dumps(payload, ensure_ascii=False), encoding="utf-8"
                 )
