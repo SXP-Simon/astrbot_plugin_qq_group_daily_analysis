@@ -6,10 +6,11 @@ import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../configCon
 import { renderingRuntimeSchema, renderingStrategySchema } from "../renderingConfig";
 import { validateSingleFieldWithZod } from "../validation";
 
-it("Typst 宽度上限可保存，超过上限时在编辑端拒绝", () => {
-  const plan = { __template_key: "typst", typst_width: 1280 };
-  expect(renderingStrategySchema.safeParse(plan).success).toBe(true);
-  expect(renderingStrategySchema.safeParse({ ...plan, typst_width: 1281 }).success).toBe(false);
+it("Typst 固定排版不保留旧宽度和 PPI 配置", () => {
+  const plan = renderingStrategySchema.parse({ __template_key: "typst", typst_width: 1280, typst_ppi: 288 });
+  expect(plan).not.toHaveProperty("typst_width");
+  expect(plan).not.toHaveProperty("typst_ppi");
+  expect(schema.t2i_rendering.items.t2i_rendering_strategies.templates.typst.items).not.toHaveProperty("typst_width");
 });
 
 describe("可扩展渲染方案", () => {

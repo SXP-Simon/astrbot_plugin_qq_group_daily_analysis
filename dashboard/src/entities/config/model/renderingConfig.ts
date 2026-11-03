@@ -85,8 +85,6 @@ export const renderingStrategySchema = z.object({
   google_fonts: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   gstatic: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   render_service: z.enum(["astrbot", "custom", "typst"], { error: "请选择有效的渲染方案类型" }).optional(),
-  typst_width: z.number().int().min(640).max(1280).optional(),
-  typst_ppi: z.number().int().min(72).max(288).optional(),
   service_endpoint: z.string({ error: "服务地址必须是文字" }).trim().optional(),
   service_token: z.string({ error: "服务 Token 必须是文字" }).max(4096, "服务 Token 不能超过 4096 个字符").regex(/^[\x20-\x7e]*$/, "服务 Token 请使用英文、数字或常用符号，不能换行").transform((value) => value.trim()).default(""),
   type: z.enum(["png", "jpeg"], { error: "请选择 PNG 或 JPEG 格式" }).default("png"),
@@ -117,11 +115,10 @@ export const renderingStrategySchema = z.object({
   const service = value.render_service ?? (value.__template_key === "typst" ? "typst" as const : value.__template_key === "custom" ? "custom" as const : "astrbot" as const);
   const environment = value.environment ?? (value.__template_key === "mainland" ? "Mainland" as const : "Overseas" as const);
   // 旧调用方式只用于迁移，保存后由条目类型唯一决定服务。
-  const { render_service: _legacyService, font_mode: _fontMode, ...plan } = value;
+  const { render_service: _legacyService, font_mode: _fontMode, typst_width: _legacyWidth, typst_ppi: _legacyPpi, ...plan } = value;
   return Object.assign(plan, {
     environment,
     ...(service === "custom" ? { request_timeout: value.request_timeout ?? DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS, font_mode: value.font_mode ?? "network" } : {}),
-    ...(service === "typst" ? { typst_width: value.typst_width ?? 940, typst_ppi: value.typst_ppi ?? 144 } : {}),
     service_endpoint: service === "custom" ? t2iEndpointSchema.parse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT) : value.service_endpoint ?? "",
     __template_key: service === "typst" ? "typst" : service === "custom" ? "custom" : environment === "Mainland" ? "mainland" : "strategy",
   });

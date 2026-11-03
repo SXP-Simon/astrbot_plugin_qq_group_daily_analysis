@@ -401,8 +401,6 @@ export interface components {
              */
             render_service: "astrbot" | "custom" | "typst";
             group_id?: string;
-            typst_width?: number;
-            typst_ppi?: number;
             platform_id?: string;
             /** @description 自定义方案的服务地址，省略时使用 http://127.0.0.1:8999/text2img */
             service_endpoint?: string;

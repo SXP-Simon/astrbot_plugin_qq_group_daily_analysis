@@ -359,8 +359,6 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                     service_token: item.service_token,
                     timeout: item.timeout,
                     request_timeout: item.request_timeout,
-                    typst_width: item.typst_width,
-                    typst_ppi: item.typst_ppi,
                   }} />
                   </>
                 )}

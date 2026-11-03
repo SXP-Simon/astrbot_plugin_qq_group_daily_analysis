@@ -12,8 +12,6 @@ export interface T2iProbeInput {
   service_token?: unknown;
   timeout?: unknown;
   request_timeout?: unknown;
-  typst_width?: unknown;
-  typst_ppi?: unknown;
   group_id?: unknown;
   platform_id?: unknown;
 }
@@ -27,8 +25,6 @@ export const t2iProbeRequestSchema = renderingStrategySchema.and(targetSchema)
   .transform((plan): T2iProbeRequest => plan.__template_key === "typst" ? {
     render_service: "typst",
     timeout: plan.timeout,
-    typst_width: plan.typst_width ?? 940,
-    typst_ppi: plan.typst_ppi ?? 144,
   } : plan.__template_key === "custom" ? {
     render_service: "custom",
     service_endpoint: plan.service_endpoint,

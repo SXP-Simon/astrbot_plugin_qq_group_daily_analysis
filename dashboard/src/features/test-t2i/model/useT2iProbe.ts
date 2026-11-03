@@ -32,7 +32,7 @@ export function useT2iProbe(input: T2iProbeInput) {
     setResult(null);
     setError("");
     return () => { sequence.current += 1; };
-  }, [input.render_service, input.service_endpoint, input.service_token, input.timeout, input.request_timeout, input.typst_width, input.typst_ppi, input.group_id, input.platform_id, groupKey]);
+  }, [input.render_service, input.service_endpoint, input.service_token, input.timeout, input.request_timeout, input.group_id, input.platform_id, groupKey]);
 
   const run = async () => {
     if (loading) return;
