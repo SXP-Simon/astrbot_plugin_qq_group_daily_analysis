@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 
 REPORT_TEMPLATES = Path(__file__).parent / "templates"
-# 发布包不含开发目录的图片，所有装饰只通过配置的 CDN 获取并持久缓存。
+# 发布包不含开发目录的图片；仓库素材使用配置的 CDN，上游外链沿用原模板来源。
 THEME_DECORATIONS: dict[str, tuple[str, ...]] = {
     "HatsuneMiku": tuple(
         f"HatsuneMiku/retouch_{name}.png"
@@ -84,6 +84,10 @@ THEME_DECORATIONS: dict[str, tuple[str, ...]] = {
         )
     ),
     "scrapbook": ("scrapbook/assistant.jpg",),
+    "BlueArchive": (
+        "https://img.dkdun.cn/v1/2026/17/7170c8669dad05dd.png",
+        "https://img.dkdun.cn/v1/2026/17/314653a2aa301144.png",
+    ),
     "maria": (
         "maria/statue_virgin_mary.png",
         "maria/rose_red.png",
@@ -265,7 +269,7 @@ async def render_typst_report(
                 data["decorations"] = await asyncio.gather(
                     *(
                         assets.localize(
-                            f"{base}/{name}",
+                            name if name.startswith("https://") else f"{base}/{name}",
                             opacity=opacities.get(index, 1.0),
                         )
                         for index, name in enumerate(THEME_DECORATIONS.get(theme, ()))

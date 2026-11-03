@@ -36,7 +36,8 @@ def native(tmp_path, monkeypatch):
     return generator
 
 
-def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch):
+@pytest.mark.parametrize("theme", ["HatsuneMiku", "BlueArchive"])
+def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch, theme):
     directory = native.data_dir / "typst/fonts"
     directory.mkdir(parents=True)
     (directory / "test.ttf").write_bytes(b"font")
@@ -58,7 +59,7 @@ def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch):
                     QualityDimension(name="异常颜色", percentage=30, comment="", color='red); panic("invalid")')],
     )
     async def check():
-        image, html = await native.generate_image_report(result, "123456", host, hide_user_names=True)
+        image, html = await native.generate_image_report(result, "123456", host, hide_user_names=True, template_theme=theme)
         assert image.startswith("base64://") and html is None
         assert base64.b64decode(image.removeprefix("base64://")) == png_bytes()
         exported = json.dumps(captured, ensure_ascii=False)
@@ -68,6 +69,10 @@ def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch):
         assert not list((native.data_dir / "typst/jobs").iterdir())
         host.assert_not_called()
         native._prepare_render_data.assert_not_called()
+        if theme == "BlueArchive":
+            sources = {call.args[0] for call in TypstAssets.localize.await_args_list}
+            assert "https://img.dkdun.cn/v1/2026/17/7170c8669dad05dd.png" in sources
+            assert "https://img.dkdun.cn/v1/2026/17/314653a2aa301144.png" in sources
         await native.close()
     asyncio.run(check())
 
