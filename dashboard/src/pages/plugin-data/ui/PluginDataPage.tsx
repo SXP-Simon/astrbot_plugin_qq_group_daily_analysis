@@ -6,7 +6,7 @@ import {
   SaveOutlined,
 } from "@ant-design/icons";
 import { usePluginDataViewModel } from "../model/usePluginDataViewModel";
-import { PartitionsTab } from "./partitions/PartitionsTab";
+import { ManagedFilesPanel } from "./partitions/ManagedFilesPanel";
 import { IncrementalTab } from "./incremental/IncrementalTab";
 import { BatchDetailModal } from "./incremental/BatchDetailModal";
 import { CheckpointsTab } from "./checkpoints/CheckpointsTab";
@@ -74,7 +74,7 @@ export const PluginDataPage: React.FC = () => {
       </Card>
 
       {/* 1. 存储空间全景 */}
-      {activeTab === "partitions" && <PartitionsTab vm={vm} />}
+      {activeTab === "partitions" && <ManagedFilesPanel />}
 
       {/* 2. 增量分析批次管理 */}
       {activeTab === "incremental" && <IncrementalTab vm={vm} />}
@@ -87,7 +87,7 @@ export const PluginDataPage: React.FC = () => {
         type="info"
         showIcon
         message="数据管理安全提示"
-        description="此处展示插件生成的所有离线中间物料与报告数据。清理缓存仅释放本地磁盘占用，已持久化到历史记录数据库的分析摘要与活跃度指标不受影响。"
+        description="文件按实际用途提供操作，变更前请查看分区影响说明。字体和素材会影响后续渲染；增量批次和快照会影响分析汇总与续跑。宿主共享临时目录不在本插件管理范围内。"
         style={{ marginTop: 8 }}
       />
 

@@ -1,3 +1,4 @@
+import { managedFileMockHandlers } from "./data/managedFiles";
 import { mockTemplateResources, mockTypstFonts } from "./data/templateResources";
 import { supportsTemplate } from "../entities/report/model/templates";
 import { renderingRuntimeSchema } from "../entities/config/model/renderingConfig";
@@ -29,6 +30,7 @@ export interface MockHandlerResponse<T = unknown> {
 }
 
 export const mockHandlers = {
+  ...managedFileMockHandlers,
   "POST config/test-t2i": () => ({
     status: "error",
     message: "演示模式不进行真实渲染，请连接 AstrBot 插件后再试。",
