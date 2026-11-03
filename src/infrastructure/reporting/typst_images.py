@@ -72,9 +72,8 @@ class TypstAssets:
                 try:
                     path = await self.resource_store.ensure(name, self.session)
                     managed_path = path
-                    stat = path.stat()
-                    source_revision = (
-                        f":{path.resolve()}:{stat.st_mtime_ns}:{stat.st_size}"
+                    source_revision = ":" + await asyncio.to_thread(
+                        self._source_revision, path
                     )
                 except (aiohttp.ClientError, TimeoutError, ValueError, OSError):
                     self.network_budget_exhausted = (
@@ -126,6 +125,22 @@ class TypstAssets:
                     return target.name
                 logger.warning("Typst 素材获取失败，本次使用占位装饰")
                 return ""
+
+    @staticmethod
+    def _source_revision(path: Path) -> str:
+        """流式计算原始素材版本，兼容时间戳未改变的同名替换。
+
+        Args:
+            path: 已定位的本地原始素材。
+
+        Returns:
+            内容 SHA256，不一次性持有整份图片字节。
+        """
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(65536), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     async def _process_image(
         self, payload: bytes, target: Path, cached: Path, opacity: float, oval: bool

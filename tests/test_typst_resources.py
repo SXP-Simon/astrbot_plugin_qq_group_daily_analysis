@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import os
 from io import BytesIO
 from unittest.mock import MagicMock
 
@@ -33,6 +34,7 @@ async def test_replacing_managed_original_invalidates_derived_image(
         pixels = []
         for index, color in enumerate(("red", "blue")):
             Image.new("RGB", (12, 12), color).save(original)
+            os.utime(original, ns=(1700000000000000000, 1700000000000000000))
             job = tmp_path / f"job-{index}"
             job.mkdir()
             assets = typst_resources.TypstAssets(
