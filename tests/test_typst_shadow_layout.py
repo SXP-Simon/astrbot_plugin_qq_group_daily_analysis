@@ -45,9 +45,24 @@ def test_shadow_keeps_existing_layout_dimensions(tmp_path, body, width, height):
 
 
 @pytest.mark.parametrize("ppi", [72, 144, 288])
-def test_recovery_end_marker_matches_actual_png_height(tmp_path, managed_fonts, ppi):
-    source = Path(__file__).parents[1] / "src/infrastructure/reporting/templates/recovery.typ"
+@pytest.mark.parametrize("theme", ["recovery", "maria"])
+def test_end_marker_matches_actual_png_height(tmp_path, managed_fonts, ppi, theme):
+    """验证末尾位置提供的像素预算与实际 PNG 高度一致。
+
+    Args:
+        tmp_path: 本次编译的隔离根目录。
+        managed_fonts: 已准备的插件受管理字体目录。
+        ppi: 输出分辨率；各档均应保持配置的像素宽度。
+        theme: 使用末尾位置测高的报告模板。
+    """
+    templates = Path(__file__).parents[1] / "src/infrastructure/reporting/templates"
+    source = templates / "recovery.typ" if theme == "recovery" else templates / theme / "report.typ"
     shutil.copyfile(source, tmp_path / "main.typ")
+    if theme != "recovery":
+        shutil.copyfile(templates / "common.typ", tmp_path / "common.typ")
+        for resource in source.parent.iterdir():
+            if resource.suffix in (".typ", ".svg") and resource != source:
+                shutil.copyfile(resource, tmp_path / resource.name)
     (tmp_path / "data.json").write_text(json.dumps({
         "width": 940, "ppi": ppi, "language": "zh-Hans", "font_language": "zh-Hans", "date": "2026-11-03",
         "generated_at": "2026-11-03 12:00:00", "message_count": 42, "participant_count": 8,

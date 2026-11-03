@@ -313,5 +313,6 @@
       ],radius:25.6,dy:20,blur:45,color:primary.transparentize(86%))
     })
   ]
-  context {let m=measure(body);[#metadata((height:m.height/1pt))<report-size>];body}
+  body
+  context [#metadata((height:here().position().y/1pt))<report-size>]
 }
