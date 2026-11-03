@@ -20,6 +20,7 @@ export function useManagedFiles() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [listError, setListError] = useState("");
   const [content, setContent] = useState<ManagedFileContent | null>(null);
   const listSequence = useRef(0);
   const detailSequence = useRef(0);
@@ -35,9 +36,9 @@ export function useManagedFiles() {
     setLoading(true);
     try {
       const result = await fetchManagedFiles(partition.key, search, page, extensions, directory);
-      if (sequence === listSequence.current) { setFiles(result.items); setGroups(result.groups || []); setTotal(result.total); setError(""); }
+      if (sequence === listSequence.current) { setFiles(result.items); setGroups(result.groups || []); setTotal(result.total); setListError(""); }
     } catch (cause) {
-      if (sequence === listSequence.current) setError(cause instanceof Error ? cause.message : "文件列表读取失败");
+      if (sequence === listSequence.current) setListError(cause instanceof Error ? cause.message : "文件列表读取失败");
     } finally { if (sequence === listSequence.current) setLoading(false); }
   }, [partition, search, page, extensions, directory]);
 
@@ -47,7 +48,7 @@ export function useManagedFiles() {
 
   const select = (value: ManagedPartition | null) => {
     detailSequence.current++;
-    setPartition(value); setDirectory(""); setGroups([]); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setContent(null); setSelected([]); setDeleteResult(null);
+    setPartition(value); setDirectory(""); setGroups([]); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setContent(null); setSelected([]); setDeleteResult(null); setListError("");
   };
   const inspect = async (name: string) => {
     if (!partition || busy) return;
@@ -99,7 +100,7 @@ export function useManagedFiles() {
     const known = new Map([...selected, ...files].map(file => [file.name, file]));
     setSelected(keys.slice(0, 200).flatMap(key => known.get(String(key)) ? [known.get(String(key))!] : []));
   };
-  return { partitions, partition, files, groups, directory, total, search, extensions, page, loading, busy, error, content, selected, deleteResult,
+  return { partitions, partition, files, groups, directory, total, search, extensions, page, loading, busy, error, listError, content, selected, deleteResult,
     refresh, load, select, inspect, download, mutate, setContent, setPage,
     selectDirectory: (value: string) => { detailSequence.current++; setDirectory(value); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setContent(null); setSelected([]); setDeleteResult(null); },
     deleteSelected, selectFiles, clearSelection: () => setSelected([]),

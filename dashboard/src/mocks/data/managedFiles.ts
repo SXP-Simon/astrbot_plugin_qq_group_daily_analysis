@@ -1,4 +1,5 @@
 import type { ManagedFileContent, ManagedPartition } from "../../entities/plugin-data/api/managedFilesApi";
+import { mockConfigBackups } from "./configBackups";
 
 const definitions: [string, string, string, boolean, boolean][] = [
   ["reports", "历史报告文件", "已生成的图片及 HTML 报告", false, true],
@@ -17,6 +18,15 @@ const definitions: [string, string, string, boolean, boolean][] = [
 ];
 
 const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#39c5bb"/><text x="15" y="55" fill="white">Miku report</text></svg>';
+const impacts: Record<string, string> = {
+  reports: "删除后历史报告无法预览，分析存档仍保留。", custom_templates: "源码修改立即用于后续渲染，请先下载留存原版。",
+  config_files: "同名替换保留配置路径；重命名或删除会使原配置引用失效。", config_backups: "删除会失去对应版本的恢复依据，备份原件不可修改。",
+  typst_fonts: "移除字体可能改变后续报告排版。", template_resources: "删除本地素材后会回退至仓库素材或从 CDN 重新获取。",
+  typst_assets: "缓存清理后，下次渲染会自动重新生成。", typst_jobs: "工作目录由渲染器管理；仅提供只读诊断，避免影响正在编译的任务。",
+  preview_cache: "清理后打开模板画廊时按需重新生成。", hosted_reports: "删除后对应的分享链接将失效。",
+  legacy_history: "这里只管理旧版 JSON 文件；当前分析存档请通过 KV 管理入口维护。", avatar_storage: "按平台缓存键清理头像后会按需重新获取，不直接操作数据库文件。",
+  state: "只展示数据库与状态文件占用；分析存档、批次及快照通过对应业务入口管理。",
+};
 let revision = 0;
 export const managedMockFiles = new Map<string, Map<string, ManagedFileContent>>();
 
@@ -41,9 +51,9 @@ putManagedMockFile("custom_templates", "draft_theme/template.json", '{"name":"�
 putManagedMockFile("reports", "123456789_2026-11-03.html", '<!doctype html><html><body style="font-family:sans-serif;color:#238b86"><h1>群聊日报</h1><p>今天共 384 条消息，12 位活跃成员。</p></body></html>');
 putManagedMockFile("reports", "123456789_2026-11-03_miku.png", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
 putManagedMockFile("reports", "987654321_2026-11-02_maria.jpg", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
-putManagedMockFile("config_backups", "plugin_config_5.6.4_20261103.json", '{"plugin_version":"5.6.4","config":{"rendering":{"service":"typst"}}}');
+for (const backup of mockConfigBackups) putManagedMockFile("config_backups", backup.backup.filename, JSON.stringify(backup.content, null, 2));
 putManagedMockFile("template_resources", "hack/globe.svg", svg);
-putManagedMockFile("config_files", "character.svg", svg);
+putManagedMockFile("config_files", "daily_comic/comic_characters/templates/character/reference_images/character.png", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
 putManagedMockFile("typst_fonts", "NotoSansSC.ttf", null, "AAEAAAAA");
 putManagedMockFile("typst_fonts", "NotoSansTC.ttf", null, "AAEAAAAA");
 putManagedMockFile("preview_cache", "miku.svg", svg);
@@ -53,7 +63,7 @@ export function managedMockPartitions(): ManagedPartition[] {
   return definitions.map(([key, name, description, writable, deletable]) => {
     const files = [...(managedMockFiles.get(key)?.values() || [])];
     return { key, name, description, writable, deletable, directory: `demo/plugin_data/${key}/`,
-      impact: key === "custom_templates" ? "源码修改立即用于后续渲染，请先下载留存原版。" : key === "typst_fonts" ? "移除字体可能改变后续报告排版。" : key === "config_files" ? "重命名或删除会使配置中的旧路径失效。" : "操作影响此分区内文件，请先导出需要保留的内容。",
+      impact: impacts[key],
       count: files.length, size_bytes: files.reduce((sum, file) => sum + atob(file.content_base64).length, 0) };
   });
 }

@@ -26,6 +26,11 @@ export const mockPluginConfig: PluginConfigData = {
   schema,
 };
 
+mockPluginConfig.config.daily_comic.comic_characters = [{
+  __template_key: "character", name: "示例角色", enable: true,
+  reference_images: ["files/daily_comic/comic_characters/templates/character/reference_images/character.png"],
+}];
+
 // 演示原生渲染与 HTML 后备，生产默认值仍由配置契约管理。
 const rendering = mockPluginConfig.config.t2i_rendering;
 if (rendering) rendering.t2i_rendering_strategies = [

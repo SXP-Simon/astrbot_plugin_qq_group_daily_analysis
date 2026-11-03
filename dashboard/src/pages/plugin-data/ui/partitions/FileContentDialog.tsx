@@ -4,7 +4,7 @@ import { DownloadOutlined, EditOutlined } from "@ant-design/icons";
 import { useManagedFiles } from "../../model/useManagedFiles";
 import { FileEditorDialog, type FileDraft } from "./FileEditorDialog";
 
-export function FileContentDialog({ vm, editor, setEditor }: { vm: ReturnType<typeof useManagedFiles>; editor: FileDraft | null; setEditor: Dispatch<SetStateAction<FileDraft | null>> }) {
+export function FileContentDialog({ vm, editor, setEditor, references }: { vm: ReturnType<typeof useManagedFiles>; editor: FileDraft | null; setEditor: Dispatch<SetStateAction<FileDraft | null>>; references?: string[] }) {
   const [rename, setRename] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const currentFile = vm.files.find(file => file.name === vm.content?.name);
@@ -32,8 +32,8 @@ export function FileContentDialog({ vm, editor, setEditor }: { vm: ReturnType<ty
       <Button onClick={() => vm.setContent(null)}>关闭</Button>
     </Space>}>
       {vm.content && <Space direction="vertical" style={{ width: "100%" }}>
+        {!!references?.length && <Alert type="warning" showIcon message="此图片正在被配置引用；同名替换保留引用，重命名或删除会使旧路径失效。" description={<Typography.Text style={{ overflowWrap: "anywhere" }}>{references.join("、")}</Typography.Text>} />}
         {vm.content.media_type.startsWith("image/") ? <Image src={previewUrl} style={{ maxHeight: 480, objectFit: "contain" }} /> : vm.content.media_type === "text/html" ? <Tabs items={[{ key: "preview", label: "隔离预览", children: <iframe title="报告预览" sandbox="" srcDoc={vm.content.text || ""} style={{ width: "100%", height: 480, border: "1px solid #ddd" }} /> }, { key: "source", label: "HTML 源码", children: <Input.TextArea readOnly value={vm.content.text || ""} rows={18} /> }]} /> : vm.content.text !== null ? <Input.TextArea readOnly value={vm.content.text} rows={18} /> : <Alert type="info" message="此二进制文件可下载后使用对应应用查看" />}
-        <Typography.Text type="secondary">修订号：{vm.content.revision.slice(0, 12)}</Typography.Text>
       </Space>}
       {vm.content && <FileEditorDialog vm={vm} editor={editor} setEditor={setEditor} />}
     <Modal open={!!vm.content && rename !== null} title="重命名文件" okText="重命名" cancelText="取消" confirmLoading={vm.busy} onCancel={() => setRename(null)} onOk={async () => {

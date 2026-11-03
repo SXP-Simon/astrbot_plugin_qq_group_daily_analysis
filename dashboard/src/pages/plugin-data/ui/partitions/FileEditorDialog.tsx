@@ -19,7 +19,7 @@ export function FileEditorDialog({ vm, editor, setEditor }: { vm: ReturnType<typ
           if (file.size > 32 * 1024 * 1024) { void message.error("文件不得超过 32 MiB"); return false; }
           const reader = new FileReader(); reader.onload = () => setEditor(value => value && { ...value, encoded: String(reader.result).split(",")[1] }); reader.readAsDataURL(file); return false;
         }}><Button icon={<UploadOutlined />}>选择替换内容</Button></Upload> : <Input.TextArea aria-label="文件内容" value={editor?.text} rows={20} onChange={event => setEditor(value => value && { ...value, text: event.target.value })} />}
-        <Typography.Text type="secondary">字体支持 TTF / OTF / TTC；图片会校验格式及像素预算；单文件最大 32 MiB。</Typography.Text>
+        <Typography.Text type="secondary">{vm.partition?.key === "custom_templates" ? "源码和素材按相对路径引用；请保留模板所需入口及引用关系。" : vm.partition?.key === "template_resources" ? "文件路径须与主题素材清单一致，可在素材状态页展开清单并复制路径。" : "同名替换会保留原配置引用路径。"}单文件最大 32 MiB，图片会校验格式与像素预算。</Typography.Text>
       </Space>
     </Modal>
   </>;

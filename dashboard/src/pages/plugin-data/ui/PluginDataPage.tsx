@@ -76,7 +76,7 @@ export const PluginDataPage: React.FC<{ onNavigate?: (page: "reports" | "config"
       </Card>
 
       {/* 1. 存储空间全景 */}
-      {activeTab === "partitions" && <ManagedFilesPanel onNavigate={onNavigate} />}
+      {activeTab === "partitions" && <ManagedFilesPanel onNavigate={onNavigate} onOpenDataTab={setActiveTab} />}
 
       {activeTab === "records" && <StoredRecordsTab />}
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ConfigProvider } from "antd";
 import { ManagedFilesPanel } from "../ManagedFilesPanel";
-import { fetchManagedContent, fetchManagedFiles, fetchManagedPartitions } from "../../../../../entities/plugin-data/api/managedFilesApi";
+import { fetchManagedContent, fetchManagedFiles, fetchManagedPartitions, mutateManagedFile } from "../../../../../entities/plugin-data/api/managedFilesApi";
 import { fetchReportTemplates } from "../../../../../entities/report/api/reportApi";
 
 vi.mock("../../../../../entities/plugin-data/api/managedFilesApi", () => ({
@@ -89,11 +89,25 @@ it("包内新建文件默认留在模板目录，返回列表后清空筛选与�
   fireEvent.click(await screen.findByText("管理文件"));
   fireEvent.click(screen.getByText("新建源码"));
   const editor = await modalLayer("上传或新建文件");
-  await waitFor(() => expect(within(editor).getByText("demo/")).toBeVisible());
-  fireEvent.click(within(editor).getByText(/取.?消/));
+  expect(within(editor).getByText("demo/")).toBeInTheDocument();
+  fireEvent.change(within(editor).getByLabelText("文件相对路径"), { target: { value: "helper.typ" } });
+  fireEvent.click(within(editor).getByText(/保.?存/));
+  await waitFor(() => expect(mutateManagedFile).toHaveBeenCalledWith(expect.objectContaining({ partition: "custom_templates", name: "demo/helper.typ", operation: "create" })));
+  await waitFor(() => expect(editor).not.toBeVisible());
   fireEvent.click(screen.getByText("Typst 模板（.typ）"));
   fireEvent.click(screen.getByText("返回模板列表"));
   expect(await screen.findByText("我的模板")).toBeVisible();
   fireEvent.click(screen.getByText("管理文件"));
   expect(screen.getByText("全部类型").closest("button")).toHaveAttribute("aria-pressed", "true");
 }, 20000);
+
+it("从分区跳转业务页面时关闭抽屉，避免遮住目标页面", async () => {
+  const partition = (await fetchManagedPartitions())[0];
+  vi.mocked(fetchManagedPartitions).mockResolvedValue([{ ...partition, key: "reports", name: "历史报告文件", writable: false }]);
+  const navigate = vi.fn();
+  render(<ConfigProvider theme={{ token: { motion: false } }}><ManagedFilesPanel onNavigate={navigate} /></ConfigProvider>);
+  fireEvent.click(await screen.findByText("管理"));
+  fireEvent.click(screen.getByText("打开历史报告预览与重绘"));
+  expect(navigate).toHaveBeenCalledWith("reports");
+  await waitFor(() => expect(document.querySelector(".ant-drawer-open")).toBeNull());
+});

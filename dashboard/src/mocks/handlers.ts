@@ -253,10 +253,10 @@ export const mockHandlers = {
 
   // 7. 数据存储管理
   "GET plugin-data/overview": () => ({ status: "ok", data: mockPluginDataOverview }),
-  "GET plugin-data/config-backups": () => ({ status: "ok", data: { items: mockConfigBackups.map((item) => item.backup) } }),
+  "GET plugin-data/config-backups": () => ({ status: "ok", data: { items: mockConfigBackups.filter(item => managedMockFiles.get("config_backups")?.has(item.backup.filename)).map(item => ({ ...item.backup, size_bytes: atob(managedMockFiles.get("config_backups")!.get(item.backup.filename)!.content_base64).length })) } }),
   "GET plugin-data/config-backups/detail": (params?: Record<string, unknown>) => {
     const detail = mockConfigBackups.find((item) => item.backup.filename === params?.filename);
-    return detail ? { status: "ok", data: detail } : { status: "error", message: "备份不存在" };
+    return detail && managedMockFiles.get("config_backups")?.has(detail.backup.filename) ? { status: "ok", data: detail } : { status: "error", message: "备份不存在" };
   },
   "POST plugin-data/:section/clear": () => ({ status: "ok", data: { deleted: 10 } }),
   "GET data/incremental/groups": () => ({
