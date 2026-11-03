@@ -200,7 +200,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cache/typst-tests/typst/fonts
-          key: typst-fonts-${{ hashFiles('src/infrastructure/reporting/typst_resources.py') }}
+          key: typst-fonts-${{ hashFiles('src/infrastructure/reporting/typst_fonts.py') }}
 
       - name: Prepare Typst Test Fonts
         run: |
