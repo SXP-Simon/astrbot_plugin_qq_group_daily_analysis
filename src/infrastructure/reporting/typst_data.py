@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, TypedDict
 
@@ -11,7 +12,7 @@ from .profile_mappings import resolve_profile_info
 from .render_data_preparer import RenderDataPreparer
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
@@ -86,6 +87,25 @@ class TypstReportData(TypedDict):
     decorations: list[str]
 
 
+@dataclass(frozen=True, slots=True)
+class TypstIdentityOptions:
+    """只在准备阶段使用的平台回调与身份展示选项。
+
+    Args:
+        avatar_getter: 平台头像地址查询。
+        nickname_getter: 平台昵称查询。
+        namespace: 平台缓存命名空间。
+        hide_names: 是否隐藏群友身份。
+        extended_ids: 是否允许字母数字身份编号。
+    """
+
+    avatar_getter: Callable[[str, int | None], Awaitable[str | None]] | None = None
+    nickname_getter: Callable[[str], Awaitable[str | None]] | None = None
+    namespace: str | None = None
+    hide_names: bool = False
+    extended_ids: bool = False
+
+
 class TypstDataPreparer:
     """为各主题复用身份净化、昵称和头像能力，生成原生 Typst 数据。"""
 
@@ -95,12 +115,17 @@ class TypstDataPreparer:
         avatars: AvatarService,
         assets: TypstAssets,
         result: AnalysisResultPayload,
-        hide_names: bool,
-        avatar_getter: Callable | None,
-        nickname_getter: Callable | None,
-        namespace: str | None,
-        extended_ids: bool,
-    ):
+        identity: TypstIdentityOptions,
+    ) -> None:
+        """补齐结果中出现的成员，并固定本轮身份展示行为。
+
+        Args:
+            config: 内容展示上限与人格映射配置。
+            avatars: 平台隔离头像服务。
+            assets: 本次任务的图片本地化器。
+            result: 原始领域分析结果，不在原地修改其用户映射。
+            identity: 平台回调、匿名开关与身份编号规则。
+        """
         self.config, self.avatars, self.assets = config, avatars, assets
         users = dict(result.get("user_analysis") or {})
         for portrait in result["user_titles"]:
@@ -109,11 +134,11 @@ class TypstDataPreparer:
             if quote.user_id:
                 users.setdefault(str(quote.user_id), {"nickname": quote.sender})
         self.result: AnalysisResultPayload = {**result, "user_analysis": users}
-        self.hide_names, self.extended_ids = hide_names, extended_ids
+        self.hide_names, self.extended_ids = identity.hide_names, identity.extended_ids
         self.avatar_getter, self.nickname_getter, self.namespace = (
-            avatar_getter,
-            nickname_getter,
-            namespace,
+            identity.avatar_getter,
+            identity.nickname_getter,
+            identity.namespace,
         )
 
     def plain(self, text: str) -> str:
@@ -222,45 +247,7 @@ class TypstDataPreparer:
                     "contributors": await self.rich_text("、".join(topic.contributors)),
                 }
             )
-        raw_overrides = config.get_profile_mapping_config()
-        overrides = (
-            {str(k): v for k, v in raw_overrides.items() if isinstance(v, dict)}
-            if isinstance(raw_overrides, dict)
-            else {}
-        )
-        portraits: list[TypstPortrait] = []
-        for portrait in result["user_titles"][: config.get_max_user_titles()]:
-            profile = resolve_profile_info(
-                portrait.mbti,
-                config.get_profile_display_mode(),
-                overrides,
-                profile_manifest,
-                config,
-                cdn_base_url,
-            )
-            opacity = (
-                0.18
-                if theme == "maria"
-                else min(1.0, max(0.0, float(profile["profile_image_opacity"])))
-            )
-            portraits.append(
-                {
-                    "name": "" if self.hide_names else portrait.name,
-                    "title": self.plain(portrait.title),
-                    "profile": self.plain(str(profile["profile_display"])),
-                    "mbti": self.plain(portrait.mbti),
-                    "reason": [{"text": self.plain(portrait.reason), "avatar": ""}],
-                    "avatar": await self.avatar(
-                        str(portrait.user_id), oval=theme == "maria"
-                    ),
-                    "image": await self.assets.localize(
-                        str(profile["profile_image"]),
-                        opacity,
-                    ),
-                    "image_fit": str(profile["profile_image_size_mode"]),
-                    "opacity": opacity,
-                }
-            )
+        portraits = await self._prepare_portraits(profile_manifest, cdn_base_url, theme)
         quotes: list[TypstQuote] = []
         for quote in stats.golden_quotes[: config.get_max_golden_quotes()]:
             quotes.append(
@@ -321,3 +308,58 @@ class TypstDataPreparer:
             ],
             "decorations": [],
         }
+
+    async def _prepare_portraits(
+        self, profile_manifest: dict[str, dict], cdn_base_url: str, theme: str
+    ) -> list[TypstPortrait]:
+        """解析人格映射并本地化画像资源，保留主题固定的裁切和水印。
+
+        Args:
+            profile_manifest: 人格装饰清单。
+            cdn_base_url: 本轮图片镜像。
+            theme: 当前主题。
+
+        Returns:
+            已完成身份净化与图片准备的画像数据。
+        """
+        config = self.config
+        raw_overrides = config.get_profile_mapping_config()
+        overrides = (
+            {str(k): v for k, v in raw_overrides.items() if isinstance(v, dict)}
+            if isinstance(raw_overrides, dict)
+            else {}
+        )
+        portraits: list[TypstPortrait] = []
+        for portrait in self.result["user_titles"][: config.get_max_user_titles()]:
+            profile = resolve_profile_info(
+                portrait.mbti,
+                config.get_profile_display_mode(),
+                overrides,
+                profile_manifest,
+                config,
+                cdn_base_url,
+            )
+            opacity = (
+                0.18
+                if theme == "maria"
+                else min(1.0, max(0.0, float(profile["profile_image_opacity"])))
+            )
+            portraits.append(
+                {
+                    "name": "" if self.hide_names else portrait.name,
+                    "title": self.plain(portrait.title),
+                    "profile": self.plain(str(profile["profile_display"])),
+                    "mbti": self.plain(portrait.mbti),
+                    "reason": [{"text": self.plain(portrait.reason), "avatar": ""}],
+                    "avatar": await self.avatar(
+                        str(portrait.user_id), oval=theme == "maria"
+                    ),
+                    "image": await self.assets.localize(
+                        str(profile["profile_image"]),
+                        opacity,
+                    ),
+                    "image_fit": str(profile["profile_image_size_mode"]),
+                    "opacity": opacity,
+                }
+            )
+        return portraits

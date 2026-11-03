@@ -191,3 +191,9 @@ THEME_FILES: dict[str, tuple[str, ...]] = {
     )
 }
 RESOURCE_FILES = frozenset(name for names in THEME_FILES.values() for name in names)
+
+# 索引与装饰列表一致，保留各主题原有水印透明度。
+THEME_DECORATION_OPACITIES: dict[str, dict[int, float]] = {
+    "maria": {5: 0.16, 8: 0.16, 9: 0.16, 10: 0.16},
+    "ATRI": {1: 0.96, 2: 0.72, 3: 0.68},
+}

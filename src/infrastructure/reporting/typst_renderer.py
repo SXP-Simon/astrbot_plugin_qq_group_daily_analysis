@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import shutil
-import subprocess
-import sys
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -18,16 +15,15 @@ from PIL import Image
 
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
-from .template_asset_catalog import THEME_DECORATIONS
+from .template_asset_catalog import THEME_DECORATION_OPACITIES, THEME_DECORATIONS
 from .template_installer import is_path_within, validate_template_name
 from .template_resources import TemplateResourceStore
-from .typst_data import TypstDataPreparer
+from .typst_data import TypstDataPreparer, TypstIdentityOptions
+from .typst_process import run_typst_worker
 from .typst_resources import TypstAssets
 from .typst_worker import REPORT_PPI, REPORT_WIDTH
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
     from ..config.rendering_config import RenderingStrategyOptions
@@ -35,46 +31,6 @@ if TYPE_CHECKING:
 
 
 REPORT_TEMPLATES = Path(__file__).parent / "templates"
-
-
-async def run_typst_worker(
-    job_dir: Path, font_dir: Path, timeout_seconds: float
-) -> None:
-    """限时执行隔离编译，取消或超时后等待子进程退出再清理目录。
-
-    Args:
-        job_dir: 本次编译专用目录。
-        font_dir: 受管理字体目录。
-        timeout_seconds: 编译允许的最长秒数。
-
-    Raises:
-        TimeoutError: 编译超时且进程已终止。
-        RuntimeError: 编译器返回失败。
-    """
-    process = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-I",
-        str(Path(__file__).with_name("typst_worker.py")),
-        str(job_dir),
-        str(font_dir),
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.PIPE,
-        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-    )
-    communication = asyncio.create_task(process.communicate())
-    try:
-        async with asyncio.timeout(timeout_seconds):
-            _, stderr = await asyncio.shield(communication)
-    except BaseException:
-        if process.returncode is None:
-            try:
-                process.kill()
-            except ProcessLookupError:
-                pass
-        await asyncio.shield(communication)
-        raise
-    if process.returncode:
-        raise RuntimeError((stderr or b"").decode("utf-8", errors="replace")[:1800])
 
 
 async def render_typst_probe(
@@ -112,164 +68,202 @@ async def render_typst_probe(
         return await asyncio.to_thread((job_dir / "report.png").read_bytes)
 
 
-async def render_typst_report(
-    result: AnalysisResultPayload,
-    config: ConfigManager,
-    data_dir: Path,
-    avatars: AvatarService,
-    profile_manifest: dict[str, dict],
-    theme: str,
-    options: RenderingStrategyOptions,
-    avatar_getter: Callable | None = None,
-    nickname_getter: Callable | None = None,
-    namespace: str | None = None,
-    hide_names: bool = False,
-    extended_ids: bool = False,
-) -> bytes:
-    """准备原生数据和 CDN 素材，独立编译为现有发送接口可接受的图片。
+class TypstReportRenderer:
+    """独立报告适配器，分离任务输入、编译恢复与输出编码。
 
     Args:
-        result: 完整领域分析结果。
-        config: 当前插件配置。
-        data_dir: 插件数据根目录。
-        avatars: 现有平台隔离头像服务。
-        profile_manifest: 人格资源映射。
-        theme: 内置或已安装的自定义主题目录名。
-        options: 本轮 Typst 方案参数。
-        avatar_getter: 平台头像回调。
-        nickname_getter: 平台昵称回调。
-        namespace: 平台缓存命名空间。
-        hide_names: 是否匿名。
-        extended_ids: 是否识别字母数字用户 ID。
-
-    Returns:
-        PNG 或 JPEG 字节；不生成或调用 HTML。
-
-    Raises:
-        ValueError: 主题不支持或没有安装受管理字体。
-        RuntimeError: 编译失败。
-        TimeoutError: 准备或编译超过本轮超时。
+        config: 插件配置，布局尺寸不从配置读取。
+        data_dir: 插件受管理数据目录。
+        avatars: 平台隔离的头像服务。
+        profile_manifest: 人格装饰清单。
     """
-    theme = validate_template_name(theme)
-    template_dir = REPORT_TEMPLATES / theme
-    is_builtin = template_dir.is_dir()
-    if not is_builtin:
-        custom = config.get_custom_report_template_dir(theme)
-        if (
-            not custom
-            or custom.is_symlink()
-            or not is_path_within(custom, custom.parent)
-        ):
-            raise ValueError(f"未找到 Typst 主题「{theme}」，请重新安装或选择其他模板")
-        template_dir = custom
-        if any(path.is_symlink() for path in template_dir.rglob("*")):
-            raise ValueError("Typst 自定义模板包含符号链接，请重新上传独立文件")
-    template = template_dir / "report.typ"
-    if not template.is_file():
-        raise ValueError(
-            f"主题「{theme}」没有 Typst 模板，请选择支持 Typst 的主题或切换渲染方案"
-        )
-    font_dir = data_dir / "typst" / "fonts"
-    if not font_dir.is_dir() or not any(
-        p.suffix.lower() in (".ttf", ".otf", ".ttc") for p in font_dir.iterdir()
-    ):
-        raise ValueError(
-            "请先在 WebUI 下载 Typst 字体，字体保存在插件数据目录 typst/fonts"
-        )
-    jobs = data_dir / "typst" / "jobs"
-    jobs.mkdir(parents=True, exist_ok=True)
-    resources = options.get("resource_urls")
-    cdn = resources["cdn_base_url"] if resources else config.get_t2i_cdn_base_url()
-    environment = options.get("resource_environment")
-    base = config.get_template_assets_base_url(environment, cdn_base_url=cdn)
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + options.get("timeout", 30000) / 1000
-    async with asyncio.timeout_at(deadline):
-        with TemporaryDirectory(prefix="report-", dir=jobs) as directory:
-            job_dir = Path(directory)
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=15), trust_env=True
-            ) as session:
-                resource_store = TemplateResourceStore(data_dir, base)
-                assets = TypstAssets(
-                    data_dir, job_dir, session, resource_store=resource_store
+
+    def __init__(
+        self,
+        config: ConfigManager,
+        data_dir: Path,
+        avatars: AvatarService,
+        profile_manifest: dict[str, dict],
+    ) -> None:
+        self.config = config
+        self.data_dir = data_dir
+        self.avatars = avatars
+        self.profile_manifest = profile_manifest
+
+    def _resolve_template(self, theme: str) -> Path:
+        """解析真实模板入口，内置目录优先并拒绝自定义符号链接。
+
+        Args:
+            theme: 已校验的主题名。
+
+        Returns:
+            内置或用户安装的 report.typ 路径。
+
+        Raises:
+            ValueError: 模板不存在、不支持 Typst 或目录包含符号链接。
+        """
+        directory = REPORT_TEMPLATES / theme
+        if not directory.is_dir():
+            custom = self.config.get_custom_report_template_dir(theme)
+            if (
+                not custom
+                or custom.is_symlink()
+                or not is_path_within(custom, custom.parent)
+            ):
+                raise ValueError(
+                    f"未找到 Typst 主题「{theme}」，请重新安装或选择其他模板"
                 )
-                preparer = TypstDataPreparer(
-                    config,
-                    avatars,
-                    assets,
-                    result,
-                    hide_names,
-                    avatar_getter,
-                    nickname_getter,
-                    namespace,
-                    extended_ids,
-                )
-                data = await preparer.prepare(profile_manifest, cdn, theme)
-                # 按原模板预处理水印，编译时直接复用缓存中的透明 PNG。
-                opacities: dict[int, float] = {}
-                if theme == "maria":
-                    opacities = {5: 0.16, 8: 0.16, 9: 0.16, 10: 0.16}
-                elif theme == "ATRI":
-                    opacities = {1: 0.96, 2: 0.72, 3: 0.68}
-                data["decorations"] = await asyncio.gather(
-                    *(
-                        assets.localize(
-                            name if name.startswith("https://") else f"{base}/{name}",
-                            opacity=opacities.get(index, 1.0),
-                        )
-                        for index, name in enumerate(THEME_DECORATIONS.get(theme, ()))
-                    )
-                )
-            shutil.copyfile(REPORT_TEMPLATES / "common.typ", job_dir / "common.typ")
-            if is_builtin:
-                for resource in template.parent.iterdir():
-                    if resource.suffix in (".svg", ".typ") and resource != template:
-                        shutil.copyfile(resource, job_dir / resource.name)
-            else:
-                # 自定义模板保留相对目录；编译根目录不包含宿主配置或历史记录。
-                shutil.copytree(template_dir, job_dir, dirs_exist_ok=True)
-            # 上传包不能覆盖本次数据或编译入口。
-            shutil.copyfile(template, job_dir / "main.typ")
-            if is_builtin:
-                await resource_store.stage_vectors(theme, job_dir)
-            payload = data
-            (job_dir / "data.json").write_text(
-                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+            if any(path.is_symlink() for path in custom.rglob("*")):
+                raise ValueError("Typst 自定义模板包含符号链接，请重新上传独立文件")
+            directory = custom
+        template = directory / "report.typ"
+        if not template.is_file():
+            raise ValueError(
+                f"主题「{theme}」没有 Typst 模板，请选择支持 Typst 的主题或切换渲染方案"
             )
-            # 为恢复版预留少量预算；超时进程退出后才可复用任务目录。
-            remaining = max(0.0, deadline - loop.time())
-            try:
-                await run_typst_worker(
-                    job_dir, font_dir, remaining - min(2.0, remaining / 5)
+        return template
+
+    async def render(
+        self,
+        result: AnalysisResultPayload,
+        theme: str,
+        options: RenderingStrategyOptions,
+        identity: TypstIdentityOptions | None = None,
+    ) -> bytes:
+        """在统一预算内准备、编译并导出静态报告。
+
+        Args:
+            result: 完整领域分析结果。
+            theme: 内置或已安装的主题名。
+            options: 本轮输出和网络方案，不含动态版心参数。
+            identity: 身份展示与平台回调，均不进入模板代码。
+
+        Returns:
+            PNG 或 JPEG 字节。
+
+        Raises:
+            ValueError: 缺少主题入口或受管理字体。
+            RuntimeError: 主题和基础恢复均编译失败。
+            TimeoutError: 准备或编译超过本轮预算。
+        """
+        template = self._resolve_template(validate_template_name(theme))
+        font_dir = self.data_dir / "typst/fonts"
+        if not font_dir.is_dir() or not any(
+            p.suffix.lower() in (".ttf", ".otf", ".ttc") for p in font_dir.iterdir()
+        ):
+            raise ValueError(
+                "请先在 WebUI 下载 Typst 字体，字体保存在插件数据目录 typst/fonts"
+            )
+        jobs = self.data_dir / "typst/jobs"
+        jobs.mkdir(parents=True, exist_ok=True)
+        deadline = (
+            asyncio.get_running_loop().time() + options.get("timeout", 30000) / 1000
+        )
+        async with asyncio.timeout_at(deadline):
+            with TemporaryDirectory(prefix="report-", dir=jobs) as directory:
+                job = Path(directory)
+                await self._prepare(
+                    result, template, job, options, identity or TypstIdentityOptions()
                 )
-            except (RuntimeError, TimeoutError) as error:
-                logger.warning(
-                    f"Typst 主题 {theme} 渲染失败，自动改用基础排版保留报告内容：{error}"
+                await self._compile(job, deadline, template.parent.name)
+                image = await asyncio.to_thread((job / "report.png").read_bytes)
+                if options.get("type", "png") == "jpeg":
+                    image = await asyncio.to_thread(
+                        _encode_jpeg, image, options.get("quality", 90)
+                    )
+                return image
+
+    async def _prepare(
+        self,
+        result: AnalysisResultPayload,
+        template: Path,
+        job: Path,
+        options: RenderingStrategyOptions,
+        identity: TypstIdentityOptions,
+    ) -> None:
+        """组装隔离任务输入：结构化数据、资源和主模板。
+
+        Args:
+            result: 原始领域分析结果。
+            template: 已解析的真实入口。
+            job: 本次专用编译目录。
+            options: 已固定的资源方案。
+            identity: 平台身份与匿名选项。
+        """
+        theme = template.parent.name
+        builtin = template.parent.parent == REPORT_TEMPLATES
+        resources = options.get("resource_urls")
+        cdn = (
+            resources["cdn_base_url"]
+            if resources
+            else self.config.get_t2i_cdn_base_url()
+        )
+        base = self.config.get_template_assets_base_url(
+            options.get("resource_environment"), cdn_base_url=cdn
+        )
+        store = TemplateResourceStore(self.data_dir, base)
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=15), trust_env=True
+        ) as session:
+            assets = TypstAssets(self.data_dir, job, session, resource_store=store)
+            preparer = TypstDataPreparer(
+                self.config, self.avatars, assets, result, identity
+            )
+            data = await preparer.prepare(self.profile_manifest, cdn, theme)
+            opacities = THEME_DECORATION_OPACITIES.get(theme, {})
+            data["decorations"] = await asyncio.gather(
+                *(
+                    assets.localize(f"{base}/{name}", opacity=opacities.get(index, 1.0))
+                    for index, name in enumerate(THEME_DECORATIONS.get(theme, ()))
                 )
-                trace = TraceContext.current()
-                if trace:
-                    trace.metadata["typst_recovery"] = {
-                        "theme": theme,
-                        "reason": str(error)[:1800] or type(error).__name__,
-                        "mode": "basic",
-                    }
-                    trace.metadata["has_warnings"] = True
-                # 独立入口不导入主题或公共组件，不读取图片；不删除任何分析文字。
-                shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job_dir / "main.typ")
-                (job_dir / "data.json").write_text(
-                    json.dumps(payload, ensure_ascii=False), encoding="utf-8"
-                )
-                (job_dir / "report.png").unlink(missing_ok=True)
-                await run_typst_worker(
-                    job_dir, font_dir, max(0.0, deadline - loop.time())
-                )
-            image = await asyncio.to_thread((job_dir / "report.png").read_bytes)
-            if options.get("type", "png") == "jpeg":
-                image = await asyncio.to_thread(
-                    _encode_jpeg, image, options.get("quality", 90)
-                )
-            return image
+            )
+        shutil.copyfile(REPORT_TEMPLATES / "common.typ", job / "common.typ")
+        if builtin:
+            for resource in template.parent.iterdir():
+                if resource.suffix in (".svg", ".typ") and resource != template:
+                    shutil.copyfile(resource, job / resource.name)
+            await store.stage_vectors(theme, job)
+        else:
+            # 保留相对导入，上传包不能覆盖运行时生成的数据和入口。
+            shutil.copytree(template.parent, job, dirs_exist_ok=True)
+        shutil.copyfile(template, job / "main.typ")
+        (job / "data.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8"
+        )
+
+    async def _compile(self, job: Path, deadline: float, theme: str) -> None:
+        """主题失败后在剩余预算内使用独立基础排版，取消不触发恢复。
+
+        Args:
+            job: 本次隔离编译目录。
+            deadline: 整条渲染链路的单调时钟截止时间。
+            theme: 本轮主题，用于诊断记录。
+
+        Raises:
+            RuntimeError: 基础恢复也失败。
+            TimeoutError: 剩余预算耗尽。
+        """
+        loop = asyncio.get_running_loop()
+        remaining = max(0.0, deadline - loop.time())
+        fonts = self.data_dir / "typst/fonts"
+        try:
+            await run_typst_worker(job, fonts, remaining - min(2.0, remaining / 5))
+        except (RuntimeError, TimeoutError) as error:
+            logger.warning(
+                f"Typst 主题 {theme} 渲染失败，自动改用基础排版保留报告内容：{error}"
+            )
+            trace = TraceContext.current()
+            if trace:
+                trace.metadata["typst_recovery"] = {
+                    "theme": theme,
+                    "reason": str(error)[:1800] or type(error).__name__,
+                    "mode": "basic",
+                }
+                trace.metadata["has_warnings"] = True
+            # 恢复入口不导入主题、组件或图片，原始结构化文字保持完整。
+            shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job / "main.typ")
+            (job / "report.png").unlink(missing_ok=True)
+            await run_typst_worker(job, fonts, max(0.0, deadline - loop.time()))
 
 
 def _encode_jpeg(payload: bytes, quality: int) -> bytes:

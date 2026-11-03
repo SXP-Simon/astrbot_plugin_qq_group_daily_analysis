@@ -52,7 +52,8 @@ from .render_diagnostics import (
     summarize_render_error,
 )
 from .templates import HTMLTemplates
-from .typst_renderer import render_typst_report
+from .typst_data import TypstIdentityOptions
+from .typst_renderer import TypstReportRenderer
 
 # 产物内嵌追踪号的 meta 名称与匹配模式（注入与自愈共用同一套定义）
 _TRACE_META_ATTR = "astrbot-trace-id"
@@ -627,19 +628,21 @@ class ReportGenerator(IReportGenerator):
                         attempt_timeout = asyncio.timeout_at(render_deadline)
                         async with attempt_timeout:
                             if render_service == "typst":
-                                image_data = await render_typst_report(
-                                    analysis_result,
+                                native = TypstReportRenderer(
                                     self.config_manager,
                                     self.data_dir,
                                     self._avatar_service,
                                     self._profile_asset_manifest,
-                                    template_theme,
-                                    strategy,
-                                    avatar_url_getter,
-                                    nickname_getter,
-                                    avatar_cache_namespace,
-                                    hide_user_names,
-                                    allow_alphanumeric_user_ids,
+                                )
+                                identity = TypstIdentityOptions(
+                                    avatar_getter=avatar_url_getter,
+                                    nickname_getter=nickname_getter,
+                                    namespace=avatar_cache_namespace,
+                                    hide_names=hide_user_names,
+                                    extended_ids=allow_alphanumeric_user_ids,
+                                )
+                                image_data = await native.render(
+                                    analysis_result, template_theme, strategy, identity
                                 )
                             elif render_service == "custom":
                                 assert html_content is not None

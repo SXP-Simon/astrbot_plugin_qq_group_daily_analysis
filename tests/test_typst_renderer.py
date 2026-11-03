@@ -122,7 +122,7 @@ async def test_cancellation_does_not_start_recovery(native, monkeypatch):
 @pytest.mark.asyncio
 async def test_custom_typst_keeps_relative_modules_and_isolated_root(native, tmp_path, monkeypatch):
     """自定义主模板和子目录导入一起进入隔离任务目录。"""
-    from src.infrastructure.reporting.typst_renderer import render_typst_report
+    from src.infrastructure.reporting.typst_renderer import TypstReportRenderer
 
     fonts = native.data_dir / "typst/fonts"
     fonts.mkdir(parents=True)
@@ -141,7 +141,8 @@ async def test_custom_typst_keeps_relative_modules_and_isolated_root(native, tmp
         (job / "report.png").write_bytes(png_bytes())
     monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
     try:
-        result = await render_typst_report(create_analysis_result(), native.config_manager, native.data_dir, native._avatar_service, {}, "native", {})
+        renderer = TypstReportRenderer(native.config_manager, native.data_dir, native._avatar_service, {})
+        result = await renderer.render(create_analysis_result(), "native", {})
         assert result == png_bytes()
     finally:
         await native.close()
