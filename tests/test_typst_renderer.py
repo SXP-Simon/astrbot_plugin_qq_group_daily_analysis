@@ -223,10 +223,12 @@ async def test_native_trace_tracks_stages_and_cancel(native, monkeypatch, cancel
             assert (await native.generate_image_report(create_analysis_result(), "test", None))[0]
         trace.finish(TaskEvent.CANCEL if cancel else TaskEvent.SUCCEED)
         spans = trace.to_dict()["spans"]
-        assert [span["stage_name"] for span in spans] == ["TYPST_VALIDATE", "TYPST_DATA", "TYPST_RESOURCES", "TYPST_COMPILE"] + ([] if cancel else ["TYPST_ENCODE"])
-        assert spans[3]["status"] == ("aborted" if cancel else "success")
+        assert [span["stage_name"] for span in spans] == ["IMAGE_RENDER_QUEUE", "IMAGE_RENDER_ATTEMPT", "TYPST_VALIDATE", "TYPST_DATA", "TYPST_RESOURCES", "TYPST_COMPILE"] + ([] if cancel else ["TYPST_ENCODE"])
+        compile_span = next(span for span in spans if span["stage_name"] == "TYPST_COMPILE")
+        assert compile_span["status"] == ("cancelled" if cancel else "success")
+        assert compile_span["payload"]["parent_span_id"] == spans[1]["span_id"]
         if not cancel:
-            assert spans[3]["payload"]["worker_peak_rss_mb"] == 120.5
+            assert compile_span["payload"]["worker_peak_rss_mb"] == 120.5
         assert trace.status == ("aborted" if cancel else "succeeded")
     finally:
         await native.close()

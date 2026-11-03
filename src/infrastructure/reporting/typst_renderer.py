@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
-from contextlib import AbstractAsyncContextManager, nullcontext
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,8 +13,9 @@ from typing import TYPE_CHECKING
 import aiohttp
 from PIL import Image
 
-from ...shared.trace_context import SpanRecord, TraceContext
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .render_trace import render_span as _span
 from .template_asset_catalog import THEME_DECORATION_OPACITIES, THEME_DECORATIONS
 from .template_installer import is_path_within, validate_template_name
 from .template_resources import TemplateResourceStore
@@ -33,35 +33,6 @@ if TYPE_CHECKING:
 
 
 REPORT_TEMPLATES = Path(__file__).parent / "templates"
-
-
-def _span(
-    stage: str, payload: dict[str, object] | None = None
-) -> AbstractAsyncContextManager[SpanRecord | None]:
-    """复用现有追踪上下文；离线渲染不创建虚假的任务。
-
-    Args:
-        stage: 原生渲染步骤名。
-        payload: 不含正文或用户身份的诊断指标。
-
-    Returns:
-        当前任务的异步阶段，离线调用时为空上下文。
-    """
-    trace = TraceContext.current()
-    if not trace:
-        return nullcontext()
-    details = dict(payload or {})
-    parent = next(
-        (
-            span
-            for span in reversed(trace._spans)
-            if span["stage_name"] == "RENDER_REPORT" and span["status"] == "running"
-        ),
-        None,
-    )
-    if parent:
-        details["parent_span_id"] = parent["span_id"]
-    return trace.span_async(stage, details)
 
 
 async def render_typst_probe(
