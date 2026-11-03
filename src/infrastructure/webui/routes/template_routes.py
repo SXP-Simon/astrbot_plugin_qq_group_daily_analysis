@@ -220,7 +220,11 @@ class TemplateRoutes:
             return error_response("安装模板失败，请查看服务器日志。", status_code=500)
 
     async def api_uninstall_template(self) -> WebApiResponse:
-        """卸载通过安装器安装的自定义报告视觉模板（内置模板与手动放入的目录拒绝）"""
+        """移除插件数据目录内的自定义模板，包含手动模板和未完成目录。
+
+        Returns:
+            指定模板的移除结果，或内置模板、非法目录等错误响应。
+        """
         try:
             try:
                 body = await request.json()
