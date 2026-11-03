@@ -53,9 +53,9 @@ async def compiler(managed_fonts, monkeypatch):
     generator._avatar_service.get_user_avatar = AsyncMock(return_value=avatar)
     localize = TypstAssets.localize
 
-    async def offline_assets(self, source, opacity=1):
+    async def offline_assets(self, source, opacity=1, *, oval=False):
         # 保留真实头像解码与落盘；装饰 CDN 不可用时应以空资源继续编译。
-        return await localize(self, source, opacity) if source.startswith("data:") else ""
+        return await localize(self, source, opacity, oval=oval) if source.startswith("data:") else ""
 
     monkeypatch.setattr(TypstAssets, "localize", offline_assets)
     try:
@@ -65,10 +65,12 @@ async def compiler(managed_fonts, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack"])
+@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria"])
 @pytest.mark.parametrize("case", ["complete", "empty", "summary_only", "plain_markup", "long_text", "anonymous"])
-async def test_real_compilation_accepts_report_content(compiler, theme, case):
+async def test_real_compilation_accepts_report_content(compiler, monkeypatch, theme, case):
     _, generator, _ = compiler
+    worker = AsyncMock(wraps=typst_renderer.run_typst_worker)
+    monkeypatch.setattr(typst_renderer, "run_typst_worker", worker)
     data = create_analysis_result(empty=case == "empty")
     data["statistics"].activity_visualization.hourly_activity = {
         hour: 0 if case == "empty" else hour % 5 for hour in range(24)
@@ -105,6 +107,7 @@ async def test_real_compilation_accepts_report_content(compiler, theme, case):
         assert output.format == "PNG"
         output.verify()
     host.assert_not_called()
+    worker.assert_awaited_once()
     assert not list((generator.data_dir / "typst/jobs").iterdir())
 
 

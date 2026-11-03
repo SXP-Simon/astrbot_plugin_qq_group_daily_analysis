@@ -50,11 +50,17 @@ THEME_DECORATIONS: dict[str, tuple[str, ...]] = {
     ),
     "deepseek_maid": ("deepseek_maid/basin-v3.png", "deepseek_maid/closed-eye-0.png"),
     "maria": (
-        "maria/rosa_chinensis_sachiko_yumi.png",
+        "maria/statue_virgin_mary.png",
         "maria/rose_red.png",
         "maria/rose_white.png",
         "maria/rose_yellow.png",
         "maria/rosa_gigantea_sei_shimako.png",
+        "maria/rosa_chinensis_sachiko_yumi.png",
+        "maria/sei_window_observation.png",
+        "maria/rosa_foetida_yoshino_rei.png",
+        "maria/rose_red.png",
+        "maria/rose_white.png",
+        "maria/rose_yellow.png",
     ),
 }
 
@@ -214,11 +220,17 @@ async def render_typst_report(
                     namespace,
                     extended_ids,
                 )
-                data = await preparer.prepare(profile_manifest, cdn)
+                data = await preparer.prepare(profile_manifest, cdn, theme)
                 data["decorations"] = await asyncio.gather(
                     *(
-                        assets.localize(f"{base}/{name}")
-                        for name in THEME_DECORATIONS.get(theme, ())
+                        assets.localize(
+                            f"{base}/{name}",
+                            # Maria 的背景蔷薇及姐妹水印沿用原模板的 0.16 不透明度。
+                            opacity=0.16
+                            if theme == "maria" and (index == 5 or index >= 8)
+                            else 1.0,
+                        )
+                        for index, name in enumerate(THEME_DECORATIONS.get(theme, ()))
                     )
                 )
             payload = {

@@ -36,6 +36,7 @@ class TypstPortrait(TypedDict):
     name: str
     title: str
     profile: str
+    mbti: str
     reason: list[TextRun]
     avatar: str
     image: str
@@ -127,11 +128,12 @@ class TypstDataPreparer:
             text, self.result, self.hide_names
         )
 
-    async def avatar(self, user_id: str) -> str:
+    async def avatar(self, user_id: str, *, oval: bool = False) -> str:
         """通过平台隔离头像缓存获取并本地化头像。
 
         Args:
             user_id: 仅在准备阶段使用的身份编号。
+            oval: 是否采用 Maria 椭圆肖像；正文提及仍使用圆形头像。
 
         Returns:
             本次编译目录内的头像路径。
@@ -141,7 +143,7 @@ class TypstDataPreparer:
         source = await self.avatars.get_user_avatar(
             user_id, self.avatar_getter, self.namespace
         )
-        return await self.assets.localize(source)
+        return await self.assets.localize(source, oval=oval)
 
     async def rich_text(self, text: str) -> list[TextRun]:
         """将话题、金句和评价中的引用转为头像片段，不执行输入中的标记。
@@ -196,13 +198,14 @@ class TypstDataPreparer:
         return runs
 
     async def prepare(
-        self, profile_manifest: dict[str, dict], cdn_base_url: str
+        self, profile_manifest: dict[str, dict], cdn_base_url: str, theme: str = ""
     ) -> TypstReportData:
         """按已有展示上限准备各主题共有的数据。
 
         Args:
             profile_manifest: 现有人格图片清单。
             cdn_base_url: 本轮资源镜像，供人格素材解析使用。
+            theme: 本轮实际主题，用于保留主题固定的水印透明度。
 
         Returns:
             无 HTML 和用户原始编号的报告数据。
@@ -234,21 +237,27 @@ class TypstDataPreparer:
                 config,
                 cdn_base_url,
             )
+            opacity = (
+                0.18
+                if theme == "maria"
+                else min(1.0, max(0.0, float(profile["profile_image_opacity"])))
+            )
             portraits.append(
                 {
                     "name": "" if self.hide_names else portrait.name,
                     "title": self.plain(portrait.title),
                     "profile": self.plain(str(profile["profile_display"])),
+                    "mbti": self.plain(portrait.mbti),
                     "reason": [{"text": self.plain(portrait.reason), "avatar": ""}],
-                    "avatar": await self.avatar(str(portrait.user_id)),
+                    "avatar": await self.avatar(
+                        str(portrait.user_id), oval=theme == "maria"
+                    ),
                     "image": await self.assets.localize(
                         str(profile["profile_image"]),
-                        min(1.0, max(0.0, float(profile["profile_image_opacity"]))),
+                        opacity,
                     ),
                     "image_fit": str(profile["profile_image_size_mode"]),
-                    "opacity": min(
-                        1.0, max(0.0, float(profile["profile_image_opacity"]))
-                    ),
+                    "opacity": opacity,
                 }
             )
         quotes: list[TypstQuote] = []
