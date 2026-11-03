@@ -1,11 +1,12 @@
 import { StoredRecordsTab } from "../StoredRecordsTab";
 import { TemplateUninstallModal } from "../../../../features/install-template/ui/TemplateUninstallModal";
 import { useState } from "react";
-import { Alert, Button, Card, Col, Descriptions, Drawer, Input, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography, Upload, message } from "antd";
+import { Alert, Button, Card, Col, Descriptions, Drawer, Input, Popconfirm, Progress, Row, Space, Statistic, Table, Tabs, Tag, Typography, Upload, message } from "antd";
 import { FileOutlined, FolderOpenOutlined, ReloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { FileContentDialog } from "./FileContentDialog";
 import { FileEditorDialog, type FileDraft } from "./FileEditorDialog";
 import { useManagedFiles } from "../../model/useManagedFiles";
+import { partitionPresentation } from "../../model/partitionPresentation";
 import { formatBytes } from "../../../../shared/lib/formatters";
 import { FontManager } from "./FontManager";
 import { TemplateResources } from "../../../../features/manage-template-resources/ui/TemplateResources";
@@ -36,7 +37,7 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
         { title: "文件", dataIndex: "count", align: "right", width: 65 },
         { title: "占用空间", width: 100, align: "right", render: (_, item) => formatBytes(item.size_bytes) },
         { title: "占比", width: 115, render: (_, item) => <Progress size="small" percent={totalBytes ? Math.round(item.size_bytes / totalBytes * 100) : 0} /> },
-        { title: "分区用途与能力", render: (_, item) => <Space direction="vertical" size={2}><Typography.Text>{item.description}</Typography.Text><Space size={0}>{item.key === "typst_fonts" ? <><Tag color="blue">模板依赖</Tag><Tag color="green">补齐 / 替换 / 移除</Tag></> : <><Tag color="blue">查看</Tag>{!["state", "avatar_storage"].includes(item.key) && <Tag>导出</Tag>}{item.writable && <Tag color="green">上传 / 替换</Tag>}{item.key === "custom_templates" && <Tag color="purple">源码编辑</Tag>}</>}</Space></Space> },
+        { title: "分区用途与能力", render: (_, item) => <Space direction="vertical" size={2}><Typography.Text>{item.description}</Typography.Text><Space size={[0, 4]} wrap>{partitionPresentation[item.key]?.capabilities.map(label => <Tag key={label} color="blue">{label}</Tag>)}</Space></Space> },
         { title: "操作", fixed: "right", width: 85, render: (_, item) => <Button type="link" onClick={() => vm.select(item)}>管理</Button> },
       ]} />
     </Card>
@@ -49,11 +50,6 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
           { key: "files", label: "文件列表", children: <Space direction="vertical" style={{ width: "100%" }}>
             <Space wrap>
               <Input.Search aria-label="搜索文件" placeholder="搜索文件名或相对路径" allowClear onSearch={vm.searchFiles} style={{ width: 260 }} />
-              <Select aria-label="文件类型筛选" value={vm.extensions} onChange={vm.filterExtensions} style={{ width: 180 }} options={[
-                { value: "", label: "全部类型" }, { value: "html,htm", label: "HTML 网页" }, { value: "jpg,jpeg,png", label: "JPG + PNG 图片" },
-                { value: "jpg,jpeg", label: "JPG 图片" }, { value: "png", label: "PNG 图片" }, { value: "svg", label: "SVG 素材" },
-                { value: "webp,gif", label: "WebP / GIF" }, { value: "json", label: "JSON 数据" }, { value: "ttf,otf,ttc", label: "字体文件" }, { value: "typ", label: "Typst 模板（.typ）" }, { value: "css,js,txt,md,yaml,yml", label: "其他模板与文本源码" },
-              ]} />
               <Button icon={<ReloadOutlined />} loading={vm.loading} onClick={() => { vm.clearSelection(); void vm.load(); void vm.refresh(); }}>刷新列表</Button>
               {activePartition.writable && <Upload showUploadList={false} beforeUpload={async file => {
                 if (file.size > 32 * 1024 * 1024) { void message.error("文件不得超过 32 MiB"); return false; }
@@ -64,17 +60,20 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
               }}><Button icon={<UploadOutlined />} disabled={vm.busy}>上传文件</Button></Upload>}
               {activePartition.key === "custom_templates" && <><Button onClick={() => setEditor({ name: "", text: "" })}>新建源码</Button><Button type="primary" onClick={() => setInstalling(true)}>安装模板包</Button><Button onClick={() => setUninstalling(true)}>卸载已安装模板</Button></>}
             </Space>
+            <Space role="group" aria-label="文件类型筛选" wrap size={[8, 8]}>
+              {[{ value: "", label: "全部类型" }, ...(partitionPresentation[activePartition.key]?.filters || [])].map(filter => <Button key={filter.value} size="small" type={vm.extensions === filter.value ? "primary" : "default"} aria-pressed={vm.extensions === filter.value} onClick={() => vm.filterExtensions(filter.value)}>{filter.label}</Button>)}
+            </Space>
             {activePartition.deletable && <Space wrap><Typography.Text>已选 {vm.selected.length} 项（最多 200，支持跨页）</Typography.Text>
               <Button size="small" disabled={!vm.selected.length || vm.busy} onClick={vm.clearSelection}>取消选择</Button>
               <Popconfirm title={`删除已选的 ${vm.selected.length} 个文件？`} description={<Space direction="vertical"><Typography.Text>{activePartition.name} · {vm.extensions || "全部类型"} · {vm.search || "无关键词"}</Typography.Text><Typography.Text>{activePartition.impact}</Typography.Text><Typography.Text style={{ maxWidth: 420, overflowWrap: "anywhere" }}>{vm.selected.slice(0, 5).map(file => file.name).join("、")}{vm.selected.length > 5 ? " 等" : ""}</Typography.Text></Space>} okText="删除所选" cancelText="取消" onConfirm={vm.deleteSelected}>
                 <Button danger size="small" disabled={!vm.selected.length} loading={vm.busy}>删除所选</Button>
               </Popconfirm></Space>}
             {vm.deleteResult && <Alert showIcon type={vm.deleteResult.failed.length ? "warning" : "success"} message={`删除成功 ${vm.deleteResult.deleted.length} 项，失败 ${vm.deleteResult.failed.length} 项`} description={vm.deleteResult.failed.map(file => <div key={file.name}>{file.name}：{file.message}</div>)} />}
-            <Table<ManagedFile> rowKey="name" size="small" dataSource={vm.files} loading={vm.loading} rowSelection={activePartition.deletable ? { selectedRowKeys: vm.selected.map(file => file.name), onChange: vm.selectFiles, preserveSelectedRowKeys: true, getCheckboxProps: file => ({ disabled: vm.busy || vm.selected.length >= 200 && !vm.selected.some(item => item.name === file.name) }) } : undefined} scroll={{ x: 650 }} pagination={{ current: vm.page, total: vm.total, pageSize: 20, showSizeChanger: false, onChange: vm.setPage, showTotal: count => `共 ${count} 个文件` }} columns={[
+            <Table<ManagedFile> rowKey="name" size="small" dataSource={vm.files} loading={vm.loading} locale={{ emptyText: vm.search || vm.extensions ? "没有匹配文件，请调整关键词或文件类型。" : partitionPresentation[activePartition.key]?.empty }} rowSelection={activePartition.deletable ? { selectedRowKeys: vm.selected.map(file => file.name), onChange: vm.selectFiles, preserveSelectedRowKeys: true, getCheckboxProps: file => ({ disabled: vm.busy || vm.selected.length >= 200 && !vm.selected.some(item => item.name === file.name) }) } : undefined} scroll={{ x: 650 }} pagination={{ current: vm.page, total: vm.total, pageSize: 20, showSizeChanger: false, onChange: vm.setPage, showTotal: count => `共 ${count} 个文件` }} columns={[
               { title: "文件名", dataIndex: "name", render: name => <Typography.Text style={{ overflowWrap: "anywhere" }}><FileOutlined /> {name}</Typography.Text> },
               { title: "大小", width: 105, render: (_, file) => formatBytes(file.size_bytes) },
               { title: "修改时间", width: 175, render: (_, file) => new Date(file.modified_at * 1000).toLocaleString() },
-              { title: "操作", width: 150, render: (_, file) => file.downloadable ? <Button type="link" disabled={vm.busy} onClick={() => void vm.inspect(file.name)}>{file.editable ? "查看 / 编辑" : "查看 / 导出"}</Button> : <Tag>由模块管理</Tag> },
+              { title: "操作", width: 150, render: (_, file) => file.downloadable ? <Button type="link" disabled={vm.busy} onClick={() => void (file.editable || /^(image\/|text\/|application\/json)/.test(file.media_type) ? vm.inspect(file.name) : vm.download(file.name))}>{file.editable ? "查看 / 编辑" : /^(image\/|text\/html)/.test(file.media_type) ? "预览 / 下载" : /^(text\/|application\/json)/.test(file.media_type) ? "查看内容 / 下载" : "下载文件"}</Button> : <Tag>由模块管理</Tag> },
             ]} />
           </Space> },
           ...(activePartition.key === "avatar_storage" ? [{ key: "entries", label: "头像条目", children: <StoredRecordsTab onlyKind="avatar" /> }] : []),

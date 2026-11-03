@@ -69,6 +69,19 @@ export function useManagedFiles() {
     } catch (cause) { void message.error(cause instanceof Error ? cause.message : "文件操作失败"); return false; }
     finally { setBusy(false); }
   };
+  const download = async (name: string) => {
+    if (!partition || busy) return;
+    setBusy(true);
+    try {
+      const result = await fetchManagedContent(partition.key, name);
+      const bytes = Uint8Array.from(atob(result.content_base64), char => char.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: result.media_type }));
+      const link = document.createElement("a");
+      link.href = url; link.download = name.split("/").pop() || "download";
+      link.click(); URL.revokeObjectURL(url);
+    } catch (cause) { void message.error(cause instanceof Error ? cause.message : "文件下载失败"); }
+    finally { setBusy(false); }
+  };
   const deleteSelected = async () => {
     if (!partition || !selected.length) return;
     setBusy(true);
@@ -85,7 +98,7 @@ export function useManagedFiles() {
     setSelected(keys.slice(0, 200).flatMap(key => known.get(String(key)) ? [known.get(String(key))!] : []));
   };
   return { partitions, partition, files, total, search, extensions, page, loading, busy, error, content, selected, deleteResult,
-    refresh, load, select, inspect, mutate, setContent, setPage,
+    refresh, load, select, inspect, download, mutate, setContent, setPage,
     deleteSelected, selectFiles, clearSelection: () => setSelected([]),
     filterExtensions: (value: string) => { setExtensions(value); setPage(1); setSelected([]); setDeleteResult(null); },
     searchFiles: (value: string) => { setSearch(value); setPage(1); setSelected([]); setDeleteResult(null); } };

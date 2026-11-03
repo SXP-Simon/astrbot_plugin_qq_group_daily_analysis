@@ -56,3 +56,22 @@ it("从抽屉新建源码与安装模板时，弹窗显示在抽屉上方", asyn
   const install = installTitle.closest(".ant-modal-wrap")!;
   expect(Number(getComputedStyle(install).zIndex)).toBeGreaterThan(drawerLayer);
 }, 20000);
+
+it("模板类型直接可见且筛选传给接口，报告区只提供相关类型", async () => {
+  const template = (await fetchManagedPartitions())[0];
+  vi.mocked(fetchManagedPartitions).mockResolvedValue([template, { ...template, key: "reports", name: "历史报告文件", writable: false }]);
+  render(<ConfigProvider theme={{ token: { motion: false } }}><ManagedFilesPanel /></ConfigProvider>);
+  fireEvent.click(within((await screen.findByText("自定义报告模板")).closest("tr")!).getByText("管理"));
+  const filters = document.querySelector<HTMLElement>('[role="group"][aria-label="文件类型筛选"]')!;
+  const typ = within(filters).getByText("Typst 模板（.typ）").closest("button")!;
+  expect(typ).toBeVisible();
+  fireEvent.click(typ);
+  await waitFor(() => expect(fetchManagedFiles).toHaveBeenLastCalledWith("custom_templates", "", 1, "typ"));
+  expect(typ).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByLabelText("Close"));
+  fireEvent.click(within(screen.getByText("历史报告文件").closest("tr")!).getByText("管理"));
+  const reportFilters = document.querySelector<HTMLElement>('[role="group"][aria-label="文件类型筛选"]')!;
+  expect(within(reportFilters).queryByText(/Typst/)).toBeNull();
+  fireEvent.click(within(reportFilters).getByText("JPG + PNG"));
+  await waitFor(() => expect(fetchManagedFiles).toHaveBeenLastCalledWith("reports", "", 1, "jpg,jpeg,png"));
+}, 20000);
