@@ -65,7 +65,7 @@ async def compiler(managed_fonts, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria", "ATRI", "deepseek_maid", "art_nouveau"])
+@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria", "ATRI", "deepseek_maid", "art_nouveau", "scrapbook"])
 @pytest.mark.parametrize("case", ["complete", "empty", "summary_only", "plain_markup", "long_text", "anonymous"])
 async def test_real_compilation_accepts_report_content(compiler, monkeypatch, theme, case):
     _, generator, _ = compiler

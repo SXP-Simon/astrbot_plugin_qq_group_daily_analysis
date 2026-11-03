@@ -83,6 +83,7 @@ THEME_DECORATIONS: dict[str, tuple[str, ...]] = {
             "basin-v3",
         )
     ),
+    "scrapbook": ("scrapbook/assistant.jpg",),
     "maria": (
         "maria/statue_virgin_mary.png",
         "maria/rose_red.png",
