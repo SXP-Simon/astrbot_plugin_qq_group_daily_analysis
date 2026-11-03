@@ -45,8 +45,31 @@ THEME_DECORATIONS: dict[str, tuple[str, ...]] = {
         )
     ),
     "ATRI": (
-        "ATRI/file/1775130609119_1774881269400_可爱-1.webp",
+        "ATRI/file/1775130588385_1774881257527_bg1.webp",
+        "ATRI/file/1775130626446_1774881312214_atri1.webp",
+        "ATRI/file/1775130623112_1774881319340_atri4.webp",
+        "ATRI/file/1775130613783_1774881310058_atri3.webp",
+        "ATRI/file/1775130600453_1774881268554_可爱.webp",
         "ATRI/file/1775130585446_1774881263342_观察.webp",
+        "ATRI/file/1775130581843_1774881262835_疑惑.webp",
+        "ATRI/file/1775130598778_1774881267181_得意.webp",
+        "ATRI/file/1775130599184_1774881267385_得意-1.webp",
+        "ATRI/file/1775130605165_1774881270686_爱心.webp",
+        "ATRI/file/1775130588642_1774881263748_可爱-3.webp",
+        "ATRI/file/1775130609119_1774881269400_可爱-1.webp",
+        "ATRI/file/1775130591277_1774881264350_睡觉.webp",
+        "ATRI/file/1775130591487_1774881264336_不要.webp",
+        "ATRI/file/1775132804506_1774881263342_观察.gif",
+        "ATRI/file/1775132805081_1774881262835_疑惑.gif",
+        "ATRI/file/1775132815504_1774881268554_可爱.gif",
+        "ATRI/file/1775132817115_1774881269400_可爱-1.gif",
+        "ATRI/file/1775132805485_1774881263748_可爱-3.gif",
+        "ATRI/file/1775132813334_1774881267181_得意.gif",
+        "ATRI/file/1775132808652_1774881267385_得意-1.gif",
+        "ATRI/file/1775132811492_1774881264336_不要.gif",
+        "ATRI/file/1775132814629_1774881270686_爱心.gif",
+        "ATRI/file/1775132809943_1774881264350_睡觉.gif",
+        "ATRI/file/1775175892953_1774881267664_舔屏幕.gif",
     ),
     "deepseek_maid": ("deepseek_maid/basin-v3.png", "deepseek_maid/closed-eye-0.png"),
     "maria": (
@@ -221,14 +244,17 @@ async def render_typst_report(
                     extended_ids,
                 )
                 data = await preparer.prepare(profile_manifest, cdn, theme)
+                # 按原模板预处理水印，编译时直接复用缓存中的透明 PNG。
+                opacities: dict[int, float] = {}
+                if theme == "maria":
+                    opacities = {5: 0.16, 8: 0.16, 9: 0.16, 10: 0.16}
+                elif theme == "ATRI":
+                    opacities = {1: 0.96, 2: 0.72, 3: 0.68}
                 data["decorations"] = await asyncio.gather(
                     *(
                         assets.localize(
                             f"{base}/{name}",
-                            # Maria 的背景蔷薇及姐妹水印沿用原模板的 0.16 不透明度。
-                            opacity=0.16
-                            if theme == "maria" and (index == 5 or index >= 8)
-                            else 1.0,
+                            opacity=opacities.get(index, 1.0),
                         )
                         for index, name in enumerate(THEME_DECORATIONS.get(theme, ()))
                     )

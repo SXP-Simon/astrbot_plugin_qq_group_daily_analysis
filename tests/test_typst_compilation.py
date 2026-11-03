@@ -65,7 +65,7 @@ async def compiler(managed_fonts, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria"])
+@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria", "ATRI"])
 @pytest.mark.parametrize("case", ["complete", "empty", "summary_only", "plain_markup", "long_text", "anonymous"])
 async def test_real_compilation_accepts_report_content(compiler, monkeypatch, theme, case):
     _, generator, _ = compiler
@@ -94,6 +94,7 @@ async def test_real_compilation_accepts_report_content(compiler, monkeypatch, th
         data["topics"][0].topic = literal
         data["topics"][0].detail = literal
         data["statistics"].golden_quotes[0].content = literal
+        data["chat_quality_review"].dimensions[0].color = literal
     if case == "long_text":
         data["topics"][0].detail = "大家认真讨论具体的问题，并逐步整理可以验证的结论。" * 30
         data["user_titles"][0].name = "认真整理讨论记录的群友名字比较长"
