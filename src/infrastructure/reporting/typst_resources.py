@@ -44,6 +44,9 @@ FONT_SOURCES = {
     "LXGWWenKai.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKai-Regular.ttf",
     "LXGWWenKai-Medium.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKai-Medium.ttf",
     "LXGWWenKaiMono.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKaiMono-Regular.ttf",
+    # BlueArchive 使用完整桌面字库，避免编译期间加载网页字体分片。
+    "BlueakaBeta2GBK-DemiBold.ttf": "gh/ApricotLemonTea/BA-style-homepage@d7e9acd5d716d46cee066c59ea323b15f279d217/src/assets/font/BlueakaBeta2GBK-DemiBold.ttf",
+    "BlueakaBeta2GBK-Bold.ttf": "gh/ApricotLemonTea/BA-style-homepage@d7e9acd5d716d46cee066c59ea323b15f279d217/src/assets/font/BlueakaBeta2GBK-Bold.ttf",
 }
 
 

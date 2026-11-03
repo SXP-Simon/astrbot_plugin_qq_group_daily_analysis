@@ -48,6 +48,8 @@ QQ 官方摘要卡使用自己的系统字体列表，不受这个选项控制�
 
 独立 Typst 方案的字体统一放在插件数据目录 `typst/fonts/`，通过 WebUI 的字体下载入口管理，无需按下文为浏览器安装系统字体。Art Nouveau 的 Typst 花饰额外使用 Noto Sans Symbols 2；手账与春节的 Unicode emoji 使用 Noto Color Emoji 彩色字体，不提取为图片。春节的书法与标题沿用受管理的 Ma Shan Zheng、ZCOOL XiaoWei。升级后可再次点击下载补齐，HTML 模板的字体要求仍以上表为准。
 
+BlueArchive 的 Typst 排版使用受管理的完整 `BlueakaBeta2GBK-DemiBold.ttf` 与 `BlueakaBeta2GBK-Bold.ttf`，从[固定上游版本](https://github.com/ApricotLemonTea/BA-style-homepage/tree/d7e9acd5d716d46cee066c59ea323b15f279d217/src/assets/font)下载。普通字重的部分字形横向度量与原网页分片不同；希望保持原网页字体效果时，HTML 仍可使用原来的在线分片。Typst 不在运行时转换或合并这些分片。
+
 ## 完整字体清单与下载入口
 
 Google Fonts 链接指向[官方字体仓库](https://github.com/google/fonts)中的对应目录。下载字体文件时，优先使用完整 TTF／OTF；如果提供可变 TTF，可以用覆盖表中所需字重的版本，斜体通常需要单独文件。不要只下载 CSS，也不要把网页按字符拆分的一个 WOFF2 文件当作完整中文字体。
@@ -81,7 +83,7 @@ Google Fonts 链接指向[官方字体仓库](https://github.com/google/fonts)�
 
 - 部分系统包提供的是 `Noto Sans CJK SC`，模板使用的是 `Noto Sans SC`。它们可能互为备用，但不能据此认定原字体已经匹配。需要尽量保持原设计时，安装上表链接中的对应家族。
 - ATRI 使用 `LXGWWenKai-Regular.ttf`、`LXGWWenKai-Medium.ttf` 和 `LXGWWenKaiMono-Regular.ttf`。模板保留本地映射：`LXGW WenKai`／`LXGWWenKai-Regular` 对应 400，`LXGW WenKai Medium`／`LXGWWenKai-Medium` 对应原模板的 600，`LXGW WenKai Mono`／`LXGWWenKaiMono-Regular` 对应 400。Medium 文件自身的字重与模板声明可能不同，保留映射可继续使用该文件。
-- BlueArchive 的上游 CSS 将 `BlueakaBeta2GBK DemiBold` 映射到 `Blueaka` 400，将 `BlueakaBeta2GBK` 映射到 700。本地模式保留这些名称及 `Blueaka`／`Blueaka Bold` 候选。当前来源主要是分片网页字体，**尚未核验完整、可直接安装的桌面字体包**，请向字体提供者确认完整文件和使用许可。没有对应字体而又希望保留原设计时，继续使用在线字体；接受备用字体时才尝试本地模式。
+- BlueArchive 的上游 CSS 将 `BlueakaBeta2GBK DemiBold` 映射到 `Blueaka` 400，将 `BlueakaBeta2GBK` 映射到 700。本地模式保留这些名称及 `Blueaka`／`Blueaka Bold` 候选。已经核验可用于 Typst 的完整桌面字库，但普通字重的部分横向度量与在线分片不同，尚无完全一致的完整安装包。希望保持原网页字形时继续使用在线字体；接受这些差异时才尝试本地模式。
 
 插件不附带字体安装包，也不自动安装这些字体。
 
