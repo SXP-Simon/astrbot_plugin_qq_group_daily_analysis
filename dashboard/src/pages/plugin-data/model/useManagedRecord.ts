@@ -43,6 +43,15 @@ export function useManagedRecord(locator: RecordLocator | null, onChanged: () =>
   };
   const download = () => {
     if (!record) return;
+    if (record.locator.kind === "avatar") {
+      const data = record.data;
+      const uri = data && typeof data === "object" && !Array.isArray(data) && "data_uri" in data ? data.data_uri : null;
+      const format = typeof uri === "string" ? /^data:image\/(png|jpe?g|webp|gif|svg\+xml|bmp|x-icon);base64,/.exec(uri)?.[1] : null;
+      if (!format || typeof uri !== "string") { void message.error("头像图片暂不可下载，请刷新后重试"); return; }
+      const link = document.createElement("a"); link.href = uri;
+      link.download = `avatar-${record.locator.key || "cache"}.${format === "svg+xml" ? "svg" : format === "x-icon" ? "ico" : format}`.replace(/[\\/:*?"<>|]/g, "_");
+      link.click(); return;
+    }
     const url = URL.createObjectURL(new Blob([JSON.stringify(record, null, 2)], { type: "application/json" }));
     const link = document.createElement("a"); link.href = url;
     link.download = `${record.locator.kind}-${record.locator.batch_id || record.locator.key || record.locator.date_str || "record"}.json`.replace(/[\\/:*?"<>|]/g, "_");

@@ -31,7 +31,7 @@ export function useManagedFiles() {
 
   const load = useCallback(async () => {
     const sequence = ++listSequence.current;
-    if (!partition || partition.key === "typst_fonts") return;
+    if (!partition || ["typst_fonts", "avatar_storage"].includes(partition.key)) return;
     setLoading(true);
     try {
       const result = await fetchManagedFiles(partition.key, search, page, extensions, directory);

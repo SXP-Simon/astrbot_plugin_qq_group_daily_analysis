@@ -23,9 +23,9 @@ export function StoredRecordsTab({ onlyKind }: { onlyKind?: "avatar" | "history"
     <RecordSelectionActions vm={selection} label={kind === "history" ? "分析存档" : "头像缓存"} />
     <Table<ManagedRecordEntry> rowKey={item => recordKey(item.locator)} rowSelection={{ selectedRowKeys: selection.keys, onChange: selection.select, preserveSelectedRowKeys: true, getCheckboxProps: () => ({ disabled: selection.busy }) }} dataSource={items} size="small" loading={loading} pagination={{ current: page, total, pageSize: 20, showSizeChanger: false, onChange: setPage }} columns={[
       { title: "记录标识", dataIndex: "name", render: name => <Typography.Text style={{ overflowWrap: "anywhere" }}>{name}</Typography.Text> },
-      { title: "群组", render: (_, item) => item.locator.group_id || "—" },
+      ...(kind === "history" ? [{ title: "群组", render: (_: unknown, item: ManagedRecordEntry) => item.locator.group_id || "—" }] : []),
       { title: "数据大小", render: (_, item) => kind === "avatar" ? "按需加载" : formatBytes(item.size_bytes) },
-      { title: "操作", render: (_, item) => <Button type="link" onClick={() => setSelected(item.locator)}>查看 / 管理</Button> },
+      { title: "操作", render: (_, item) => <Button type="link" onClick={() => setSelected(item.locator)}>{kind === "avatar" ? "预览 / 管理" : "查看 / 管理"}</Button> },
     ]} />
     <ManagedRecordDialog locator={selected} importKind={importing ? "history" : undefined} onClose={() => { setSelected(null); setImporting(false); }} onChanged={() => void refresh()} />
   </Space></Card>;

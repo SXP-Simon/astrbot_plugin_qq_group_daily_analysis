@@ -46,9 +46,9 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
         <Descriptions size="small" column={1} items={[{ key: "path", label: "存储目录", children: <Typography.Text copyable>{activePartition.directory}</Typography.Text> }, { key: "use", label: "用途", children: activePartition.description }]} />
         <Alert showIcon type={activePartition.deletable ? "warning" : "info"} message={activePartition.impact} />
         {onNavigate && ["reports", "hosted_reports", "config_files", "state"].includes(activePartition.key) && <Button onClick={() => onNavigate(activePartition.key === "state" ? "traces" : activePartition.key === "config_files" ? "config" : "reports")}>{activePartition.key === "state" ? "查看分析记录与任务" : activePartition.key === "config_files" ? "打开配置中心维护引用" : "打开历史报告预览与重绘"}</Button>}
-        {activePartition.key === "custom_templates" && !vm.directory ? <TemplatePackages groups={vm.groups} loading={vm.loading} onSelect={vm.selectDirectory} onInstall={() => setInstalling(true)} onCreate={() => setEditor({ name: "", text: "" })} onRefresh={() => { void vm.load(); void vm.refresh(); }} /> : activePartition.key === "typst_fonts" ? <FontManager onChanged={() => { void vm.refresh(); }} /> : <>
+        {activePartition.key === "custom_templates" && !vm.directory ? <TemplatePackages groups={vm.groups} loading={vm.loading} onSelect={vm.selectDirectory} onInstall={() => setInstalling(true)} onCreate={() => setEditor({ name: "", text: "" })} onRefresh={() => { void vm.load(); void vm.refresh(); }} /> : activePartition.key === "typst_fonts" ? <FontManager onChanged={() => { void vm.refresh(); }} /> : activePartition.key === "avatar_storage" ? <StoredRecordsTab onlyKind="avatar" /> : <>
         {activePartition.key === "custom_templates" && <Space wrap><Button onClick={() => vm.selectDirectory("")}>返回模板列表</Button><Typography.Text strong>{vm.directory === "." ? "未归组文件" : `模板：${vm.directory}`}</Typography.Text><Typography.Text type="secondary">当前操作仅限此模板内的文件。</Typography.Text></Space>}
-        <Tabs key={`${activePartition.key}:${vm.directory}`} defaultActiveKey={activePartition.key === "avatar_storage" ? "entries" : "files"} onChange={() => { void vm.load(); void vm.refresh(); }} items={[
+        <Tabs key={`${activePartition.key}:${vm.directory}`} defaultActiveKey="files" onChange={() => { void vm.load(); void vm.refresh(); }} items={[
           { key: "files", label: "文件列表", children: <Space direction="vertical" style={{ width: "100%" }}>
             <Space wrap>
               <Input.Search aria-label="搜索文件" placeholder="搜索文件名或相对路径" allowClear onSearch={vm.searchFiles} style={{ width: 260 }} />
@@ -78,7 +78,6 @@ export function ManagedFilesPanel({ onNavigate }: { onNavigate?: (page: "reports
               { title: "操作", width: 150, render: (_, file) => file.downloadable ? <Button type="link" disabled={vm.busy} onClick={() => void (file.editable || /^(image\/|text\/|application\/json)/.test(file.media_type) ? vm.inspect(file.name) : vm.download(file.name))}>{file.editable ? "查看 / 编辑" : /^(image\/|text\/html)/.test(file.media_type) ? "预览 / 下载" : /^(text\/|application\/json)/.test(file.media_type) ? "查看内容 / 下载" : "下载文件"}</Button> : <Tag>由模块管理</Tag> },
             ]} />
           </Space> },
-          ...(activePartition.key === "avatar_storage" ? [{ key: "entries", label: "头像条目", children: <StoredRecordsTab onlyKind="avatar" /> }] : []),
           ...(activePartition.key === "template_resources" ? [{ key: "download", label: "按模板下载", children: <TemplateResources cdnBaseUrl={DEFAULT_TEMPLATE_CDN_BASE_URL} /> }] : []),
         ]} /></>}
       </Space>}
