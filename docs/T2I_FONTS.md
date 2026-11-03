@@ -120,7 +120,7 @@ TEMPLATES = {
 }
 selected = os.environ.get("FONT_TEMPLATES", "HatsuneMiku").replace(",", " ").split()
 if not selected or any(name not in TEMPLATES and name != "all" for name in selected):
-    raise SystemExit("请填写表中的模板目录名或 all；BlueArchive 暂无已核验的完整安装包。")
+    raise SystemExit("请填写表中的模板目录名或 all；BlueArchive 字体见上文固定来源，Typst 请使用 WebUI 下载。")
 if "all" in selected:
     selected = list(TEMPLATES)
 families = sorted({family for name in selected for family in TEMPLATES[name].split()})
