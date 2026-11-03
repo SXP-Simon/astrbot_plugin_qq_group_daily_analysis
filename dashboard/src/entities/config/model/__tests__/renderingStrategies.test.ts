@@ -176,3 +176,10 @@ it("保存按优先级稳定排序，保留相同优先级、扩展字段和原�
   expect(result.t2i_rendering?.t2i_rendering_strategies?.[2].future).toEqual({ keep: true });
   expect(draft).toEqual(before);
 });
+
+
+it("原生保存移除浏览器布局与网络字体字段，旧错误值不阻断静态渲染", () => {
+  const result = renderingStrategySchema.parse({ __template_key: "typst", device_scale: "unused", viewport_width: 3000, full_page: false, google_fonts: "unused", gstatic: "unused", request_timeout: "unused" });
+  for (const key of ["device_scale", "viewport_width", "full_page", "google_fonts", "gstatic", "request_timeout"]) expect(result).not.toHaveProperty(key);
+  expect(renderingStrategySchema.parse({}).device_scale).toBe("high");
+});

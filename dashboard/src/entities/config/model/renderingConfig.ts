@@ -76,7 +76,7 @@ export const t2iEndpointSchema = z.string({ error: "服务地址必须是文字"
   });
 
 // 方案结构与后端 rendering_config 保持一致，保存时保留扩展字段。
-export const renderingStrategySchema = z.object({
+const renderingStrategyInputSchema = z.object({
   name: z.string({ error: "方案名称必须是文字" }).default("渲染方案"),
   priority: z.number({ error: "优先级必须是数字" }).int("优先级必须是整数").min(0, "优先级不能小于 0").max(10000, "优先级不能大于 10000").default(10),
   environment: z.enum(["Mainland", "Overseas"], { error: "请选择内地或海外资源环境" }).optional(),
@@ -89,7 +89,7 @@ export const renderingStrategySchema = z.object({
   service_token: z.string({ error: "服务 Token 必须是文字" }).max(4096, "服务 Token 不能超过 4096 个字符").regex(/^[\x20-\x7e]*$/, "服务 Token 请使用英文、数字或常用符号，不能换行").transform((value) => value.trim()).default(""),
   type: z.enum(["png", "jpeg"], { error: "请选择 PNG 或 JPEG 格式" }).default("png"),
   quality: z.number({ error: "图片质量必须是数字" }).int("图片质量必须是整数").min(1, "图片质量不能小于 1").max(100, "图片质量不能大于 100").default(80),
-  device_scale: z.enum(["normal", "high", "ultra"], { error: "请选择有效的分辨率等级" }).default("high"),
+  device_scale: z.enum(["normal", "high", "ultra"], { error: "请选择有效的分辨率等级" }).optional(),
   request_timeout: z.number({ error: "请求等待上限必须是数字" }).int("请求等待上限必须是整数").min(1000, "请求等待上限不能小于 1000 毫秒").max(300000, "请求等待上限不能大于 300000 毫秒").optional(),
   timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").default(20000),
 }).catchall(z.unknown()).superRefine((value, ctx) => {
@@ -115,14 +115,25 @@ export const renderingStrategySchema = z.object({
   const service = value.render_service ?? (value.__template_key === "typst" ? "typst" as const : value.__template_key === "custom" ? "custom" as const : "astrbot" as const);
   const environment = value.environment ?? (value.__template_key === "mainland" ? "Mainland" as const : "Overseas" as const);
   // 旧调用方式只用于迁移，保存后由条目类型唯一决定服务。
-  const { render_service: _legacyService, font_mode: _fontMode, typst_width: _legacyWidth, typst_ppi: _legacyPpi, ...plan } = value;
+  const { device_scale: _scale, render_service: _legacyService, font_mode: _fontMode, typst_width: _legacyWidth, typst_ppi: _legacyPpi, ...plan } = value;
   return Object.assign(plan, {
     environment,
+    ...(service === "typst" ? {} : { device_scale: value.device_scale ?? "high" as const }),
     ...(service === "custom" ? { request_timeout: value.request_timeout ?? DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS, font_mode: value.font_mode ?? "network" } : {}),
     service_endpoint: service === "custom" ? t2iEndpointSchema.parse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT) : value.service_endpoint ?? "",
     __template_key: service === "typst" ? "typst" : service === "custom" ? "custom" : environment === "Mainland" ? "mainland" : "strategy",
   });
 });
+
+// Remove obsolete browser controls before validation as they cannot affect a native image.
+export const renderingStrategySchema = z.preprocess((input) => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const value = input as Record<string, unknown>;
+  const service = value.render_service ?? value.__template_key;
+  if (service !== "typst") return value;
+  const ignored = new Set(["typst_width", "typst_ppi", "device_scale", "device_scale_factor_level", "viewport_width", "viewport_height", "full_page", "google_fonts", "gstatic", "custom_google_fonts", "custom_gstatic", "request_timeout"]);
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !ignored.has(key)));
+}, renderingStrategyInputSchema);
 
 export const renderingConfigSchema = z.object({
   t2i_rendering_strategies: z.array(renderingStrategySchema).optional(),
