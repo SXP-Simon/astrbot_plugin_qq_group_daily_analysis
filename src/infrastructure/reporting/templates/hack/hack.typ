@@ -10,7 +10,11 @@
   let edge = (lh - 1)/2
   let rendered = text(font: if mono {t.mono} else {t.fonts}, size: size*t.u, weight: weight, fill: fill,
     top-edge: (baseline+edge)*1em, bottom-edge: -(1-baseline+edge)*1em)[#body]
-  if italic {skew(ax: -12deg, origin: bottom, rendered)} else {rendered}
+  if italic {
+    // 按字形或西文词段合成斜体，避免长金句的首行随整段高度向右偏移。
+    show regex("[（「【]?[\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Hangul}][，。！？…、）」】]*|[\\p{Latin}\\p{N}]+|[\"'.,:;!?()\\[\\]{}-]"): it=>box(height:lh*size*t.u,baseline:(at:top,shift:-(baseline+edge)*size*t.u))[#skew(ax:-12deg,origin:bottom+left,it)]
+    rendered
+  }else{rendered}
 }
 #let rich(t, parts) = {
   for part in parts {

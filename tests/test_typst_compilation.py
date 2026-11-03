@@ -153,7 +153,7 @@ def test_maid_composes_cached_layers_without_floating_eyes(tmp_path, pose, expec
         assert image.convert("RGB").getpixel((250, 400)) == expected
 
 
-@pytest.mark.parametrize("theme,module", [("art_nouveau", "nouveau"), ("maria", "maria"), ("format", "format"), ("spring_festival", "spring"), ("retro_futurism", "retro")])
+@pytest.mark.parametrize("theme,module", [("art_nouveau", "nouveau"), ("maria", "maria"), ("format", "format"), ("spring_festival", "spring"), ("retro_futurism", "retro"), ("hack", "hack")])
 def test_oblique_does_not_shift_the_whole_paragraph(tmp_path, managed_fonts, theme, module):
     """验证长段落的中文斜体逐字倾斜，首行不会被推向卡片外侧。
 
@@ -170,13 +170,13 @@ def test_oblique_does_not_shift_the_whole_paragraph(tmp_path, managed_fonts, the
     shutil.copyfile(templates / theme / f"{module}.typ", tmp_path / f"{module}.typ")
     outputs = []
     for oblique in (False, True):
-        extra = f",oblique:{str(oblique).lower()}" if theme not in {"format", "spring_festival", "retro_futurism"} else ""
+        extra = f",oblique:{str(oblique).lower()}" if theme not in {"format", "spring_festival", "retro_futurism", "hack"} else ""
         (tmp_path / "main.typ").write_text(
             f'#import "{module}.typ":copy\n'
             '#set page(width:200pt,height:auto,margin:10pt)\n'
-            '#let t=(u:1pt,body:("Noto Serif SC",))\n'
+            '#let t=(u:1pt,body:("Noto Serif SC",),fonts:("Noto Sans SC",))\n'
             f'#copy(t,{json.dumps("总能把讨论带往有趣的方向，愿意认真回应每一位群友。" * 5, ensure_ascii=False)},'
-            f'size:14,lh:1.55,italic:{str(oblique).lower()}{extra})',
+            f'size:14,lh:1.55,fill:rgb("111111"),italic:{str(oblique).lower()}{extra})',
             encoding="utf-8",
         )
         compiler = typst.Compiler(
