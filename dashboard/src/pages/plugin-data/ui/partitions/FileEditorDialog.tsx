@@ -5,6 +5,7 @@ import { useManagedFiles } from "../../model/useManagedFiles";
 
 export interface FileDraft { name: string; text: string; encoded?: string; revision?: string }
 export function FileEditorDialog({ vm, editor, setEditor }: { vm: ReturnType<typeof useManagedFiles>; editor: FileDraft | null; setEditor: Dispatch<SetStateAction<FileDraft | null>> }) {
+  const prefix = vm.partition?.key === "custom_templates" && vm.directory && vm.directory !== "." ? `${vm.directory}/` : "";
   return <>
     <Modal open={!!editor} title={editor?.revision ? "替换或编辑文件" : "上传或新建文件"} width={850} okText="保存" cancelText="取消" confirmLoading={vm.busy} onCancel={() => setEditor(null)} onOk={async () => {
       if (!editor) return;
@@ -13,7 +14,7 @@ export function FileEditorDialog({ vm, editor, setEditor }: { vm: ReturnType<typ
     }}>
       <Space direction="vertical" style={{ width: "100%" }}>
         <Alert showIcon type="info" message={editor?.revision ? "保存将替换原文件，请先下载备份；同名替换保持配置路径不变。" : "填写分区内相对路径；同名文件不会被覆盖，请先在列表中打开原文件再替换。"} />
-        <Input aria-label="文件相对路径" placeholder="例如 my_theme/report.typ；素材须使用主题清单中的文件名" value={editor?.name} disabled={!!editor?.revision} onChange={event => setEditor(value => value && { ...value, name: event.target.value })} />
+        <Input aria-label="文件相对路径" prefix={prefix ? <Typography.Text type="secondary">{prefix}</Typography.Text> : undefined} placeholder={prefix ? "例如 report.typ 或 assets/character.png" : "例如 my_theme/report.typ；素材须使用主题清单中的文件名"} value={prefix && editor?.name.startsWith(prefix) ? editor.name.slice(prefix.length) : editor?.name} disabled={!!editor?.revision} onChange={event => setEditor(value => value && { ...value, name: prefix + event.target.value })} />
         {editor?.encoded !== undefined ? <Upload showUploadList={false} beforeUpload={async file => {
           if (file.size > 32 * 1024 * 1024) { void message.error("文件不得超过 32 MiB"); return false; }
           const reader = new FileReader(); reader.onload = () => setEditor(value => value && { ...value, encoded: String(reader.result).split(",")[1] }); reader.readAsDataURL(file); return false;

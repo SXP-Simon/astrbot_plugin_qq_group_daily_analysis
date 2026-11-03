@@ -34,6 +34,10 @@ export function putManagedMockFile(partition: string, name: string, text: string
 
 putManagedMockFile("custom_templates", "my_miku/report.typ", '#set text(size: 12pt)\n= 群聊日报\n你好，初音未来！');
 putManagedMockFile("custom_templates", "my_miku/template.json", '{"name":"我的初音模板"}');
+putManagedMockFile("custom_templates", "my_miku/assets/character.svg", svg);
+putManagedMockFile("custom_templates", "my_maria/report.typ", '#set text(size: 12pt)\n= Maria 群聊日报');
+putManagedMockFile("custom_templates", "my_maria/template.json", '{"name":"我的 Maria 模板"}');
+putManagedMockFile("custom_templates", "draft_theme/template.json", '{"name":"尚未完成的模板"}');
 putManagedMockFile("reports", "123456789_2026-11-03.html", '<!doctype html><html><body style="font-family:sans-serif;color:#238b86"><h1>群聊日报</h1><p>今天共 384 条消息，12 位活跃成员。</p></body></html>');
 putManagedMockFile("reports", "123456789_2026-11-03_miku.png", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
 putManagedMockFile("reports", "987654321_2026-11-02_maria.jpg", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
@@ -59,9 +63,17 @@ export const managedFileMockHandlers = {
   "GET plugin-data/files": (query?: Record<string, unknown>) => {
     const partition = String(query?.partition);
     const extensions = String(query?.extensions || "").split(",").filter(Boolean);
-    const items = [...(managedMockFiles.get(partition)?.values() || [])].filter(file => file.name.toLowerCase().includes(String(query?.search || "").toLowerCase()) && (!extensions.length || extensions.includes(file.name.split(".").pop()!.toLowerCase())));
+    const all = [...(managedMockFiles.get(partition)?.values() || [])];
+    const groups = new Map<string, { directory: string; count: number; size_bytes: number }>();
+    if (partition === "custom_templates") for (const file of all) {
+      const directory = file.name.includes("/") ? file.name.split("/")[0] : ".";
+      const group = groups.get(directory) || { directory, count: 0, size_bytes: 0 };
+      group.count++; group.size_bytes += atob(file.content_base64).length; groups.set(directory, group);
+    }
+    const directory = String(query?.directory || "");
+    const items = all.filter(file => file.name.toLowerCase().includes(String(query?.search || "").toLowerCase()) && (!directory || (directory === "." ? !file.name.includes("/") : file.name.startsWith(directory + "/"))) && (!extensions.length || extensions.includes(file.name.split(".").pop()!.toLowerCase())));
     const start = (Number(query?.page || 1) - 1) * 20;
-    return { status: "ok", data: { items: items.slice(start, start + 20).map(file => ({ name: file.name, revision: file.revision, media_type: file.media_type, size_bytes: atob(file.content_base64).length, modified_at: 1793692800, editable: partition === "custom_templates", downloadable: !["state", "avatar_storage"].includes(partition) })), total: items.length } };
+    return { status: "ok", data: { items: items.slice(start, start + 20).map(file => ({ name: file.name, revision: file.revision, media_type: file.media_type, size_bytes: atob(file.content_base64).length, modified_at: 1793692800, editable: partition === "custom_templates" && file.text !== null, downloadable: !["state", "avatar_storage"].includes(partition) })), total: items.length, groups: [...groups.values()].sort((a, b) => a.directory.localeCompare(b.directory)) } };
   },
   "GET plugin-data/files/content": (query?: Record<string, unknown>) => {
     const file = managedMockFiles.get(String(query?.partition))?.get(String(query?.name));

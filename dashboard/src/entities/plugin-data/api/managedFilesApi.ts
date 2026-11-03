@@ -6,6 +6,7 @@ export type ManagedPartition = components["schemas"]["ManagedPartition"];
 export type ManagedFile = components["schemas"]["ManagedFile"];
 export type ManagedFileContent = components["schemas"]["ManagedFileContent"];
 export type ManagedFileMutation = components["schemas"]["ManagedFileMutation"];
+export type ManagedFileGroup = components["schemas"]["ManagedFileGroup"];
 
 const partitionSchema: z.ZodType<ManagedPartition> = z.object({
   key: z.string(), name: z.string(), directory: z.string(), description: z.string(), impact: z.string(),
@@ -33,9 +34,9 @@ export async function fetchManagedPartitions() {
   return z.object({ items: z.array(partitionSchema) }).parse(checkedData(await apiGet("plugin-data/partitions"))).items;
 }
 
-export async function fetchManagedFiles(partition: string, search: string, page: number, extensions = "") {
-  return z.object({ items: z.array(fileSchema), total: z.number() }).parse(checkedData(
-    await apiGet("plugin-data/files", { partition, search, page, page_size: 20, extensions })));
+export async function fetchManagedFiles(partition: string, search: string, page: number, extensions = "", directory = "") {
+  return z.object({ items: z.array(fileSchema), total: z.number(), groups: z.array(z.object({ directory: z.string(), count: z.number(), size_bytes: z.number() })).optional() }).parse(checkedData(
+    await apiGet("plugin-data/files", { partition, search, page, page_size: 20, extensions, directory })));
 }
 
 export async function fetchManagedContent(partition: string, name: string) {

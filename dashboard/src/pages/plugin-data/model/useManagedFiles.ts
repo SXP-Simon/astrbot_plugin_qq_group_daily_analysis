@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { message } from "antd";
 import {
   fetchManagedContent, fetchManagedFiles, fetchManagedPartitions, mutateManagedFile, deleteManagedFiles,
-  type ManagedFileContent, type ManagedFileMutation, type ManagedPartition, type ManagedFile,
+  type ManagedFileContent, type ManagedFileMutation, type ManagedPartition, type ManagedFile, type ManagedFileGroup,
 } from "../../../entities/plugin-data/api/managedFilesApi";
 
 export function useManagedFiles() {
   const [partitions, setPartitions] = useState<ManagedPartition[]>([]);
   const [partition, setPartition] = useState<ManagedPartition | null>(null);
   const [files, setFiles] = useState<ManagedFile[]>([]);
+  const [groups, setGroups] = useState<ManagedFileGroup[]>([]);
+  const [directory, setDirectory] = useState("");
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [extensions, setExtensions] = useState("");
@@ -32,12 +34,12 @@ export function useManagedFiles() {
     if (!partition || partition.key === "typst_fonts") return;
     setLoading(true);
     try {
-      const result = await fetchManagedFiles(partition.key, search, page, extensions);
-      if (sequence === listSequence.current) { setFiles(result.items); setTotal(result.total); setError(""); }
+      const result = await fetchManagedFiles(partition.key, search, page, extensions, directory);
+      if (sequence === listSequence.current) { setFiles(result.items); setGroups(result.groups || []); setTotal(result.total); setError(""); }
     } catch (cause) {
       if (sequence === listSequence.current) setError(cause instanceof Error ? cause.message : "文件列表读取失败");
     } finally { if (sequence === listSequence.current) setLoading(false); }
-  }, [partition, search, page, extensions]);
+  }, [partition, search, page, extensions, directory]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { const sequence = listSequence; void load(); return () => { sequence.current++; }; }, [load]);
@@ -45,7 +47,7 @@ export function useManagedFiles() {
 
   const select = (value: ManagedPartition | null) => {
     detailSequence.current++;
-    setPartition(value); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setContent(null); setSelected([]); setDeleteResult(null);
+    setPartition(value); setDirectory(""); setGroups([]); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setContent(null); setSelected([]); setDeleteResult(null);
   };
   const inspect = async (name: string) => {
     if (!partition || busy) return;
@@ -97,8 +99,9 @@ export function useManagedFiles() {
     const known = new Map([...selected, ...files].map(file => [file.name, file]));
     setSelected(keys.slice(0, 200).flatMap(key => known.get(String(key)) ? [known.get(String(key))!] : []));
   };
-  return { partitions, partition, files, total, search, extensions, page, loading, busy, error, content, selected, deleteResult,
+  return { partitions, partition, files, groups, directory, total, search, extensions, page, loading, busy, error, content, selected, deleteResult,
     refresh, load, select, inspect, download, mutate, setContent, setPage,
+    selectDirectory: (value: string) => { detailSequence.current++; setDirectory(value); setSearch(""); setExtensions(""); setPage(1); setFiles([]); setContent(null); setSelected([]); setDeleteResult(null); },
     deleteSelected, selectFiles, clearSelection: () => setSelected([]),
     filterExtensions: (value: string) => { setExtensions(value); setPage(1); setSelected([]); setDeleteResult(null); },
     searchFiles: (value: string) => { setSearch(value); setPage(1); setSelected([]); setDeleteResult(null); } };

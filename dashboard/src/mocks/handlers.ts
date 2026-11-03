@@ -187,10 +187,15 @@ export const mockHandlers = {
     status: "ok",
     data: { success: true, message: "模板上传成功", template_name: "custom_uploaded" },
   }),
-  "POST templates/uninstall": () => ({
-    status: "ok",
-    data: { name: "custom_demo", removed: true },
-  }),
+  "POST templates/uninstall": (body?: Record<string, unknown>) => {
+    const name = String(body?.name || "");
+    const index = mockReportTemplates.findIndex(item => item.id === name && item.can_uninstall);
+    if (index < 0) return { status: "error", message: "此模板不支持安装器卸载" };
+    mockReportTemplates.splice(index, 1);
+    const files = managedMockFiles.get("custom_templates");
+    for (const key of files?.keys() || []) if (key.startsWith(name + "/")) files?.delete(key);
+    return { status: "ok", data: { name, removed: true } };
+  },
   "POST reports/rerender": () => ({
     status: "ok",
     data: {

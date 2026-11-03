@@ -8,6 +8,7 @@ export function FileContentDialog({ vm, editor, setEditor }: { vm: ReturnType<ty
   const [rename, setRename] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const currentFile = vm.files.find(file => file.name === vm.content?.name);
+  const prefix = vm.partition?.key === "custom_templates" && vm.directory && vm.directory !== "." ? `${vm.directory}/` : "";
   useEffect(() => {
     if (!vm.content) { setPreviewUrl(""); return; }
     const bytes = Uint8Array.from(atob(vm.content.content_base64), char => char.charCodeAt(0));
@@ -37,7 +38,7 @@ export function FileContentDialog({ vm, editor, setEditor }: { vm: ReturnType<ty
       {vm.content && <FileEditorDialog vm={vm} editor={editor} setEditor={setEditor} />}
     <Modal open={!!vm.content && rename !== null} title="重命名文件" okText="重命名" cancelText="取消" confirmLoading={vm.busy} onCancel={() => setRename(null)} onOk={async () => {
       if (vm.content && rename && await vm.mutate({ operation: "rename", name: vm.content.name, revision: vm.content.revision, new_name: rename })) setRename(null);
-    }}><Alert type="warning" message="重命名后，模板或配置中引用的旧路径需要同步更新。" style={{ marginBottom: 12 }} /><Input aria-label="新文件名" value={rename || ""} onChange={event => setRename(event.target.value)} /></Modal>
+    }}><Alert type="warning" message="重命名后，模板或配置中引用的旧路径需要同步更新。" style={{ marginBottom: 12 }} /><Input aria-label="新文件名" prefix={prefix ? <Typography.Text type="secondary">{prefix}</Typography.Text> : undefined} value={prefix && rename?.startsWith(prefix) ? rename.slice(prefix.length) : rename || ""} onChange={event => setRename(prefix + event.target.value)} /></Modal>
     </Modal>
   </>;
 }
