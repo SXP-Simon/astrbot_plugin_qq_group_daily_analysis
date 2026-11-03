@@ -81,6 +81,24 @@ class IIncrementalStore(ABC):
 class ICheckpointStore(ABC):
     """阶段快照检查点仓储接口"""
 
+    def replace_checkpoint_data(
+        self, checkpoint_id: str, expected_data: object, data: object
+    ) -> bool:
+        """仅替换指定快照的产物，保留身份、创建时间和过期时间。
+
+        Args:
+            checkpoint_id: 精确快照主键，不进行旧版本回退匹配。
+            expected_data: 编辑前读取的产物，用于并发比较。
+            data: 经过编辑的新产物。
+
+        Returns:
+            产物一致且替换成功时为真。
+
+        Raises:
+            NotImplementedError: 仓储尚不支持快照修订。
+        """
+        raise NotImplementedError
+
     @abstractmethod
     def save_checkpoint(
         self,
