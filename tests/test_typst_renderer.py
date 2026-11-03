@@ -198,3 +198,52 @@ async def test_cancel_during_avatar_preparation_does_not_recover_or_send(native,
         assert not list((native.data_dir / "typst/jobs").iterdir())
     finally:
         await native.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_native_trace_tracks_stages_and_cancel(native, monkeypatch, cancel):
+    from src.domain.value_objects.task_event import TaskEvent
+    trace = TraceContext(trace_id=f"native-stages-{cancel}", group_id="test")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    fonts = native.data_dir / "typst/fonts"
+    fonts.mkdir(parents=True)
+    (fonts / "test.ttf").write_bytes(b"font")
+    async def worker(job, font_dir, timeout):
+        if cancel:
+            raise asyncio.CancelledError()
+        (job / "report.png").write_bytes(png_bytes())
+        return {"worker_peak_rss_mb": 120.5, "layout_ms": 12.0}
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
+    try:
+        if cancel:
+            with pytest.raises(asyncio.CancelledError):
+                await native.generate_image_report(create_analysis_result(), "test", None)
+        else:
+            assert (await native.generate_image_report(create_analysis_result(), "test", None))[0]
+        trace.finish(TaskEvent.CANCEL if cancel else TaskEvent.SUCCEED)
+        spans = trace.to_dict()["spans"]
+        assert [span["stage_name"] for span in spans] == ["TYPST_VALIDATE", "TYPST_DATA", "TYPST_RESOURCES", "TYPST_COMPILE"] + ([] if cancel else ["TYPST_ENCODE"])
+        assert spans[3]["status"] == ("aborted" if cancel else "success")
+        if not cancel:
+            assert spans[3]["payload"]["worker_peak_rss_mb"] == 120.5
+        assert trace.status == ("aborted" if cancel else "succeeded")
+    finally:
+        await native.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_worker_telemetry_follows_existing_switch(tmp_path, monkeypatch, enabled):
+    trace = TraceContext(trace_id="worker-metrics", group_id="test")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    monkeypatch.setattr(TraceContext, "_enable_metrics", enabled)
+    class Process:
+        returncode = 0
+        async def communicate(self):
+            return b'{"worker_peak_rss_mb":120.5,"layout_ms":12,"raster_ms":-1,"font_setup_ms":true}', b""
+    create = AsyncMock(return_value=Process())
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
+    metrics = await run_typst_worker(tmp_path, tmp_path / "fonts", 1)
+    assert ("--metrics" in create.call_args.args) is enabled
+    assert metrics == ({"worker_peak_rss_mb":120.5, "layout_ms":12.0} if enabled else None)

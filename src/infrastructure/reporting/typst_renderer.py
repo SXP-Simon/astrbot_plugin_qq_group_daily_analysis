@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+from contextlib import AbstractAsyncContextManager, nullcontext
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,7 +14,7 @@ from typing import TYPE_CHECKING
 import aiohttp
 from PIL import Image
 
-from ...shared.trace_context import TraceContext
+from ...shared.trace_context import SpanRecord, TraceContext
 from ...utils.logger import logger
 from .template_asset_catalog import THEME_DECORATION_OPACITIES, THEME_DECORATIONS
 from .template_installer import is_path_within, validate_template_name
@@ -28,9 +29,26 @@ if TYPE_CHECKING:
     from ..config.config_manager import ConfigManager
     from ..config.rendering_config import RenderingStrategyOptions
     from .avatar_service import AvatarService
+    from .typst_data import TypstReportData
 
 
 REPORT_TEMPLATES = Path(__file__).parent / "templates"
+
+
+def _span(
+    stage: str, payload: dict[str, object] | None = None
+) -> AbstractAsyncContextManager[SpanRecord | None]:
+    """复用现有追踪上下文；离线渲染不创建虚假的任务。
+
+    Args:
+        stage: 原生渲染步骤名。
+        payload: 不含正文或用户身份的诊断指标。
+
+    Returns:
+        当前任务的异步阶段，离线调用时为空上下文。
+    """
+    trace = TraceContext.current()
+    return trace.span_async(stage, payload) if trace else nullcontext()
 
 
 async def render_typst_probe(
@@ -146,14 +164,15 @@ class TypstReportRenderer:
             RuntimeError: 主题和基础恢复均编译失败。
             TimeoutError: 准备或编译超过本轮预算。
         """
-        template = self._resolve_template(validate_template_name(theme))
-        font_dir = self.data_dir / "typst/fonts"
-        if not font_dir.is_dir() or not any(
-            p.suffix.lower() in (".ttf", ".otf", ".ttc") for p in font_dir.iterdir()
-        ):
-            raise ValueError(
-                "请先在 WebUI 下载 Typst 字体，字体保存在插件数据目录 typst/fonts"
-            )
+        async with _span("TYPST_VALIDATE", {"template": theme, "width": REPORT_WIDTH}):
+            template = self._resolve_template(validate_template_name(theme))
+            font_dir = self.data_dir / "typst/fonts"
+            if not font_dir.is_dir() or not any(
+                p.suffix.lower() in (".ttf", ".otf", ".ttc") for p in font_dir.iterdir()
+            ):
+                raise ValueError(
+                    "请先在 WebUI 下载 Typst 字体，字体保存在插件数据目录 typst/fonts"
+                )
         jobs = self.data_dir / "typst/jobs"
         jobs.mkdir(parents=True, exist_ok=True)
         deadline = (
@@ -171,11 +190,16 @@ class TypstReportRenderer:
                     deadline,
                 )
                 await self._compile(job, deadline, template.parent.name)
-                image = await asyncio.to_thread((job / "report.png").read_bytes)
-                if options.get("type", "png") == "jpeg":
-                    image = await asyncio.to_thread(
-                        _encode_jpeg, image, options.get("quality", 90)
-                    )
+                async with _span(
+                    "TYPST_ENCODE", {"format": options.get("type", "png")}
+                ) as span:
+                    image = await asyncio.to_thread((job / "report.png").read_bytes)
+                    if options.get("type", "png") == "jpeg":
+                        image = await asyncio.to_thread(
+                            _encode_jpeg, image, options.get("quality", 90)
+                        )
+                    if span:
+                        span["payload"]["image_bytes"] = len(image)
                 return image
 
     async def _prepare(
@@ -195,9 +219,9 @@ class TypstReportRenderer:
             job: 本次专用编译目录。
             options: 已固定的资源方案。
             identity: 平台身份与匿名选项。
+            deadline: 整条渲染链路的截止时间。
         """
         theme = template.parent.name
-        builtin = template.parent.parent == REPORT_TEMPLATES
         resources = options.get("resource_urls")
         cdn = (
             resources["cdn_base_url"]
@@ -218,7 +242,41 @@ class TypstReportRenderer:
             preparer = TypstDataPreparer(
                 self.config, self.avatars, assets, result, identity
             )
-            data = await preparer.prepare(self.profile_manifest, cdn, theme)
+            async with _span("TYPST_DATA") as span:
+                data = await preparer.prepare(self.profile_manifest, cdn, theme)
+                if span:
+                    span["payload"].update(
+                        topics=len(data["topics"]),
+                        portraits=len(data["portraits"]),
+                        quotes=len(data["quotes"]),
+                    )
+                    if assets.network_budget_exhausted:
+                        span["payload"]["warning"] = (
+                            "头像或昵称查询超时，保留正文继续生成"
+                        )
+            await self._prepare_resources(template, job, data, assets, store)
+
+    async def _prepare_resources(
+        self,
+        template: Path,
+        job: Path,
+        data: TypstReportData,
+        assets: TypstAssets,
+        store: TemplateResourceStore,
+    ) -> None:
+        """本地化主题资源并写入隔离编译输入，缺图按现有占位规则继续。
+
+        Args:
+            template: 已解析的主题入口。
+            job: 本轮隔离目录。
+            data: 已净化的结构化报告内容。
+            assets: 本轮图片缓存与解码器。
+            store: 固定素材清单的本地优先存储。
+        """
+        theme = template.parent.name
+        builtin = template.parent.parent == REPORT_TEMPLATES
+        base = store.base_url
+        async with _span("TYPST_RESOURCES", {"template": theme}) as span:
             opacities = THEME_DECORATION_OPACITIES.get(theme, {})
             data["decorations"] = await asyncio.gather(
                 *(
@@ -226,16 +284,34 @@ class TypstReportRenderer:
                     for index, name in enumerate(THEME_DECORATIONS.get(theme, ()))
                 )
             )
-        shutil.copyfile(REPORT_TEMPLATES / "common.typ", job / "common.typ")
-        if builtin:
-            for resource in template.parent.iterdir():
-                if resource.suffix in (".svg", ".typ") and resource != template:
-                    shutil.copyfile(resource, job / resource.name)
-            await store.stage_vectors(theme, job)
-        else:
-            # 保留相对导入，上传包不能覆盖运行时生成的数据和入口。
-            shutil.copytree(template.parent, job, dirs_exist_ok=True)
-            (job / CUSTOM_TEMPLATE_MARKER).touch()
+            shutil.copyfile(REPORT_TEMPLATES / "common.typ", job / "common.typ")
+            if builtin:
+                for resource in template.parent.iterdir():
+                    if resource.suffix in (".svg", ".typ") and resource != template:
+                        shutil.copyfile(resource, job / resource.name)
+                await store.stage_vectors(theme, job)
+            else:
+                # 保留相对导入，上传包不能覆盖运行时生成的数据和入口。
+                shutil.copytree(template.parent, job, dirs_exist_ok=True)
+                (job / CUSTOM_TEMPLATE_MARKER).touch()
+            shutil.copyfile(template, job / "main.typ")
+            (job / "data.json").write_text(
+                json.dumps(data, ensure_ascii=False), encoding="utf-8"
+            )
+            if span:
+                span["payload"].update(
+                    local_resources=store.local_hits,
+                    downloaded_resources=store.downloads,
+                    missing_resources=len(store.failed),
+                    missing_images=len(assets.failed),
+                    image_cache_hits=assets.cache_hits,
+                    network_budget_exhausted=assets.network_budget_exhausted
+                    or store.network_budget_exhausted,
+                )
+                if store.failed or assets.failed:
+                    span["payload"]["warning"] = (
+                        "部分图片或图标缺失，已使用占位；可在配置中心下载主题素材或切换 CDN"
+                    )
         if assets.network_budget_exhausted or store.network_budget_exhausted:
             logger.warning(
                 "Typst 部分可选网络资源超时，保留正文并继续排版；可检查网络或在 WebUI 补齐主题素材"
@@ -244,10 +320,6 @@ class TypstReportRenderer:
             if trace:
                 trace.metadata["has_warnings"] = True
                 trace.metadata["typst_network_budget_exhausted"] = True
-        shutil.copyfile(template, job / "main.typ")
-        (job / "data.json").write_text(
-            json.dumps(data, ensure_ascii=False), encoding="utf-8"
-        )
 
     async def _compile(self, job: Path, deadline: float, theme: str) -> None:
         """主题失败后在剩余预算内使用独立基础排版，取消不触发恢复。
@@ -264,8 +336,16 @@ class TypstReportRenderer:
         loop = asyncio.get_running_loop()
         remaining = max(0.0, deadline - loop.time())
         fonts = self.data_dir / "typst/fonts"
+        compile_span = None
         try:
-            await run_typst_worker(job, fonts, remaining - min(2.0, remaining / 5))
+            async with _span(
+                "TYPST_COMPILE", {"template": theme, "width": REPORT_WIDTH}
+            ) as compile_span:
+                metrics = await run_typst_worker(
+                    job, fonts, remaining - min(2.0, remaining / 5)
+                )
+                if compile_span and metrics:
+                    compile_span["payload"].update(metrics)
         except (RuntimeError, TimeoutError) as error:
             logger.warning(
                 f"Typst 主题 {theme} 渲染失败，自动改用基础排版保留报告内容：{error}"
@@ -278,11 +358,27 @@ class TypstReportRenderer:
                     "mode": "basic",
                 }
                 trace.metadata["has_warnings"] = True
-            # 恢复入口不导入主题、组件或图片，原始结构化文字保持完整。
-            shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job / "main.typ")
-            (job / "report.png").unlink(missing_ok=True)
-            (job / CUSTOM_TEMPLATE_MARKER).unlink(missing_ok=True)
-            await run_typst_worker(job, fonts, max(0.0, deadline - loop.time()))
+            async with _span(
+                "TYPST_RECOVERY",
+                {"mode": "basic", "reason": str(error)[:1800] or type(error).__name__},
+            ) as recovery_span:
+                # 恢复入口不导入主题、组件或图片，原始结构化文字保持完整。
+                shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job / "main.typ")
+                (job / "report.png").unlink(missing_ok=True)
+                (job / CUSTOM_TEMPLATE_MARKER).unlink(missing_ok=True)
+                metrics = await run_typst_worker(
+                    job, fonts, max(0.0, deadline - loop.time())
+                )
+                if recovery_span and metrics:
+                    recovery_span["payload"].update(metrics)
+            if compile_span:
+                compile_span["status"] = "warning"
+                compile_span["payload"]["failure_reason"] = compile_span["payload"].pop(
+                    "error", str(error)
+                )
+                compile_span["payload"]["warning"] = (
+                    "主题编译失败，基础排版已恢复完整报告"
+                )
 
 
 def _encode_jpeg(payload: bytes, quality: int) -> bytes:

@@ -15,6 +15,7 @@ from test_template_section_conditional_rendering import create_analysis_result
 from test_typst_resources import oversized_avatar_uri as oversized_avatar_uri
 
 from src.domain.value_objects import GoldenQuote, QualityDimension, QualityReview, UserTitle
+from src.domain.value_objects.task_event import TaskEvent
 from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.reporting import typst_renderer
 from src.infrastructure.reporting.dispatcher import ReportDispatcher
@@ -291,6 +292,8 @@ def test_atri_glass_blurs_the_cached_background(tmp_path, managed_fonts):
 @pytest.mark.parametrize("fallback", [False, True])
 async def test_only_exhausted_recovery_uses_explicit_host_fallback(compiler, tmp_path, monkeypatch, fallback):
     config, generator, png = compiler
+    trace = TraceContext(trace_id=f"exhausted-{fallback}", group_id="test")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
     root = tmp_path / "templates"
     (root / "HatsuneMiku").mkdir(parents=True)
     (root / "HatsuneMiku/report.typ").write_text("#let broken = (", encoding="utf-8")
@@ -311,6 +314,11 @@ async def test_only_exhausted_recovery_uses_explicit_host_fallback(compiler, tmp
     assert host.await_count == prepare_html.await_count == int(fallback)
     assert bool(image) is fallback
     assert bool(html) is fallback
+    trace.finish(TaskEvent.SUCCEED if fallback else TaskEvent.FAIL)
+    assert trace.status == ("warning" if fallback else "failed")
+    native_spans = [span for span in trace.to_dict()["spans"] if span["stage_name"] in ("TYPST_COMPILE", "TYPST_RECOVERY")]
+    assert len(native_spans) == 2
+    assert all(span["status"] == ("warning" if fallback else "failed") for span in native_spans)
     assert not list((generator.data_dir / "typst/jobs").iterdir())
 
 
@@ -338,7 +346,7 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
                     path.write_bytes(b"broken image")
             if fault == "timeout":
                 timeout = min(timeout, .05)
-        await real_worker(job, fonts, timeout)
+        return await real_worker(job, fonts, timeout)
 
     worker = AsyncMock(side_effect=record_worker)
     monkeypatch.setattr(typst_renderer, "run_typst_worker", worker)
@@ -371,6 +379,14 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
     assert len(saved) == 1
     assert saved[0].read_bytes() == base64.b64decode(image.removeprefix("base64://"))
     assert trace.metadata["typst_recovery"]["mode"] == "basic"
+    spans = {span["stage_name"]: span for span in trace.to_dict()["spans"]}
+    assert spans["TYPST_COMPILE"]["status"] == "warning"
+    assert "error" not in spans["TYPST_COMPILE"]["payload"]
+    assert spans["TYPST_RECOVERY"]["status"] == "success"
+    assert spans["TYPST_RECOVERY"]["payload"]["worker_peak_rss_mb"] > 0
+    assert spans["TYPST_ENCODE"]["payload"]["image_bytes"] > 0
+    trace.finish(TaskEvent.SUCCEED)
+    assert trace.status == "warning"
     dispatcher._dispatch_text.assert_not_called()
     assert not list((generator.data_dir / "typst/jobs").iterdir())
 

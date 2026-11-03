@@ -42,6 +42,7 @@ class TypstAssets:
             resource_store.network_deadline if resource_store else None
         )
         self.network_budget_exhausted = False
+        self.cache_hits = 0
         self.semaphore = asyncio.Semaphore(6)
         self.image_semaphore = asyncio.Semaphore(1)
         self.failed: set[str] = set()
@@ -65,12 +66,14 @@ class TypstAssets:
         key = hashlib.sha256(f"{variant}{opacity}:{source}".encode()).hexdigest()
         target = self.job_dir / f"{key}.png"
         if target.is_file():
+            self.cache_hits += 1
             return target.name
         cached = self.cache / f"{key}.png"
         async with self.semaphore:
             try:
                 if cached.is_file():
                     await asyncio.to_thread(shutil.copyfile, cached, target)
+                    self.cache_hits += 1
                     return target.name
                 if source in self.failed:
                     return ""
@@ -93,6 +96,7 @@ class TypstAssets:
                     self.network_budget_exhausted = True
                 if cached.is_file():
                     await asyncio.to_thread(shutil.copyfile, cached, target)
+                    self.cache_hits += 1
                     return target.name
                 logger.warning("Typst 素材获取失败，本次使用占位装饰")
                 return ""

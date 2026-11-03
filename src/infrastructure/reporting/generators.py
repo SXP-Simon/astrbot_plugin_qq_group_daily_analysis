@@ -382,6 +382,8 @@ class ReportGenerator(IReportGenerator):
             元组 (image_url_or_path, html_content)。
         """
         html_content = None
+        render_trace = TraceContext.current()
+        native_span_start = len(render_trace._spans) if render_trace else 0
         if not template_theme:
             trace_ctx = TraceContext.current()
             if trace_ctx and trace_ctx.metadata.get("override_template_name"):
@@ -676,6 +678,19 @@ class ReportGenerator(IReportGenerator):
                             self._inspect_render_result, image_data, response_info
                         )
                         if is_valid and isinstance(image_data, (str, bytes)):
+                            if render_trace:
+                                for span in render_trace._spans[native_span_start:]:
+                                    if (
+                                        span["stage_name"].startswith("TYPST_")
+                                        and span["status"] == "failed"
+                                    ):
+                                        span["status"] = "warning"
+                                        span["payload"]["failure_reason"] = span[
+                                            "payload"
+                                        ].pop("error", "")
+                                        span["payload"]["warning"] = (
+                                            "后续渲染方案已恢复图片报告"
+                                        )
                             if render_service == "typst":
                                 html_content = None
                                 template_render_ms = html_size_kb = 0.0
