@@ -243,6 +243,11 @@ def generate_openapi_spec() -> dict[str, Any]:
                                 "schema": {
                                     "type": "object",
                                     "properties": {
+                                        "name": {
+                                            "type": "string",
+                                            "maxLength": 128,
+                                            "description": "Optional preset filename for per-file progress; must belong to the selected theme",
+                                        },
                                         "cdn_base_url": {
                                             "type": "string",
                                             "maxLength": 2048,

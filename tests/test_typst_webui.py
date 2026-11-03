@@ -32,7 +32,7 @@ async def test_font_download_is_serialized_and_uses_managed_directory(probe, tmp
     monkeypatch.setattr(config_routes.StarTools, "get_data_dir", lambda name: tmp_path)
     entered, finish = asyncio.Event(), asyncio.Event()
     calls = []
-    async def download(directory, cdn, theme=None):
+    async def download(directory, cdn, theme=None, *, name=None):
         calls.append((directory, cdn, theme))
         entered.set()
         await finish.wait()
@@ -97,7 +97,23 @@ async def test_font_download_selects_only_known_theme(probe, tmp_path, monkeypat
     request.json.return_value = {"cdn_base_url": "https://cdn.jsdelivr.net", "theme": theme}
     result = await routes.api_download_typst_fonts()
     if valid:
-        download.assert_awaited_once_with(tmp_path, "https://cdn.jsdelivr.net", theme=theme)
+        download.assert_awaited_once_with(tmp_path, "https://cdn.jsdelivr.net", theme=theme, name=None)
+    else:
+        assert result["status_code"] == 400
+        download.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name,valid", [("Outfit.ttf", True), ("Cinzel.ttf", False), ("../outside.ttf", False), ([], False)])
+async def test_font_file_route_validates_theme_membership(probe, tmp_path, monkeypatch, name, valid):
+    routes, request, _ = probe
+    monkeypatch.setattr(config_routes.StarTools, "get_data_dir", lambda _: tmp_path)
+    download = AsyncMock(return_value={"ready": False})
+    monkeypatch.setattr(config_routes, "download_typst_fonts", download)
+    request.json.return_value = {"cdn_base_url": "https://cdn.jsdelivr.net", "theme": "HatsuneMiku", "name": name}
+    result = await routes.api_download_typst_fonts()
+    if valid:
+        download.assert_awaited_once_with(tmp_path, "https://cdn.jsdelivr.net", theme="HatsuneMiku", name=name)
     else:
         assert result["status_code"] == 400
         download.assert_not_called()

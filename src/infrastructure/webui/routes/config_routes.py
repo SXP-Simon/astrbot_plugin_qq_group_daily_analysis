@@ -32,7 +32,7 @@ from ...config.rendering_config import (
 from ...reporting.cdn_probe import probe_template_cdn
 from ...reporting.custom_t2i_client import render_custom_t2i, validate_t2i_image
 from ...reporting.html_renderer import bind_group_html_renderer
-from ...reporting.typst_fonts import THEME_FONTS
+from ...reporting.typst_fonts import FONT_SOURCES, THEME_FONTS
 from ...reporting.typst_renderer import render_typst_probe
 from ...reporting.typst_resources import download_typst_fonts, typst_font_status
 from ..web_compat import WebApiResponse, error_response, json_response, request
@@ -268,6 +268,10 @@ class ConfigRoutes:
                 not isinstance(theme, str) or theme not in THEME_FONTS
             ):
                 raise ValueError("未知 Typst 模板")
+            name = body.get("name")
+            allowed = THEME_FONTS[theme] if isinstance(theme, str) else FONT_SOURCES
+            if name is not None and (not isinstance(name, str) or name not in allowed):
+                raise ValueError("请选择所选模板使用的预设字体")
         except (ValueError, TypeError):
             return error_response("请选择有效的模板和字体下载 CDN", status_code=400)
         if self._typst_font_lock.locked():
@@ -278,6 +282,7 @@ class ConfigRoutes:
                     Path(StarTools.get_data_dir(PLUGIN_NAME)),
                     cdn or DEFAULT_CDN_HOST,
                     theme=theme,
+                    name=name,
                 )
             return json_response({"status": "ok", "data": status})
         except Exception:

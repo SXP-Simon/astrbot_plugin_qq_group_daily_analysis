@@ -1699,6 +1699,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Optional preset filename for per-file progress; must belong to the selected theme */
+                    name?: string;
                     cdn_base_url?: string;
                     /** @description 内置模板名称；省略则下载全部预设字体 */
                     theme?: string;
