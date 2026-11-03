@@ -71,7 +71,18 @@ THEME_DECORATIONS: dict[str, tuple[str, ...]] = {
         "ATRI/file/1775132809943_1774881264350_睡觉.gif",
         "ATRI/file/1775175892953_1774881267664_舔屏幕.gif",
     ),
-    "deepseek_maid": ("deepseek_maid/basin-v3.png", "deepseek_maid/closed-eye-0.png"),
+    "deepseek_maid": tuple(
+        f"deepseek_maid/layers/{name}.png"
+        for name in (
+            "front",
+            "eye-0",
+            "eye-1",
+            "mouth",
+            "closed-eye-0",
+            "closed-eye-1",
+            "basin-v3",
+        )
+    ),
     "maria": (
         "maria/statue_virgin_mary.png",
         "maria/rose_red.png",

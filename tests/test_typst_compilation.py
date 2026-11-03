@@ -65,7 +65,7 @@ async def compiler(managed_fonts, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria", "ATRI"])
+@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria", "ATRI", "deepseek_maid"])
 @pytest.mark.parametrize("case", ["complete", "empty", "summary_only", "plain_markup", "long_text", "anonymous"])
 async def test_real_compilation_accepts_report_content(compiler, monkeypatch, theme, case):
     _, generator, _ = compiler
@@ -110,6 +110,47 @@ async def test_real_compilation_accepts_report_content(compiler, monkeypatch, th
     host.assert_not_called()
     worker.assert_awaited_once()
     assert not list((generator.data_dir / "typst/jobs").iterdir())
+
+
+@pytest.mark.parametrize("pose,expected", [
+    ("open", (0, 0, 0)), ("sleep", (255, 255, 255)),
+    ("basin", (255, 0, 0)), ("missing", (255, 255, 255)),
+])
+def test_maid_composes_cached_layers_without_floating_eyes(tmp_path, pose, expected):
+    """用本地图层验证睁眼、闭眼、铁盆裁切及主体缺失时的整体留白。
+
+    Args:
+        tmp_path: 本次编译的隔离根目录。
+        pose: 角色状态或主体图片缺失的场景。
+        expected: 眼部采样点应有的颜色。
+    """
+    import typst
+
+    templates = Path(__file__).parents[1] / "src/infrastructure/reporting/templates"
+    shutil.copyfile(templates / "common.typ", tmp_path / "common.typ")
+    shutil.copyfile(templates / "deepseek_maid/maid.typ", tmp_path / "maid.typ")
+    decorations = []
+    for source in typst_renderer.THEME_DECORATIONS["deepseek_maid"]:
+        name = Path(source).name
+        layer = Image.new("RGBA", (1536, 1024), "blue" if name == "front.png" else (0, 0, 0, 0))
+        if name in ("eye-0.png", "closed-eye-0.png"):
+            ImageDraw.Draw(layer).rectangle((350, 390, 390, 430), fill="black" if name == "eye-0.png" else "white")
+        if name == "basin-v3.png":
+            layer = Image.new("RGBA", (1122, 1402), "red")
+        layer.save(tmp_path / name)
+        decorations.append("" if pose == "missing" and name == "front.png" else name)
+    (tmp_path / "data.json").write_text(json.dumps({"decorations": decorations}), encoding="utf-8")
+    (tmp_path / "main.typ").write_text(
+        '#import "maid.typ":character\n'
+        '#set page(width:710pt,height:1024pt,margin:0pt)\n'
+        f'#character((u:1pt),json("data.json"),mood:"{pose}",'
+        f'basin:{str(pose == "basin").lower()},width:710,height:1024)',
+        encoding="utf-8",
+    )
+    compiler = typst.Compiler(str(tmp_path / "main.typ"), root=str(tmp_path), ignore_system_fonts=True)
+    with Image.open(BytesIO(compiler.compile(format="png", ppi=72))) as image:
+        assert image.size == (710, 1024)
+        assert image.convert("RGB").getpixel((250, 400)) == expected
 
 
 def test_atri_glass_blurs_the_cached_background(tmp_path, managed_fonts):
