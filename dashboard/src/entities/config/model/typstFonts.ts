@@ -8,4 +8,7 @@ export const typstFontStatusSchema: z.ZodType<TypstFontStatus> = z.object({
   files: z.array(z.string()),
   missing: z.array(z.string()),
   ready: z.boolean(),
+  groups: z.array(z.object({
+    theme: z.string(), required: z.array(z.string()), missing: z.array(z.string()), ready: z.boolean(),
+  })).optional(),
 });

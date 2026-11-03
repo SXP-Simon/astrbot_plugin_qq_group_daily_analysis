@@ -4,7 +4,8 @@ import type { TypstFontStatus } from "../../../entities/config/model/typstFonts"
 
 export function useTypstFonts(cdnBaseUrl: string) {
   const [status, setStatus] = useState<TypstFontStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [operation, setOperation] = useState<"selected" | "all" | "refresh" | null>(null);
+  const loading = operation !== null;
   const [error, setError] = useState("");
   const sequence = useRef(0);
 
@@ -18,19 +19,23 @@ export function useTypstFonts(cdnBaseUrl: string) {
     return () => { sequence.current += 1; };
   }, []);
 
-  const run = async (download: boolean) => {
+  const run = async (download: boolean, theme?: string) => {
     if (loading) return;
     const request = ++sequence.current;
-    setLoading(true);
+    setOperation(download ? theme === undefined ? "all" : "selected" : "refresh");
     setError("");
     try {
-      const value = download ? await downloadTypstFonts(cdnBaseUrl) : await fetchTypstFonts();
+      const value = download ? await downloadTypstFonts(cdnBaseUrl, theme) : await fetchTypstFonts();
       if (sequence.current === request) setStatus(value);
     } catch (cause: unknown) {
       if (sequence.current === request) setError(cause instanceof Error ? cause.message : "字体操作未完成，请重试。");
+      if (download) {
+        const partial = await fetchTypstFonts().catch(() => null);
+        if (partial && sequence.current === request) setStatus(partial);
+      }
     } finally {
-      if (sequence.current === request) setLoading(false);
+      if (sequence.current === request) setOperation(null);
     }
   };
-  return { status, loading, error, run };
+  return { status, loading, operation, error, run };
 }

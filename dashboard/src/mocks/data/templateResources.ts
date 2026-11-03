@@ -199,6 +199,74 @@ const fonts = [
   "BlueakaBeta2GBK-DemiBold.ttf",
   "BlueakaBeta2GBK-Bold.ttf"
 ];
+const themeFonts: Record<string, string[]> = {
+  "HatsuneMiku": [
+    "Outfit.ttf",
+    "ShareTechMono.ttf",
+    "Inter.ttf"
+  ],
+  "simple": [],
+  "hack": [
+    "Inter.ttf",
+    "JetBrainsMono.ttf",
+    "LXGWWenKaiMono.ttf"
+  ],
+  "maria": [
+    "NotoSerifSC.ttf",
+    "NotoSerifTC.ttf",
+    "Cinzel.ttf",
+    "CormorantGaramond.ttf",
+    "CormorantGaramond-Italic.ttf",
+    "JetBrainsMono.ttf"
+  ],
+  "ATRI": [
+    "LXGWWenKai.ttf",
+    "LXGWWenKai-Medium.ttf",
+    "LXGWWenKaiMono.ttf"
+  ],
+  "deepseek_maid": [
+    "JetBrainsMono.ttf"
+  ],
+  "art_nouveau": [
+    "NotoSerifSC.ttf",
+    "NotoSerifTC.ttf",
+    "Cinzel.ttf",
+    "CormorantGaramond.ttf",
+    "CormorantGaramond-Italic.ttf",
+    "JetBrainsMono.ttf"
+  ],
+  "scrapbook": [
+    "PatrickHand.ttf",
+    "ZCOOLKuaiLe.ttf",
+    "LXGWWenKai.ttf",
+    "LXGWWenKai-Medium.ttf"
+  ],
+  "format": [
+    "Inter.ttf",
+    "NotoSerifSC.ttf",
+    "NotoSerifTC.ttf"
+  ],
+  "spring_festival": [
+    "ZCOOLXiaoWei.ttf",
+    "MaShanZheng.ttf",
+    "NotoSerifSC.ttf",
+    "NotoSerifTC.ttf"
+  ],
+  "retro_futurism": [
+    "Oswald.ttf",
+    "JetBrainsMono.ttf",
+    "NotoSerifSC.ttf",
+    "NotoSerifTC.ttf"
+  ],
+  "BlueArchive": [
+    "BlueakaBeta2GBK-DemiBold.ttf",
+    "BlueakaBeta2GBK-Bold.ttf"
+  ]
+};
 export const mockTypstFonts: TypstFontStatus = {
   directory: "demo/data/typst/fonts", files: fonts.slice(0, 2), missing: fonts.slice(2), ready: false,
+  groups: Object.entries(themeFonts).map(([theme, extra]) => {
+    const required = [...fonts.slice(0, 5), ...extra];
+    return { theme, required, missing: required.filter(file => !fonts.slice(0, 2).includes(file)), ready: false };
+  }),
 };

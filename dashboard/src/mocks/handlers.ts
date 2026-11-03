@@ -48,10 +48,18 @@ export const mockHandlers = {
     return { status: "ok", data: { ...file } };
   },
   "GET config/typst-fonts": () => ({ status: "ok", data: mockTypstFonts }),
-  "POST config/typst-fonts/download": () => {
-    mockTypstFonts.files = [...mockTypstFonts.files, ...mockTypstFonts.missing];
-    mockTypstFonts.missing = [];
-    mockTypstFonts.ready = true;
+  "POST config/typst-fonts/download": (body?: Record<string, unknown>) => {
+    const theme = body?.theme;
+    const selected = mockTypstFonts.groups?.find(group => group.theme === theme);
+    if (theme != null && !selected) return { status: "error", message: "未知 Typst 模板" };
+    const names = selected?.missing || mockTypstFonts.missing;
+    mockTypstFonts.files = [...new Set([...mockTypstFonts.files, ...names])];
+    mockTypstFonts.missing = mockTypstFonts.missing.filter(file => !names.includes(file));
+    mockTypstFonts.ready = !mockTypstFonts.missing.length;
+    mockTypstFonts.groups?.forEach(group => {
+      group.missing = group.required.filter(file => !mockTypstFonts.files.includes(file));
+      group.ready = !group.missing.length;
+    });
     return { status: "ok", data: mockTypstFonts };
   },
   // 1. 大盘指标与趋势
