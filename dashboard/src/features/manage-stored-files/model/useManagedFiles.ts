@@ -65,10 +65,12 @@ export function useManagedFiles() {
     finally { setBusy(false); }
   };
   const mutate = async (input: Omit<ManagedFileMutation, "partition">) => {
-    if (!partition) return false;
+    if (!partition || busy) return false;
+    const sequence = detailSequence.current;
     setBusy(true);
     try {
       await mutateManagedFile({ ...input, partition: partition.key });
+      if (sequence !== detailSequence.current) { await refresh(); return false; }
       setContent(null);
       await Promise.all([load(), refresh()]);
       void message.success("文件操作完成");
@@ -90,10 +92,12 @@ export function useManagedFiles() {
     finally { setBusy(false); }
   };
   const deleteSelected = async () => {
-    if (!partition || !selected.length) return;
+    if (!partition || !selected.length || busy) return;
+    const sequence = detailSequence.current;
     setBusy(true);
     try {
       const result = await deleteManagedFiles(partition.key, selected.map(file => ({ name: file.name, revision: file.revision })));
+      if (sequence !== detailSequence.current) { await refresh(); return; }
       setDeleteResult(result);
       setSelected(current => current.filter(file => !result.deleted.includes(file.name)));
       await Promise.all([load(), refresh()]);
