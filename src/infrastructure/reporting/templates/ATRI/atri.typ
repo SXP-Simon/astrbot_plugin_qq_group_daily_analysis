@@ -103,7 +103,8 @@
     layers+="</g>"
   }
   let svg="<svg xmlns='http://www.w3.org/2000/svg' width='834' height='"+str(header-height)+"'><defs>"+defs+"</defs>"+layers+"</svg>"
-  let backdrop=image(bytes(svg),format:"svg",width:834*t.u,height:header-height*t.u)
+  // str 的负数使用 Unicode 负号，SVG 数字只接受 ASCII 连字符。
+  let backdrop=image(bytes(svg.replace("−","-")),format:"svg",width:834*t.u,height:header-height*t.u)
   glass(t,padx:32,pady:0,radius:22,stroke:0,background:backdrop,dy:16,blur:40,[
     #v(30*t.u)
     #grid(columns:(1fr,220*t.u),gutter:24*t.u,align:bottom,left-copy,date-box)
