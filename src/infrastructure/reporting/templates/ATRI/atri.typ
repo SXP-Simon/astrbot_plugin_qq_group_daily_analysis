@@ -55,25 +55,58 @@
     #v(18*t.u)#body
   ])
 }
-#let header(t,d) = {
-  let backdrop=block(width:834*t.u,height:213*t.u,clip:true)[
-    #if d.decorations.at(0,default:"")!="" {image(d.decorations.at(0),width:100%,height:100%,fit:"cover")}
-    #place(top+left,rect(width:100%,height:100%,fill:gradient.linear((rgb("2c76a1").transparentize(22%),0%),(rgb("58b0dd").transparentize(38%),56%),(rgb("aee2f7").transparentize(62%),100%),angle:30deg,space:rgb),stroke:none))
-    #place(top+left,rect(width:100%,height:100%,fill:gradient.linear(white.transparentize(78%),white.transparentize(100%),angle:45deg,space:rgb),stroke:none))
+#let header(t,d) = context {
+  let eyebrow=box(inset:(x:14*t.u,y:6*t.u),stroke:1*t.u+white.transparentize(40%),radius:100*t.u)[#copy(t,"A.T.R.I · Daily Communication Report",size:13,fill:white,tracking:.077)]
+  let left-copy=block(width:492.8*t.u)[
+    #eyebrow
+    #v(12*t.u)#copy(t,"亚托莉的群聊观测日志",size:38,weight:600,fill:white,lh:1.2)
+    #v(12*t.u)#copy(t,"主人，今天群里的大家也超级精神呢！身为高性能的亚托莉，已经把所有闪闪发光的聊天记忆，像打捞海底宝藏一样全都收集好啦！",size:15,lh:1.8,fill:white.transparentize(8%))
   ]
-  glass(t,padx:32,pady:0,radius:22,stroke:0,background:backdrop,fill:none,dy:16,blur:40,[
+  let date-box=box(width:220*t.u,inset:(x:24*t.u,y:18*t.u),stroke:1.5*t.u+white.transparentize(40%),radius:20*t.u)[#align(center)[
+    #copy(t,"REPORT GENERATED",size:11,weight:600,fill:white,tracking:.227)#v(8*t.u)
+    #copy(t,"✦",size:11,fill:white.transparentize(30%))#v(6*t.u)
+    #copy(t,[#d.date#linebreak()#d.generated_at],size:15,weight:600,fill:white,mono:true,lh:1.7,tracking:.033)
+  ]]
+  // 按实际文字高度定位玻璃区域，日期换行或字体变化时仍与前景同步。
+  let content-height=calc.max(measure(left-copy).height,measure(date-box).height)/t.u
+  let header-height=content-height+60.74
+  let eyebrow-size=measure(eyebrow)
+  let date-height=measure(date-box).height/t.u
+  // CSS 的角度以画布的投影长度计算，不按 SVG 的单位正方形拉伸渐变。
+  let sea-length=834*calc.cos(30deg)+header-height*calc.sin(30deg)
+  let sea-dx=sea-length*calc.cos(30deg)/2
+  let sea-dy=sea-length*calc.sin(30deg)/2
+  let shine-d=(834+header-height)/4
+  let diagonal=" x1='"+str(417-shine-d)+"' y1='"+str(header-height/2-shine-d)+"' x2='"+str(417+shine-d)+"' y2='"+str(header-height/2+shine-d)+"' gradientUnits='userSpaceOnUse'"
+  let defs="<linearGradient id='sea' gradientUnits='userSpaceOnUse' x1='"+str(417-sea-dx)+"' y1='"+str(header-height/2-sea-dy)+"' x2='"+str(417+sea-dx)+"' y2='"+str(header-height/2+sea-dy)+"'><stop stop-color='#2c76a1' stop-opacity='.78'/><stop offset='.56' stop-color='#58b0dd' stop-opacity='.62'/><stop offset='1' stop-color='#aee2f7' stop-opacity='.38'/></linearGradient>"
+  defs+="<linearGradient id='base-shine'"+diagonal+"><stop stop-color='white' stop-opacity='.1'/><stop offset='.5' stop-color='white' stop-opacity='0'/></linearGradient><linearGradient id='shine'"+diagonal+"><stop stop-color='white' stop-opacity='.22'/><stop offset='.45' stop-color='white' stop-opacity='0'/></linearGradient>"
+  defs+="<radialGradient id='glow' gradientUnits='userSpaceOnUse' cx='700.56' cy='"+str(header-height*.24)+"' r='"+str(calc.sqrt(calc.pow(700.56,2)+calc.pow(header-height*.76,2))*.2)+"'><stop stop-color='white' stop-opacity='.52'/><stop offset='1' stop-color='white' stop-opacity='0'/></radialGradient><linearGradient id='top-shine' x2='0' y2='1'><stop stop-color='white' stop-opacity='.25'/><stop offset='1' stop-color='white' stop-opacity='0'/></linearGradient>"
+  let scene=""
+  let path=d.decorations.at(0,default:"")
+  if path!="" {scene+="<image href='"+path+"' width='834' height='"+str(header-height)+"' preserveAspectRatio='xMidYMid slice'/>"}
+  for paint in ("base-shine","sea","glow","shine") {scene+="<rect width='834' height='"+str(header-height)+"' fill='url(#"+paint+")'/>"}
+  defs+="<g id='scene'>"+scene+"</g>"
+  let layers="<use href='#scene'/>"
+  for (name,x,y,width,height,blur,radius,opacity) in (
+    ("eyebrow",32,30,eyebrow-size.width/t.u,eyebrow-size.height/t.u,12,100,.35),
+    ("date",582,30 + content-height - date-height,220,date-height,16,20,.4),
+  ) {
+    // 只计算卡片及三倍标准差的周边，避免对整幅海景反复分配滤镜缓冲。
+    let pad=blur*3
+    let dimensions=" x='"+str(x)+"' y='"+str(y)+"' width='"+str(width)+"' height='"+str(height)+"'"
+    let delta=(width+height)/4
+    defs+="<filter id='f-"+name+"' filterUnits='userSpaceOnUse' x='"+str(x - pad)+"' y='"+str(y - pad)+"' width='"+str(width+pad*2)+"' height='"+str(height+pad*2)+"' color-interpolation-filters='sRGB'><feGaussianBlur stdDeviation='"+str(blur)+"'/></filter>"
+    defs+="<clipPath id='c-"+name+"'><rect"+dimensions+" rx='"+str(calc.min(radius,width/2,height/2))+"'/></clipPath>"
+    defs+="<linearGradient id='g-"+name+"' gradientUnits='userSpaceOnUse' x1='"+str(x+width/2-delta)+"' y1='"+str(y+height/2-delta)+"' x2='"+str(x+width/2+delta)+"' y2='"+str(y+height/2+delta)+"'><stop stop-color='white' stop-opacity='"+str(opacity)+"'/><stop offset='1' stop-color='white' stop-opacity='.1'/></linearGradient>"
+    layers+="<g clip-path='url(#c-"+name+")'><use href='#scene' filter='url(#f-"+name+")'/><rect"+dimensions+" fill='url(#g-"+name+")'/>"
+    if name=="date" {layers+="<rect x='"+str(x)+"' y='"+str(y)+"' width='"+str(width)+"' height='"+str(height/2)+"' fill='url(#top-shine)'/>"}
+    layers+="</g>"
+  }
+  let svg="<svg xmlns='http://www.w3.org/2000/svg' width='834' height='"+str(header-height)+"'><defs>"+defs+"</defs>"+layers+"</svg>"
+  let backdrop=image(bytes(svg),format:"svg",width:834*t.u,height:header-height*t.u)
+  glass(t,padx:32,pady:0,radius:22,stroke:0,background:backdrop,dy:16,blur:40,[
     #v(30*t.u)
-    #grid(columns:(1fr,220*t.u),gutter:24*t.u,align:bottom,
-      block(width:492.8*t.u)[
-        #box(inset:(x:14*t.u,y:6*t.u),fill:gradient.linear(white.transparentize(65%),white.transparentize(90%),angle:45deg,space:rgb),stroke:1*t.u+white.transparentize(40%),radius:100*t.u)[#copy(t,"A.T.R.I · Daily Communication Report",size:13,fill:white,tracking:.077)]
-        #v(12*t.u)#copy(t,"亚托莉的群聊观测日志",size:38,weight:600,fill:white,lh:1.2)
-        #v(12*t.u)#copy(t,"主人，今天群里的大家也超级精神呢！身为高性能的亚托莉，已经把所有闪闪发光的聊天记忆，像打捞海底宝藏一样全都收集好啦！",size:15,lh:1.8,fill:white.transparentize(8%))
-      ],
-      box(width:220*t.u,inset:(x:24*t.u,y:18*t.u),fill:gradient.linear(white.transparentize(60%),white.transparentize(90%),angle:45deg,space:rgb),stroke:1.5*t.u+white.transparentize(40%),radius:20*t.u)[#align(center)[
-        #copy(t,"REPORT GENERATED",size:11,weight:600,fill:white,tracking:.227)#v(8*t.u)
-        #copy(t,"✦",size:11,fill:white.transparentize(30%))#v(6*t.u)
-        #copy(t,[#d.date#linebreak()#d.generated_at],size:15,weight:600,fill:white,mono:true,lh:1.7,tracking:.033)
-      ]])
+    #grid(columns:(1fr,220*t.u),gutter:24*t.u,align:bottom,left-copy,date-box)
     #v(30.74*t.u)
   ])
 }

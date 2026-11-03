@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from PIL import Image
+from PIL import Image, ImageDraw, ImageStat
 from test_template_section_conditional_rendering import create_analysis_result
 
 from src.domain.value_objects import GoldenQuote, QualityDimension, QualityReview, UserTitle
@@ -110,6 +110,43 @@ async def test_real_compilation_accepts_report_content(compiler, monkeypatch, th
     host.assert_not_called()
     worker.assert_awaited_once()
     assert not list((generator.data_dir / "typst/jobs").iterdir())
+
+
+def test_atri_glass_blurs_the_cached_background(tmp_path, managed_fonts):
+    """验证 SVG 使用任务内缓存图片，日期卡中的背景确实被模糊。
+
+    Args:
+        tmp_path: 本次编译的隔离根目录。
+        managed_fonts: 已准备的插件受管理字体目录。
+    """
+    import typst
+
+    templates = Path(__file__).parents[1] / "src/infrastructure/reporting/templates"
+    shutil.copyfile(templates / "common.typ", tmp_path / "common.typ")
+    shutil.copyfile(templates / "ATRI/atri.typ", tmp_path / "atri.typ")
+    # 高频条纹能区分真实模糊与简单的半透明遮罩，不绑定具体海景像素。
+    background = Image.new("RGB", (834, 213), "white")
+    drawing = ImageDraw.Draw(background)
+    for x in range(0, 834, 12):
+        drawing.rectangle((x, 0, x + 5, 212), fill="black")
+    background.save(tmp_path / "cached-scene.png")
+    (tmp_path / "main.typ").write_text(
+        '#import "atri.typ":header\n'
+        '#set page(width:834pt,height:auto,margin:0pt)\n'
+        '#set text(font:"LXGW WenKai",lang:"zh",region:"CN",cjk-latin-spacing:none)\n'
+        '#header((u:1pt,font:("LXGW WenKai",),mono:("LXGW WenKai Mono",)), '
+        '(date:"2026年11月03日",generated_at:"2026-11-03 12:00:00",decorations:("cached-scene.png",)))',
+        encoding="utf-8",
+    )
+    compiler = typst.Compiler(
+        str(tmp_path / "main.typ"), root=str(tmp_path),
+        font_paths=[str(managed_fonts / "typst/fonts")], ignore_system_fonts=True,
+    )
+    with Image.open(BytesIO(compiler.compile(format="png", ppi=72))) as image:
+        clear = sum(ImageStat.Stat(image.crop((450, 105, 468, 115)).convert("RGB")).stddev)
+        frosted = sum(ImageStat.Stat(image.crop((590, 105, 608, 115)).convert("RGB")).stddev)
+        assert clear > 30
+        assert frosted < clear * .3
 
 
 @pytest.mark.asyncio
