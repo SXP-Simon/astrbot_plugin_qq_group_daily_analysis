@@ -46,7 +46,7 @@
 
 QQ 官方摘要卡使用自己的系统字体列表，不受这个选项控制。
 
-独立 Typst 方案的字体统一放在插件数据目录 `typst/fonts/`，通过 WebUI 的字体下载入口管理，无需按下文为浏览器安装系统字体。Art Nouveau 的 Typst 花饰额外使用 Noto Sans Symbols 2；升级后可再次点击下载补齐，HTML 模板的字体要求仍以上表为准。
+独立 Typst 方案的字体统一放在插件数据目录 `typst/fonts/`，通过 WebUI 的字体下载入口管理，无需按下文为浏览器安装系统字体。Art Nouveau 的 Typst 花饰额外使用 Noto Sans Symbols 2；手账的 Unicode emoji 使用 Noto Color Emoji 彩色字体，不提取为图片。升级后可再次点击下载补齐，HTML 模板的字体要求仍以上表为准。
 
 ## 完整字体清单与下载入口
 
