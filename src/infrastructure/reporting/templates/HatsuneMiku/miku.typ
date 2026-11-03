@@ -266,5 +266,7 @@
       #heading(t,d)#stats(t,d)#peak(t,d)#activity(t,d)#topics(t,d)#portraits(t,d)#quotes(t,d)#quality(t,d)#footer(t,d)
     ])
   ]
-  context {let size=measure(content); [#metadata((height:size.height/1pt))<report-size>];content}
+  content
+  // 用末尾标记取得实际高度，避免为像素预算再次测量整页。
+  context [#metadata((height:here().position().y/1pt))<report-size>]
 }
