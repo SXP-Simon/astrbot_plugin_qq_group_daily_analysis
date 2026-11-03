@@ -128,6 +128,94 @@
         }
       }
     },
+    "/config/template-resources": {
+      "get": {
+        "summary": "查询内置主题的本地素材",
+        "operationId": "getTemplateResources",
+        "responses": {
+          "200": {
+            "description": "仅查询本地资源，不联网",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TemplateResourceStatus"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/template-resources/download": {
+      "post": {
+        "summary": "从选定CDN补齐一个固定素材",
+        "operationId": "downloadTemplateResource",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "cdn_base_url"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "cdn_base_url": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "素材已就绪，已存在则不联网",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TemplateResourceFile"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法CDN或不在清单中的资源名"
+          },
+          "502": {
+            "description": "下载失败，可切换CDN重试；已有资源保留"
+          }
+        }
+      }
+    },
     "/config/typst-fonts": {
       "get": {
         "summary": "读取受管理的 Typst 字体状态",
@@ -1060,6 +1148,57 @@
           "group_name",
           "platform"
         ]
+      },
+      "TemplateResourceFile": {
+        "type": "object",
+        "required": [
+          "name",
+          "available"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TemplateResourceGroup": {
+        "type": "object",
+        "required": [
+          "theme",
+          "files"
+        ],
+        "properties": {
+          "theme": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateResourceFile"
+            }
+          }
+        }
+      },
+      "TemplateResourceStatus": {
+        "type": "object",
+        "required": [
+          "directory",
+          "groups"
+        ],
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateResourceGroup"
+            }
+          }
+        }
       },
       "TypstFontStatus": {
         "type": "object",

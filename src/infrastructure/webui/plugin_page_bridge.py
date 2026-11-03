@@ -22,6 +22,7 @@ from .routes import (
     TraceRoutes,
 )
 from .routes.config_routes import _config_key_to_folder, _sanitize_path_segment
+from .routes.template_resource_routes import TemplateResourceRoutes
 from .web_compat import (
     WebApiResponse,
     error_response,
@@ -95,6 +96,7 @@ class PluginPageWebUIBridge:
             report_dispatcher=self.report_dispatcher,
             report_output_dir=self.report_output_dir,
         )
+        self.template_resource_routes = TemplateResourceRoutes()
         self.template_routes = TemplateRoutes(
             analysis_service=self.analysis_service,
             report_dispatcher=self.report_dispatcher,
@@ -283,6 +285,18 @@ class PluginPageWebUIBridge:
                 self.config_routes.api_test_t2i,
                 ["POST"],
                 "Test AstrBot or custom T2I with a fixed HTML page without saving configuration",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/template-resources",
+                self.template_resource_routes.api_get_resources,
+                ["GET"],
+                "读取各主题本地素材状态",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/template-resources/download",
+                self.template_resource_routes.api_download_resource,
+                ["POST"],
+                "按固定清单补齐单个模板素材",
             ),
             (
                 f"/{PLUGIN_NAME}/config/typst-fonts",

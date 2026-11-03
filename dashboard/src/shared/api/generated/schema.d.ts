@@ -22,6 +22,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/config/template-resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查询内置主题的本地素材 */
+        get: operations["getTemplateResources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/template-resources/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 从选定CDN补齐一个固定素材 */
+        post: operations["downloadTemplateResource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config/typst-fonts": {
         parameters: {
             query?: never;
@@ -387,6 +421,18 @@ export interface components {
             group_id: string;
             group_name: string;
             platform: string;
+        };
+        TemplateResourceFile: {
+            name: string;
+            available: boolean;
+        };
+        TemplateResourceGroup: {
+            theme: string;
+            files: components["schemas"]["TemplateResourceFile"][];
+        };
+        TemplateResourceStatus: {
+            directory: string;
+            groups: components["schemas"]["TemplateResourceGroup"][];
         };
         TypstFontStatus: {
             directory: string;
@@ -865,6 +911,75 @@ export interface operations {
             };
             /** @description 配置保存失败 */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getTemplateResources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 仅查询本地资源，不联网 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: components["schemas"]["TemplateResourceStatus"];
+                    };
+                };
+            };
+        };
+    };
+    downloadTemplateResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    cdn_base_url: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 素材已就绪，已存在则不联网 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: components["schemas"]["TemplateResourceFile"];
+                    };
+                };
+            };
+            /** @description 非法CDN或不在清单中的资源名 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 下载失败，可切换CDN重试；已有资源保留 */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
