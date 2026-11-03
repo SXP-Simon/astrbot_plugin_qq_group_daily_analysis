@@ -207,8 +207,13 @@ class TypstAssets:
         with Image.open(BytesIO(payload)) as image:
             if image.width * image.height > 16_000_000:
                 raise ValueError("素材图片像素过多")
-            image = image.convert("RGBA")
-            image.thumbnail((1600, 1600))
+            # 先缩小原生 RGB/RGBA，避免复制完整大图；调色板及透明色先解析。
+            if image.mode not in ("RGB", "RGBA") or "transparency" in image.info:
+                image = image.convert("RGBA")
+            # 保持原 RGBA 分支的一次重采样，不使用 JPEG draft 或整倍缩小。
+            image.thumbnail((1600, 1600), reducing_gap=None)
+            if image.mode != "RGBA":
+                image = image.convert("RGBA")
             if opacity < 1:
                 image.putalpha(
                     image.getchannel("A").point(
