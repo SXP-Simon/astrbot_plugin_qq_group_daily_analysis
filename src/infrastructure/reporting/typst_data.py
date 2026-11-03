@@ -55,6 +55,7 @@ class TypstDimension(TypedDict):
     name: str
     percentage: float
     comment: list[TextRun]
+    color: str
 
 
 class TypstReview(TypedDict):
@@ -282,6 +283,11 @@ class TypstDataPreparer:
                         "name": self.plain(dim.name),
                         "percentage": max(0.0, min(100.0, dim.percentage)),
                         "comment": await self.rich_text(dim.comment),
+                        "color": dim.color
+                        if re.fullmatch(
+                            r"#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?", dim.color
+                        )
+                        else "#607d8b",
                     }
                     for dim in review.dimensions
                 ],

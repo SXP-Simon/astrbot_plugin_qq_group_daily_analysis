@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 from test_template_section_conditional_rendering import create_analysis_result
 
+from src.domain.value_objects import QualityDimension, QualityReview
 from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.typst_renderer import run_typst_worker
@@ -50,6 +51,12 @@ def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch):
     result = create_analysis_result()
     result["user_analysis"] = {"123456": {"nickname": "张三"}}
     result["topics"][0].detail = "[123456] 张三 #read(\"/secret\") <script>"
+    result["chat_quality_review"] = QualityReview(
+        title="评价", subtitle="", summary="内容",
+        dimensions=[QualityDimension(name="自定义颜色", percentage=40, comment="", color="#12aBcF"),
+                    QualityDimension(name="短色值", percentage=30, comment="", color="#abc"),
+                    QualityDimension(name="异常颜色", percentage=30, comment="", color='red); panic("invalid")')],
+    )
     async def check():
         image, html = await native.generate_image_report(result, "123456", host, hide_user_names=True)
         assert image.startswith("base64://") and html is None
@@ -57,6 +64,7 @@ def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch):
         exported = json.dumps(captured, ensure_ascii=False)
         assert "123456" not in exported and "张三" not in exported
         assert '#read' in exported and '<script>' in exported
+        assert [dim["color"] for dim in captured["review"]["dimensions"]] == ["#12aBcF", "#abc", "#607d8b"]
         assert not list((native.data_dir / "typst/jobs").iterdir())
         host.assert_not_called()
         native._prepare_render_data.assert_not_called()
