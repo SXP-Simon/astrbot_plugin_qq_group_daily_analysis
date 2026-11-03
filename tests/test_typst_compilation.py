@@ -65,7 +65,7 @@ async def compiler(managed_fonts, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria", "ATRI", "deepseek_maid", "art_nouveau", "scrapbook", "format", "spring_festival"])
+@pytest.mark.parametrize("theme", ["HatsuneMiku", "simple", "hack", "maria", "ATRI", "deepseek_maid", "art_nouveau", "scrapbook", "format", "spring_festival", "retro_futurism"])
 @pytest.mark.parametrize("case", ["complete", "empty", "summary_only", "plain_markup", "long_text", "anonymous"])
 async def test_real_compilation_accepts_report_content(compiler, monkeypatch, theme, case):
     _, generator, _ = compiler
@@ -153,7 +153,7 @@ def test_maid_composes_cached_layers_without_floating_eyes(tmp_path, pose, expec
         assert image.convert("RGB").getpixel((250, 400)) == expected
 
 
-@pytest.mark.parametrize("theme,module", [("art_nouveau", "nouveau"), ("maria", "maria"), ("format", "format"), ("spring_festival", "spring")])
+@pytest.mark.parametrize("theme,module", [("art_nouveau", "nouveau"), ("maria", "maria"), ("format", "format"), ("spring_festival", "spring"), ("retro_futurism", "retro")])
 def test_oblique_does_not_shift_the_whole_paragraph(tmp_path, managed_fonts, theme, module):
     """验证长段落的中文斜体逐字倾斜，首行不会被推向卡片外侧。
 
@@ -170,7 +170,7 @@ def test_oblique_does_not_shift_the_whole_paragraph(tmp_path, managed_fonts, the
     shutil.copyfile(templates / theme / f"{module}.typ", tmp_path / f"{module}.typ")
     outputs = []
     for oblique in (False, True):
-        extra = f",oblique:{str(oblique).lower()}" if theme not in {"format", "spring_festival"} else ""
+        extra = f",oblique:{str(oblique).lower()}" if theme not in {"format", "spring_festival", "retro_futurism"} else ""
         (tmp_path / "main.typ").write_text(
             f'#import "{module}.typ":copy\n'
             '#set page(width:200pt,height:auto,margin:10pt)\n'
@@ -190,6 +190,36 @@ def test_oblique_does_not_shift_the_whole_paragraph(tmp_path, managed_fonts, the
     first_line = outputs[1].crop((10, 10, 190, 32)).convert("L").point(lambda value: 255 if value < 100 else 0)
     bounds = first_line.getbbox()
     assert bounds is not None and bounds[0] < 5
+
+
+def test_retro_avatars_keep_css_grayscale_contrast_and_transparency(tmp_path):
+    """验证本地头像的灰度、对比度及透明区，不依赖网络素材。
+
+    Args:
+        tmp_path: 本次编译的隔离根目录。
+    """
+    import typst
+
+    templates = Path(__file__).parents[1] / "src/infrastructure/reporting/templates"
+    shutil.copyfile(templates / "retro_futurism/retro.typ", tmp_path / "retro.typ")
+    pixels = Image.new("RGBA", (40, 40), (57, 197, 187, 255))
+    ImageDraw.Draw(pixels).rectangle((20, 0, 39, 39), fill=(0, 0, 0, 0))
+    pixels.save(tmp_path / "avatar.png")
+    (tmp_path / "main.typ").write_text(
+        '#import "retro.typ":avatar\n'
+        '#set page(width:80pt,height:40pt,margin:0pt,fill:white)\n'
+        '#grid(columns:(40pt,40pt),gutter:0pt,'
+        'avatar((u:1pt),"avatar.png",size:40),'
+        'avatar((u:1pt),"avatar.png",size:40,round:true,contrast:1))',
+        encoding="utf-8",
+    )
+    compiler = typst.Compiler(str(tmp_path / "main.typ"), root=str(tmp_path), ignore_system_fonts=True)
+    with Image.open(BytesIO(compiler.compile(format="png", ppi=72))) as output:
+        output = output.convert("RGB")
+        for point, expected in [((10, 20), 170), ((50, 20), 167)]:
+            assert all(abs(channel - expected) <= 1 for channel in output.getpixel(point))
+        assert output.getpixel((30, 20)) == (238, 238, 238)
+        assert output.getpixel((70, 20)) == (255, 255, 255)
 
 
 def test_atri_glass_blurs_the_cached_background(tmp_path, managed_fonts):
