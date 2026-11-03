@@ -48,7 +48,20 @@ def _span(
         当前任务的异步阶段，离线调用时为空上下文。
     """
     trace = TraceContext.current()
-    return trace.span_async(stage, payload) if trace else nullcontext()
+    if not trace:
+        return nullcontext()
+    details = dict(payload or {})
+    parent = next(
+        (
+            span
+            for span in reversed(trace._spans)
+            if span["stage_name"] == "RENDER_REPORT" and span["status"] == "running"
+        ),
+        None,
+    )
+    if parent:
+        details["parent_span_id"] = parent["span_id"]
+    return trace.span_async(stage, details)
 
 
 async def render_typst_probe(

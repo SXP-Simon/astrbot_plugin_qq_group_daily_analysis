@@ -380,6 +380,7 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
     assert saved[0].read_bytes() == base64.b64decode(image.removeprefix("base64://"))
     assert trace.metadata["typst_recovery"]["mode"] == "basic"
     spans = {span["stage_name"]: span for span in trace.to_dict()["spans"]}
+    assert all(span["payload"]["parent_span_id"] == spans["RENDER_REPORT"]["span_id"] for stage, span in spans.items() if stage.startswith("TYPST_"))
     assert spans["TYPST_COMPILE"]["status"] == "warning"
     assert "error" not in spans["TYPST_COMPILE"]["payload"]
     assert spans["TYPST_RECOVERY"]["status"] == "success"
