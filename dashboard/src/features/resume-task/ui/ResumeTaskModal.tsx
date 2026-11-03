@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Modal, Alert, Form, Select, Space, message } from "antd";
+import { Modal, Alert, Form, Select, Space } from "antd";
 import { SyncOutlined, ApiOutlined, SkinOutlined } from "@ant-design/icons";
 import { fetchProviderList, LLMProviderItem } from "../../../entities/trace/api/traceApi";
-import { fetchReportTemplates } from "../../../entities/report/api/reportApi";
-import { formatTemplateOptions, ReportTemplateItem, DEFAULT_REPORT_TEMPLATES } from "../../../entities/report/model/templates";
+import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
+import { formatTemplateOptions } from "../../../entities/report/model/templates";
 
 interface ResumeTaskModalProps {
   open: boolean;
@@ -20,8 +20,7 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
 }) => {
   const [providers, setProviders] = useState<LLMProviderItem[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
-  const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const { templates, loading: loadingTemplates, ready, error, refresh } = useReportTemplates("configured", open);
   const [selectedProvider, setSelectedProvider] = useState("auto");
   const [selectedTemplate, setSelectedTemplate] = useState("auto");
 
@@ -30,22 +29,16 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
       setSelectedProvider("auto");
       setSelectedTemplate("auto");
       setLoadingProviders(true);
-      setLoadingTemplates(true);
       fetchProviderList()
         .then((list) => setProviders(list))
         .catch(() => {})
         .finally(() => setLoadingProviders(false));
-      fetchReportTemplates("configured")
-        .then((list) => setTemplates(list))
-        .catch(() => {
-          message.warning("模板列表获取失败，已回退显示内置模板");
-          setTemplates(DEFAULT_REPORT_TEMPLATES);
-        })
-        .finally(() => setLoadingTemplates(false));
+
     }
   }, [open]);
 
   const handleOk = () => {
+    if (selectedTemplate !== "auto" && (!ready || !templates.some((item) => item.id === selectedTemplate))) return;
     onConfirm(
       selectedProvider !== "auto" ? selectedProvider : undefined,
       selectedTemplate !== "auto" ? selectedTemplate : undefined
@@ -66,6 +59,7 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
       onCancel={onCancel}
       onOk={handleOk}
       confirmLoading={loading}
+      okButtonProps={{ disabled: selectedTemplate !== "auto" && (!ready || !templates.some((item) => item.id === selectedTemplate)) }}
       okText="立即续跑"
       cancelText="取消"
       destroyOnClose
@@ -80,6 +74,7 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
           style={{ marginBottom: 16 }}
         />
 
+        {error && <Alert type="warning" message={error} action={<a onClick={() => void refresh()}>重试</a>} />}
         <Form layout="vertical">
           <Form.Item
             label={

@@ -10,7 +10,7 @@ import {
   Tag,
   Typography,
   Image,
-  message,
+  Alert,
 } from "antd";
 import {
   EyeOutlined,
@@ -24,13 +24,14 @@ import {
 import { useTheme } from "../../../shared/lib/useTheme";
 import {
   KNOWN_TEMPLATES,
-  DEFAULT_REPORT_TEMPLATES, supportsTemplate, templateCapabilities, type TemplateRequirements,
+  supportsTemplate, templateCapabilities, type TemplateRequirements,
   getTemplateCdnUrl,
-  ReportTemplateItem,
 } from "../../../entities/report/model/templates";
-import { fetchReportTemplates, fetchTemplatePreview } from "../../../entities/report/api/reportApi";
+import { fetchTemplatePreview } from "../../../entities/report/api/reportApi";
 import { TemplateInstallModal } from "../../../features/install-template/ui/TemplateInstallModal";
 import { TemplateUninstallModal } from "../../../features/install-template/ui/TemplateUninstallModal";
+
+import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
 
 const GALLERY_FALLBACK =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='180' viewBox='0 0 200 180'><rect width='200' height='180' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='12'>预览图</text></svg>";
@@ -92,30 +93,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
   const [previewVisible, setPreviewVisible] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
-  const [remoteTemplates, setRemoteTemplates] = useState<ReportTemplateItem[]>([]);
-
-  useEffect(() => {
-    // 拉取全量模板（含自定义模板的 display_name/desc/tag 元信息；
-    // 失败时 KNOWN_TEMPLATES 兜底展示内置模板，控制台留日志便于排查）
-    fetchReportTemplates()
-      .then((list) => setRemoteTemplates(Array.isArray(list) ? list : []))
-      .catch((e) => {
-        console.warn("[templates] 获取模板列表失败，回退到内置模板展示", e);
-        setRemoteTemplates([]);
-      });
-  }, []);
-
-  // 安装/卸载后主动重新拉取模板列表，保证画廊与下拉立即出现/移除对应模板；
-  // 拉取失败时保留现有展示（不置空），并提示用户（与“自定义模板静默消失”问题一致）
-  const refreshRemoteTemplates = async () => {
-    try {
-      const list = await fetchReportTemplates();
-      setRemoteTemplates(Array.isArray(list) ? list : []);
-    } catch (e) {
-      console.warn("[templates] 刷新模板列表失败，保留现有展示", e);
-      message.warning("模板列表刷新失败，请稍后重试或刷新页面。");
-    }
-  };
+  const { templates: remoteTemplates, loading, ready, error, refresh: refreshRemoteTemplates } = useReportTemplates();
 
   const currentTemplate =
     typeof value === "string" && value
@@ -130,7 +108,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
   }, [currentTemplate]);
 
   const availableTemplates = useMemo(() =>
-    (remoteTemplates.length ? remoteTemplates : DEFAULT_REPORT_TEMPLATES)
+    remoteTemplates
       .filter((item) => supportsTemplate(item, requirements)), [remoteTemplates, requirements]);
   const templateOptions = useMemo(() => availableTemplates.map((item) => ({
     label: `${item.display_name || item.label || item.id} [${templateCapabilities(item).join(" / ")}]`,
@@ -164,13 +142,17 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
-      {!currentSupported && <Text type="warning">当前主题不支持所选渲染引擎或输出格式，请选择兼容主题。切换不会自动覆盖你的配置。</Text>}
+      {error && <Alert type="error" showIcon message={error} action={<Button onClick={() => void refreshRemoteTemplates()}>重试</Button>} />}
+      {ready && !remoteTemplates.length && <Text type="secondary">暂无可用模板，请安装模板或刷新列表。</Text>}
+      {ready && !currentSupported && <Text type="warning">当前主题不支持所选渲染引擎或输出格式，请选择兼容主题。切换不会自动覆盖你的配置。</Text>}
       {cdnBaseUrl === null && (
         <Text type="danger">CDN 地址没填对，请先到「图片渲染策略」改一下，再来看模板预览。</Text>
       )}
       {/* 顶部下拉选择与快捷按钮 */}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <Select
+          loading={loading}
+          disabled={!ready}
           value={currentTemplate}
           onChange={(v) => onChange(v)}
           style={{ minWidth: 200, flex: 1 }}

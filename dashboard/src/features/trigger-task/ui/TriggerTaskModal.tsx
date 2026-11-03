@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Form, Input, Select } from "antd";
+import { Modal, Form, Input, Select, Alert, Button } from "antd";
 import { ConnectedPlatform } from "../../../entities/task/api/taskApi";
 import { LLMProviderItem } from "../../../entities/trace/api/traceApi";
 import { ReportTemplateItem, formatTemplateOptions } from "../../../entities/report/model/templates";
@@ -18,6 +18,8 @@ interface TriggerTaskModalProps {
   loadingProviders?: boolean;
   templates?: ReportTemplateItem[];
   loadingTemplates?: boolean;
+  templatesError?: string;
+  onRefreshTemplates?: () => void;
   onGroupIdChange: (val: string) => void;
   onGroupNameChange: (val: string) => void;
   onPlatformChange: (val: string) => void;
@@ -41,6 +43,8 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
   loadingProviders = false,
   templates = [],
   loadingTemplates = false,
+  templatesError,
+  onRefreshTemplates,
   onGroupIdChange,
   onGroupNameChange,
   onPlatformChange,
@@ -86,6 +90,7 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
       destroyOnClose
       width={460}
     >
+      {templatesError && <Alert type="warning" message={templatesError} action={<Button onClick={onRefreshTemplates}>重试</Button>} />}
       <Form layout="vertical" style={{ marginTop: 16 }}>
         <Form.Item label="群号 / 会话标识" required>
           <Input

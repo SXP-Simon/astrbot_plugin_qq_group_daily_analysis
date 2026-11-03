@@ -2,8 +2,10 @@ import React, { useEffect, useState } from "react";
 import { Modal, Form, Select, Radio, Alert, Space, Typography, message } from "antd";
 import { SkinOutlined } from "@ant-design/icons";
 import { ReportItem } from "../../../entities/report/model/types";
-import { fetchReportTemplates, rerenderReport } from "../../../entities/report/api/reportApi";
-import { formatTemplateOptions, ReportTemplateItem, DEFAULT_REPORT_TEMPLATES } from "../../../entities/report/model/templates";
+import { rerenderReport } from "../../../entities/report/api/reportApi";
+import { formatTemplateOptions } from "../../../entities/report/model/templates";
+
+import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
 
 const { Text } = Typography;
 
@@ -23,27 +25,14 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
   const [form] = Form.useForm();
   const renderFormat = Form.useWatch<"image" | "html">("render_format", form) || "image";
   const [loading, setLoading] = useState(false);
-  const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const { templates, loading: loadingTemplates, ready, error, refresh } = useReportTemplates(renderFormat, open);
 
   useEffect(() => {
     if (open && report) form.setFieldsValue({ template_name: "HatsuneMiku", render_format: report.is_html ? "html" : "image" });
   }, [open, report, form]);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLoadingTemplates(true);
-    fetchReportTemplates(renderFormat).then((list) => {
-      if (!cancelled) setTemplates(list);
-    }).catch(() => {
-      if (!cancelled) { message.warning("模板列表获取失败，已回退显示内置模板"); setTemplates(DEFAULT_REPORT_TEMPLATES); }
-    }).finally(() => { if (!cancelled) setLoadingTemplates(false); });
-    return () => { cancelled = true; };
-  }, [open, renderFormat]);
-
   const handleSubmit = async () => {
-    if (!report) return;
+    if (!report || !ready) return;
     try {
       const values = await form.validateFields();
       setLoading(true);
@@ -63,7 +52,7 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
         message.error("重新渲染失败，可能未找到该群的分析快照");
       }
     } catch {
-      // Form validation or network error
+      // Keep validation errors in the form; request errors are surfaced by the bridge.
     } finally {
       setLoading(false);
     }
@@ -83,6 +72,7 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
       onCancel={onClose}
       onOk={handleSubmit}
       confirmLoading={loading}
+      okButtonProps={{ disabled: !ready || !templates.length }}
       okText="立即重新渲染"
       cancelText="取消"
       destroyOnClose
@@ -94,6 +84,7 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
         description="直接复用该群先前的聊天统计、话题总结与群友画像数据，无需再次调用大模型，消耗 0 Token。"
         style={{ marginBottom: 16 }}
       />
+      {error && <Alert type="error" message={error} action={<a onClick={() => void refresh()}>重试</a>} />}
       <Form form={form} layout="vertical">
         <Form.Item label="目标群聊">
           <Text strong>{report?.group_name || report?.group_id || "-"}</Text>
@@ -104,6 +95,7 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
           rules={[{ required: true, message: "请选择视觉主题模板" }]}
         >
           <Select
+            disabled={!ready}
             loading={loadingTemplates}
             options={templateOptions}
           />
