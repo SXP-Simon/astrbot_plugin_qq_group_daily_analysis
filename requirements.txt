@@ -1,3 +1,4 @@
 diskcache
 ulid-py
-psutiltypst>=0.15.0,<0.16
+psutil
+typst>=0.15.0,<0.16
