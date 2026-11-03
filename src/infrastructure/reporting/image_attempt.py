@@ -149,6 +149,7 @@ class ImageRenderTelemetry:
             return
         native = not attempt.backend.requires_html
         result = request.result
+        stats = result.get("statistics")
         self.parent["payload"].update(
             {
                 "format": "image",
@@ -164,7 +165,7 @@ class ImageRenderTelemetry:
                 "t2i_render_ms": attempt.render_ms,
                 "topics_rendered": len(result.get("topics") or []),
                 "titles_rendered": len(result.get("user_titles") or []),
-                "quotes_rendered": len(result["statistics"].golden_quotes),
+                "quotes_rendered": len(stats.golden_quotes) if stats else 0,
                 "html_chars": 0 if native else len(html.content or ""),
                 "hide_user_names": request.identity.hide_names,
             }

@@ -58,6 +58,7 @@ class ImageReportSession:
                 acquired = True
             deadline = asyncio.get_running_loop().time() + self.timeout
             last_error = "没有可用的渲染策略。"
+            attempt: ImageAttempt | None = None
             for index, strategy in enumerate(strategies, 1):
                 if asyncio.get_running_loop().time() >= deadline:
                     break
@@ -66,6 +67,9 @@ class ImageReportSession:
                     strategy,
                     self.backends[strategy.get("render_service", "astrbot")],
                     self.environment,
+                )
+                logger.debug(
+                    f"[T2I诊断 v2] 开始生成图片；配置读取：{attempt.info['config_lookup']}；配置地址：{attempt.info['configured_endpoint']}"
                 )
                 telemetry.attach(attempt)
                 image, expired = await self._attempt(attempt, html, telemetry, deadline)
@@ -78,7 +82,15 @@ class ImageReportSession:
                 logger.warning(f"第 {index} 次图片生成失败：{last_error}")
                 if expired:
                     break
-            logger.error(f"图片生成未成功，最后一次失败原因：{last_error}")
+            last = attempt.info if attempt else None
+            logger.error(
+                f"图片生成未成功，最后一次失败原因：{last_error}"
+                + (
+                    f"\n配置读取：{last['config_lookup']}；配置地址：{last['configured_endpoint']}"
+                    if last
+                    else ""
+                )
+            )
             return None, html.content
         finally:
             if acquired:
