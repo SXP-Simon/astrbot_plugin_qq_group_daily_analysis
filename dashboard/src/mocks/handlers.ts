@@ -41,7 +41,11 @@ export const mockHandlers = {
     status: "error",
     message: "演示模式不进行真实网络检测，请连接 AstrBot 插件后再试。",
   }),
-  "GET config/template-resources": () => ({ status: "ok", data: mockTemplateResources }),
+  "GET config/template-resources": () => {
+    const files = managedMockFiles.get("template_resources");
+    mockTemplateResources.groups.forEach(group => group.files.forEach(file => { file.available = files?.has(file.name) || false; }));
+    return { status: "ok", data: mockTemplateResources };
+  },
   "POST config/template-resources/download": (body?: Record<string, unknown>) => {
     const file = mockTemplateResources.groups.flatMap((group) => group.files).find((item) => item.name === body?.name);
     if (!file) return { status: "error", message: "演示素材不在清单中" };
@@ -64,7 +68,10 @@ export const mockHandlers = {
     const theme = body?.theme;
     const selected = mockTypstFonts.groups?.find(group => group.theme === theme);
     if (theme != null && !selected) return { status: "error", message: "未知 Typst 模板" };
-    const names = selected?.missing || mockTypstFonts.missing;
+    const allowed = selected?.required || [...new Set(mockTypstFonts.groups?.flatMap(group => group.required) || [])];
+    if (body?.name != null && (typeof body.name !== "string" || !allowed.includes(body.name))) return { status: "error", message: "字体不属于所选预设" };
+    if (body?.name === "Cinzel.ttf" && String(body.cdn_base_url).includes("jsdmirror")) return { status: "error", message: "演示：字体下载超时，可切换 CDN 或上传本地字体后重试" };
+    const names = (selected?.missing || mockTypstFonts.missing).filter(name => body?.name == null || name === body.name);
     names.forEach(name => putManagedMockFile("typst_fonts", name, null, "AAEAAAAA"));
     mockTypstFonts.files = [...new Set([...mockTypstFonts.files, ...names])];
     mockTypstFonts.missing = mockTypstFonts.missing.filter(file => !names.includes(file));

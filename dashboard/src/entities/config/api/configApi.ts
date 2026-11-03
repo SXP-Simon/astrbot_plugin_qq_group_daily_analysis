@@ -140,10 +140,10 @@ export async function fetchTypstFonts(): Promise<TypstFontStatus> {
   return parsed.data;
 }
 
-export async function downloadTypstFonts(cdnBaseUrl: string, theme?: string): Promise<TypstFontStatus> {
+export async function downloadTypstFonts(cdnBaseUrl: string, theme?: string, name?: string): Promise<TypstFontStatus> {
   const parsedCdn = cdnBaseUrlSchema.safeParse(cdnBaseUrl);
   if (!parsedCdn.success) throw new Error(parsedCdn.error.issues[0].message);
-  const response = await apiPost<unknown>("config/typst-fonts/download", { cdn_base_url: parsedCdn.data, ...(theme === undefined ? {} : { theme }) });
+  const response = await apiPost<unknown>("config/typst-fonts/download", { cdn_base_url: parsedCdn.data, ...(theme === undefined ? {} : { theme }), ...(name === undefined ? {} : { name }) });
   const parsed = typstFontStatusSchema.safeParse(extractData(response));
   if (!parsed.success) throw new Error(response?.message || "字体下载未完成，请检查 CDN 后重试。");
   return parsed.data;

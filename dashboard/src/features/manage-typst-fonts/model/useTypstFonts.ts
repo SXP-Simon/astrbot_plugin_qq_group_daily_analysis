@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { downloadTypstFonts, fetchTypstFonts } from "../../../entities/config/api/configApi";
+import { fetchTypstFonts } from "../../../entities/config/api/configApi";
 import type { TypstFontStatus } from "../../../entities/config/model/typstFonts";
+
+import { useFontDownload } from "./useFontDownload";
 
 export function useTypstFonts(cdnBaseUrl: string) {
   const [status, setStatus] = useState<TypstFontStatus | null>(null);
   const [operation, setOperation] = useState<"selected" | "all" | "refresh" | null>(null);
-  const loading = operation !== null;
+  const downloadQueue = useFontDownload(setStatus);
+  const loading = operation !== null || downloadQueue.running;
   const [error, setError] = useState("");
   const sequence = useRef(0);
 
@@ -25,8 +28,11 @@ export function useTypstFonts(cdnBaseUrl: string) {
     setOperation(download ? theme === undefined ? "all" : "selected" : "refresh");
     setError("");
     try {
-      const value = download ? await downloadTypstFonts(cdnBaseUrl, theme) : await fetchTypstFonts();
-      if (sequence.current === request) setStatus(value);
+      if (download && status) await downloadQueue.download(cdnBaseUrl, status, theme);
+      else {
+        const value = await fetchTypstFonts();
+        if (sequence.current === request) setStatus(value);
+      }
     } catch (cause: unknown) {
       if (sequence.current === request) setError(cause instanceof Error ? cause.message : "字体操作未完成，请重试。");
       if (download) {
@@ -37,5 +43,5 @@ export function useTypstFonts(cdnBaseUrl: string) {
       if (sequence.current === request) setOperation(null);
     }
   };
-  return { status, loading, operation, error, run };
+  return { status, loading, operation, error, run, downloadQueue };
 }

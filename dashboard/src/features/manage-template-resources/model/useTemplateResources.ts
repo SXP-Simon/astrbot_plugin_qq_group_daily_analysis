@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { downloadTemplateResource, fetchTemplateResources } from "../../../entities/config/api/templateResourceApi";
 import { cdnBaseUrlSchema } from "../../../entities/config/model/renderingConfig";
 import type { TemplateResourceStatus } from "../../../entities/config/model/templateResources";
 
-export function useTemplateResources(cdnBaseUrl: string) {
+export function useTemplateResources(cdnBaseUrl: string, refreshVersion = 0) {
   const [status, setStatus] = useState<TemplateResourceStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
@@ -13,7 +13,8 @@ export function useTemplateResources(cdnBaseUrl: string) {
   const busy = useRef(false);
   const refreshSequence = useRef(0);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
+    if (busy.current) return;
     const sequence = ++refreshSequence.current;
     setLoading(true);
     setError("");
@@ -25,13 +26,14 @@ export function useTemplateResources(cdnBaseUrl: string) {
     } finally {
       if (mounted.current && refreshSequence.current === sequence) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
     void refresh();
     return () => { mounted.current = false; refreshSequence.current += 1; };
-  }, []);
+  }, [refresh]);
+  useEffect(() => { if (refreshVersion > 0) void refresh(); }, [refreshVersion, refresh]);
 
   const download = async (theme?: string) => {
     if (!status || busy.current) return;

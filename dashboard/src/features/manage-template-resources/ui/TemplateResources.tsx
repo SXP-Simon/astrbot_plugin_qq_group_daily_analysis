@@ -4,10 +4,10 @@ import { TEMPLATE_CDN_PRESETS } from "../../../entities/config/model/renderingCo
 import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
 import { useTemplateResources } from "../model/useTemplateResources";
 
-export function TemplateResources({ cdnBaseUrl, onChanged }: { cdnBaseUrl: string; onChanged?: () => void }) {
+export function TemplateResources({ cdnBaseUrl, onChanged, refreshVersion = 0 }: { cdnBaseUrl: string; onChanged?: () => void; refreshVersion?: number }) {
   const [cdn, setCdn] = useState(cdnBaseUrl);
   useEffect(() => setCdn(cdnBaseUrl), [cdnBaseUrl]);
-  const vm = useTemplateResources(cdn);
+  const vm = useTemplateResources(cdn, refreshVersion);
   const missing = vm.status?.groups.flatMap((group) => group.files).filter((file) => !file.available).length ?? 0;
   return <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
     <Typography.Text strong>模板原始素材</Typography.Text>

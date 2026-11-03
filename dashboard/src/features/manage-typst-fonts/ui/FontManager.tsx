@@ -1,3 +1,4 @@
+import { FontDownloadProgress } from "./FontDownloadProgress";
 import { useState } from "react";
 import { Alert, Button, Input, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography, Upload } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
@@ -24,6 +25,7 @@ export function FontManager({ onChanged }: { onChanged: () => void }) {
       <Button disabled={vm.busy} loading={vm.loading} onClick={() => void vm.refresh()}>刷新字体状态</Button>
     </Space>
     {vm.status && <Alert type={vm.missing ? "info" : "success"} showIcon message={`已安装 ${vm.installed} / ${vm.required} 个字体${vm.missing ? `，缺少 ${vm.missing} 个` : "，已就绪"}`} />}
+    <FontDownloadProgress download={vm.downloadQueue} />
     {vm.error && <Alert type="error" showIcon message={vm.error} />}
     <Space wrap>
       <Input.Search aria-label="搜索字体" placeholder="搜索字体文件名" allowClear onSearch={vm.searchFonts} disabled={disabled} style={{ width: 250 }} />

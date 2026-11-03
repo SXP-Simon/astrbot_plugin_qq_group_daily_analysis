@@ -1,5 +1,5 @@
 import { Alert, Button, Descriptions, Drawer, Space, Tabs, Typography } from "antd";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { usePartitionManager } from "../../model/usePartitionManager";
 import { StoredRecordsTab } from "../StoredRecordsTab";
 import { ManagedFileList } from "../../../../features/manage-stored-files/ui/ManagedFileList";
@@ -13,6 +13,7 @@ import { ConfigBackupsViewer } from "../../../../features/view-config-backups/ui
 import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../../entities/config/model/renderingConfig";
 
 export function ManagedPartitionDrawer({ manager }: { manager: ReturnType<typeof usePartitionManager> }) {
+  const [resourceVersion, setResourceVersion] = useState(0);
   const { files: vm, partition, references, links } = manager;
   const specializedManagers: Record<string, ReactNode> = {
     typst_fonts: <FontManager onChanged={manager.refresh} />,
@@ -26,8 +27,8 @@ export function ManagedPartitionDrawer({ manager }: { manager: ReturnType<typeof
       {partition.key === "config_files" && <><Typography.Text type="secondary">新增图片需在配置中心选择对应字段；这里可预览、同名替换、复制引用路径与清理文件。下列引用来自当前已保存的插件配置。</Typography.Text>{references.error && <Alert type="warning" showIcon message={references.error} description="无法确认引用关系，请先刷新或打开配置中心检查。" action={<Button onClick={() => void references.refresh()}>重新检查</Button>} />}</>}
       <Space wrap>{links.map(link => <Button key={`${link.kind}:${link.destination}`} onClick={() => manager.navigate(link)}>{link.label}</Button>)}{partition.key === "config_backups" && <ConfigBackupsViewer />}</Space>
       {partition.key === "custom_templates" && <TemplatePackages groups={vm.groups} directory={vm.directory} loading={vm.loading} busy={vm.busy} onSelect={vm.selectDirectory} onInstall={() => manager.setInstalling(true)} onCreate={() => vm.setEditor({ name: "", text: "" })} onRefresh={manager.refresh} />}
-      {specializedManagers[partition.key] || (partition.key === "custom_templates" && !vm.directory ? null : <Tabs key={`${partition.key}:${vm.directory}`} defaultActiveKey={partition.key === "template_resources" ? "download" : "files"} onChange={manager.refresh} items={[
-        ...(partition.key === "template_resources" ? [{ key: "download", label: "主题素材状态", children: <TemplateResources cdnBaseUrl={DEFAULT_TEMPLATE_CDN_BASE_URL} onChanged={manager.refresh} /> }] : []),
+      {specializedManagers[partition.key] || (partition.key === "custom_templates" && !vm.directory ? null : <Tabs key={`${partition.key}:${vm.directory}`} defaultActiveKey={partition.key === "template_resources" ? "download" : "files"} onChange={key => { manager.refresh(); if (key === "download") setResourceVersion(value => value + 1); }} items={[
+        ...(partition.key === "template_resources" ? [{ key: "download", label: "主题素材状态", children: <TemplateResources refreshVersion={resourceVersion} cdnBaseUrl={DEFAULT_TEMPLATE_CDN_BASE_URL} onChanged={manager.refresh} /> }] : []),
         { key: "files", label: partition.key === "template_resources" ? "本地素材与替换" : partition.key === "state" ? "数据库与状态占用" : partition.key === "typst_jobs" ? "只读诊断文件" : "文件列表", children: <ManagedFileList vm={vm} partition={partition} references={references} /> },
       ]} />)}
     </Space>}
