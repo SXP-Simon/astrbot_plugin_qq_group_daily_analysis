@@ -179,14 +179,22 @@ export const mockHandlers = {
         "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='200'><rect width='100%' height='100%' fill='%2352c41a'/><text x='50%' y='50%' fill='white' font-size='18' text-anchor='middle'>Template Live Preview</text></svg>",
     },
   }),
-  "POST templates/install_from_url": () => ({
-    status: "ok",
-    data: { success: true, message: "模板安装成功", template_name: "custom_demo" },
-  }),
-  "POST templates/install_from_file": () => ({
-    status: "ok",
-    data: { success: true, message: "模板上传成功", template_name: "custom_uploaded" },
-  }),
+  "POST templates/install_from_url": (body?: Record<string, unknown>) => {
+    const name = String(body?.name || "custom_demo").trim();
+    if (!name || name.length > 50 || name.startsWith(".") || name.endsWith(".") || /[\\/:*?"<>|]/.test(name) || mockReportTemplates.some(item => item.id === name) || [...(managedMockFiles.get("custom_templates")?.keys() || [])].some(key => key.startsWith(name + "/"))) return { status: "error", message: "模板名无效或目录已存在，请使用不同名称" };
+    putManagedMockFile("custom_templates", `${name}/report.typ`, "#set text(size: 12pt)\n= 演示模板");
+    putManagedMockFile("custom_templates", `${name}/template.json`, JSON.stringify({ name: "在线安装演示模板" }));
+    mockReportTemplates.push({ id: name, label: `在线安装演示模板 (${name})`, display_name: "在线安装演示模板", is_custom: true, has_typst: true, can_uninstall: true });
+    return { status: "ok", data: { name, label: "在线安装演示模板", has_typst: true, has_image: false, has_html: false, files: ["report.typ", "template.json"] } };
+  },
+  "POST templates/install_from_file": (body?: Record<string, unknown>) => {
+    const name = String(body?.name || "custom_uploaded").trim();
+    if (!name || name.length > 50 || name.startsWith(".") || name.endsWith(".") || /[\\/:*?"<>|]/.test(name) || mockReportTemplates.some(item => item.id === name) || [...(managedMockFiles.get("custom_templates")?.keys() || [])].some(key => key.startsWith(name + "/"))) return { status: "error", message: "模板名无效或目录已存在，请使用不同名称" };
+    putManagedMockFile("custom_templates", `${name}/report.typ`, "#set text(size: 12pt)\n= 演示模板");
+    putManagedMockFile("custom_templates", `${name}/template.json`, JSON.stringify({ name: "上传安装演示模板" }));
+    mockReportTemplates.push({ id: name, label: `上传安装演示模板 (${name})`, display_name: "上传安装演示模板", is_custom: true, has_typst: true, can_uninstall: true });
+    return { status: "ok", data: { name, label: "上传安装演示模板", has_typst: true, has_image: false, has_html: false, files: ["report.typ", "template.json"] } };
+  },
   "POST templates/uninstall": (body?: Record<string, unknown>) => {
     const name = String(body?.name || "");
     const index = mockReportTemplates.findIndex(item => item.id === name && item.can_uninstall);

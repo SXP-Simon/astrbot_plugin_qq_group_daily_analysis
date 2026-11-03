@@ -150,7 +150,7 @@ export async function installTemplateFromFile(
     file_data: base64Data,
     name: name || undefined,
   });
-  return assertInstallResult(res, "安装失败，请确认压缩包内包含 image_template.html。");
+  return assertInstallResult(res, "安装失败，请确认压缩包内包含 report.typ、image_template.html 或 html_template.html 入口。");
 }
 
 export async function uninstallTemplate(

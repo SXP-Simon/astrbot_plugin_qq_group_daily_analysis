@@ -154,3 +154,18 @@ it("Typst演示覆盖本地缓存、下载、超时、恢复、失败和取消�
   const live = mockHandlers["GET tasks/active"]().data.find(task => task.task_id === "trace-typst-live");
   expect(live?.current_stage).toBe("TYPST_RESOURCES");
 });
+it("模板安装的两种入口均同步模板目录与能力列表，卸载后完整移除", () => {
+  for (const [endpoint, name] of [["POST templates/install_from_url", "mock_installed_url"], ["POST templates/install_from_file", "mock_installed_zip"]] as const) {
+    const installed = mockHandlers[endpoint]({ name });
+    expect(installed.status).toBe("ok");
+    expect(installed.data?.name).toBe(name);
+    expect(mockHandlers["GET reports/templates"]().data.find(item => item.id === name)).toMatchObject({ is_custom: true, has_typst: true, can_uninstall: true });
+    const files = mockHandlers["GET plugin-data/files"]({ partition: "custom_templates", directory: name }).data;
+    expect(files.total).toBe(2);
+    expect(files.groups.find(item => item.directory === name)?.count).toBe(2);
+    expect(mockHandlers[endpoint]({ name }).status).toBe("error");
+    expect(mockHandlers["POST templates/uninstall"]({ name }).data).toEqual({ name, removed: true });
+    expect(mockHandlers["GET plugin-data/files"]({ partition: "custom_templates", directory: name }).data.total).toBe(0);
+    expect(mockHandlers["GET reports/templates"]().data.some(item => item.id === name)).toBe(false);
+  }
+});
