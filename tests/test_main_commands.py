@@ -25,6 +25,7 @@ from astrbot_plugin_qq_group_daily_analysis.src.application.services.analysis_ap
     DuplicateGroupTaskError,
 )
 from astrbot_plugin_qq_group_daily_analysis.src.shared.constants import PLUGIN_NAME
+from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.platform.stop_signal import FrontendStopWatcher
 
 
 class FakeAstrBotConfig(dict):
@@ -32,6 +33,25 @@ class FakeAstrBotConfig(dict):
 
     def save_config(self):
         pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("matched", [0, 1])
+async def test_stop_command_confirms_only_matched_plugin_tasks(plugin, monkeypatch, matched):
+    event = MockEvent(platform_name="qq_official", platform_id="任意东西")
+    event.stop_event = Mock()
+    monkeypatch.setattr(FrontendStopWatcher, "request_stop_for", Mock(return_value=matched))
+    command = plugin.stop_group_analysis(event)
+    if matched:
+        reply = await anext(command)
+        assert "已请求停止" in reply["text"]
+        event.stop_event.assert_not_called()
+        with pytest.raises(StopAsyncIteration):
+            await anext(command)
+        event.stop_event.assert_called_once()
+    else:
+        assert [reply async for reply in command] == []
+        event.stop_event.assert_not_called()
 
 
 class MockEvent:

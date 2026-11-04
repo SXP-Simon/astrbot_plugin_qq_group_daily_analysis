@@ -592,6 +592,26 @@ class GroupDailyAnalysis(Star):
 
     # ==================== 指令注册与分发 ====================
 
+    @filter.command("stop", priority=100)
+    async def stop_group_analysis(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
+        """停止当前会话的手动群分析，没有匹配任务时保留宿主处理。
+
+        Args:
+            event: 宿主完成前缀解析后的 stop 命令事件。
+
+        Yields:
+            群分析任务收到停止请求的确认消息。
+        """
+        if not FrontendStopWatcher.request_stop_for(event):
+            return
+        yield event.plain_result(
+            "已请求停止当前会话的群分析任务，正在取消执行并清理资源。"
+        )
+        # 先让宿主发送确认，再终止后续命令处理，避免吞掉确认或重复回复。
+        event.stop_event()
+
     @filter.command("群分析", alias={"group_analysis"})
     @filter.permission_type(PermissionType.ADMIN)
     async def analyze_group_daily(
