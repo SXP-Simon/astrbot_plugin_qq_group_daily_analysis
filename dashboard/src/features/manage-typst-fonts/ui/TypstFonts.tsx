@@ -5,6 +5,7 @@ import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
 import { useTypstFonts } from "../model/useTypstFonts";
 import { FONT_DOWNLOAD_SOURCES } from "../../../entities/config/model/typstFonts";
 import { FontManagementContext } from "../model/FontManagementContext";
+import { ExternalLink } from "../../../shared/ui/ExternalLink";
 
 export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
   const navigation = useContext(FontManagementContext);
@@ -37,7 +38,7 @@ export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
     </Space>
     <Typography.Text type="secondary">CDN 优先模式下，大字库（含 ATRI 文楷）仍从固定 GitHub Raw 来源直连；也可选择全部字体走 Raw，绕过镜像 CDN 的体积限制。下载由插件服务器执行，Raw 无法访问时需检查服务器网络或代理；更换 CDN 不会改变直连地址。失败重试仅补缺失文件，也可在字体管理中上传同名文件。</Typography.Text>
     <Typography.Text type="secondary">下载失败时可打开「管理 / 上传字体」，进入「数据管理 → 存储分区明细与管理 → Typst 字体」，查看对应版本的上游与下载链接。浏览器下载成功后，使用对应字体行的上传按钮即可自动按预设命名。</Typography.Text>
-    <Typography.Text type="secondary">预设字体采用 <Typography.Link href="https://openfontlicense.org/open-font-license-official-text/" target="_blank" rel="noreferrer">SIL OFL 1.1</Typography.Link>，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。</Typography.Text>
+    <Typography.Text type="secondary">预设字体采用 <ExternalLink href="https://openfontlicense.org/open-font-license-official-text/">SIL OFL 1.1</ExternalLink>，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。</Typography.Text>
     {(vm.downloadQueue.error || vm.downloadQueue.progress.total > 0) && <FontDownloadProgress download={vm.downloadQueue} />}
     {vm.error && <Alert type="error" showIcon message={vm.error} />}
   </Space>;

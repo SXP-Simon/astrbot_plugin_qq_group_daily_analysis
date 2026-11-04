@@ -8,10 +8,14 @@ import { DEFAULT_TEMPLATE_CDN_BASE_URL, TEMPLATE_CDN_PRESETS } from "../../../en
 import { formatBytes } from "../../../shared/lib/formatters";
 import { FONT_DOWNLOAD_SOURCES } from "../../../entities/config/model/typstFonts";
 import { FontManagementContext, type FontManagementSelection } from "../model/FontManagementContext";
+import { useBrowserFontDownload } from "../model/useBrowserFontDownload";
+import { BrowserFontDownloadProgress } from "./BrowserFontDownloadProgress";
+import { ExternalLink } from "../../../shared/ui/ExternalLink";
 
 export function FontManager({ onChanged, initialSelection }: { onChanged: () => void; initialSelection?: FontManagementSelection }) {
   const navigation = useContext(FontManagementContext);
   const vm = useManagedFonts(() => { onChanged(); navigation?.changed(); }, initialSelection);
+  const browserDownload = useBrowserFontDownload();
   const [cdn, setCdn] = useState(initialSelection?.cdnBaseUrl || DEFAULT_TEMPLATE_CDN_BASE_URL);
   const [replacement, setReplacement] = useState<{ file: File; existing: ManagedFontRow } | null>(null);
   const disabled = vm.loading || vm.busy;
@@ -29,8 +33,9 @@ export function FontManager({ onChanged, initialSelection }: { onChanged: () => 
       <Button disabled={vm.busy} loading={vm.loading} onClick={() => void vm.refresh()}>刷新字体状态</Button>
     </Space>
     {vm.status && <Alert type={vm.missing ? "info" : "success"} showIcon message={`已安装 ${vm.installed} / ${vm.required} 个字体${vm.missing ? `，缺少 ${vm.missing} 个` : "，已就绪"}`} />}
-    <Typography.Text type="secondary">预设字体采用 <Typography.Link href="https://openfontlicense.org/open-font-license-official-text/" target="_blank" rel="noreferrer">SIL OFL 1.1</Typography.Link>，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。</Typography.Text>
+    <Typography.Text type="secondary">预设字体采用 <ExternalLink href="https://openfontlicense.org/open-font-license-official-text/">SIL OFL 1.1</ExternalLink>，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。</Typography.Text>
     {(vm.downloadQueue.error || vm.downloadQueue.progress.total > 0) && <FontDownloadProgress download={vm.downloadQueue} />}
+    <BrowserFontDownloadProgress download={browserDownload} />
     {vm.error && <Alert type="error" showIcon message={vm.error} />}
     <Space wrap>
       <Input.Search aria-label="搜索字体" placeholder="搜索字体文件名" allowClear onSearch={vm.searchFonts} disabled={disabled} style={{ width: 250 }} />
@@ -53,7 +58,7 @@ export function FontManager({ onChanged, initialSelection }: { onChanged: () => 
       { title: "依赖模板", render: (_, row) => !row.themes.length ? <Typography.Text type="secondary">自定义字体，供自定义模板使用</Typography.Text> : row.themes.length === vm.groups.length ? <Tooltip title={row.themes.map(themeName).join("、")}><Tag color="blue">所有内置模板共享</Tag></Tooltip> : <Space size={0} wrap>{row.themes.map(key => <Tag key={key}>{themeName(key)}</Tag>)}</Space> },
       { title: "手动获取", width: 150, render: (_, row) => {
         const preset = vm.status?.presets?.find(item => item.name === row.name);
-        return preset ? <Space size={4}><Typography.Link href={preset.upstream_url} target="_blank" rel="noreferrer">查看上游</Typography.Link><Typography.Link href={preset.download_url} target="_blank" rel="noreferrer">直接下载</Typography.Link></Space> : <Typography.Text type="secondary">{row.themes.length ? "暂无来源链接，请刷新字体状态" : "自定义字体请自行确认来源"}</Typography.Text>;
+        return preset ? <Space size={4}><ExternalLink href={preset.upstream_url}>查看上游</ExternalLink><Button type="link" size="small" disabled={disabled || browserDownload.running} onClick={() => browserDownload.download(preset)}>直接下载</Button></Space> : <Typography.Text type="secondary">{row.themes.length ? "暂无来源链接，请刷新字体状态" : "自定义字体请自行确认来源"}</Typography.Text>;
       } },
       { title: "操作", width: 145, render: (_, row) => row.file ? <Space size={4}>
         <Upload accept=".ttf,.otf,.ttc" showUploadList={false} disabled={disabled} beforeUpload={file => { setReplacement({ file, existing: row }); return false; }}><Button type="link" size="small" disabled={disabled}>替换</Button></Upload>
