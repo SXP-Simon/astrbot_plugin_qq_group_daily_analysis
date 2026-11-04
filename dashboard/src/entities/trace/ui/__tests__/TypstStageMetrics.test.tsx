@@ -13,6 +13,15 @@ it("本地编译隐藏旧海外标签，并标出终止前的实际执行阶段"
   expect(screen.getByText(/指标为进程终止前的采样/)).toBeVisible();
 });
 
+it("报告父阶段同时明确展示 Typst 编译增长和独立的宿主净变化", () => {
+  render(<StageMetricsBadges stageName="RENDER_REPORT" payload={{ typst_peak_rss_mb: 250, typst_peak_delta_mb: 220, typst_rss_source: "linux_proc_status", delta_memory_mb: 0.1 }} />);
+  expect(screen.getByText("Typst 子进程 RSS 峰值:")).toBeVisible();
+  expect(screen.getByText("250 MiB")).toBeVisible();
+  expect(screen.getByText("Typst 编译峰值增长:")).toBeVisible();
+  expect(screen.getByText("220 MiB")).toBeVisible();
+  expect(screen.getByText("宿主 RSS 净变化:")).toBeVisible();
+});
+
 it("区分编译进程峰值与宿主内存，隐藏非法遥测并提示预算耗尽", () => {
   render(<StageMetricsBadges stageName="TYPST_COMPILE" payload={{ worker_peak_rss_mb: 156.9, worker_start_rss_mb: 11.7, worker_peak_delta_mb: 145.2, worker_rss_source: "linux_proc_status", delta_memory_mb: 0, font_setup_ms: Number.NaN, network_budget_exhausted: true }} />);
   expect(screen.getByText("子进程 RSS 峰值:")).toBeVisible();

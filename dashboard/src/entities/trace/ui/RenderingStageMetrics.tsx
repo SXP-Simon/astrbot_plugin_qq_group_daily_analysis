@@ -5,6 +5,7 @@ import { useTheme } from "../../../shared/lib/useTheme";
 export function RenderingStageMetrics({ payload, children }: { payload: Record<string, unknown>; children?: ReactNode }) {
   const { isDark } = useTheme();
   const ownProcessRss = ["linux_proc_status", "windows_working_set"].includes(String(payload.worker_rss_source));
+  const ownTypstRss = ["linux_proc_status", "windows_working_set"].includes(String(payload.typst_rss_source));
   const native = payload.service_type === "typst";
   const phases: Record<string, string> = { font_setup: "字体初始化", layout: "布局测量", raster: "栅格导出" };
   const workerPhase = typeof payload.worker_phase === "string" ? phases[payload.worker_phase] : undefined;
@@ -12,6 +13,8 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
     worker_start_rss_mb: "子进程加载编译器前的 RSS，作为本次编译内存增长的基准。",
     worker_peak_rss_mb: "隔离进程自身的峰值常驻内存，进程退出后释放，不计入宿主 RSS 净变化。",
     worker_peak_delta_mb: "子进程峰值减去启动 RSS，表示本次编译的峰值增长，不是结束后的内存泄漏量。",
+    typst_peak_rss_mb: "取本阶段内各次串行 Typst 编译的最大 RSS 峰值，不相加，也不等于宿主内存增长。",
+    typst_peak_delta_mb: "取各次 Typst 编译相对其自身启动 RSS 的最大增长量；与宿主 RSS 净变化分开记录。",
   };
   const metrics = [
     ["strategy_name", "方案", ""],
@@ -39,6 +42,8 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
     ["worker_start_rss_mb", "子进程启动 RSS", "MiB"],
     ["worker_peak_rss_mb", "子进程 RSS 峰值", "MiB"],
     ["worker_peak_delta_mb", "编译峰值增长", "MiB"],
+    ["typst_peak_rss_mb", "Typst 子进程 RSS 峰值", "MiB"],
+    ["typst_peak_delta_mb", "Typst 编译峰值增长", "MiB"],
     ["image_bytes", "图片字节", "B"],
   ] as const;
   return (
@@ -47,7 +52,7 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
         if (native && key === "resource_environment") return null;
         const value = payload[key];
         if (unit === "" ? typeof value !== "string" || !value.trim() : typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
-        const metricLabel = key === "worker_peak_rss_mb" && !ownProcessRss ? "进程历史 RSS 峰值" : label;
+        const metricLabel = key === "worker_peak_rss_mb" && !ownProcessRss ? "进程历史 RSS 峰值" : key === "typst_peak_rss_mb" && !ownTypstRss ? "Typst 历史口径 RSS 峰值" : label;
         const hint = key === "worker_peak_rss_mb" && !ownProcessRss ? "进程历史峰值可能包含启动时继承的内存，不等于本次隔离编译占用。" : memoryHints[key];
         return <span key={key} title={hint}><MetricPill isDark={isDark} label={metricLabel} value={`${typeof value === "number" ? value.toLocaleString() : String(value)} ${unit}`} status={key.startsWith("missing_") && typeof value === "number" && value > 0 ? "warning" : "default"} /></span>;
       })}
@@ -55,6 +60,7 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
       {payload.mode === "basic" && <MetricPill isDark={isDark} label="恢复方案" value="基础排版" isMono={false} />}
       {workerPhase && <MetricPill isDark={isDark} label="最后阶段" value={workerPhase} status="warning" isMono={false} />}
       {payload.worker_metrics_partial === true && <span style={{ flexBasis: "100%", fontSize: 11 }}>指标为进程终止前的采样，未完成的阶段不显示完整耗时。</span>}
+      {payload.typst_metrics_partial === true && <span style={{ flexBasis: "100%", fontSize: 11 }}>Typst 汇总包含中断前的采样；各次串行编译取最大值，不相加。</span>}
       {payload.mode === "basic" && typeof payload.original_raster_ppi === "number" && typeof payload.requested_raster_ppi === "number" && payload.original_raster_ppi > payload.requested_raster_ppi && <span style={{ flexBasis: "100%", fontSize: 11 }}>基础恢复使用标准密度 {payload.requested_raster_ppi} PPI。</span>}
       {typeof payload.raster_ppi === "number" && typeof payload.requested_raster_ppi === "number" && payload.raster_ppi < payload.requested_raster_ppi && <span style={{ flexBasis: "100%", fontSize: 11 }}>长图像素预算已限制导出密度，排版与内容保持不变。</span>}
       {children}

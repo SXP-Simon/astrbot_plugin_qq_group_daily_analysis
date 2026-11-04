@@ -167,7 +167,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
               {/* 各生命周期阶段专属数据标签 */}
               <StageMetricsBadges
                 stageName={span.stage_name}
-                payload={span.payload as Record<string, unknown> | undefined}
+                payload={{ ...span.payload, ...node.typstMemory }}
               />
 
               {/* LLM 调用与重试链路表格 */}

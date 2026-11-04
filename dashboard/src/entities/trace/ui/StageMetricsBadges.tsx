@@ -219,6 +219,12 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {Boolean(payload.hide_user_names) && (
             <MetricPill isDark={isDark} label="隐私保护" value="匿名模式" isMono={false} />
           )}
+          {typeof payload.typst_peak_rss_mb === "number" && Number.isFinite(payload.typst_peak_rss_mb) && <RenderingStageMetrics payload={{
+            typst_peak_rss_mb: payload.typst_peak_rss_mb,
+            typst_peak_delta_mb: payload.typst_peak_delta_mb,
+            typst_rss_source: payload.typst_rss_source,
+            typst_metrics_partial: payload.typst_metrics_partial,
+          }} />}
           {renderMemoryPill()}
         </div>
       );
