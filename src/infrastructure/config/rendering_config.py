@@ -271,7 +271,13 @@ def parse_rendering_strategies(
         for key, label, default, lower, upper in (
             ("priority", "优先级", 10, 0, 10000),
             ("quality", "图片质量", 80, 1, 100),
-            ("timeout", "渲染超时", 20000, 1000, 300000),
+            (
+                "timeout",
+                "渲染超时",
+                30000 if render_service == "typst" else 20000,
+                1000,
+                300000,
+            ),
         ):
             number = item.get(key, default)
             if type(number) is not int or not lower <= number <= upper:

@@ -9,6 +9,14 @@ from src.infrastructure.config.config_migrator import ConfigMigrator
 from src.infrastructure.config.rendering_config import parse_rendering_strategies
 
 
+def test_native_compile_defaults_to_thirty_seconds_and_preserves_explicit_value():
+    plans = parse_rendering_strategies([
+        {"__template_key": "typst"}, {"__template_key": "strategy"},
+        {"__template_key": "typst", "timeout": 15000},
+    ])
+    assert [plan["timeout"] for plan in plans] == [30000, 20000, 15000]
+
+
 def test_typst_roundtrip_and_runtime_options():
     manager = object.__new__(ConfigManager)
     manager.config = {"t2i_rendering": {"t2i_rendering_strategies": [
