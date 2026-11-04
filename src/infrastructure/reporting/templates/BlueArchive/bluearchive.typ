@@ -275,7 +275,7 @@
 #let render(d)={
   let u=.5pt
   let cjk=if d.font_language=="zh-Hant" {("Noto Sans TC","Noto Sans SC")}else{("Noto Sans SC","Noto Sans TC")}
-  let t=(u:u,fonts:("BlueakaBeta2GBK",..cjk,"Noto Color Emoji"))
+  let t=(u:u,fonts:(..cjk,"Noto Color Emoji"))
   set page(width:940*u,height:auto,margin:0pt,fill:rgb("edf5fc"))
   set text(font:t.fonts,size:16*u,weight:600,lang:"zh",cjk-latin-spacing:none,hyphenate:false)
   set par(leading:0pt,spacing:0pt)

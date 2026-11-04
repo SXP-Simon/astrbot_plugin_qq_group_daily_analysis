@@ -70,8 +70,6 @@ async def test_builtin_templates_keep_assets_and_conditionally_load_fonts(
         assert ".woff2" not in html
     elif theme == "ATRI":
         assert "LXGWWenKai-Regular.woff2" in html
-    elif theme == "BlueArchive":
-        assert "xcnahida.cn/fonts/" in html
     else:
         assert "/css2?family=" in html
     if theme == "ATRI":
@@ -79,10 +77,10 @@ async def test_builtin_templates_keep_assets_and_conditionally_load_fonts(
     if theme == "HatsuneMiku":
         assert "/HatsuneMiku/retouch_" in html
     if theme == "retro_futurism":
-        assert 'local("Impact")' in html
+        assert 'local("Impact")' not in html
     if theme == "BlueArchive" and mode == "local":
-        assert 'local("BlueakaBeta2GBK DemiBold")' in html
-        assert 'local("BlueakaBeta2GBK")' in html
+        assert "Blueaka" not in html
+        assert "Noto Sans SC" in html
 
 
 @pytest.mark.asyncio

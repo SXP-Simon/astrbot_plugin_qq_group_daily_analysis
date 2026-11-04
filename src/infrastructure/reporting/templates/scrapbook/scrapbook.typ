@@ -300,7 +300,7 @@
 #let render(d) = {
   let u=.5pt
   let body=if d.font_language=="zh-Hant" {("Noto Sans TC","Noto Sans SC","Noto Color Emoji")}else{("Noto Sans SC","Noto Sans TC","Noto Color Emoji")}
-  let t=(u:u,body:body,hand:("Patrick Hand","KaiTi","STKaiti","LXGW WenKai",..body))
+  let t=(u:u,body:body,hand:("Patrick Hand","LXGW WenKai",..body))
   set page(width:940*u,height:auto,margin:0pt,fill:bg)
   set text(font:body,size:16*u,fill:ink,lang:"zh",region:if d.font_language=="zh-Hant" {"TW"}else{"CN"},cjk-latin-spacing:none,overhang:false)
   set par(leading:0pt,spacing:0pt)

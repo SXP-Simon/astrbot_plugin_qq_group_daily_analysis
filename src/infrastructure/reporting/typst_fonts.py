@@ -5,10 +5,10 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, TypedDict
 
-import aiohttp
-
 if TYPE_CHECKING:
     from pathlib import Path
+
+import aiohttp
 
 # 字体始终写入插件 data 目录；来源是固定上游，不接受任意下载 URL 或目标路径。
 FONT_SOURCES = {
@@ -36,9 +36,6 @@ FONT_SOURCES = {
     "LXGWWenKai.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKai-Regular.ttf",
     "LXGWWenKai-Medium.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKai-Medium.ttf",
     "LXGWWenKaiMono.ttf": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKaiMono-Regular.ttf",
-    # BlueArchive 使用完整桌面字库，避免编译期间加载网页字体分片。
-    "BlueakaBeta2GBK-DemiBold.ttf": "gh/ApricotLemonTea/BA-style-homepage@d7e9acd5d716d46cee066c59ea323b15f279d217/src/assets/font/BlueakaBeta2GBK-DemiBold.ttf",
-    "BlueakaBeta2GBK-Bold.ttf": "gh/ApricotLemonTea/BA-style-homepage@d7e9acd5d716d46cee066c59ea323b15f279d217/src/assets/font/BlueakaBeta2GBK-Bold.ttf",
 }
 
 BASE_FONTS = (
@@ -93,7 +90,8 @@ THEME_FONTS = {
             "NotoSerifSC.ttf",
             "NotoSerifTC.ttf",
         ),
-        "BlueArchive": ("BlueakaBeta2GBK-DemiBold.ttf", "BlueakaBeta2GBK-Bold.ttf"),
+        # 旧 Blueaka 文件含方正版权声明且缺少明确许可，不再预设下载或主动使用。
+        "BlueArchive": (),
     }.items()
 }
 
@@ -163,7 +161,7 @@ async def download_typst_fonts(
         data_dir: 插件数据根目录。
         cdn_base_url: 当前配置的 CDN 根地址。
         theme: 仅补齐该内置主题的字体；空值下载完整预设。
-        name: Optional preset file for observable per-file download queues.
+        name: 可选的单个预设文件，用于逐文件展示真实下载进度。
 
     Returns:
         下载后的字体状态；已存在的预设不会重复下载。

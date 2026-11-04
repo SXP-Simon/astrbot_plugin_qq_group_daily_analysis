@@ -93,8 +93,8 @@
 
             --radius: 12px;
             {# 未传语言时 _TC_FIRST 等价于原来的地区判断，输出不变 #}
-            --font-main: {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
-            --font-title: 'cjkfonts AllSeto', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
+            --font-main: {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
+            --font-title: {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
             --font-num: 'Outfit', sans-serif;
             --font-mono: 'Share Tech Mono', monospace;
 
@@ -2160,8 +2160,8 @@
        ③ 小标签（统计卡 / 峰值时段）走英文报表惯例的大写 + 字距，信息量不变、视觉更齐整；
        ④ 行高：原 1.8 是给中文调的，拉丁字母 1.62 更耐读（partial 里是内联样式，只能 !important 覆盖）。 */
     :lang(en) {
-        --font-main: 'Inter', 'Outfit', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-        --font-title: 'Outfit', 'Inter', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        --font-main: 'Inter', 'Outfit', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, sans-serif;
+        --font-title: 'Outfit', 'Inter', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, sans-serif;
     }
     :lang(en) h1 { font-weight: 800; letter-spacing: -0.018em; }
     :lang(en) .section-title-text { letter-spacing: -0.011em !important; }

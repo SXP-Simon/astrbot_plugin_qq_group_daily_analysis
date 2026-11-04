@@ -12,24 +12,6 @@
         rel="stylesheet">
     {% endif %}
     <style>
-        @font-face {
-            font-family: "Oswald-Fallback";
-            src: local("Impact"), local("Arial Black"), local("Helvetica Neue Bold");
-            font-weight: 400 700;
-        }
-
-        @font-face {
-            font-family: "JetBrains-Fallback";
-            src: local("Consolas"), local("Monaco"), local("Courier New");
-            font-weight: 400 700;
-        }
-
-        @font-face {
-            font-family: "NotoSans-Fallback";
-            src: local("Microsoft YaHei"), local("PingFang SC"), local("Hiragino Sans GB"), local("SimHei");
-            font-weight: 400 700;
-        }
-
         :root {
             /* Better Palette - More "Industrial Retro" */
             --c-bg: #F8F4E8;
@@ -50,7 +32,7 @@
             --c-scanline: rgba(18, 16, 16, 0.02);
 
             /* Fonts */
-            --font-display: "Oswald", "Oswald-Fallback", Impact, sans-serif;
+            --font-display: "Oswald", sans-serif;
             --font-mono: "JetBrains Mono", monospace;
             --font-body: {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, sans-serif;
         }
