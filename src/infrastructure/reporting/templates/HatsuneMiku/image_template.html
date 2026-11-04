@@ -35,7 +35,7 @@
         href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+JP:wght@400;700&family=Outfit:wght@400;600;800&family=Share+Tech+Mono{# 英文报告才加载 Inter（拉丁正文字体）：中文/繁体报告一个字节都不多下 #}{% if REPORT_LANG == 'en' %}&family=Inter:wght@400;500;600;700{% endif %}&display=swap"
         rel="stylesheet">
     {% endif %}
-    <!-- cjkfonts font-face removed for T2I rendering performance; uses Noto Sans SC fallback -->
+    <!-- 全瀨體保留为标题首选候选；当前不主动下载，未安装时按后续字体回退。 -->
     <!-- 图标已内联为 SVG（11 个），不再依赖 lucide CDN -->
     <style>
         :root {
@@ -55,7 +55,7 @@
             --radius: 12px;
             {# 未传语言时 _TC_FIRST 等价于原来的地区判断，输出不变 #}
             --font-main: {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
-            --font-title: {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Noto Sans CJK TC', 'Source Han Sans TC', cursive;
+            --font-title: 'cjkfonts AllSeto', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Noto Sans CJK TC', 'Source Han Sans TC', cursive;
             --font-num: 'Outfit', sans-serif;
             --font-mono: 'Share Tech Mono', monospace;
 
