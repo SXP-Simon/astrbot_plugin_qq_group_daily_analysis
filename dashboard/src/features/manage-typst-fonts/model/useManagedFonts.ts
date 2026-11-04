@@ -59,8 +59,8 @@ export function useManagedFonts(onChanged: () => void, initialSelection?: FontMa
     try { await action(); success = true; }
     catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : "字体操作失败"); }
     finally {
-      if (mounted.current) { await refresh(); if (mounted.current) { onChanged(); setBusy(false); } }
       operating.current = false;
+      if (mounted.current) { setBusy(false); void refresh(); onChanged(); }
     }
     return success;
   };
@@ -74,6 +74,7 @@ export function useManagedFonts(onChanged: () => void, initialSelection?: FontMa
       setError("该字体预设已变化，请刷新状态后重新上传"); return false;
     }
     if (operating.current) return false;
+    setError(""); setRemoved(null);
     const success = await fontUpload.upload(file, existing?.name || presetName || file.name, existing);
     if (success && !existing && !presetName && mounted.current) setTheme("__all__");
     return success;

@@ -72,10 +72,13 @@ it("按方案选定模板并给出同版来源，上传上游原文件时自动�
   expect(await screen.findByText(preset.upstream_url)).toBeInTheDocument();
   expect(within(row).getByRole("button", { name: "直接下载" })).toBeVisible();
   expect(within(row).queryByRole("link")).not.toBeInTheDocument();
+  fireEvent.change(row.querySelector<HTMLInputElement>("input[type=file]")!, { target: { files: [new File([new Uint8Array(20)], "invalid.png")] } });
+  expect(await screen.findByText("请选择非空的 TTF、OTF 或 TTC 字体文件，最大 32 MiB")).toBeVisible();
   const file = new File([new Uint8Array([0, 1, 0, 0, ...Array(1024).fill(0)])], "LXGWWenKai-Regular.ttf", { type: "font/ttf" });
   fireEvent.change(row.querySelector<HTMLInputElement>("input[type=file]")!, { target: { files: [file] } });
   await waitFor(() => expect(startManagedUpload).toHaveBeenCalledWith(expect.objectContaining({ partition: "typst_fonts", name, operation: "create" })));
   expect(await screen.findByText("已安装 1 / 1 个字体，已就绪")).toBeVisible();
+  expect(screen.queryByText("请选择非空的 TTF、OTF 或 TTC 字体文件，最大 32 MiB")).not.toBeInTheDocument();
   expect(onChanged).toHaveBeenCalled();
   expect(screen.getByRole("combobox", { name: "字体下载 CDN" })).toBeDisabled();
 }, 15000);
