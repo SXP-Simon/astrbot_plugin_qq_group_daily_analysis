@@ -341,10 +341,10 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
               ${stageName}
             </div>
             <div style="font-size: 12px; color: #0d9488; margin-bottom: 2px;">
-              当前进程 RSS: <b style="font-family: monospace;">${curVal.toFixed(1)} MB</b>
+              宿主阶段边界 RSS: <b style="font-family: monospace;">${curVal.toFixed(1)} MiB</b>
             </div>
             <div style="font-size: 11px; color: ${deltaColor};">
-              阶段内存增量: <b>${Number(delta) > 0 ? `+${delta}` : delta} MB</b>
+              宿主 RSS 净变化: <b>${Number(delta) > 0 ? `+${delta}` : delta} MiB</b>
             </div>
           `;
         },
@@ -384,7 +384,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
       },
       series: [
         {
-          name: "内存 RSS",
+          name: "宿主 RSS 采样",
           type: "line",
           smooth: true,
           showSymbol: true,
@@ -413,7 +413,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
           markLine: {
             symbol: ["none", "none"],
             label: {
-              formatter: "峰值: {c} MB",
+              formatter: "宿主采样峰值: {c} MiB",
               position: "insideEndTop",
               fontSize: 10,
               color: isDark ? "#fbbf24" : "#d97706",
@@ -577,7 +577,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
           <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#1e293b" }}>
             全链路性能指标与运行期资源观测
           </Text>
-          <Tooltip title="精准采集各生命周期耗时瀑布、Python 进程 RSS 内存阶梯演进、T2I 渲染链路细分与 Base64 传输体积膨胀比">
+          <Tooltip title="生命周期耗时、阶段边界的宿主 RSS 采样及传输体积。宿主采样不包含 Typst 子进程开销，隔离编译峰值请查看对应编译阶段。">
             <InfoCircleOutlined style={{ color: isDark ? "#8b949e" : "#94a3b8", fontSize: 11, cursor: "pointer" }} />
           </Tooltip>
         </Space>
@@ -613,7 +613,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
                 icon: <ClockCircleOutlined />,
               },
               {
-                label: "内存演进",
+                label: "宿主 RSS 采样",
                 value: "memory",
                 icon: <LineChartOutlined />,
               },
@@ -646,14 +646,14 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
         </span>
         <span style={{ color: isDark ? "#30363d" : "#e2e8f0" }}>|</span>
         <span style={{ fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
-          峰值内存: <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>{perf?.peak_memory_mb ? `${perf.peak_memory_mb.toFixed(1)} MB` : "--"}</b>
+          宿主采样峰值: <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>{perf?.peak_memory_mb ? `${perf.peak_memory_mb.toFixed(1)} MiB` : "--"}</b>
         </span>
         {perf?.delta_memory_mb !== undefined && (
           <Tag
             color={perf.delta_memory_mb > 15 ? "orange" : "default"}
             style={{ margin: 0, padding: "0 4px", fontSize: 10, lineHeight: "16px", height: 16 }}
           >
-            增量: {perf.delta_memory_mb > 0 ? `+${perf.delta_memory_mb.toFixed(1)}` : perf.delta_memory_mb.toFixed(1)} MB
+            宿主净变化: {perf.delta_memory_mb > 0 ? `+${perf.delta_memory_mb.toFixed(1)}` : perf.delta_memory_mb.toFixed(1)} MiB
           </Tag>
         )}
         {hasRetries && (

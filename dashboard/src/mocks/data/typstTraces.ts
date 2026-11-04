@@ -30,7 +30,7 @@ const scenes: Scene[] = [
   { id: "html-native", name: "无 HTML 入口后原生恢复", status: "warning", htmlFirst: true, theme: "custom_native" },
 ];
 
-const workerMetrics = { font_setup_ms: 85, layout_ms: 190, raster_ms: 670, worker_peak_rss_mb: 156.9 };
+const workerMetrics = { font_setup_ms: 85, layout_ms: 190, raster_ms: 670, worker_start_rss_mb: 11.7, worker_peak_rss_mb: 156.9, worker_peak_delta_mb: 145.2, worker_rss_source: "linux_proc_status" };
 const restored = { warning: "后续渲染方案已恢复图片报告" };
 
 function nativeSteps(scene: Scene): Step[] {
@@ -52,13 +52,13 @@ function nativeSteps(scene: Scene): Step[] {
   const compileFailed = scene.recovered;
   steps.push({ stage: "TYPST_COMPILE", ms: compileFailed ? 310 : 945,
     status: scene.status === "aborted" ? "cancelled" : compileFailed ? scene.status === "failed" ? "failed" : "warning" : "success",
-    payload: { template: theme, width: 940, ...(scene.status === "aborted" ? {} : compileFailed ? { font_setup_ms: 85, layout_ms: 190, worker_peak_rss_mb: 103.5 } : workerMetrics),
+    payload: { template: theme, width: 940, ...(scene.status === "aborted" ? {} : compileFailed ? { font_setup_ms: 85, layout_ms: 190, worker_start_rss_mb: 12, worker_peak_rss_mb: 103.5, worker_peak_delta_mb: 91.5, worker_rss_source: "linux_proc_status" } : workerMetrics),
       ...(compileFailed ? scene.status === "failed" ? { error: "主题第 18 行：预期长度，得到字符串" } : { failure_reason: "主题第 18 行：预期长度，得到字符串", warning: scene.fallback ? restored.warning : "主题编译失败，基础排版已恢复完整报告" } : {}),
       ...(scene.status === "aborted" ? { cancelled: true } : {}),
     } });
   if (scene.recovered) steps.push({ stage: "TYPST_RECOVERY", ms: 530,
     status: scene.status === "failed" ? "failed" : scene.fallback ? "warning" : "success",
-    payload: { mode: "basic", reason: "主题类型错误", font_setup_ms: 82, layout_ms: 65, worker_peak_rss_mb: 119.3, ...(!scene.fallback && scene.status !== "failed" ? { raster_ms: 380 } : {}),
+    payload: { mode: "basic", reason: "主题类型错误", font_setup_ms: 82, layout_ms: 65, worker_start_rss_mb: 11.8, worker_peak_rss_mb: 119.3, worker_peak_delta_mb: 107.5, worker_rss_source: "linux_proc_status", ...(!scene.fallback && scene.status !== "failed" ? { raster_ms: 380 } : {}),
       ...(scene.status === "failed" ? { error: "基础恢复也超出本轮编译预算" } : scene.fallback ? { failure_reason: "基础排版编译失败", ...restored } : {}),
     } });
   if (!scene.fallback && scene.status !== "failed" && scene.status !== "aborted") steps.push({ stage: "TYPST_ENCODE", ms: 9, payload: { format: "png", image_bytes: 382910 } });

@@ -4,6 +4,12 @@ import { useTheme } from "../../../shared/lib/useTheme";
 
 export function RenderingStageMetrics({ payload, children }: { payload: Record<string, unknown>; children?: ReactNode }) {
   const { isDark } = useTheme();
+  const ownProcessRss = ["linux_proc_status", "windows_working_set"].includes(String(payload.worker_rss_source));
+  const memoryHints: Record<string, string> = {
+    worker_start_rss_mb: "子进程加载编译器前的 RSS，作为本次编译内存增长的基准。",
+    worker_peak_rss_mb: "隔离进程自身的峰值常驻内存，进程退出后释放，不计入宿主 RSS 净变化。",
+    worker_peak_delta_mb: "子进程峰值减去启动 RSS，表示本次编译的峰值增长，不是结束后的内存泄漏量。",
+  };
   const metrics = [
     ["strategy_name", "方案", ""],
     ["service_type", "引擎", ""],
@@ -22,7 +28,9 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
     ["font_setup_ms", "字体初始化", "ms"],
     ["layout_ms", "布局测量", "ms"],
     ["raster_ms", "栅格导出", "ms"],
-    ["worker_peak_rss_mb", "编译进程峰值", "MiB"],
+    ["worker_start_rss_mb", "子进程启动 RSS", "MiB"],
+    ["worker_peak_rss_mb", "子进程 RSS 峰值", "MiB"],
+    ["worker_peak_delta_mb", "编译峰值增长", "MiB"],
     ["image_bytes", "图片字节", "B"],
   ] as const;
   return (
@@ -30,11 +38,16 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
       {metrics.map(([key, label, unit]) => {
         const value = payload[key];
         if (unit === "" ? typeof value !== "string" || !value.trim() : typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
-        return <MetricPill key={key} isDark={isDark} label={label} value={`${typeof value === "number" ? value.toLocaleString() : String(value)} ${unit}`} status={key.startsWith("missing_") && typeof value === "number" && value > 0 ? "warning" : "default"} />;
+        const metricLabel = key === "worker_peak_rss_mb" && !ownProcessRss ? "进程历史 RSS 峰值" : label;
+        const hint = key === "worker_peak_rss_mb" && !ownProcessRss ? "进程历史峰值可能包含启动时继承的内存，不等于本次隔离编译占用。" : memoryHints[key];
+        return <span key={key} title={hint}><MetricPill isDark={isDark} label={metricLabel} value={`${typeof value === "number" ? value.toLocaleString() : String(value)} ${unit}`} status={key.startsWith("missing_") && typeof value === "number" && value > 0 ? "warning" : "default"} /></span>;
       })}
       {payload.network_budget_exhausted === true && <MetricPill isDark={isDark} label="网络预算" value="已耗尽，保留正文" status="warning" isMono={false} />}
       {payload.mode === "basic" && <MetricPill isDark={isDark} label="恢复方案" value="基础排版" isMono={false} />}
       {children}
+      {typeof payload.worker_peak_rss_mb === "number" && Number.isFinite(payload.worker_peak_rss_mb) && payload.worker_peak_rss_mb >= 0 && <span style={{ flexBasis: "100%", fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
+        {ownProcessRss ? "宿主净变化不含隔离编译开销；子进程结束后释放内存。" : "历史采集口径可能包含启动时继承的内存，不能直接作为本次编译占用。"}
+      </span>}
     </div>
   );
 }

@@ -200,6 +200,7 @@ it("Typst演示覆盖本地缓存、下载、超时、恢复、失败和取消�
   expect(recovered?.status).toBe("warning");
   expect(recovered?.spans?.find(span => span.stage_name === "TYPST_COMPILE")?.status).toBe("warning");
   expect(recovered?.spans?.find(span => span.stage_name === "TYPST_RECOVERY")?.payload?.worker_peak_rss_mb).toBeGreaterThan(0);
+  expect(recovered?.spans?.find(span => span.stage_name === "TYPST_RECOVERY")?.payload).toMatchObject({ worker_rss_source: "linux_proc_status", worker_start_rss_mb: 11.8, worker_peak_delta_mb: 107.5 });
   expect(recovered?.spans?.at(-1)?.stage_name).toBe("DISPATCH_REPORT");
   for (const trace of native.filter(trace => trace.status === "failed" || trace.status === "aborted")) {
     expect(trace.spans?.some(span => span.stage_name === "DISPATCH_REPORT")).toBe(false);

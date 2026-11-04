@@ -19,14 +19,17 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
   const renderMemoryPill = () => {
     if (payload.delta_memory_mb !== undefined && payload.delta_memory_mb !== null) {
       const delta = Number(payload.delta_memory_mb);
+      if (!Number.isFinite(delta)) return null;
       const isIncrease = delta > 0;
       return (
-        <MetricPill
-          isDark={isDark}
-          label="宿主 RSS 变化"
-          value={`${isIncrease ? `+${delta.toFixed(1)}` : delta.toFixed(1)} MiB`}
-          status={delta > 15 ? "warning" : "default"}
-        />
+        <span title="宿主在本阶段结束与开始时的 RSS 差值，不包含隔离的 Typst 子进程，也不是阶段内存峰值。">
+          <MetricPill
+            isDark={isDark}
+            label="宿主 RSS 净变化"
+            value={`${isIncrease ? `+${delta.toFixed(1)}` : delta.toFixed(1)} MiB`}
+            status={delta > 15 ? "warning" : "default"}
+          />
+        </span>
       );
     }
     return null;
