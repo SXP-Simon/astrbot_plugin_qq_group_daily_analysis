@@ -31,7 +31,7 @@ class ManagedFileRoutes:
 
     def __init__(self, report_dir: Path | None = None) -> None:
         self.report_dir = report_dir
-        self._lock = asyncio.Lock()
+        self.mutation_lock = asyncio.Lock()
 
     def store(self) -> ManagedFiles:
         """在请求时获取插件 data 目录，便于插件迁移和测试。"""
@@ -148,7 +148,7 @@ class ManagedFileRoutes:
             if len(encoded) > (MAX_FILE_BYTES + 2) // 3 * 4:
                 raise ValueError("文件不得超过 32 MiB")
             payload = base64.b64decode(encoded, validate=True)
-            async with self._lock:
+            async with self.mutation_lock:
                 await asyncio.to_thread(
                     self.store().mutate,
                     partition,
@@ -198,7 +198,7 @@ class ManagedFileRoutes:
                 raise ValueError("此分区不允许删除文件")
             deleted: list[str] = []
             failed: list[dict[str, str]] = []
-            async with self._lock:
+            async with self.mutation_lock:
                 for name, revision in selected:
                     try:
                         await asyncio.to_thread(

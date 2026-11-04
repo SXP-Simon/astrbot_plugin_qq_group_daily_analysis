@@ -385,3 +385,125 @@ FILE_PATHS["/plugin-data/files/delete-many"] = {
         },
     }
 }
+
+FILE_SCHEMAS["ManagedUploadReceipt"] = {
+    "type": "object",
+    "properties": {
+        "received": {"type": "integer"},
+        "total": {"type": "integer"},
+        "complete": {"type": "boolean"},
+    },
+    "required": ["received", "total", "complete"],
+}
+FILE_PATHS["/plugin-data/files/upload/start"] = {
+    "post": {
+        "operationId": "startManagedFileUpload",
+        "summary": "固定上传目标及大小",
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            **{
+                                name: {"type": "string"}
+                                for name in (
+                                    "download_id",
+                                    "partition",
+                                    "name",
+                                    "operation",
+                                    "revision",
+                                )
+                            },
+                            "total": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 33554432,
+                            },
+                        },
+                        "required": [
+                            "download_id",
+                            "partition",
+                            "name",
+                            "operation",
+                            "total",
+                        ],
+                    }
+                }
+            },
+        },
+        "responses": {
+            "200": {"description": "上传标识回执"},
+            "400": {"description": "目标不合法"},
+            "409": {"description": "已取消"},
+        },
+    }
+}
+FILE_PATHS["/plugin-data/files/upload/{upload_id}/{offset}"] = {
+    "post": {
+        "operationId": "uploadManagedFileChunk",
+        "summary": "接收不超过 1 MiB 的二进制分块",
+        "parameters": [
+            {"in": "path", "name": name, "required": True, "schema": {"type": "string"}}
+            for name in ("upload_id", "offset")
+        ],
+        "requestBody": {
+            "required": True,
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {"file": {"type": "string", "format": "binary"}},
+                        "required": ["file"],
+                    }
+                }
+            },
+        },
+        "responses": {
+            "200": {
+                "description": "服务器已接收的字节数及完整保存状态",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "status": {"type": "string"},
+                                "data": {
+                                    "$ref": "#/components/schemas/ManagedUploadReceipt"
+                                },
+                            },
+                            "required": ["status", "data"],
+                        }
+                    }
+                },
+            },
+            "400": {"description": "上传参数或内容不合法"},
+            "409": {"description": "取消、重复或文件修订冲突"},
+        },
+    }
+}
+FILE_PATHS["/plugin-data/files/upload/cancel"] = {
+    "post": {
+        "operationId": "cancelManagedFileUpload",
+        "summary": "取消上传并清理暂存分块",
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "download_id": {"type": "string", "format": "uuid"}
+                        },
+                        "required": ["download_id"],
+                    }
+                }
+            },
+        },
+        "responses": {
+            "200": {"description": "上传取消已确认"},
+            "400": {"description": "无效标识"},
+        },
+    }
+}

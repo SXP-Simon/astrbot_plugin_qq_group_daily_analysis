@@ -25,6 +25,7 @@ from .routes import (
 from .routes.config_routes import _config_key_to_folder, _sanitize_path_segment
 from .routes.managed_file_routes import ManagedFileRoutes
 from .routes.managed_record_routes import ManagedRecordRoutes
+from .routes.managed_upload_routes import ManagedUploadRoutes
 from .routes.template_resource_routes import TemplateResourceRoutes
 from .web_compat import (
     WebApiResponse,
@@ -121,6 +122,9 @@ class PluginPageWebUIBridge:
             report_output_dir=self.report_output_dir,
         )
         self.managed_file_routes = ManagedFileRoutes(self.report_output_dir)
+        self.managed_upload_routes = ManagedUploadRoutes(
+            self.managed_file_routes, self.downloads
+        )
         self.managed_record_routes = ManagedRecordRoutes(
             self.analysis_service, self.active_task_manager
         )
@@ -128,6 +132,24 @@ class PluginPageWebUIBridge:
     def register_routes(self) -> None:
         """向 AstrBot 注册所有 Web API 端点"""
         routes = [
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/upload/start",
+                self.managed_upload_routes.api_start,
+                ["POST"],
+                "初始化文件上传元数据",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/upload/<upload_id>/<offset>",
+                self.managed_upload_routes.api_upload,
+                ["POST"],
+                "接收二进制文件分块",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/upload/cancel",
+                self.managed_upload_routes.api_cancel,
+                ["POST"],
+                "取消文件上传并清理暂存",
+            ),
             # 1. 活跃任务与控制
             (
                 f"/{PLUGIN_NAME}/tasks/active",

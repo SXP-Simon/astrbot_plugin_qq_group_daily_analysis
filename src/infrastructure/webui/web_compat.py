@@ -5,10 +5,13 @@
 
 from __future__ import annotations
 
+import inspect
 import sys
 from typing import TYPE_CHECKING, Protocol, TypeAlias, runtime_checkable
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from fastapi.responses import FileResponse, JSONResponse, Response
     from starlette.responses import StreamingResponse
 
@@ -59,6 +62,13 @@ except (ImportError, AttributeError):
 
 
 @runtime_checkable
+class UploadedFileMapping(Protocol):
+    """宿主多值文件映射的读取契约。"""
+
+    def items(self) -> Iterable[tuple[str, object]]: ...
+
+
+@runtime_checkable
 class RequestProtocol(Protocol):
     """Web 请求对象结构化契约协议。"""
 
@@ -77,8 +87,7 @@ class RequestProtocol(Protocol):
         """Starlette/FastAPI 查询参数兼容字典。"""
         ...
 
-    @property
-    def files(self) -> dict[str, object]:
+    async def files(self) -> dict[str, object]:
         """上传文件映射字典。"""
         ...
 
@@ -169,17 +178,24 @@ class _RequestProxy:
                 pass
         return {}
 
-    @property
-    def files(self) -> dict[str, object]:
-        """获取上传文件映射字典。"""
+    async def files(self) -> dict[str, object]:
+        """读取宿主异步上传文件，同时兼容旧版文件映射。
+
+        Returns:
+            表单字段名与宿主文件对象；读取错误由上传接口处理。
+        """
         target = self._get_target()
         if target is None:
             return {}
         res = getattr(target, "files", None)
+        if callable(res):
+            res = res()
+        if inspect.isawaitable(res):
+            res = await res
         if res is not None:
             if isinstance(res, dict):
                 return dict(res)
-            if hasattr(res, "items") and not callable(res):
+            if isinstance(res, UploadedFileMapping):
                 return dict(res.items())
         return {}
 
