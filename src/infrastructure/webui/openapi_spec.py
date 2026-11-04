@@ -186,6 +186,83 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                 }
             },
+            "/config/downloads/progress": {
+                "post": {
+                    "summary": "读取当前下载的来源、字节数和等待时长",
+                    "operationId": "getDownloadProgress",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["download_id"],
+                                    "properties": {
+                                        "download_id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                        }
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "当前进度；请求未启动或已结束时为 null",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["status", "data"],
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "type": "object",
+                                                "nullable": True,
+                                                "required": [
+                                                    "name",
+                                                    "url",
+                                                    "received",
+                                                    "total",
+                                                    "phase",
+                                                    "elapsed_seconds",
+                                                    "idle_seconds",
+                                                ],
+                                                "properties": {
+                                                    "name": {"type": "string"},
+                                                    "url": {"type": "string"},
+                                                    "received": {
+                                                        "type": "integer",
+                                                        "minimum": 0,
+                                                    },
+                                                    "total": {
+                                                        "type": "integer",
+                                                        "nullable": True,
+                                                    },
+                                                    "phase": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "connecting",
+                                                            "downloading",
+                                                            "validating",
+                                                        ],
+                                                    },
+                                                    "elapsed_seconds": {
+                                                        "type": "number"
+                                                    },
+                                                    "idle_seconds": {"type": "number"},
+                                                },
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "无效下载标识"},
+                    },
+                },
+            },
             "/config/template-resources": {
                 "get": {
                     "summary": "查询内置主题的本地素材",
@@ -300,11 +377,17 @@ def generate_openapi_spec() -> dict[str, Any]:
                                         "name": {
                                             "type": "string",
                                             "maxLength": 128,
-                                            "description": "Optional preset filename for per-file progress; must belong to the selected theme",
+                                            "description": "逐文件下载的预设文件名，必须属于所选模板",
                                         },
                                         "cdn_base_url": {
                                             "type": "string",
                                             "maxLength": 2048,
+                                        },
+                                        "source": {
+                                            "type": "string",
+                                            "enum": ["cdn", "github"],
+                                            "default": "cdn",
+                                            "description": "CDN 优先（大字库固定来源直连），或全部使用 GitHub Raw",
                                         },
                                         "theme": {
                                             "type": "string",

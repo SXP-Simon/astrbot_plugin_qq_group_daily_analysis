@@ -302,6 +302,12 @@ class PluginPageWebUIBridge:
                 "取消指定字体或模板素材下载并清理临时文件",
             ),
             (
+                f"/{PLUGIN_NAME}/config/downloads/progress",
+                self.downloads.api_progress,
+                ["POST"],
+                "读取下载的实际来源、字节进度与等待时长",
+            ),
+            (
                 f"/{PLUGIN_NAME}/config/template-resources",
                 self.template_resource_routes.api_get_resources,
                 ["GET"],

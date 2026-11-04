@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from ..reporting.typst_fonts import FontDownloadProgress
+
 from .web_compat import WebApiResponse, error_response, json_response, request
 
 
@@ -24,6 +26,53 @@ class DownloadControl:
     def __init__(self) -> None:
         self._active: dict[str, asyncio.Task[object]] = {}
         self._cancelled: dict[str, float] = {}
+        self._progress: dict[str, tuple[FontDownloadProgress, float, float]] = {}
+
+    def update_progress(
+        self, download_id: object, progress: FontDownloadProgress
+    ) -> None:
+        """记录受控下载的最新进度，不保留已结束请求。
+
+        Args:
+            download_id: 已进入 track 的页面请求标识。
+            progress: 固定来源与当前读取字节数。
+        """
+        if isinstance(download_id, str) and download_id in self._active:
+            now = time.monotonic()
+            previous = self._progress.get(download_id)
+            self._progress[download_id] = (
+                progress.copy(),
+                previous[1] if previous else now,
+                now,
+            )
+
+    async def api_progress(self) -> WebApiResponse:
+        """读取一个下载的真实进度与等待时长。
+
+        Returns:
+            进行中的字节进度；尚未启动或已经结束时为 null。
+        """
+        try:
+            body = await request.json()
+            download_id = body.get("download_id") if type(body) is dict else None
+            if (
+                not isinstance(download_id, str)
+                or str(uuid.UUID(download_id)) != download_id
+            ):
+                raise ValueError("下载标识无效")
+        except (ValueError, TypeError):
+            return error_response("下载标识无效，请刷新页面重试", status_code=400)
+        snapshot = self._progress.get(download_id)
+        data = None
+        if snapshot:
+            progress, started, updated = snapshot
+            now = time.monotonic()
+            data = {
+                **progress,
+                "elapsed_seconds": round(now - started, 1),
+                "idle_seconds": round(now - updated, 1),
+            }
+        return json_response({"status": "ok", "data": data})
 
     @asynccontextmanager
     async def track(self, download_id: object) -> AsyncIterator[None]:
@@ -67,6 +116,7 @@ class DownloadControl:
             raise
         finally:
             self._active.pop(download_id, None)
+            self._progress.pop(download_id, None)
 
     async def api_cancel(self) -> WebApiResponse:
         """停止一个页面拥有的下载，等待其连接关闭和临时文件清理。

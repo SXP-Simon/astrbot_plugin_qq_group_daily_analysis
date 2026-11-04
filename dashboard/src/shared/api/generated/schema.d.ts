@@ -175,6 +175,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/config/downloads/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 读取当前下载的来源、字节数和等待时长 */
+        post: operations["getDownloadProgress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config/template-resources": {
         parameters: {
             query?: never;
@@ -1649,6 +1666,52 @@ export interface operations {
             };
         };
     };
+    getDownloadProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    download_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 当前进度；请求未启动或已结束时为 null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            name: string;
+                            url: string;
+                            received: number;
+                            total: number | null;
+                            /** @enum {string} */
+                            phase: "connecting" | "downloading" | "validating";
+                            elapsed_seconds: number;
+                            idle_seconds: number;
+                        } | null;
+                    };
+                };
+            };
+            /** @description 无效下载标识 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getTemplateResources: {
         parameters: {
             query?: never;
@@ -1755,9 +1818,15 @@ export interface operations {
                 "application/json": {
                     /** Format: uuid */
                     download_id?: string;
-                    /** @description Optional preset filename for per-file progress; must belong to the selected theme */
+                    /** @description 逐文件下载的预设文件名，必须属于所选模板 */
                     name?: string;
                     cdn_base_url?: string;
+                    /**
+                     * @description CDN 优先（大字库固定来源直连），或全部使用 GitHub Raw
+                     * @default cdn
+                     * @enum {string}
+                     */
+                    source?: "cdn" | "github";
                     /** @description 内置模板名称；省略则下载全部预设字体 */
                     theme?: string;
                 };

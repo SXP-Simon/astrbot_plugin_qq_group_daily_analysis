@@ -265,7 +265,14 @@ class ConfigRoutes:
             raw_cdn = body.get("cdn_base_url", DEFAULT_CDN_HOST)
             if not isinstance(raw_cdn, str):
                 raise ValueError("CDN 必须是字符串")
-            cdn = normalize_cdn_base_url(raw_cdn)
+            source = body.get("source", "cdn")
+            if source not in ("cdn", "github"):
+                raise ValueError("未知字体下载来源")
+            cdn = (
+                DEFAULT_CDN_HOST
+                if source == "github"
+                else normalize_cdn_base_url(raw_cdn or DEFAULT_CDN_HOST)
+            )
             theme = body.get("theme")
             if theme is not None and (
                 not isinstance(theme, str) or theme not in THEME_FONTS
@@ -276,28 +283,35 @@ class ConfigRoutes:
             if name is not None and (not isinstance(name, str) or name not in allowed):
                 raise ValueError("请选择所选模板使用的预设字体")
         except (ValueError, TypeError):
-            return error_response("请选择有效的模板和字体下载 CDN", status_code=400)
+            return error_response("请选择有效的模板、字体和下载来源", status_code=400)
         if self._typst_font_lock.locked():
             return error_response("字体正在下载，请等待完成后刷新", status_code=409)
         try:
             async with (
                 self.downloads.track(body.get("download_id")),
                 self._typst_font_lock,
-                asyncio.timeout(180),
             ):
                 status = await download_typst_fonts(
                     Path(StarTools.get_data_dir(PLUGIN_NAME)),
                     cdn or DEFAULT_CDN_HOST,
                     theme=theme,
                     name=name,
+                    source=source,
+                    on_progress=lambda value: self.downloads.update_progress(
+                        body.get("download_id"), value
+                    ),
                 )
             return json_response({"status": "ok", "data": status})
         except DownloadCancelled:
             return error_response("下载已取消，已完成的字体会保留", status_code=409)
-        except Exception:
-            logger.warning("Typst 字体下载未完成，已下载文件保留，可更换 CDN 后重试")
+        except ValueError as exc:
+            logger.warning(f"Typst 字体下载未完成：{exc}")
+            return error_response(str(exc), status_code=502)
+        except Exception as exc:
+            logger.warning(f"Typst 字体下载未完成：{type(exc).__name__}: {exc}")
             return error_response(
-                "字体下载未完成，请检查 CDN 后重试；已下载的字体会保留", status_code=502
+                "字体下载未完成，请检查插件服务器网络、代理与目录写入权限；已下载的字体会保留",
+                status_code=502,
             )
 
     async def api_get_config(self) -> WebApiResponse:

@@ -2,7 +2,7 @@
 
 import asyncio
 from io import BytesIO
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import pytest
 from PIL import Image
@@ -28,25 +28,26 @@ async def test_typst_probe_uses_plugin_data_and_no_host(probe, tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_font_download_is_serialized_and_uses_managed_directory(probe, tmp_path, monkeypatch):
+@pytest.mark.parametrize("source", ["cdn", "github"])
+async def test_font_download_is_serialized_and_uses_managed_directory(probe, tmp_path, monkeypatch, source):
     routes, request, _ = probe
     monkeypatch.setattr(config_routes.StarTools, "get_data_dir", lambda name: tmp_path)
     entered, finish = asyncio.Event(), asyncio.Event()
     calls = []
-    async def download(directory, cdn, theme=None, *, name=None):
-        calls.append((directory, cdn, theme))
+    async def download(directory, cdn, theme=None, *, name=None, source="cdn", on_progress=None):
+        calls.append((directory, cdn, theme, source))
         entered.set()
         await finish.wait()
         return {"directory": str(directory / "typst/fonts"), "files": ["Noto.ttf"], "missing": [], "ready": True}
     monkeypatch.setattr(config_routes, "download_typst_fonts", download)
-    request.json.return_value = {"cdn_base_url": "https://cdn.jsdelivr.net/", "path": "/not/allowed"}
+    request.json.return_value = {"cdn_base_url": "invalid" if source == "github" else "https://cdn.jsdelivr.net/", "source": source, "path": "/not/allowed"}
     task = asyncio.create_task(routes.api_download_typst_fonts())
-    await entered.wait()
+    await asyncio.wait_for(entered.wait(), 5)
     duplicate = await routes.api_download_typst_fonts()
     assert duplicate["status_code"] == 409
     finish.set()
     assert (await task)["data"]["data"]["ready"] is True
-    assert calls == [(tmp_path, "https://cdn.jsdelivr.net", None)]
+    assert calls == [(tmp_path, config_routes.DEFAULT_CDN_HOST if source == "github" else "https://cdn.jsdelivr.net", None, source)]
 
 
 @pytest.mark.asyncio
@@ -98,7 +99,7 @@ async def test_font_download_selects_only_known_theme(probe, tmp_path, monkeypat
     request.json.return_value = {"cdn_base_url": "https://cdn.jsdelivr.net", "theme": theme}
     result = await routes.api_download_typst_fonts()
     if valid:
-        download.assert_awaited_once_with(tmp_path, "https://cdn.jsdelivr.net", theme=theme, name=None)
+        download.assert_awaited_once_with(tmp_path, "https://cdn.jsdelivr.net", theme=theme, name=None, source="cdn", on_progress=ANY)
     else:
         assert result["status_code"] == 400
         download.assert_not_called()
@@ -114,7 +115,7 @@ async def test_font_file_route_validates_theme_membership(probe, tmp_path, monke
     request.json.return_value = {"cdn_base_url": "https://cdn.jsdelivr.net", "theme": "HatsuneMiku", "name": name}
     result = await routes.api_download_typst_fonts()
     if valid:
-        download.assert_awaited_once_with(tmp_path, "https://cdn.jsdelivr.net", theme="HatsuneMiku", name=name)
+        download.assert_awaited_once_with(tmp_path, "https://cdn.jsdelivr.net", theme="HatsuneMiku", name=name, source="cdn", on_progress=ANY)
     else:
         assert result["status_code"] == 400
         download.assert_not_called()

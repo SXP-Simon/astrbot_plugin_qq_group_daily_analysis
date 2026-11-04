@@ -34,6 +34,7 @@ async def test_cancel_closes_stream_and_removes_partial_file(
     manager, request = control
     release = asyncio.Event()
     connected = asyncio.Event()
+    progressed = asyncio.Event()
 
     async def stream(request):
         response = web.StreamResponse()
@@ -64,7 +65,11 @@ async def test_cancel_closes_stream_and_removes_partial_file(
         try:
             async with manager.track(download_id), aiohttp.ClientSession() as session:
                 if kind == "font":
-                    await typst_fonts._download_font(session, base, target)
+                    def report(value):
+                        manager.update_progress(download_id, value)
+                        if value["received"]:
+                            progressed.set()
+                    await typst_fonts._download_font(session, base, target, report)
                 else:
                     await template_resources.TemplateResourceStore(
                         tmp_path, base
@@ -75,12 +80,21 @@ async def test_cancel_closes_stream_and_removes_partial_file(
     task = asyncio.create_task(download())
     try:
         await asyncio.wait_for(connected.wait(), 5)
+        if kind == "font":
+            # 服务端仍挂起时，应已能看到首块数据；总大小未知时不得编造百分比。
+            await asyncio.wait_for(progressed.wait(), 5)
+            progress = (await manager.api_progress())["data"]
+            assert progress["received"] > 0
+            assert progress["total"] is None
+            assert progress["phase"] == "downloading"
+            assert progress["url"] == base
         assert (await manager.api_cancel())["data"]["cancelled"] is True
         assert await task == "cancelled"
         assert not target.exists()
         assert not list(tmp_path.rglob("*.part"))
         assert completed.read_bytes() == b"completed"
         assert not manager._active
+        assert (await manager.api_progress())["data"] is None
     finally:
         release.set()
         await runner.cleanup()
