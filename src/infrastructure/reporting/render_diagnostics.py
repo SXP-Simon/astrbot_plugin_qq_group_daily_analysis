@@ -34,6 +34,8 @@ class RenderAttemptRecord(TypedDict, total=False):
     service_type: Literal["astrbot", "custom", "typst"]
     font_mode: FontMode
     resource_environment: str
+    execution_location: str
+    asset_policy: str
     resource_urls: RenderingResourceConfig | None
     render_timeout_ms: int | None
     request_timeout_ms: int | None

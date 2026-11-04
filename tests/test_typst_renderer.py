@@ -96,6 +96,40 @@ def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch, t
     asyncio.run(check())
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("environment", ["Mainland", "Overseas"])
+async def test_native_fonts_and_trace_do_not_inherit_html_environment(native, monkeypatch, environment):
+    from src.infrastructure.reporting import typst_data
+
+    monkeypatch.setattr(typst_data, "resolve_report_language", lambda _: None)
+    native.config_manager.config["t2i_rendering"]["t2i_rendering_strategies"][0]["environment"] = environment
+    fonts = native.data_dir / "typst/fonts"
+    fonts.mkdir(parents=True)
+    (fonts / "test.ttf").write_bytes(b"font")
+    trace = TraceContext(trace_id=f"native-environment-{environment}")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    captured = {}
+
+    async def worker(job, font_dir, timeout, raster_ppi=144):
+        captured.update(json.loads((job / "data.json").read_text(encoding="utf-8")))
+        (job / "report.png").write_bytes(png_bytes())
+
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
+    try:
+        with trace.span("RENDER_REPORT") as parent:
+            assert (await native.generate_image_report(create_analysis_result(), "test", None))[0]
+        attempt = next(span for span in trace._spans if span["stage_name"] == "IMAGE_RENDER_ATTEMPT")
+        record = parent["payload"]["render_attempts"][0]
+        assert captured["font_language"] == captured["language"] == "zh-Hans"
+        for payload in (parent["payload"], attempt["payload"], record):
+            assert "resource_environment" not in payload
+            assert payload["execution_location"] == "本地隔离进程"
+            assert "本地优先" in payload["asset_policy"]
+        assert record["font_mode"] == "local"
+    finally:
+        await native.close()
+
+
 @pytest.mark.parametrize("cancel", [False, True])
 def test_worker_is_dead_before_timeout_or_cancel_returns(tmp_path, monkeypatch, cancel):
     async def check():

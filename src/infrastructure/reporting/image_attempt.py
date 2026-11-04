@@ -1,4 +1,4 @@
-"""Per-attempt strategy snapshot and image rendering telemetry."""
+"""单轮渲染的策略快照与观测信息。"""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class ImageAttempt:
-    """Separate service metadata from screenshot options before dispatch."""
+    """在调用渲染器前分离服务信息与截图参数。"""
 
     index: int
     strategy: RenderingStrategyOptions
@@ -77,6 +77,10 @@ class ImageAttempt:
             "type": str(options.get("type", "jpeg")),
             **self.response,
         }
+        if service == "typst":
+            self.record.pop("resource_environment", None)
+            self.record["execution_location"] = "本地隔离进程"
+            self.record["asset_policy"] = "本地优先，缺失时按方案 CDN 获取"
 
     def finish(self) -> None:
         self.record.update(self.response)
@@ -90,7 +94,7 @@ class ImageAttempt:
 
 
 class ImageRenderTelemetry:
-    """Keep renderer diagnostics out of dispatch and HTML preparation."""
+    """独立维护渲染诊断，不侵入消息投递和 HTML 准备。"""
 
     def __init__(self) -> None:
         self.trace = TraceContext.current()
@@ -126,14 +130,14 @@ class ImageRenderTelemetry:
         image_size: int,
         dimensions: str | None,
     ) -> None:
-        """Publish successful output and retain earlier failures as recovery warnings.
+        """记录成功产物，并将已经恢复的失败保留为告警。
 
         Args:
-            attempt: Successful service attempt.
-            request: Original immutable request.
-            html: Successful HTML cache, unused for native output.
-            image_size: Validated encoded byte count.
-            dimensions: Validated image dimensions.
+            attempt: 最终成功的渲染尝试。
+            request: 不可变的原始报告请求。
+            html: HTML 渲染缓存，原生排版不读取。
+            image_size: 已验证的图片字节数。
+            dimensions: 已验证的成品尺寸。
         """
         if self.trace:
             for span in self.trace._spans[self.start :]:
@@ -160,7 +164,7 @@ class ImageRenderTelemetry:
                 "template": request.theme,
                 "viewport": attempt.viewport,
                 "render_attempt": attempt.index,
-                "resource_environment": attempt.environment,
+                "service_type": attempt.record.get("service_type"),
                 "image_format": str(attempt.options.get("type", "jpeg")),
                 "image_bytes": image_size,
                 "dimensions": dimensions,
@@ -174,7 +178,12 @@ class ImageRenderTelemetry:
                 "hide_user_names": request.identity.hide_names,
             }
         )
-        if not native:
+        if native:
+            self.parent["payload"].pop("resource_environment", None)
+            self.parent["payload"]["execution_location"] = "本地隔离进程"
+            self.parent["payload"]["asset_policy"] = "本地优先，缺失时按方案 CDN 获取"
+        else:
+            self.parent["payload"]["resource_environment"] = attempt.environment
             self.parent["payload"]["avatars_processed"] = (
                 len(html.payload["avatar_reuse_registry"]) if html.payload else 0
             )

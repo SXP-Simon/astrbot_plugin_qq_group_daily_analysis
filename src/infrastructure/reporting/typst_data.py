@@ -93,8 +93,7 @@ class TypstDataPreparer:
         hourly = stats.activity_visualization.hourly_activity
         return {
             "language": language,
-            "font_language": explicit_language
-            or ("zh-Hant" if config.get_t2i_font_source() == "Overseas" else "zh-Hans"),
+            "font_language": language,
             "date": format_report_date(explicit_language, datetime.now()),
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message_count": stats.message_count,
