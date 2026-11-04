@@ -255,7 +255,6 @@ def _collect_peak(
     if pid is not None and (pid <= 0 or sys.platform not in ("win32", "linux")):
         return
     try:
-        current: float | None = None
         if sys.platform == "win32":
             import psutil
 
@@ -264,7 +263,8 @@ def _collect_peak(
             except psutil.Error:
                 return
             peak = info._asdict()["peak_wset"] / 1024**2
-            current = info.rss / 1024**2
+            if baseline:
+                metrics["worker_start_rss_mb"] = round(info.rss / 1024**2, 2)
             source = "windows_working_set"
         elif sys.platform == "linux":
             # ru_maxrss 跨 exec 保留，可能带入 AstrBot 的大内存；VmHWM 属于当前映像。
@@ -278,7 +278,10 @@ def _collect_peak(
                 if line.startswith(("VmHWM:", "VmRSS:"))
             )
             peak = float(fields["VmHWM"].split()[0]) / 1024
-            current = float(fields["VmRSS"].split()[0]) / 1024
+            if baseline:
+                metrics["worker_start_rss_mb"] = round(
+                    float(fields["VmRSS"].split()[0]) / 1024, 2
+                )
             source = "linux_proc_status"
         else:
             import resource
@@ -289,8 +292,6 @@ def _collect_peak(
             source = "posix_getrusage"
         metrics["worker_peak_rss_mb"] = round(peak, 2)
         metrics["worker_rss_source"] = source
-        if baseline and current is not None:
-            metrics["worker_start_rss_mb"] = round(current, 2)
         if "worker_start_rss_mb" in metrics:
             metrics["worker_peak_delta_mb"] = round(
                 max(0.0, peak - metrics["worker_start_rss_mb"]), 2

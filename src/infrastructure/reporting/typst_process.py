@@ -6,7 +6,6 @@ import asyncio
 import json
 import math
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -129,6 +128,11 @@ async def _execute_typst_worker(
     deadline = asyncio.get_running_loop().time() + timeout_seconds
     if timeout_seconds <= 0:
         raise TypstWorkerTimeoutError("Typst 编译预算已耗尽，未启动新进程", None)
+    creationflags = 0
+    if os.name == "nt":
+        import subprocess
+
+        creationflags = subprocess.CREATE_NO_WINDOW
     process = await asyncio.create_subprocess_exec(
         sys.executable,
         "-I",
@@ -142,7 +146,7 @@ async def _execute_typst_worker(
         if collect_metrics
         else asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.PIPE,
-        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        creationflags=creationflags,
     )
     communication = asyncio.create_task(process.communicate())
     try:
