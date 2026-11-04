@@ -10,6 +10,25 @@ import configSchema from "../../../../_conf_schema.json";
 import { mockPluginConfig } from "../data/configs";
 import { mockCheckpoints } from "../data/pluginData";
 import { extractData } from "../../shared/api/bridge";
+import { mockActiveTasks } from "../data/tasks";
+
+it("手动触发的 Mock 任务进入活跃列表，中止后历史记录收敛为已中止", () => {
+  const response = mockHandlers["POST tasks/trigger"]({ group_id: "QQ_OPENID", group_name: "取消测试群", platform: "qq_official_main" });
+  const traceId = response.data!.trace_id;
+  try {
+    expect(mockActiveTasks.some(task => task.task_id === traceId && task.trigger_type === "web_ui")).toBe(true);
+    expect(mockHandlers["POST tasks/cancel"]({ task_id: traceId }).status).toBe("ok");
+    expect(mockActiveTasks.some(task => task.task_id === traceId)).toBe(false);
+    expect(mockTraces.find(trace => trace.trace_id === traceId)).toMatchObject({ status: "aborted", error_message: "由 WebUI 手动取消任务" });
+    expect(mockHandlers["POST tasks/cancel"]({ task_id: traceId }).status).toBe("error");
+    expect(mockHandlers["POST tasks/cancel"]({ task_id: "missing-task" }).status).toBe("error");
+  } finally {
+    const index = mockTraces.findIndex(trace => trace.trace_id === traceId);
+    if (index >= 0) mockTraces.splice(index, 1);
+    const activeIndex = mockActiveTasks.findIndex(task => task.task_id === traceId);
+    if (activeIndex >= 0) mockActiveTasks.splice(activeIndex, 1);
+  }
+});
 
 it("快照 Mock 按请求身份读取真实 data 结构，并拒绝缺失或不匹配的身份", () => {
   const item = mockCheckpoints.items[1];
@@ -145,10 +164,9 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
     expect(comicTrace?.spans?.some((s) => s.stage_name === "comic_generation")).toBe(true);
   });
 
-  it("应当支持手动触发分析任务并返回排队 Trace ID", () => {
+  it("手动触发未指定群聊时拒绝创建 Mock 任务", () => {
     const res = mockHandlers["POST tasks/trigger"]();
-    expect(res.status).toBe("ok");
-    expect(res.data?.trace_id).toBeDefined();
+    expect(res.status).toBe("error");
   });
 
   it("应当返回可用的海报视觉主题模板列表", () => {

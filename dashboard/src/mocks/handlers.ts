@@ -12,6 +12,7 @@ import { configMockHandlers, mockPluginConfig, mockProviders, mockPersonas } fro
 import { mockPluginLogs } from "./data/logs";
 import { mockConfigBackups } from "./data/configBackups";
 import { mockGroups } from "./data/groups";
+import { mockSSEService } from "./sseMock";
 import { TAG_STYLE_MAP } from "../entities/log/model/types";
 import type { AvailableTag } from "../entities/log/model/types";
 import {
@@ -108,11 +109,39 @@ export const mockHandlers = {
   // 2. 活跃任务与控制
   "GET tasks/active": () => ({ status: "ok", data: mockActiveTasks }),
   "GET platforms": () => ({ status: "ok", data: mockConnectedPlatforms }),
-  "POST tasks/trigger": () => ({
-    status: "ok",
-    data: { trace_id: `trace-manual-${Date.now()}`, message: "任务已成功提交排队" },
-  }),
-  "POST tasks/cancel": () => ({ status: "ok", data: { success: true } }),
+  "POST tasks/trigger": (body?: Record<string, unknown>) => {
+    if (typeof body?.group_id !== "string" || !body.group_id.trim()) return { status: "error", message: "请选择要分析的群聊" };
+    const now = Date.now() / 1000;
+    const task = {
+      task_id: `trace-manual-${crypto.randomUUID()}`, group_id: body.group_id,
+      group_name: typeof body.group_name === "string" ? body.group_name : body.group_id,
+      platform: typeof body.platform === "string" ? body.platform : "auto", trigger_type: "web_ui",
+      current_stage: "FETCH_MESSAGES", started_at: now, duration_s: 0, last_heartbeat: now,
+    };
+    mockActiveTasks.unshift(task);
+    mockTraces.unshift({ ...task, trace_id: task.task_id, status: "running", duration_ms: null, spans: [] });
+    mockSSEService.emitManualEvent({ event: "task_started", data: task });
+    return { status: "ok", data: { trace_id: task.task_id, message: "任务已成功提交排队" } };
+  },
+  "POST tasks/cancel": (body?: Record<string, unknown>) => {
+    const index = mockActiveTasks.findIndex(task => task.task_id === body?.task_id);
+    if (index < 0) return { status: "error", message: "任务不存在或已经结束，请刷新后确认" };
+    const [task] = mockActiveTasks.splice(index, 1);
+    const trace = mockTraces.find(item => item.trace_id === task.task_id);
+    if (trace) {
+      const completedAt = Date.now() / 1000;
+      trace.status = "aborted";
+      trace.completed_at = completedAt;
+      trace.duration_ms = Math.max(0, (completedAt - trace.started_at) * 1000);
+      trace.error_message = "由 WebUI 手动取消任务";
+      trace.spans?.filter(span => span.status === "running").forEach(span => {
+        span.status = "aborted";
+        span.duration_ms = Math.max(0, (completedAt - span.started_at) * 1000);
+      });
+    }
+    mockSSEService.emitManualEvent({ event: "task_canceled", data: { task_id: task.task_id } });
+    return { status: "ok", data: { success: true } };
+  },
   "POST tasks/:traceId/resume": () => ({
     status: "ok",
     data: { trace_id: `trace-resume-${Date.now()}`, message: "任务恢复执行成功" },
