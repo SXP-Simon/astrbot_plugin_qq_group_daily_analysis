@@ -3,11 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { ConfigProvider } from "antd";
 import { FontManager } from "../../../../../features/manage-typst-fonts/ui/FontManager";
 import { downloadTypstFonts, fetchTypstFonts } from "../../../../../entities/config/api/configApi";
-import { deleteManagedFiles, fetchManagedContent, fetchManagedFiles, mutateManagedFile, type ManagedFile } from "../../../../../entities/plugin-data/api/managedFilesApi";
+import { deleteManagedFiles, fetchManagedContent, fetchManagedFiles, mutateManagedFile, startManagedUpload, uploadManagedChunk, type ManagedFile } from "../../../../../entities/plugin-data/api/managedFilesApi";
 import { mockFontPresets } from "../../../../../mocks/data/fontPresets";
 
 vi.mock("../../../../../entities/config/api/configApi", () => ({ downloadTypstFonts: vi.fn(), fetchTypstFonts: vi.fn() }));
-vi.mock("../../../../../entities/plugin-data/api/managedFilesApi", () => ({ deleteManagedFiles: vi.fn(), fetchManagedContent: vi.fn(), fetchManagedFiles: vi.fn(), mutateManagedFile: vi.fn() }));
+vi.mock("../../../../../entities/plugin-data/api/managedFilesApi", () => ({ deleteManagedFiles: vi.fn(), fetchManagedContent: vi.fn(), fetchManagedFiles: vi.fn(), mutateManagedFile: vi.fn(), uploadManagedChunk: vi.fn(), startManagedUpload: vi.fn() }));
 let files: ManagedFile[];
 const metadata = (name: string): ManagedFile => ({ name, size_bytes: 1024, modified_at: 1, media_type: "font/ttf", downloadable: true, editable: false, revision: `stat:${name}` });
 const required = ["NotoSansSC.ttf", "Inter.ttf"];
@@ -62,7 +62,7 @@ it("按方案选定模板并给出同版来源，上传上游原文件时自动�
     directory: "/plugin/typst/fonts", files: files.map(file => file.name), missing: files.some(file => file.name === name) ? [] : [name], ready: files.some(file => file.name === name), presets: [preset],
     groups: [{ theme: "ATRI", required: [name], missing: files.some(file => file.name === name) ? [] : [name], ready: files.some(file => file.name === name) }],
   }));
-  vi.mocked(mutateManagedFile).mockImplementation(async input => { files.push(metadata(input.name)); });
+  vi.mocked(uploadManagedChunk).mockImplementation(async (file) => { files.push(metadata(name)); return { received: file.size, total: file.size, complete: true }; });
   const onChanged = vi.fn();
   render(<ConfigProvider theme={{ token: { motion: false } }}><FontManager onChanged={onChanged} initialSelection={{ theme: "ATRI", cdnBaseUrl: "https://cdn.jsdelivr.net", source: "github" }} /></ConfigProvider>);
   await screen.findByText("已安装 0 / 1 个字体，缺少 1 个");
@@ -74,7 +74,7 @@ it("按方案选定模板并给出同版来源，上传上游原文件时自动�
   expect(within(row).queryByRole("link")).not.toBeInTheDocument();
   const file = new File([new Uint8Array([0, 1, 0, 0, ...Array(1024).fill(0)])], "LXGWWenKai-Regular.ttf", { type: "font/ttf" });
   fireEvent.change(row.querySelector<HTMLInputElement>("input[type=file]")!, { target: { files: [file] } });
-  await waitFor(() => expect(mutateManagedFile).toHaveBeenCalledWith(expect.objectContaining({ partition: "typst_fonts", name, operation: "create" })));
+  await waitFor(() => expect(startManagedUpload).toHaveBeenCalledWith(expect.objectContaining({ partition: "typst_fonts", name, operation: "create" })));
   expect(await screen.findByText("已安装 1 / 1 个字体，已就绪")).toBeVisible();
   expect(onChanged).toHaveBeenCalled();
   expect(screen.getByRole("combobox", { name: "字体下载 CDN" })).toBeDisabled();

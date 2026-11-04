@@ -33,8 +33,48 @@ export interface MockHandlerResponse<T = unknown> {
 }
 
 const cancelledDownloads = new Set<string>();
+const mockUploads = new Map<string, { name: string; partition: string; total: number; received: number; operation: string; revision: string }>();
+const cancelledUploads = new Set<string>();
 
 export const mockHandlers = {
+  "POST plugin-data/files/upload/start": (body?: Record<string, unknown>) => {
+    const id = String(body?.download_id || ""), name = String(body?.name || ""), total = Number(body?.total);
+    if (cancelledUploads.has(id)) return { status: "error", message: "上传已取消" };
+    if (!id || !name || mockUploads.has(id) || !Number.isInteger(total) || total <= 0 || total > 32 * 1024 * 1024) return { status: "error", message: "上传参数无效" };
+    mockUploads.set(id, { name, partition: String(body?.partition), total, received: 0, operation: String(body?.operation), revision: String(body?.revision || "") });
+    return { status: "ok", data: { upload_id: id } };
+  },
+  "POST plugin-data/files/upload": (body?: Record<string, unknown>) => {
+    const id = String(body?.download_id || "");
+    const offset = Number(body?.offset), bytes = Number(body?.chunk_bytes);
+    if (cancelledUploads.has(id)) return { status: "error", message: "上传已取消" };
+    const current = mockUploads.get(id);
+    if (!current || bytes <= 0 || bytes > 1024 * 1024 || offset !== current.received || offset + bytes > current.total) return { status: "error", message: "上传分块不匹配" };
+    const { name, total } = current;
+    current.received += bytes;
+    mockUploads.set(id, current);
+    const complete = current.received === total;
+    if (complete) {
+      const saved = managedMockFiles.get(current.partition)?.get(name);
+      if (current.operation === "create" ? !!saved : !saved || current.revision !== saved.revision) { mockUploads.delete(id); return { status: "error", message: "文件已变更或目标已存在，请刷新" }; }
+      putManagedMockFile(current.partition, name, null, "AAEAAAAA");
+      mockUploads.delete(id);
+      if (current.partition === "typst_fonts") {
+        mockTypstFonts.files = [...new Set([...mockTypstFonts.files, name])];
+        mockTypstFonts.missing = mockTypstFonts.missing.filter(file => file !== name);
+        mockTypstFonts.ready = !mockTypstFonts.missing.length;
+        mockTypstFonts.groups?.forEach(group => { group.missing = group.required.filter(file => !mockTypstFonts.files.includes(file)); group.ready = !group.missing.length; });
+      }
+    }
+    return { status: "ok", data: { received: current.received, total, complete } };
+  },
+  "POST plugin-data/files/upload/cancel": (body?: Record<string, unknown>) => {
+    const id = String(body?.download_id || "");
+    if (!id) return { status: "error", message: "上传标识无效" };
+    if (cancelledUploads.size >= 1024) cancelledUploads.clear();
+    cancelledUploads.add(id); mockUploads.delete(id);
+    return { status: "ok", data: { download_id: id, cancelled: true } };
+  },
   "POST config/downloads/cancel": (body?: Record<string, unknown>) => {
     if (typeof body?.download_id !== "string") return { status: "error", message: "下载标识无效" };
     if (cancelledDownloads.size >= 1024) cancelledDownloads.clear();

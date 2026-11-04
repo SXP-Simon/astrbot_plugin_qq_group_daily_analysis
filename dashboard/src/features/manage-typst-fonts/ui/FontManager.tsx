@@ -1,4 +1,5 @@
 import { FontDownloadProgress } from "./FontDownloadProgress";
+import { FontUploadProgress } from "./FontUploadProgress";
 import { useContext, useState } from "react";
 import { Alert, Button, Input, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography, Upload } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
@@ -18,7 +19,7 @@ export function FontManager({ onChanged, initialSelection }: { onChanged: () => 
   const browserDownload = useBrowserFontDownload();
   const [cdn, setCdn] = useState(initialSelection?.cdnBaseUrl || DEFAULT_TEMPLATE_CDN_BASE_URL);
   const [replacement, setReplacement] = useState<{ file: File; existing: ManagedFontRow } | null>(null);
-  const disabled = vm.loading || vm.busy;
+  const disabled = vm.busy;
   const themeName = (key: string) => KNOWN_TEMPLATES.find(item => item.key === key)?.name || key;
   const selectedFiles = vm.files.filter(file => vm.selected.includes(file.name));
   const affected = vm.groups.filter(group => selectedFiles.some(file => group.required.includes(file.name)));
@@ -29,13 +30,14 @@ export function FontManager({ onChanged, initialSelection }: { onChanged: () => 
       <Select aria-label="管理字体的模板" value={vm.theme} disabled={disabled} style={{ minWidth: 260 }} onChange={vm.selectTheme} options={[{ value: "__all__", label: "全部预设与自定义字体" }, ...vm.groups.map(group => ({ value: group.theme, label: themeName(group.theme) }))]} />
       <Select aria-label="字体下载来源" value={vm.downloadQueue.source} disabled={disabled} options={FONT_DOWNLOAD_SOURCES} onChange={vm.downloadQueue.setSource} style={{ width: 300, maxWidth: "100%" }} />
       <Select aria-label="字体下载 CDN" value={cdn} disabled={disabled || vm.downloadQueue.source === "github"} options={TEMPLATE_CDN_PRESETS} onChange={setCdn} style={{ width: 350, maxWidth: "100%" }} />
-      <Button type="primary" disabled={disabled || !vm.status || !vm.missing} loading={vm.busy} onClick={() => void vm.download(cdn)}>{vm.theme === "__all__" ? "补齐全部预设字体" : "补齐所选模板字体"}</Button>
+      <Button type="primary" disabled={disabled || !vm.status || !vm.missing} loading={vm.downloadQueue.running} onClick={() => void vm.download(cdn)}>{vm.theme === "__all__" ? "补齐全部预设字体" : "补齐所选模板字体"}</Button>
       <Button disabled={vm.busy} loading={vm.loading} onClick={() => void vm.refresh()}>刷新字体状态</Button>
     </Space>
     {vm.status && <Alert type={vm.missing ? "info" : "success"} showIcon message={`已安装 ${vm.installed} / ${vm.required} 个字体${vm.missing ? `，缺少 ${vm.missing} 个` : "，已就绪"}`} />}
     <Typography.Text type="secondary">预设字体采用 <ExternalLink href="https://openfontlicense.org/open-font-license-official-text/">SIL OFL 1.1</ExternalLink>，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。</Typography.Text>
     {(vm.downloadQueue.error || vm.downloadQueue.progress.total > 0) && <FontDownloadProgress download={vm.downloadQueue} />}
     <BrowserFontDownloadProgress download={browserDownload} />
+    <FontUploadProgress upload={vm.fontUpload} />
     {vm.error && <Alert type="error" showIcon message={vm.error} />}
     <Space wrap>
       <Input.Search aria-label="搜索字体" placeholder="搜索字体文件名" allowClear onSearch={vm.searchFonts} disabled={disabled} style={{ width: 250 }} />

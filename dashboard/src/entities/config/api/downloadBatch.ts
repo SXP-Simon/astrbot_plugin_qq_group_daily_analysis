@@ -5,6 +5,8 @@ export class DownloadBatch {
   stopped = false;
   private active = new Set<string>();
 
+  constructor(private cancelEndpoint = "config/downloads/cancel") {}
+
   async run<T>(download: (id: string) => Promise<T>): Promise<T> {
     // getRandomValues 在普通 HTTP 的宿主 WebUI 也可用，randomUUID 需要安全上下文。
     const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -20,12 +22,18 @@ export class DownloadBatch {
   async cancel(): Promise<void> {
     this.stopped = true;
     const results = await Promise.allSettled([...this.active].map(async download_id => {
-      const response = await apiPost("config/downloads/cancel", { download_id });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let response: unknown;
+      try {
+        response = await Promise.race([apiPost(this.cancelEndpoint, { download_id }), new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("取消请求超过 10 秒未收到回执")), 10_000);
+        })]);
+      } finally { clearTimeout(timer); }
       const data = extractData<{ download_id?: string; cancelled?: boolean }>(response);
       if (data?.download_id !== download_id || data.cancelled !== true) throw new Error("未收到取消回执");
     }));
     if (results.some(result => result.status === "rejected")) {
-      throw new Error("队列已停止，但部分下载的取消尚未确认，请重试取消或等待当前请求结束。");
+      throw new Error("已停止后续传输，但部分请求的取消尚未确认，请重试取消或等待当前请求结束。");
     }
   }
 }

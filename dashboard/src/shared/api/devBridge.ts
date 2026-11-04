@@ -144,6 +144,20 @@ export async function devApiPost<T = unknown>(
   return res as ApiResponse<T>;
 }
 
+/** 开发环境保持二进制分块传输，与宿主上传的请求形态一致。 */
+export async function devApiUpload(path: string, file: File): Promise<unknown> {
+  if (getDevBridgeMode() === "proxy") {
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch(`${PLUGIN_BASE_PATH}/${path}`, { method: "POST", body });
+    return await response.json();
+  }
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const matched = /^plugin-data\/files\/upload\/([^/]+)\/(\d+)$/.exec(path);
+  if (!matched) throw new Error("未知上传路径");
+  return matchMockHandler("POST", "plugin-data/files/upload", undefined, { download_id: matched[1], offset: Number(matched[2]), chunk_bytes: file.size });
+}
+
 export function devSubscribeSSE(handlers: {
   onMessage: (event: SSEEventWrapper) => void;
   onError?: () => void;

@@ -12,6 +12,15 @@ import { mockCheckpoints } from "../data/pluginData";
 import { extractData } from "../../shared/api/bridge";
 import { mockActiveTasks } from "../data/tasks";
 
+it("字体上传 Mock 只有末块才发布文件，取消后拒绝迟到分块", () => {
+  const name = "mock-chunk-font.ttf", download_id = "chunk-upload-test";
+  expect(mockHandlers["POST plugin-data/files/upload/start"]({ download_id, partition: "typst_fonts", name, operation: "create", total: 1024 }).status).toBe("ok");
+  expect(mockHandlers["POST plugin-data/files/upload"]({ download_id, offset: 0, chunk_bytes: 512 }).data).toMatchObject({ received: 512, complete: false });
+  expect(mockHandlers["GET plugin-data/files/content"]({ partition: "typst_fonts", name }).status).toBe("error");
+  expect(mockHandlers["POST plugin-data/files/upload/cancel"]({ download_id }).data?.cancelled).toBe(true);
+  expect(mockHandlers["POST plugin-data/files/upload"]({ download_id, offset: 512, chunk_bytes: 512 }).status).toBe("error");
+});
+
 it("手动触发的 Mock 任务进入活跃列表，中止后历史记录收敛为已中止", () => {
   const response = mockHandlers["POST tasks/trigger"]({ group_id: "QQ_OPENID", group_name: "取消测试群", platform: "qq_official_main" });
   const traceId = response.data!.trace_id;

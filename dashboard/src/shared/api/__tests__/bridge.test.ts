@@ -1,9 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { apiGet, apiPost, extractData, fetchContext, subscribeSSE } from "../bridge";
+import { apiGet, apiPost, apiUpload, extractData, fetchContext, subscribeSSE } from "../bridge";
 
 describe("API 通信网桥 (Shared API Bridge)", () => {
   beforeEach(() => {
     delete (window as { AstrBotPluginPage?: unknown }).AstrBotPluginPage;
+  });
+
+  it("二进制上传使用宿主允许的不带查询参数路径并兼容扁平回执", async () => {
+    const upload = vi.fn(async (path: string, file: File) => {
+      expect(path).not.toContain("?");
+      expect(file.size).toBe(20);
+      return { received: 20, total: 20, complete: true };
+    });
+    window.AstrBotPluginPage = { upload } as unknown as NonNullable<Window["AstrBotPluginPage"]>;
+    const file = new File([new Uint8Array(20)], "font.ttf");
+    expect(await apiUpload("plugin-data/files/upload/uuid/0", file)).toMatchObject({ received: 20 });
+    expect(upload).toHaveBeenCalledWith("plugin-data/files/upload/uuid/0", file);
   });
 
   it("当 window 上不存在 AstrBotPluginPage 时，应当平滑降级至本地 devBridge", async () => {

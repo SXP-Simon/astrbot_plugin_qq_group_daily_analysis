@@ -1,6 +1,7 @@
 import {
   devApiGet,
   devApiPost,
+  devApiUpload,
   devFetchContext,
   devSubscribeSSE,
 } from "./devBridge";
@@ -31,6 +32,7 @@ export interface ApiResponse<T = unknown> {
 }
 
 export interface AstrBotPluginPageBridge {
+  upload?: <T = unknown>(path: string, file: File) => Promise<ApiResponse<T> | null>;
   ready: () => Promise<AstrBotContext>;
   onContext?: (callback: (ctx: AstrBotContext) => void) => () => void;
   apiGet: <T = unknown>(
@@ -55,6 +57,28 @@ declare global {
   interface Window {
     AstrBotPluginPage?: AstrBotPluginPageBridge;
   }
+}
+
+/** 使用宿主二进制上传能力，避免大文件膨胀为 Base64 JSON。 */
+export async function apiUpload(path: string, file: File): Promise<unknown> {
+  const bridge = getBridge();
+  let response: unknown;
+  let pending: Promise<unknown>;
+  if (bridge) {
+    if (typeof bridge.upload !== "function") throw new Error("当前宿主不支持二进制文件上传，请升级 AstrBot 后重试。");
+    pending = bridge.upload(path, file);
+  } else if (import.meta.env.DEV) pending = devApiUpload(path, file);
+  else throw new Error("宿主上传接口不可用");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    // 与宿主 files:upload 的 60 秒上限一致；失败后业务层会请求后端取消并清理。
+    response = await Promise.race([pending, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("上传分块超过 60 秒未收到回执，将停止后续传输并清理暂存；请检查到插件服务器的连接。")), 60_000);
+    })]);
+  } finally { clearTimeout(timer); }
+  if (!response) throw new Error("未收到上传回执，请检查连接并刷新文件状态。");
+  extractData(response);
+  return response;
 }
 
 function getBridge(): AstrBotPluginPageBridge | null {
