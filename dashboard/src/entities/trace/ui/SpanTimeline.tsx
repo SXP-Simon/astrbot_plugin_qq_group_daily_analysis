@@ -1,12 +1,15 @@
 import React, { useState } from "react";
-import { Timeline, Typography, Space, theme } from "antd";
+import { Timeline, Typography, Space, theme, type TimelineItemProps } from "antd";
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   SyncOutlined,
   ExclamationCircleOutlined,
+  StopOutlined,
 } from "@ant-design/icons";
 import { TraceSpan } from "../model/types";
+import { resolveSpanOutcome } from "../model/spanOutcome";
+import { buildSpanTree, type SpanTreeNode } from "../model/spanTree";
 import { getStageSlaThreshold } from "../model/sla";
 import { StageMetricsBadges } from "./StageMetricsBadges";
 import { PromptsInspector, PromptDetail } from "./PromptsInspector";
@@ -86,8 +89,10 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
     );
   };
 
-  const items = mergedSpans.map((span, idx) => {
-    const spanKey = span.span_id || `span_${idx}_${span.stage_name}`;
+  const renderSpan = (node: SpanTreeNode, parent?: TraceSpan): TimelineItemProps => {
+    const span = node.span;
+    const parentDuration = parent ? parent.duration_ms ?? Math.max(0, Date.now() - parent.started_at * 1000) : totalDurationMs;
+    const spanKey = span.span_id;
     const isRunning = span.status === "running" && taskStatus === "running";
     const duration =
       span.duration_ms !== null && span.duration_ms !== undefined
@@ -98,21 +103,14 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
 
     const { thresholdMs } = getStageSlaThreshold(span.stage_name);
     const isSlaExceeded = !isRunning && duration > thresholdMs;
-    const isFailed =
-      span.status === "failed" ||
-      span.status === "error" ||
-      Boolean(span.payload?.error);
-
-    const isWarning =
-      !isFailed &&
-      (span.status === "warning" ||
-        span.status === "partial_success" ||
-        span.payload?.success === false ||
-        Boolean(span.payload?.warning) ||
-        (Array.isArray(span.payload?.subtask_errors) && span.payload.subtask_errors.length > 0));
+    const outcome = resolveSpanOutcome(span.status, span.payload);
+    const isFailed = outcome === "failed";
+    const isWarning = outcome === "warning";
 
     let icon = <CheckCircleOutlined style={{ color: "#52c41a" }} />;
-    if (isFailed) {
+    if (outcome === "cancelled") {
+      icon = <StopOutlined style={{ color: token.colorTextDisabled }} />;
+    } else if (isFailed) {
       icon = <CloseCircleOutlined style={{ color: "#ff4d4f" }} />;
     } else if (isRunning) {
       icon = <SyncOutlined spin style={{ color: "#1677ff" }} />;
@@ -147,7 +145,9 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
             stageName={span.stage_name}
             durationMs={span.duration_ms}
             startedAt={span.started_at}
-            totalDurationMs={totalDurationMs}
+            totalDurationMs={parentDuration}
+            parentStageName={parent?.stage_name}
+            hasChildren={node.children.length > 0}
             status={span.status}
             isExpanded={isExpanded}
             onToggleExpand={() => toggleExpand(spanKey)}
@@ -167,7 +167,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
               {/* 各生命周期阶段专属数据标签 */}
               <StageMetricsBadges
                 stageName={span.stage_name}
-                payload={span.payload as Record<string, unknown> | undefined}
+                payload={{ ...span.payload, ...node.typstMemory }}
               />
 
               {/* LLM 调用与重试链路表格 */}
@@ -189,17 +189,21 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
               <SpanPayloadViewer
                 payload={span.payload as Record<string, unknown> | undefined}
               />
+              {node.children.length > 0 && <Timeline
+                items={node.children.map(child => renderSpan(child, span))}
+                style={{ marginTop: 16, paddingLeft: 12 }}
+              />}
             </div>
           )}
         </div>
       ),
     };
-  });
+  };
 
   return (
     <Timeline
       mode="left"
-      items={items}
+      items={buildSpanTree(mergedSpans).map(node => renderSpan(node))}
       style={{ marginTop: 8, paddingLeft: 4 }}
     />
   );

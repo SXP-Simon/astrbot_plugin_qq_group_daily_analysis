@@ -19,7 +19,10 @@ def test_native_resource_selectors_keep_custom_entry_without_legacy_schema_field
         for key in ("cdn_base_url", "google_fonts", "gstatic"):
             assert f"t2i_{environment}_{key}" not in group
     for template_key, template in group["t2i_rendering_strategies"]["templates"].items():
-        for key in ("cdn_base_url", "google_fonts", "gstatic"):
+        if template_key == "typst":
+            assert not {"google_fonts", "gstatic", "custom_google_fonts", "custom_gstatic"} & template["items"].keys()
+        keys = ("cdn_base_url",) if template_key == "typst" else ("cdn_base_url", "google_fonts", "gstatic")
+        for key in keys:
             field = template["items"][key]
             assert field["type"] == "string"
             assert field["default"] in field["options"]
@@ -50,8 +53,10 @@ def test_saved_custom_addresses_are_selectable_in_all_presets_without_duplicates
     templates = schema["t2i_rendering"]["items"]["t2i_rendering_strategies"][
         "templates"
     ]
-    for template in templates.values():
-        for key, address in config["t2i_rendering_strategies"][0].items():
+    for template_key, template in templates.items():
+        keys = ("cdn_base_url",) if template_key == "typst" else ("cdn_base_url", "google_fonts", "gstatic")
+        for key in keys:
+            address = config["t2i_rendering_strategies"][0][key]
             field = template["items"][key]
             assert field["options"].count(address) == 1
             assert (

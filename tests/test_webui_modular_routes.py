@@ -85,6 +85,7 @@ async def test_resume_task_uses_new_trace_and_preserves_terminal_source(
             "group_name": "测试群",
             "platform": "onebot",
             "status": "running",
+            "extra": {"analysis_date": "2026-10-01"},
         }
     )
     TaskLifecycleService(mock_trace_store).transition(
@@ -131,6 +132,7 @@ async def test_resume_task_uses_new_trace_and_preserves_terminal_source(
     assert new_trace_id != "resume-source"
     assert resumed_args[0]["trace_id"] == new_trace_id
     assert resumed_args[0]["checkpoint_trace_id"] == "resume-source"
+    assert resumed_args[0]["date_str"] == "2026-10-01"
     assert mock_trace_store.get_trace("resume-source")["status"] == "failed"
     assert mock_trace_store.get_trace(new_trace_id)["status"] == "running"
     await mock_active_mgr.finish_task(new_trace_id)

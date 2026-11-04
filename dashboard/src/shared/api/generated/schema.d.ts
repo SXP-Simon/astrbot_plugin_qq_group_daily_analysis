@@ -4,6 +4,193 @@
  */
 
 export interface paths {
+    "/plugin-data/partitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getManagedPartitions */
+        get: operations["getManagedPartitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getManagedFiles */
+        get: operations["getManagedFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getManagedFileContent */
+        get: operations["getManagedFileContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files/mutate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** mutateManagedFile */
+        post: operations["mutateManagedFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files/delete-many": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete only selected files with revisions */
+        post: operations["deleteManagedFiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files/upload/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 固定上传目标及大小 */
+        post: operations["startManagedFileUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files/upload/{upload_id}/{offset}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 接收不超过 1 MiB 的二进制分块 */
+        post: operations["uploadManagedFileChunk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/files/upload/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 取消上传并清理暂存分块 */
+        post: operations["cancelManagedFileUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** listManagedRecords */
+        get: operations["listManagedRecords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/records/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getManagedRecord */
+        get: operations["getManagedRecord"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugin-data/records/mutate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** mutateManagedRecord */
+        post: operations["mutateManagedRecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config": {
         parameters: {
             query?: never;
@@ -16,6 +203,108 @@ export interface paths {
         put?: never;
         /** 保存配置，带版本时拒绝覆盖过期快照 */
         post: operations["savePluginConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/downloads/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 取消指定下载，保留已经完成的文件 */
+        post: operations["cancelDownload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/downloads/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 读取当前下载的来源、字节数和等待时长 */
+        post: operations["getDownloadProgress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/template-resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查询内置主题的本地素材 */
+        get: operations["getTemplateResources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/template-resources/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 从选定CDN补齐一个固定素材 */
+        post: operations["downloadTemplateResource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/typst-fonts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取受管理的 Typst 字体状态 */
+        get: operations["getTypstFonts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/typst-fonts/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 按模板或完整预设下载字体到插件自己的 data 目录 */
+        post: operations["downloadTypstFonts"];
         delete?: never;
         options?: never;
         head?: never;
@@ -349,22 +638,147 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ManagedFileGroup: {
+            directory: string;
+            count: number;
+            size_bytes: number;
+        };
+        ManagedPartition: {
+            key: string;
+            name: string;
+            directory: string;
+            description: string;
+            impact: string;
+            writable: boolean;
+            deletable: boolean;
+            count: number;
+            size_bytes: number;
+        };
+        ManagedFile: {
+            name: string;
+            revision: string;
+            size_bytes: number;
+            modified_at: number;
+            media_type: string;
+            editable: boolean;
+            downloadable: boolean;
+        };
+        ManagedFileContent: {
+            name: string;
+            content_base64: string;
+            revision: string;
+            media_type: string;
+            text: string | null;
+        };
+        ManagedFileMutation: {
+            partition: string;
+            name: string;
+            revision?: string;
+            content_base64?: string;
+            new_name?: string;
+            /** @enum {string} */
+            operation: "create" | "replace" | "rename" | "delete";
+        };
+        ManagedFileDeleteMany: {
+            partition: string;
+            files: {
+                name: string;
+                revision: string;
+            }[];
+        };
+        ManagedFileDeleteResult: {
+            deleted: string[];
+            failed: {
+                name: string;
+                message: string;
+            }[];
+        };
+        ManagedUploadReceipt: {
+            received: number;
+            total: number;
+            complete: boolean;
+        };
+        RecordLocator: {
+            kind: string;
+            key?: string;
+            group_id?: string;
+            batch_id?: string;
+            date_str?: string;
+            stage_name?: string;
+            trace_id?: string;
+        };
+        ManagedRecord: {
+            locator: components["schemas"]["RecordLocator"];
+            data: components["schemas"]["BackupJsonValue"];
+            revision: string;
+        };
+        ManagedRecordEntry: {
+            locator: components["schemas"]["RecordLocator"];
+            name: string;
+            size_bytes: number;
+        };
+        ManagedRecordMutation: {
+            locator: components["schemas"]["RecordLocator"];
+            /** @enum {string} */
+            operation: "create" | "replace" | "delete";
+            data?: components["schemas"]["BackupJsonValue"];
+            revision?: string;
+        };
         GroupItem: {
             group_id: string;
             group_name: string;
             platform: string;
+        };
+        TemplateResourceFile: {
+            name: string;
+            available: boolean;
+        };
+        TemplateResourceGroup: {
+            theme: string;
+            files: components["schemas"]["TemplateResourceFile"][];
+        };
+        TemplateResourceStatus: {
+            directory: string;
+            groups: components["schemas"]["TemplateResourceGroup"][];
+        };
+        TypstFontStatus: {
+            presets?: components["schemas"]["TypstFontPreset"][];
+            directory: string;
+            files: string[];
+            missing: string[];
+            ready: boolean;
+            groups?: components["schemas"]["TypstFontGroup"][];
+        };
+        TypstFontGroup: {
+            theme: string;
+            required: string[];
+            missing: string[];
+            ready: boolean;
+        };
+        TypstFontPreset: {
+            name: string;
+            /** Format: uri */
+            download_url: string;
+            /** Format: uri */
+            upstream_url: string;
+            cdn_path: string | null;
         };
         T2iProbeRequest: {
             /**
              * @default custom
              * @enum {string}
              */
-            render_service: "astrbot" | "custom";
+            render_service: "astrbot" | "custom" | "typst";
             group_id?: string;
             platform_id?: string;
             /** @description 自定义方案的服务地址，省略时使用 http://127.0.0.1:8999/text2img */
             service_endpoint?: string;
             service_token?: string;
+            /**
+             * @description Typst 导出密度，版心不变，最高成品宽 1410px
+             * @enum {integer}
+             */
+            raster_ppi?: 144 | 180 | 216;
             /** @default 20000 */
             timeout: number;
             /** @description 自定义方案的请求等待上限，省略时为 40000 毫秒 */
@@ -565,6 +979,7 @@ export interface components {
             can_uninstall?: boolean | null;
             has_image?: boolean | null;
             has_html?: boolean | null;
+            has_typst?: boolean | null;
         };
         PluginLogItem: {
             id: string;
@@ -733,6 +1148,583 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getManagedPartitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            items: components["schemas"]["ManagedPartition"][];
+                        };
+                    };
+                };
+            };
+            /** @description 不支持的操作或非法文件 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件已变更或目标已存在 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 目录读取或文件操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getManagedFiles: {
+        parameters: {
+            query: {
+                partition: string;
+                search?: string;
+                page?: number;
+                page_size?: number;
+                extensions?: string;
+                directory?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            items: components["schemas"]["ManagedFile"][];
+                            total: number;
+                            groups?: components["schemas"]["ManagedFileGroup"][];
+                        };
+                    };
+                };
+            };
+            /** @description 不支持的操作或非法文件 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件已变更或目标已存在 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 目录读取或文件操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getManagedFileContent: {
+        parameters: {
+            query: {
+                partition: string;
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["ManagedFileContent"];
+                    };
+                };
+            };
+            /** @description 不支持的操作或非法文件 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件已变更或目标已存在 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 目录读取或文件操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mutateManagedFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedFileMutation"];
+            };
+        };
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            success: boolean;
+                        };
+                    };
+                };
+            };
+            /** @description 不支持的操作或非法文件 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件已变更或目标已存在 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 目录读取或文件操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteManagedFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedFileDeleteMany"];
+            };
+        };
+        responses: {
+            /** @description 逐项操作结果，允许部分成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["ManagedFileDeleteResult"];
+                    };
+                };
+            };
+            /** @description 非法分区或选择列表 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    startManagedFileUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    download_id: string;
+                    partition: string;
+                    name: string;
+                    operation: string;
+                    revision?: string;
+                    total: number;
+                };
+            };
+        };
+        responses: {
+            /** @description 上传标识回执 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 目标不合法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 已取消 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    uploadManagedFileChunk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+                offset: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 服务器已接收的字节数及完整保存状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["ManagedUploadReceipt"];
+                    };
+                };
+            };
+            /** @description 上传参数或内容不合法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 取消、重复或文件修订冲突 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cancelManagedFileUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    download_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 上传取消已确认 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 无效标识 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listManagedRecords: {
+        parameters: {
+            query: {
+                kind: string;
+                search?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            items: components["schemas"]["ManagedRecordEntry"][];
+                            total: number;
+                        };
+                    };
+                };
+            };
+            /** @description 非法记录或不支持的操作 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录不存在或已过期 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录冲突或群任务正在执行 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储暂不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getManagedRecord: {
+        parameters: {
+            query: {
+                kind: string;
+                key?: string;
+                group_id?: string;
+                batch_id?: string;
+                date_str?: string;
+                stage_name?: string;
+                trace_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["ManagedRecord"];
+                    };
+                };
+            };
+            /** @description 非法记录或不支持的操作 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录不存在或已过期 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录冲突或群任务正在执行 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储暂不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mutateManagedRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedRecordMutation"];
+            };
+        };
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            success: boolean;
+                        };
+                    };
+                };
+            };
+            /** @description 非法记录或不支持的操作 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录不存在或已过期 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 记录冲突或群任务正在执行 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存储暂不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getPluginConfig: {
         parameters: {
             query?: never;
@@ -791,7 +1783,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 配置保存成功，返回新版本供后续保存使用 */
+            /** @description 配置保存成功，返回独立回执与新版本，避免页面桥接解包时丢失版本 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -801,9 +1793,6 @@ export interface operations {
                         /** @constant */
                         status: "ok";
                         message?: string;
-                        data: {
-                            [key: string]: unknown;
-                        };
                         revision: string;
                     };
                 };
@@ -824,6 +1813,241 @@ export interface operations {
             };
             /** @description 配置保存失败 */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cancelDownload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    download_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 取消已确认，网络连接及临时文件已清理 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            download_id: string;
+                            cancelled: boolean;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    getDownloadProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    download_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 当前进度；请求未启动或已结束时为 null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            name: string;
+                            url: string;
+                            received: number;
+                            total: number | null;
+                            /** @enum {string} */
+                            phase: "connecting" | "downloading" | "validating";
+                            elapsed_seconds: number;
+                            idle_seconds: number;
+                        } | null;
+                    };
+                };
+            };
+            /** @description 无效下载标识 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getTemplateResources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 仅查询本地资源，不联网 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: components["schemas"]["TemplateResourceStatus"];
+                    };
+                };
+            };
+        };
+    };
+    downloadTemplateResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    download_id?: string;
+                    name: string;
+                    cdn_base_url: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 素材已就绪，已存在则不联网 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: components["schemas"]["TemplateResourceFile"];
+                    };
+                };
+            };
+            /** @description 非法CDN或不在清单中的资源名 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 下载失败，可切换CDN重试；已有资源保留 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getTypstFonts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 字体状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["TypstFontStatus"];
+                    };
+                };
+            };
+        };
+    };
+    downloadTypstFonts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    download_id?: string;
+                    /** @description 逐文件下载的预设文件名，必须属于所选模板 */
+                    name?: string;
+                    cdn_base_url?: string;
+                    /**
+                     * @description CDN 优先（大字库固定来源直连），或全部使用 GitHub Raw
+                     * @default cdn
+                     * @enum {string}
+                     */
+                    source?: "cdn" | "github";
+                    /** @description 内置模板名称；省略则下载全部预设字体 */
+                    theme?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 字体状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["TypstFontStatus"];
+                    };
+                };
+            };
+            /** @description 无效模板或 CDN 地址 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 字体正在下载 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 下载未完成，已成功的文件会保留 */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1222,7 +2446,10 @@ export interface operations {
     };
     getReportTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 按当前首选渲染引擎与目标输出格式筛选；all 返回全部入口能力 */
+                render_format?: "all" | "configured" | "image" | "html";
+            };
             header?: never;
             path?: never;
             cookie?: never;

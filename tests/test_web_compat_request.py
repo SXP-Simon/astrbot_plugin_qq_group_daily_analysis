@@ -35,7 +35,7 @@ def test_module_scan_guard_rejects_iteration(access):
         getattr(registry, access)()
 
 
-@pytest.mark.parametrize("attribute", ["query", "query_params", "headers", "files"])
+@pytest.mark.parametrize("attribute", ["query", "query_params", "headers"])
 def test_host_request_does_not_scan_modules(monkeypatch, attribute):
     """读取请求属性应直接使用宿主代理，不受模块数量影响。"""
     target = SimpleNamespace(
@@ -51,6 +51,19 @@ def test_host_request_does_not_scan_modules(monkeypatch, attribute):
         target.query if attribute == "query_params" else getattr(target, attribute)
     )
     assert value == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_uploaded_files_support_host_async_method_and_legacy_mapping(monkeypatch, asynchronous):
+    files = {"file": object()}
+
+    async def read_files():
+        return files
+
+    monkeypatch.setattr(web_compat, "_real_request", SimpleNamespace(files=read_files if asynchronous else files))
+    monkeypatch.setattr(web_compat, "sys", SimpleNamespace(modules=NoScanModules()))
+    assert await web_compat._RequestProxy().files() == files
 
 
 def test_host_request_takes_priority_over_foreign_plugin(monkeypatch):

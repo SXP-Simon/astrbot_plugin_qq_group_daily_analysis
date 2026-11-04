@@ -152,6 +152,24 @@ class ConfigMigrator:
                     if "render_service" in item:
                         del item["render_service"]
                         modified = True
+                    if plan["render_service"] == "typst":
+                        for key in (
+                            "typst_width",
+                            "typst_ppi",
+                            "device_scale",
+                            "device_scale_factor_level",
+                            "viewport_width",
+                            "viewport_height",
+                            "full_page",
+                            "request_timeout",
+                            "google_fonts",
+                            "gstatic",
+                            "custom_google_fonts",
+                            "custom_gstatic",
+                        ):
+                            if key in item:
+                                del item[key]
+                                modified = True
                     if "font_mode" in plan:
                         if item.get("font_mode") != plan["font_mode"]:
                             item["font_mode"] = plan["font_mode"]
@@ -160,6 +178,8 @@ class ConfigMigrator:
                         del item["font_mode"]
                         modified = True
                     for key in ("cdn_base_url", "google_fonts", "gstatic"):
+                        if plan["render_service"] == "typst" and key != "cdn_base_url":
+                            continue
                         if key not in item or item[key] == CUSTOM_RESOURCE_OPTION:
                             if item.get(key) == CUSTOM_RESOURCE_OPTION:
                                 item[f"custom_{key}"] = plan[key]

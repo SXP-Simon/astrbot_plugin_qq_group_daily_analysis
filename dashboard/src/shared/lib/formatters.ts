@@ -64,12 +64,23 @@ export function formatStageName(stage?: string): string {
     SAVE_SUMMARY: "历史记录持久化",
     REPORT_RENDERING: "报告长图渲染",
     RENDER_REPORT: "报告长图渲染与生成",
+    IMAGE_RENDER_QUEUE: "等待图片渲染队列",
+    IMAGE_RENDER_ATTEMPT: "图片渲染方案尝试",
+    IMAGE_HTML_PREPARE: "HTML 模板与资源准备",
+    IMAGE_SERVICE_RENDER: "HTML 图片服务渲染",
+    TYPST_VALIDATE: "Typst 模板与字体检查",
+    TYPST_DATA: "Typst 正文与身份数据准备",
+    TYPST_RESOURCES: "Typst 本地素材与下载",
+    TYPST_COMPILE: "Typst 主题编译",
+    TYPST_RECOVERY: "Typst 基础排版恢复",
+    TYPST_ENCODE: "Typst 图片编码",
     MESSAGE_DISPATCH: "群聊消息投递",
     DISPATCH_REPORT: "群聊消息投递与分发",
     COMIC_GENERATION: "漫画生成与投递",
     COMIC_STORYBOARD: "漫画分镜提示词提取",
     COMIC_DRAWING: "漫画长图生成与投递",
     CRASH_RECOVERY: "异常终止恢复",
+    CHECKPOINT_RESTORE: "分析快照恢复",
   };
   const key = stage.toUpperCase();
   return stageMap[key] || stageMap[stage] || stage;

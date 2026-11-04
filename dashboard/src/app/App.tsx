@@ -29,6 +29,8 @@ import { ConfigPage } from "../pages/config/ui/ConfigPage";
 import { useConfigViewModel } from "../pages/config/model/useConfigViewModel";
 import { PluginDataPage } from "../pages/plugin-data/ui/PluginDataPage";
 import { DevToolbar } from "../widgets/dev-bar/DevToolbar";
+import { FontManagementContext, type FontManagementRequest } from "../features/manage-typst-fonts/model/FontManagementContext";
+import { ResourceManagementContext, type ResourceManagementRequest } from "../features/manage-template-resources/model/ResourceManagementContext";
 
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
@@ -37,6 +39,12 @@ export const App: React.FC = () => {
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [fontRequest, setFontRequest] = useState<FontManagementRequest | null>(null);
+  const [fontVersion, setFontVersion] = useState(0);
+  const fontNavigationSequence = useRef(0);
+  const [resourceRequest, setResourceRequest] = useState<ResourceManagementRequest | null>(null);
+  const [resourceVersion, setResourceVersion] = useState(0);
+  const resourceNavigationSequence = useRef(0);
 
   const activeTabRef = useRef(activeTab);
   useEffect(() => {
@@ -115,8 +123,8 @@ export const App: React.FC = () => {
         // 1. 活跃任务状态变更：由 overviewVM 内存增量更新（0 HTTP 请求、0 毫秒延时）
         currentVMs.overviewVM.handleSSEEvent(eventPayload);
 
-        // 2. 终态事件（task_finished）：精准失效该条缓存并仅刷新当前展示的活跃 Tab
-        if (evt.event === "task_finished") {
+        // 2. 完成、取消和超时均为终态：精准失效缓存并刷新当前展示的 Tab。
+        if (["task_finished", "task_canceled", "task_timed_out"].includes(evt.event ?? "")) {
           const data = evt.data as { task_id?: string } | undefined;
           const taskId = data?.task_id;
           if (taskId) {
@@ -248,7 +256,7 @@ export const App: React.FC = () => {
           <HddOutlined /> 数据管理
         </span>
       ),
-      children: <PluginDataPage />,
+      children: <PluginDataPage onNavigate={handleTabChange} fontRequest={fontRequest} onFontRequestHandled={() => setFontRequest(null)} />,
     },
   ];
 
@@ -266,6 +274,15 @@ export const App: React.FC = () => {
         },
       }}
     >
+      <FontManagementContext.Provider value={{
+        open: selection => { setFontRequest({ ...selection, sequence: ++fontNavigationSequence.current }); handleTabChange("plugin-data"); },
+        changed: () => setFontVersion(value => value + 1), version: fontVersion,
+      }}>
+      <ResourceManagementContext.Provider value={{
+        open: selection => { setResourceRequest({ ...selection, sequence: ++resourceNavigationSequence.current }); handleTabChange("plugin-data"); },
+        request: resourceRequest, handled: () => setResourceRequest(null),
+        changed: () => setResourceVersion(value => value + 1), version: resourceVersion,
+      }}>
       <div
         style={{
           minHeight: "100vh",
@@ -312,6 +329,8 @@ export const App: React.FC = () => {
           loadingProviders={triggerVM.loadingProviders}
           templates={triggerVM.templates}
           loadingTemplates={triggerVM.loadingTemplates}
+          templatesError={triggerVM.templatesError}
+          onRefreshTemplates={() => void triggerVM.refreshTemplates()}
           onGroupIdChange={triggerVM.setGroupId}
           onGroupNameChange={triggerVM.setGroupName}
           onPlatformChange={triggerVM.setPlatform}
@@ -331,6 +350,8 @@ export const App: React.FC = () => {
         {/* 独立开发调试浮动工具栏 (Dev Only) */}
         {import.meta.env.DEV && <DevToolbar />}
       </div>
+      </ResourceManagementContext.Provider>
+      </FontManagementContext.Provider>
     </ConfigProvider>
   );
 };

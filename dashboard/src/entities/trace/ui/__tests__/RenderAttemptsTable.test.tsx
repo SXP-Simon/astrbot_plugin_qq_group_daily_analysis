@@ -20,6 +20,12 @@ it("没有服务信息的旧记录仍可显示", () => {
   expect(screen.queryByText(/服务：/)).not.toBeInTheDocument();
 });
 
+it("Typst 旧记录不误报海外执行与在线字体，三十秒明确为单次编译上限", () => {
+  render(<RenderAttemptsTable attempts={[{ service_type: "typst", resource_environment: "Overseas", render_timeout_ms: 30000, resource_urls: { google_fonts: "https://unused.example/fonts", gstatic: "https://unused.example/static" } }]} />);
+  expect(screen.queryByText(/资源环境: 海外|字体 CSS|字体文件/)).not.toBeInTheDocument();
+  expect(screen.getByText(/单次编译上限：30.00s/)).toBeVisible();
+});
+
 
 it("主动取消的轮次显示已停止", () => {
   render(<RenderAttemptsTable attempts={[{ attempt: 1, status: "cancelled", error: "本轮图片渲染已停止。" }]} />);

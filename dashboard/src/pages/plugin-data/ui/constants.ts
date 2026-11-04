@@ -11,19 +11,6 @@ export const SANS_NUM_STYLE: React.CSSProperties = {
   fontSize: 13,
 };
 
-export interface PartitionItem {
-  key: string;
-  name: string;
-  icon: React.ReactNode;
-  pathTag: string;
-  count: number;
-  sizeBytes: number;
-  description: string;
-  impactNotice: string;
-  onClear: () => void;
-  clearKey: string;
-}
-
 export const getStageMeta = (stage: string): { label: string; color: string } => {
   const label = formatStageName(stage);
   const colorMap: Record<string, string> = {

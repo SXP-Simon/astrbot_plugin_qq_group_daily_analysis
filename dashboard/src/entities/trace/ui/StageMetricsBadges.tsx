@@ -1,74 +1,12 @@
 import React from "react";
+import { MetricPill } from "../../../shared/ui/MetricPill";
+import { RenderingStageMetrics } from "./RenderingStageMetrics";
 import { useTheme } from "../../../shared/lib/useTheme";
 
 interface StageMetricsBadgesProps {
   stageName: string;
   payload?: Record<string, unknown>;
 }
-
-interface MetricPillProps {
-  label: string;
-  value: React.ReactNode;
-  isMono?: boolean;
-  status?: "default" | "success" | "error" | "warning";
-  isDark: boolean;
-}
-
-const MetricPill: React.FC<MetricPillProps> = ({
-  label,
-  value,
-  isMono = true,
-  status = "default",
-  isDark,
-}) => {
-  let statusColor = isDark ? "#c9d1d9" : "#334155";
-  let statusBg = isDark ? "#21262d" : "#f8fafc";
-  let borderColor = isDark ? "#30363d" : "#e2e8f0";
-
-  if (status === "success") {
-    statusColor = isDark ? "#4ade80" : "#16a34a";
-    statusBg = isDark ? "rgba(22, 163, 74, 0.12)" : "#f0fdf4";
-    borderColor = isDark ? "rgba(22, 163, 74, 0.25)" : "#bbf7d0";
-  } else if (status === "error") {
-    statusColor = isDark ? "#f87171" : "#dc2626";
-    statusBg = isDark ? "rgba(220, 38, 38, 0.12)" : "#fef2f2";
-    borderColor = isDark ? "rgba(220, 38, 38, 0.25)" : "#fecaca";
-  } else if (status === "warning") {
-    statusColor = isDark ? "#fbbf24" : "#d97706";
-    statusBg = isDark ? "rgba(217, 119, 6, 0.12)" : "#fffbeb";
-    borderColor = isDark ? "rgba(217, 119, 6, 0.25)" : "#fde68a";
-  }
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "2px 7px",
-        fontSize: 11,
-        borderRadius: 4,
-        background: statusBg,
-        border: `1px solid ${borderColor}`,
-        color: statusColor,
-        lineHeight: "16px",
-      }}
-    >
-      <span style={{ color: isDark ? "#8b949e" : "#64748b" }}>{label}:</span>
-      <span
-        style={{
-          fontWeight: 600,
-          fontFamily: isMono
-            ? "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace"
-            : "inherit",
-          color: status !== "default" ? statusColor : isDark ? "#f0f6fc" : "#0f172a",
-        }}
-      >
-        {value}
-      </span>
-    </span>
-  );
-};
 
 export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
   stageName,
@@ -81,20 +19,27 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
   const renderMemoryPill = () => {
     if (payload.delta_memory_mb !== undefined && payload.delta_memory_mb !== null) {
       const delta = Number(payload.delta_memory_mb);
+      if (!Number.isFinite(delta)) return null;
       const isIncrease = delta > 0;
       return (
-        <MetricPill
-          isDark={isDark}
-          label="内存RSS"
-          value={`${isIncrease ? `+${delta.toFixed(1)}` : delta.toFixed(1)} MB`}
-          status={delta > 15 ? "warning" : "default"}
-        />
+        <span title="宿主在本阶段结束与开始时的 RSS 差值，不包含隔离的 Typst 子进程，也不是阶段内存峰值。">
+          <MetricPill
+            isDark={isDark}
+            label="宿主 RSS 净变化"
+            value={`${isIncrease ? `+${delta.toFixed(1)}` : delta.toFixed(1)} MiB`}
+            status={delta > 15 ? "warning" : "default"}
+          />
+        </span>
       );
     }
     return null;
   };
 
   const normStage = (stageName || "").toUpperCase().replace(/-/g, "_");
+
+  if (normStage.startsWith("TYPST_") || normStage.startsWith("IMAGE_")) {
+    return <RenderingStageMetrics payload={payload}>{renderMemoryPill()}</RenderingStageMetrics>;
+  }
 
   switch (normStage) {
     case "FETCH_MESSAGES":
@@ -274,6 +219,12 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {Boolean(payload.hide_user_names) && (
             <MetricPill isDark={isDark} label="隐私保护" value="匿名模式" isMono={false} />
           )}
+          {typeof payload.typst_peak_rss_mb === "number" && Number.isFinite(payload.typst_peak_rss_mb) && <RenderingStageMetrics payload={{
+            typst_peak_rss_mb: payload.typst_peak_rss_mb,
+            typst_peak_delta_mb: payload.typst_peak_delta_mb,
+            typst_rss_source: payload.typst_rss_source,
+            typst_metrics_partial: payload.typst_metrics_partial,
+          }} />}
           {renderMemoryPill()}
         </div>
       );

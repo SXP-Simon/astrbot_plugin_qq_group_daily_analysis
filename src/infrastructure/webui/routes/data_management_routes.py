@@ -7,15 +7,19 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
+from ....application.services.task_guard import DuplicateGroupTaskError
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
 from ...config.config_backup_reader import ConfigBackupReader
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from ....application.dto.webui_dto import (
         CheckpointDeleteDTO,
         CheckpointDetailQueryDTO,
@@ -54,6 +58,27 @@ class DataManagementRoutes:
         self.trace_store = trace_store
         self.analysis_service = analysis_service
         self.report_output_dir = report_output_dir
+
+    @asynccontextmanager
+    async def _mutation_guard(self, group_id: str) -> AsyncGenerator[None, None]:
+        """删除批次、重置游标和清理快照时，与群分析任务互斥。
+
+        Args:
+            group_id: 正在管理的存储群标识。
+
+        Yields:
+            None: 已持有相关群任务锁。
+
+        Raises:
+            DuplicateGroupTaskError: 群任务仍在执行。
+        """
+        async with AsyncExitStack() as stack:
+            if self.analysis_service:
+                for task_type in ("daily", "incremental", "final"):
+                    await stack.enter_async_context(
+                        self.analysis_service.group_lock(group_id, task_type)
+                    )
+            yield
 
     @property
     def _incremental_store(self) -> IIncrementalStore | None:
@@ -95,7 +120,7 @@ class DataManagementRoutes:
             data_dir = self._get_plugin_data_dir()
 
             # 头像缓存
-            avatar_dir = data_dir / "cache" / "avatars" if data_dir else None
+            avatar_dir = data_dir / "avatar" if data_dir else None
             avatar_stats = (
                 self._dir_stats(avatar_dir)
                 if avatar_dir
@@ -131,25 +156,10 @@ class DataManagementRoutes:
             if self.report_output_dir and Path(self.report_output_dir).exists():
                 report_stats = self._dir_stats(Path(self.report_output_dir))
 
-            # 临时文件（AstrBot 全局 temp 目录下本插件生成的图片）
+            # 宿主 io_temp_img_* 不包含插件归属，不统计或清理共享临时文件。
             temp_stats: DirectoryStatsDTO = {"count": 0, "size_bytes": 0}
-            try:
-                from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-                temp_dir = Path(get_astrbot_temp_path())
-                if temp_dir.exists():
-                    count = 0
-                    size = 0
-                    for f in temp_dir.iterdir():
-                        if f.is_file() and f.name.startswith("io_temp_img_"):
-                            count += 1
-                            try:
-                                size += f.stat().st_size
-                            except OSError:
-                                pass
-                    temp_stats = {"count": count, "size_bytes": size}
-            except Exception:
-                pass
+            if data_dir:
+                temp_stats = self._dir_stats(data_dir / "template_preview_cache")
 
             return json_response(
                 {
@@ -172,17 +182,13 @@ class DataManagementRoutes:
         """清空头像缓存目录"""
         try:
             data_dir = self._get_plugin_data_dir()
-            avatar_dir = data_dir / "cache" / "avatars" if data_dir else None
+            avatar_dir = data_dir / "avatar" if data_dir else None
             if not avatar_dir or not avatar_dir.exists():
                 return json_response({"status": "ok", "data": {"deleted": 0}})
-            deleted = 0
-            for f in avatar_dir.iterdir():
-                if f.is_file():
-                    try:
-                        f.unlink()
-                        deleted += 1
-                    except OSError:
-                        pass
+            from diskcache import Cache
+
+            with Cache(str(avatar_dir)) as cache:
+                deleted = await asyncio.to_thread(cache.clear)
             logger.info(f"[plugin-data] 已清空头像缓存，删除 {deleted} 个文件")
             return json_response({"status": "ok", "data": {"deleted": deleted}})
         except Exception as e:
@@ -219,25 +225,10 @@ class DataManagementRoutes:
 
     async def api_clear_temp_files(self) -> WebApiResponse:
         """清空由本插件产生的临时图片文件（io_temp_img_* 前缀）"""
-        try:
-            from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-            temp_dir = Path(get_astrbot_temp_path())
-            if not temp_dir.exists():
-                return json_response({"status": "ok", "data": {"deleted": 0}})
-            deleted = 0
-            for f in temp_dir.iterdir():
-                if f.is_file() and f.name.startswith("io_temp_img_"):
-                    try:
-                        f.unlink()
-                        deleted += 1
-                    except OSError:
-                        pass
-            logger.info(f"[plugin-data] 已清空临时文件，删除 {deleted} 个文件")
-            return json_response({"status": "ok", "data": {"deleted": deleted}})
-        except Exception as e:
-            logger.error(f"清空临时文件异常: {e}", exc_info=True)
-            return error_response(str(e), status_code=500)
+        return error_response(
+            "宿主临时文件无法按插件区分，请在文件与素材管理中逐项清理插件预览缓存",
+            status_code=400,
+        )
 
     async def api_clear_custom_templates(self) -> WebApiResponse:
         """清空用户自定义报告模板目录"""
@@ -449,9 +440,10 @@ class DataManagementRoutes:
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            deleted = await store.delete_batch(
-                delete_dto["group_id"], delete_dto["batch_id"]
-            )
+            async with self._mutation_guard(group_id):
+                deleted = await store.delete_batch(
+                    delete_dto["group_id"], delete_dto["batch_id"]
+                )
             return json_response(
                 {
                     "status": "ok",
@@ -461,6 +453,10 @@ class DataManagementRoutes:
                         "batch_id": batch_id,
                     },
                 }
+            )
+        except DuplicateGroupTaskError:
+            return error_response(
+                "此群有任务正在执行，请结束后再修改业务数据", status_code=409
             )
         except Exception as e:
             logger.error(f"删除增量批次异常: {e}", exc_info=True)
@@ -487,7 +483,8 @@ class DataManagementRoutes:
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            deleted_count = await store.reset_group(reset_dto["group_id"])
+            async with self._mutation_guard(group_id):
+                deleted_count = await store.reset_group(reset_dto["group_id"])
             return json_response(
                 {
                     "status": "ok",
@@ -497,6 +494,10 @@ class DataManagementRoutes:
                         "message": f"Successfully reset incremental state for group {group_id}",
                     },
                 }
+            )
+        except DuplicateGroupTaskError:
+            return error_response(
+                "此群有任务正在执行，请结束后再修改业务数据", status_code=409
             )
         except Exception as e:
             logger.error(f"重置增量状态异常: {e}", exc_info=True)
@@ -661,21 +662,22 @@ class DataManagementRoutes:
                     "CheckpointStore not initialized", status_code=503
                 )
 
-            if delete_dto.get("stage_name"):
-                deleted = await asyncio.to_thread(
-                    store.delete_checkpoint,
-                    delete_dto["group_id"],
-                    delete_dto["date_str"],
-                    delete_dto["stage_name"],
-                    trace_id=delete_dto["trace_id"],
-                )
-            else:
-                await asyncio.to_thread(
-                    store.clear_checkpoints,
-                    delete_dto["group_id"],
-                    delete_dto["date_str"],
-                )
-                deleted = True
+            async with self._mutation_guard(group_id):
+                if delete_dto.get("stage_name"):
+                    deleted = await asyncio.to_thread(
+                        store.delete_checkpoint,
+                        delete_dto["group_id"],
+                        delete_dto["date_str"],
+                        delete_dto["stage_name"],
+                        trace_id=delete_dto["trace_id"],
+                    )
+                else:
+                    await asyncio.to_thread(
+                        store.clear_checkpoints,
+                        delete_dto["group_id"],
+                        delete_dto["date_str"],
+                    )
+                    deleted = True
 
             return json_response(
                 {
@@ -688,6 +690,10 @@ class DataManagementRoutes:
                         "trace_id": trace_id or None,
                     },
                 }
+            )
+        except DuplicateGroupTaskError:
+            return error_response(
+                "此群有任务正在执行，请结束后再修改业务数据", status_code=409
             )
         except Exception as e:
             logger.error(f"删除 Checkpoint 异常: {e}", exc_info=True)

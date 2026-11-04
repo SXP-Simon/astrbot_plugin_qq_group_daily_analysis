@@ -1,4 +1,5 @@
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
+import { z } from "zod";
 import { TraceRecord } from "../model/types";
 
 export interface ListTracesParams {
@@ -93,8 +94,11 @@ export async function resumeTraceTask(
     `tasks/${traceId}/resume`,
     payload
   );
+  const parsed = z.object({
+    trace_id: z.string().trim().min(1), message: z.string().optional(), status: z.enum(["ok", "success"]).optional(),
+  }).safeParse(extractData<unknown>(res));
+  if (!parsed.success) throw new Error("未收到有效的续跑回执，请刷新任务列表后确认。");
   invalidateTraceCache(traceId);
-  const data = extractData<{ trace_id: string; message: string }>(res);
-  return data || { trace_id: traceId, message: "Task resume queued" };
+  return { trace_id: parsed.data.trace_id, message: parsed.data.message || "续跑任务已提交" };
 }
 

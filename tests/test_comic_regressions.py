@@ -345,6 +345,7 @@ def test_qq_official_webhook_uses_official_report_capabilities():
             get_platform_name=Mock(return_value="qq_official_webhook"),
             platform_id="qq-official-main",
             send_text_report=AsyncMock(),
+            upload_markdown_image=AsyncMock(return_value=None),
         )
         markdown = AsyncMock(return_value=("正文", "回退正文"))
         mock_comic_trigger = Mock()
@@ -370,6 +371,8 @@ def test_qq_official_webhook_uses_official_report_capabilities():
 
         markdown.assert_awaited_once()
         assert markdown.await_args.kwargs["mention_style"] == "qq"
+        image_sender = markdown.await_args.kwargs["summary_image_uploader"]
+        assert image_sender == adapter.upload_markdown_image
         adapter.send_text_report.assert_awaited_once_with(
             "123456", "正文", fallback_content="回退正文",
         )

@@ -31,9 +31,11 @@ class RenderAttemptRecord(TypedDict, total=False):
     attempt: int
     strategy_name: str
     priority: int | None
-    service_type: Literal["astrbot", "custom"]
+    service_type: Literal["astrbot", "custom", "typst"]
     font_mode: FontMode
     resource_environment: str
+    execution_location: str
+    asset_policy: str
     resource_urls: RenderingResourceConfig | None
     render_timeout_ms: int | None
     request_timeout_ms: int | None

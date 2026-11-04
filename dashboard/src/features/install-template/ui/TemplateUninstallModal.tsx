@@ -1,3 +1,4 @@
+import { templateCapabilities } from "../../../entities/report/model/templates";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
@@ -44,8 +45,7 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
     setLoading(true);
     try {
       const list = await fetchReportTemplates();
-      // 仅展示可通过安装器卸载的自定义模板（带安装标记的后端确认项）；
-      // 内置模板与手动放置/自动备份目录（含内置模板的“自定义修改版”）不显示
+      // 移除能力由后端确认，手动放置的自定义模板也可管理。
       setTemplates(list.filter((t) => t.can_uninstall === true));
     } catch {
       message.warning("模板列表获取失败，请检查插件运行状态");
@@ -97,8 +97,8 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
         type="info"
         showIcon
         icon={<SafetyOutlined />}
-        message="仅可卸载通过「安装模板」下载的模板"
-        description="内置模板不可卸载；手动复制到数据目录的模板（无安装标记）也需手动删除文件。卸载后模板将从断点续跑 / 免 Token 重绘下拉中移除；若当前正在使用该模板，报告会自动回退到默认手账风格。"
+        message="可移除插件数据目录内的自定义模板"
+        description="手动模板也可移除，内置模板保留。将删除选定模板的整个目录及素材；使用它的配置需重新选择，已生成报告不受影响。"
         style={{ marginBottom: 12 }}
       />
       <Spin spinning={loading}>
@@ -113,7 +113,7 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
           {templates.length === 0 ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="暂无通过插件安装的自定义模板"
+              description="暂无可移除的自定义模板"
               style={{ padding: "24px 0" }}
             />
           ) : (
@@ -154,13 +154,8 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
                     }
                     description={
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        {item.desc
-                          ? item.desc
-                          : item.has_image && item.has_html
-                          ? "长图 + 网页 双模式"
-                          : item.has_image
-                          ? "长图模式"
-                          : "网页模式"}
+                        {item.desc || templateCapabilities(item).join(" / ")}
+                        <span>{templateCapabilities(item).map((capability) => <Tag key={capability}>{capability}</Tag>)}</span>
                       </Text>
                     }
                   />

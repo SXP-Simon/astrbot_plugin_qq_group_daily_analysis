@@ -6,6 +6,8 @@ WebUI 任务管理路由 (Task Routes)
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
+import math
 import uuid
 from typing import TYPE_CHECKING, cast
 
@@ -319,6 +321,29 @@ class TaskRoutes:
             if previous_status == TaskStatus.RUNNING.value:
                 return error_response("任务仍在运行，不能重复续跑", status_code=409)
             resume_trace_id = str(uuid.uuid4())
+            # 归档日随源任务保留，避免历史续跑或跨日再次续跑误查当天快照。
+            extra = trace_record.get("extra")
+            archived_date = (
+                extra.get("analysis_date") if isinstance(extra, dict) else None
+            )
+            date_str: str | None = None
+            if isinstance(archived_date, str):
+                try:
+                    date_str = dt.date.fromisoformat(archived_date).isoformat()
+                except ValueError:
+                    pass
+            started_at = trace_record.get("started_at")
+            if (
+                date_str is None
+                and isinstance(started_at, (int, float))
+                and math.isfinite(started_at)
+            ):
+                try:
+                    date_str = dt.datetime.fromtimestamp(started_at).strftime(
+                        "%Y-%m-%d"
+                    )
+                except (ValueError, OverflowError, OSError):
+                    pass
 
             try:
                 payload = await request.json()
@@ -373,6 +398,7 @@ class TaskRoutes:
                 self._run_resumed_task(
                     trace_id=resume_dto["trace_id"],
                     checkpoint_trace_id=trace_id,
+                    date_str=date_str,
                     group_id=group_id,
                     group_name=group_name,
                     platform=platform,
@@ -416,6 +442,7 @@ class TaskRoutes:
         platform: str,
         provider_id: str | None = None,
         template_name: str | None = None,
+        date_str: str | None = None,
     ) -> None:
         """后台异步执行断点续跑"""
         if not self.analysis_service:
@@ -458,6 +485,7 @@ class TaskRoutes:
                 group_id=group_id,
                 platform_id=target_platform,
                 template_name=template_name,
+                date_str=date_str,
             )
             if result and result.get("success"):
                 if result.get("fallback_to_fresh_run"):

@@ -27,6 +27,9 @@ import {
 } from "../../../entities/config/api/configApi";
 import { FieldRenderer } from "./FieldRenderer";
 import { T2iProbe } from "../../../features/test-t2i/ui/T2iProbe";
+import { TemplateResources } from "../../../features/manage-template-resources/ui/TemplateResources";
+import { TypstFonts } from "../../../features/manage-typst-fonts/ui/TypstFonts";
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
 
 const { Text } = Typography;
 
@@ -93,6 +96,9 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
   };
 
   // 添加新条目
+  const nativePlan = rawList.find((item) => findTemplateKey(item) === "typst");
+  const nativeCdn = String((nativePlan?.cdn_base_url === "__custom__" ? nativePlan?.custom_cdn_base_url : nativePlan?.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL);
+
   const handleAddItem = (templateKey: string) => {
     const tpl = templates[templateKey];
     if (!tpl) return;
@@ -349,13 +355,17 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                   })}
                 </div>
                 {fieldKey === "t2i_rendering_strategies" && (
+                  <>
+                  {itemTemplateKey === "typst" && <TypstFonts cdnBaseUrl={String((item.cdn_base_url === "__custom__" ? item.custom_cdn_base_url : item.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL)} />}
                   <T2iProbe input={{
-                    render_service: itemTemplateKey === "custom" ? "custom" : "astrbot",
+                    render_service: itemTemplateKey === "typst" ? "typst" : itemTemplateKey === "custom" ? "custom" : "astrbot",
                     service_endpoint: item.service_endpoint,
                     service_token: item.service_token,
                     timeout: item.timeout,
                     request_timeout: item.request_timeout,
+                    raster_ppi: item.raster_ppi,
                   }} />
+                  </>
                 )}
               </Card>
             );
@@ -384,6 +394,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
           添加 {templates[templateKeys[0]]?.name || "新条目"}
         </Button>
       ) : null}
+      {fieldKey === "t2i_rendering_strategies" && nativePlan && <TemplateResources cdnBaseUrl={nativeCdn} />}
     </div>
   );
 };

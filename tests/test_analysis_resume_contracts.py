@@ -13,6 +13,63 @@ from src.shared.trace_context import TraceContext
 
 
 @pytest.mark.asyncio
+async def test_repeated_resume_owns_reused_llm_checkpoint(tmp_path):
+    store = CheckpointStore(tmp_path / "repeated-resume.db")
+    store.save_checkpoint("g1", "2026-10-01", "LLM_ANALYSIS", {
+        "statistics": {"message_count": 3, "token_usage": {"total_tokens": 99}},
+        "topics": [{"topic": "已分析话题", "contributors": [], "detail": "复用内容"}],
+    }, trace_id="original")
+    config = MagicMock()
+    config.get_topic_analysis_enabled.return_value = True
+    config.get_user_title_analysis_enabled.return_value = False
+    config.get_golden_quote_analysis_enabled.return_value = False
+    config.get_chat_quality_analysis_enabled.return_value = False
+    llm = MagicMock(analyze_all_concurrent=AsyncMock())
+    fallback = AsyncMock()
+    service = AnalysisRecoveryService(config, MagicMock(), MagicMock(), MagicMock(), llm, MagicMock(), TaskGuard(), store)
+    source = "original"
+    for new_id in ("resumed-once", "resumed-twice", "resumed-three-times"):
+        async with TraceContext(trace_id=new_id) as trace:
+            result = await service.resume_analysis(new_id, "g1", date_str="2026-10-01", checkpoint_trace_id=source, fallback_daily_func=fallback)
+            assert trace.metadata["checkpoint_trace_id"] == source
+        assert result["success"] is True
+        assert result["resumed_from"] == "LLM_ANALYSIS"
+        assert result["analysis_result"]["topics"][0].topic == "已分析话题"
+        assert result["analysis_result"]["statistics"].token_usage.total_tokens == 99
+        assert store.get_checkpoint("g1", "2026-10-01", "LLM_ANALYSIS", trace_id=new_id)
+        source = new_id
+    llm.analyze_all_concurrent.assert_not_called()
+    fallback.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_partial_resume_keeps_source_checkpoints(tmp_path):
+    import asyncio
+
+    store = CheckpointStore(tmp_path / "partial-resume.db")
+    store.save_checkpoint("g1", "2026-10-01", "LLM_ANALYSIS", {
+        "statistics": {"message_count": 3},
+        "topics": [{"topic": "已完成话题", "contributors": [], "detail": "保留"}],
+    }, trace_id="original")
+    store.save_checkpoint("g1", "2026-10-01", "CLEAN_MESSAGES", {
+        "statistics": {"message_count": 3}, "unified_messages": [], "user_activity": {}, "top_users": [],
+    }, trace_id="original")
+    config = MagicMock()
+    config.get_topic_analysis_enabled.return_value = True
+    config.get_user_title_analysis_enabled.return_value = True
+    config.get_golden_quote_analysis_enabled.return_value = False
+    config.get_chat_quality_analysis_enabled.return_value = False
+    llm = MagicMock(analyze_all_concurrent=AsyncMock(side_effect=asyncio.CancelledError))
+    service = AnalysisRecoveryService(config, MagicMock(), MagicMock(), MagicMock(), llm, StatisticsService(MagicMock()), TaskGuard(), store)
+    async with TraceContext(trace_id="interrupted-resume"):
+        with pytest.raises(asyncio.CancelledError):
+            await service.resume_analysis("interrupted-resume", "g1", date_str="2026-10-01", checkpoint_trace_id="original")
+    assert store.get_checkpoint("g1", "2026-10-01", "LLM_ANALYSIS", trace_id="interrupted-resume")
+    assert store.get_checkpoint("g1", "2026-10-01", "CLEAN_MESSAGES", trace_id="interrupted-resume")
+    assert llm.analyze_all_concurrent.call_args.kwargs["topic_enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_resume_json_messages_and_preserves_archive_date(tmp_path):
     checkpoints = CheckpointStore(tmp_path / "checkpoints.db")
     checkpoints.save_checkpoint(

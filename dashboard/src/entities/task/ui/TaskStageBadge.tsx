@@ -1,6 +1,7 @@
 import React from "react";
 import { Tag } from "antd";
 import { SyncOutlined } from "@ant-design/icons";
+import { formatStageName } from "../../../shared/lib/formatters";
 
 interface TaskStageBadgeProps {
   stage: string;
@@ -10,7 +11,10 @@ export const TaskStageBadge: React.FC<TaskStageBadgeProps> = ({ stage }) => {
   let color = "processing";
   let label = stage;
 
-  if (stage.includes("FETCH")) {
+  if ((stage.toUpperCase().startsWith("TYPST_") || stage.toUpperCase().startsWith("IMAGE_"))) {
+    color = "orange";
+    label = formatStageName(stage);
+  } else if (stage.includes("FETCH")) {
     color = "blue";
     label = "拉取消息";
   } else if (stage.includes("LLM") || stage.includes("ANALYSIS")) {

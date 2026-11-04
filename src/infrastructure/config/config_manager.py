@@ -319,7 +319,7 @@ class ConfigManager:
         return val if isinstance(val, list) else [val]
 
     def get_qq_official_t2i_summary_dashboard_enabled(self) -> bool:
-        """是否启用 QQ 官方 T2I 概览图。"""
+        """是否启用 QQ 官方群聊概览图。"""
         group = self._get_group("qq_official")
         if "enable_t2i_summary_dashboard" in group:
             return bool(group["enable_t2i_summary_dashboard"])
@@ -420,17 +420,14 @@ class ConfigManager:
     def get_t2i_rendering_strategies(self) -> list[RenderingStrategyOptions]:
         """将方案转换为T2I参数，资源环境由插件消费，不传给 T2I。"""
         group = self._get_group("t2i_rendering")
-        return [
-            {
-                "full_page": True,
+        plans: list[RenderingStrategyOptions] = []
+        for item in self.get_t2i_rendering_strategy_config():
+            plan: RenderingStrategyOptions = {
                 "strategy_name": item["name"],
                 "strategy_priority": item["priority"],
                 "type": item["type"],
                 "quality": item["quality"],
-                "device_scale_factor_level": item["device_scale"],
                 "timeout": item["timeout"],
-                "viewport_width": max(1, int(group.get("t2i_viewport_width", 1440))),
-                "viewport_height": max(1, int(group.get("t2i_viewport_height", 900))),
                 "resource_environment": item["environment"],
                 "resource_urls": {
                     "cdn_base_url": item["cdn_base_url"],
@@ -445,8 +442,24 @@ class ConfigManager:
                     "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
                 ),
             }
-            for item in self.get_t2i_rendering_strategy_config()
-        ]
+            if item["render_service"] != "typst":
+                plan.update(
+                    full_page=True,
+                    device_scale_factor_level=item["device_scale"],
+                    viewport_width=max(1, int(group.get("t2i_viewport_width", 1440))),
+                    viewport_height=max(1, int(group.get("t2i_viewport_height", 900))),
+                )
+            else:
+                plan["raster_ppi"] = item.get("raster_ppi", 144)
+                for key in (
+                    "service_endpoint",
+                    "service_token",
+                    "request_timeout",
+                    "font_mode",
+                ):
+                    plan.pop(key, None)
+            plans.append(plan)
+        return plans
 
     def get_t2i_font_source(self) -> str:
         """获取第一优先级方案的环境，独立 HTML 报告也使用此环境。"""

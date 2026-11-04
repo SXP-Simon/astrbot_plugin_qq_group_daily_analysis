@@ -35,9 +35,20 @@
         href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+JP:wght@400;700&family=Outfit:wght@400;600;800&family=Share+Tech+Mono{# 英文报告才加载 Inter（拉丁正文字体）：中文/繁体报告一个字节都不多下 #}{% if REPORT_LANG == 'en' %}&family=Inter:wght@400;500;600;700{% endif %}&display=swap"
         rel="stylesheet">
     {% endif %}
-    <!-- cjkfonts font-face removed for T2I rendering performance; uses Noto Sans SC fallback -->
+    <!-- 默认通过方案 CDN 加载全瀨體的静态标题字形；本地模式由用户显式选择。 -->
     <!-- 图标已内联为 SVG（11 个），不再依赖 lucide CDN -->
     <style>
+        @font-face {
+            font-family: 'cjkfonts AllSeto';
+            {% if t2i_font_mode|default('network') == 'local' %}
+            src: local('cjkFonts 全瀨體'), local('cjkFonts');
+            {% else %}
+            src: url('{{ cdn_assets_base }}/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.woff2') format('woff2');
+            {% endif %}
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+        }
         :root {
             --miku-base: #39C5BB;
             --miku-light: #A7E7E3;
@@ -54,8 +65,8 @@
 
             --radius: 12px;
             {# 未传语言时 _TC_FIRST 等价于原来的地区判断，输出不变 #}
-            --font-main: {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
-            --font-title: 'cjkfonts AllSeto', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', cursive;
+            --font-main: {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
+            --font-title: 'cjkfonts AllSeto', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Noto Sans CJK TC', 'Source Han Sans TC', cursive;
             --font-num: 'Outfit', sans-serif;
             --font-mono: 'Share Tech Mono', monospace;
 
@@ -1487,8 +1498,8 @@
            ③ 小标签（统计卡 / 峰值时段）走英文报表惯例的大写 + 字距，信息量不变、视觉更齐整；
            ④ 行高：原 1.8 是给中文调的，拉丁字母 1.62 更耐读（partial 里是内联样式，只能 !important 覆盖）。 */
         :lang(en) {
-            --font-main: 'Inter', 'Outfit', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            --font-title: 'Outfit', 'Inter', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            --font-main: 'Inter', 'Outfit', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, sans-serif;
+            --font-title: 'Outfit', 'Inter', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, sans-serif;
         }
         :lang(en) h1 { font-weight: 800; letter-spacing: -0.018em; }
         :lang(en) .section-title-text { letter-spacing: -0.011em !important; }

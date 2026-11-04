@@ -10,20 +10,35 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, TypedDict
 
 from jinja2 import ChoiceLoader, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
 
 from ...utils.logger import logger
 from .template_installer import (
-    INSTALL_MARKER_FILENAME,
     template_dir_has_symlink_entries,
     validate_template_name,
 )
 
 if TYPE_CHECKING:
     from ..config.config_manager import ConfigManager
+
+
+class ReportTemplateInfo(TypedDict):
+    """模板可用入口与展示元信息，不把 HTML 图片和原生图片混为一谈。"""
+
+    id: str
+    label: str
+    is_custom: bool
+    has_image: bool
+    has_html: bool
+    has_typst: bool
+    display_name: str
+    desc: str
+    tag: str
+    tag_color: str
+    can_uninstall: bool
 
 
 class HTMLTemplates:
@@ -99,6 +114,17 @@ class HTMLTemplates:
         if not loaders:
             raise FileNotFoundError(f"未找到指定的报告主题模板「{clean_name}」")
 
+        source = (
+            Path(template_dir) if Path(template_dir).is_dir() else custom_template_dir
+        )
+        if source and not any(
+            (source / name).is_file()
+            for name in ("image_template.html", "html_template.html")
+        ):
+            raise ValueError(
+                f"主题「{clean_name}」仅支持 Typst 图片，不能用于 HTML 渲染或网页输出"
+            )
+
         # 将默认的 scrapbook 目录追加为最底层 Fallback，避免自定义模板缺少局部组件时渲染失败
         default_dir = os.path.join(self.base_dir, "scrapbook")
         if default_dir != template_dir and not any(
@@ -124,88 +150,71 @@ class HTMLTemplates:
 
         return env
 
-    def get_available_templates(self) -> list[dict[str, object]]:
-        """动态扫描内置与自定义数据目录，返回所有可用的视觉主题模板列表"""
-        found_themes: dict[str, dict[str, object]] = {}
+    def get_available_templates(self) -> list[ReportTemplateInfo]:
+        """扫描模板的真实入口，内置目录优先于同名的用户目录。
 
-        # 1. 扫描内置模板目录（官方模板始终由源码管理）
-        if os.path.isdir(self.base_dir):
-            for entry in sorted(os.listdir(self.base_dir)):
-                if entry.startswith(".") or entry == "format":
-                    continue
-                p = os.path.join(self.base_dir, entry)
-                if os.path.isdir(p):
-                    has_image = os.path.exists(os.path.join(p, "image_template.html"))
-                    has_html = os.path.exists(os.path.join(p, "html_template.html"))
-                    if has_image or has_html:
-                        label = self.KNOWN_TEMPLATE_NAMES.get(
-                            entry, f"{entry} (内置模板)"
-                        )
-                        meta = self._read_template_meta(p)
-                        found_themes[entry] = {
-                            "id": entry,
-                            "label": label,
-                            "is_custom": False,
-                            "has_image": has_image,
-                            "has_html": has_html,
-                            "display_name": meta.get("name") or entry,
-                            "desc": meta.get("desc", ""),
-                            "tag": meta.get("tag", ""),
-                            "tag_color": meta.get("tag_color", ""),
-                            "can_uninstall": False,
-                        }
-
-        # 2. 扫描用户自定义模板目录（仅登记非官方内置的独立自定义主题）
-        sample_res = self.config_manager.get_custom_report_template_dir("")
-        custom_base: Path | None = None
-        if sample_res:
-            p_sample = Path(str(sample_res))
-            custom_base = p_sample if p_sample.is_dir() else p_sample.parent
-
-        if custom_base and custom_base.is_dir():
-            for p in sorted(custom_base.iterdir()):
-                # 拒绝符号链接目录及其内的主模板文件：避免外部目录/文件被当作自定义模板展示
+        Returns:
+            带 HTML 图片、HTML 网页和 Typst 能力标记的模板列表。
+        """
+        found: dict[str, ReportTemplateInfo] = {}
+        builtin = Path(self.base_dir)
+        custom = self.config_manager.get_custom_report_template_dir("")
+        roots = [(builtin, False)]
+        if custom:
+            custom = Path(custom)
+            roots.append((custom if custom.is_dir() else custom.parent, True))
+        builtin_names = (
+            {path.name for path in builtin.iterdir() if path.is_dir()}
+            if builtin.is_dir()
+            else set()
+        )
+        for root, is_custom in roots:
+            if not root.is_dir() or root.is_symlink():
+                continue
+            for directory in sorted(root.iterdir()):
+                name = directory.name
                 if (
-                    p.is_dir()
-                    and not p.is_symlink()
-                    and not p.name.startswith(".")
-                    and not template_dir_has_symlink_entries(p)
+                    not directory.is_dir()
+                    or directory.is_symlink()
+                    or name.startswith(".")
+                    or template_dir_has_symlink_entries(directory)
+                    or (is_custom and name in builtin_names)
                 ):
-                    entry = p.name
-                    # 若与官方内置模板同名，则忽略自定义目录下的同名残留，严格使用官方版本
-                    if entry in found_themes:
-                        continue
-
-                    has_image = (p / "image_template.html").exists()
-                    has_html = (p / "html_template.html").exists()
-                    if has_image or has_html:
-                        meta = self._read_template_meta(p)
-                        meta_name = meta.get("name", "")
-                        custom_label = (
-                            f"{meta_name} ({entry})"
-                            if meta_name
-                            else f"{entry} (自定义主题)"
-                        )
-
-                        found_themes[entry] = {
-                            "id": entry,
-                            "label": custom_label,
-                            "is_custom": True,
-                            "has_image": has_image,
-                            "has_html": has_html,
-                            "display_name": meta_name or entry,
-                            "desc": meta.get("desc", ""),
-                            "tag": meta.get("tag", ""),
-                            "tag_color": meta.get("tag_color", ""),
-                            "can_uninstall": (p / INSTALL_MARKER_FILENAME).is_file(),
-                        }
-
-        # 确保默认的 HatsuneMiku 始终位于第一个
-        result = []
-        if "HatsuneMiku" in found_themes:
-            result.append(found_themes.pop("HatsuneMiku"))
-        result.extend(found_themes.values())
-        return result
+                    continue
+                has_image = (directory / "image_template.html").is_file()
+                has_html = (directory / "html_template.html").is_file()
+                has_typst = (directory / "report.typ").is_file()
+                if not (has_image or has_html or has_typst):
+                    continue
+                meta = self._read_template_meta(directory)
+                display_name = meta.get("name") or name
+                label = (
+                    (
+                        f"{display_name} ({name})"
+                        if meta.get("name")
+                        else f"{name} (自定义主题)"
+                    )
+                    if is_custom
+                    else self.KNOWN_TEMPLATE_NAMES.get(
+                        name, f"{display_name} (内置模板)"
+                    )
+                )
+                found[name] = {
+                    "id": name,
+                    "label": label,
+                    "is_custom": is_custom,
+                    "has_image": has_image,
+                    "has_html": has_html,
+                    "has_typst": has_typst,
+                    "display_name": display_name,
+                    "desc": meta.get("desc", ""),
+                    "tag": meta.get("tag", ""),
+                    "tag_color": meta.get("tag_color", ""),
+                    "can_uninstall": is_custom,
+                }
+        return sorted(
+            found.values(), key=lambda item: (item["id"] != "HatsuneMiku", item["id"])
+        )
 
     @staticmethod
     def _read_template_meta(template_dir: str | Path) -> dict[str, str]:

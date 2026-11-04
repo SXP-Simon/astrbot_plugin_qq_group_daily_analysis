@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 IMAGE_TEMPLATE_MARKER = "image_template.html"
 HTML_TEMPLATE_MARKER = "html_template.html"
+TYPST_TEMPLATE_MARKER = "report.typ"
 TEMPLATE_META_FILENAME = "template.json"  # 可选: {"name": "显示名"}
 # 安装器写入的安装标记：用于区分“通过插件安装器下载的模板”与“手动放入的目录”，
 # 只有带此标记的模板才允许通过 WebUI 自动卸载。
@@ -138,7 +139,12 @@ def template_dir_has_symlink_entries(template_dir: Path) -> bool:
     """
     return any(
         (template_dir / name).is_symlink()
-        for name in (IMAGE_TEMPLATE_MARKER, HTML_TEMPLATE_MARKER, "template.html")
+        for name in (
+            IMAGE_TEMPLATE_MARKER,
+            HTML_TEMPLATE_MARKER,
+            TYPST_TEMPLATE_MARKER,
+            "template.html",
+        )
     )
 
 
@@ -218,7 +224,7 @@ def _validate_archive_members(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
 def _locate_template_root(members: list[zipfile.ZipInfo]) -> str:
     """在压缩包中定位模板根目录（zip 内相对路径，'' 表示顶层）。
 
-    优先取最浅的、包含 image_template.html 或 html_template.html 的目录。
+    优先取最浅的、包含 HTML 主文件或 report.typ 的目录。
     """
     marker_dirs: dict[str, tuple[str, int]] = {}
     for member in members:
@@ -226,7 +232,11 @@ def _locate_template_root(members: list[zipfile.ZipInfo]) -> str:
             continue
         norm = member.filename.replace("\\", "/")
         filename = norm.rsplit("/", 1)[-1]
-        if filename not in {IMAGE_TEMPLATE_MARKER, HTML_TEMPLATE_MARKER}:
+        if filename not in {
+            IMAGE_TEMPLATE_MARKER,
+            HTML_TEMPLATE_MARKER,
+            TYPST_TEMPLATE_MARKER,
+        }:
             continue
         directory = norm.rsplit("/", 1)[0] if "/" in norm else ""
         depth = 0 if not directory else directory.count("/") + 1
@@ -234,7 +244,7 @@ def _locate_template_root(members: list[zipfile.ZipInfo]) -> str:
 
     if not marker_dirs:
         raise TemplateInstallError(
-            "压缩包中未找到模板主文件（image_template.html 或 html_template.html）。"
+            "压缩包中未找到模板主文件（image_template.html、html_template.html 或 report.typ）。"
         )
 
     min_depth = min(depth for _, (_, depth) in marker_dirs.items())
@@ -341,7 +351,7 @@ def install_template_from_zip(
         name: 期望的模板名；None 时从压缩包根目录名 / 内容推导。
 
     Returns:
-        安装结果字典: name / label / has_image / has_html / files。
+        安装结果字典: name / label / has_image / has_html / has_typst / files。
     """
     if not zip_data:
         raise TemplateInstallError("压缩包内容为空。")
@@ -381,12 +391,13 @@ def install_template_from_zip(
 
             has_image = (extract_dir / IMAGE_TEMPLATE_MARKER).is_file()
             has_html = (extract_dir / HTML_TEMPLATE_MARKER).is_file()
+            has_typst = (extract_dir / TYPST_TEMPLATE_MARKER).is_file()
             meta = _read_template_meta(extract_dir)
 
             # 校验主模板文件（与 HTMLTemplates 识别规则一致）
-            if not has_image and not has_html:
+            if not (has_image or has_html or has_typst):
                 raise TemplateInstallError(
-                    "模板根目录下缺少 image_template.html / html_template.html。"
+                    "模板根目录下缺少 image_template.html / html_template.html / report.typ。"
                 )
 
             target = store / template_name
@@ -421,6 +432,7 @@ def install_template_from_zip(
         "desc": meta.get("desc", ""),
         "has_image": has_image,
         "has_html": has_html,
+        "has_typst": has_typst,
         "files": sorted(written),
     }
 
@@ -572,11 +584,10 @@ def uninstall_template(
     name: str,
     store_dir: Path | None = None,
 ) -> dict[str, object]:
-    """卸载通过插件安装器下载的自定义模板。
+    """移除插件数据目录中的指定自定义模板，包括手动模板和未完成目录。
 
-    仅允许卸载带安装标记（.tpl_installed.json）的模板：
-    - 内置模板（位于插件内置 templates 目录）不在此目录下，且按名字直接拒绝；
-    - 手动放入数据目录、未经安装器安装的目录无标记，拒绝自动卸载。
+    安装标记只记录来源，不作为用户管理自己模板文件的权限条件。
+    内置模板名、非法路径及链接目标仍被拒绝，不访问内置模板目录。
 
     Args:
         name: 模板目录名。
@@ -584,6 +595,9 @@ def uninstall_template(
 
     Returns:
         卸载结果字典: name / removed。
+
+    Raises:
+        TemplateInstallError: 模板路径不合法、不存在、属于内置模板或删除失败。
     """
     template_name = validate_template_name(name)
     if template_name in builtin_template_names():
@@ -607,12 +621,6 @@ def uninstall_template(
         raise TemplateInstallError("模板名非法。")
     if not target.is_dir():
         raise TemplateInstallError(f"模板 '{template_name}' 不存在。")
-    if not (target / INSTALL_MARKER_FILENAME).is_file():
-        raise TemplateInstallError(
-            f"模板 '{template_name}' 不是通过插件安装器下载的，无法自动卸载；"
-            "如需移除请手动删除数据目录下的同名文件夹。"
-        )
-
     try:
         shutil.rmtree(target)
     except Exception as exc:

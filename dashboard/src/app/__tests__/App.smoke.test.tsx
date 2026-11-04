@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { App } from "../App";
 import * as devBridge from "../../shared/api/devBridge";
+import * as traceApi from "../../entities/trace/api/traceApi";
 
 // 本测试验证页面装配和数据加载，不在 JSDOM 中运行 Canvas 动画。
 vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
@@ -15,7 +16,12 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
 
   it("在独立开发环境下应当成功挂载根应用组件并正常渲染控制台导航与内容", async () => {
     // 冒烟测试只验证首次加载，不启动持续推送的演示计时器。
-    const sseSpy = vi.spyOn(devBridge, "devSubscribeSSE").mockReturnValue(() => {});
+    let receiveEvent: Parameters<typeof devBridge.devSubscribeSSE>[0]["onMessage"] | undefined;
+    const sseSpy = vi.spyOn(devBridge, "devSubscribeSSE").mockImplementation(handlers => {
+      receiveEvent = handlers.onMessage;
+      return () => {};
+    });
+    const cacheSpy = vi.spyOn(traceApi, "invalidateTraceCache");
     const pending: Promise<unknown>[] = [];
     const originalGet = devBridge.devApiGet;
     const getSpy = vi.spyOn(devBridge, "devApiGet").mockImplementation(function<T>(path: string, params?: Record<string, unknown>) {
@@ -39,12 +45,19 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
       // 等待实际数据，而不只检查初始页面已有的静态标题。
       await act(async () => { await Promise.allSettled(pending); });
       expect(screen.getByText("142")).toBeInTheDocument();
+      for (const event of ["task_canceled", "task_timed_out", "task_finished"]) {
+        cacheSpy.mockClear();
+        act(() => receiveEvent?.({ parsed: { event, data: { task_id: "WEBUI-CANCEL" } } }));
+        expect(cacheSpy).toHaveBeenCalledWith("WEBUI-CANCEL");
+        await act(async () => { await Promise.allSettled(pending); });
+      }
     } finally {
       view.unmount();
       // 等待初始化引出的详情请求收尾，避免回调落到已销毁的测试环境。
       await act(async () => { await Promise.allSettled(pending); });
       getSpy.mockRestore();
       sseSpy.mockRestore();
+      cacheSpy.mockRestore();
     }
   }, 20000);
 });

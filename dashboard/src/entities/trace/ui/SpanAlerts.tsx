@@ -1,4 +1,5 @@
 import React from "react";
+import { resolveSpanOutcome } from "../model/spanOutcome";
 import { useTheme } from "../../../shared/lib/useTheme";
 
 interface SpanAlertsProps {
@@ -14,10 +15,14 @@ export const SpanAlerts: React.FC<SpanAlertsProps> = ({
 }) => {
   const { isDark } = useTheme();
 
-  const isFailed = status === "failed" || status === "error";
+  const outcome = resolveSpanOutcome(status, payload);
+  const isFailed = outcome === "failed";
 
   return (
     <>
+      {outcome === "cancelled" && <div style={{ color: isDark ? "#8b949e" : "#64748b", marginBottom: 8 }}>该阶段已取消，后续步骤已停止。</div>}
+      {typeof payload?.failure_reason === "string" && <div style={{ marginBottom: 8, overflowWrap: "anywhere" }}>原始失败原因：{payload.failure_reason}</div>}
+      {payload?.mode === "basic" && typeof payload.reason === "string" && <div style={{ marginBottom: 8, overflowWrap: "anywhere" }}>恢复原因：{payload.reason}</div>}
       {/* 异常提示 */}
       {isFailed && (
         <div

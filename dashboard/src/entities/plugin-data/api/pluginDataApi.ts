@@ -1,4 +1,5 @@
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
+import { z } from "zod";
 import { configBackupListSchema, configBackupDetailSchema } from "../model/configBackup";
 
 import {
@@ -161,17 +162,11 @@ export async function fetchCheckpointDetail(
     }
   );
   if (!res) return null;
-  const anyRes = res as Record<string, unknown>;
-  if (anyRes.detail && typeof anyRes.detail === "object") {
-    return anyRes.detail as CheckpointDetail;
-  }
-  if (anyRes.data && typeof anyRes.data === "object") {
-    const dataObj = anyRes.data as Record<string, unknown>;
-    if ("checkpoint_id" in dataObj || "stage_name" in dataObj) {
-      return anyRes.data as CheckpointDetail;
-    }
-  }
-  return extractData<CheckpointDetail>(res);
+  const data = extractData<CheckpointDetail | { detail?: CheckpointDetail }>(res);
+  const detail = data && "detail" in data ? data.detail : data;
+  const parsed = z.object({ group_id: z.string(), date_str: z.string(), stage_name: z.string() }).passthrough().safeParse(detail);
+  if (!parsed.success) throw new Error("快照详情格式异常，请刷新后重试。");
+  return parsed.data;
 }
 
 export async function deleteCheckpoint(

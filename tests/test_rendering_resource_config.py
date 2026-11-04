@@ -35,13 +35,13 @@ def test_shared_resource_address_contract(case):
     assert case["plan"] == before
 
 
-def test_schema_has_three_presets_and_two_initial_host_rounds():
+def test_schema_has_four_presets_and_two_initial_host_rounds():
     fields = json.loads(
         (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
     )["t2i_rendering"]["items"]
     strategies = fields["t2i_rendering_strategies"]
     assert [(plan["environment"], plan["priority"]) for plan in strategies["default"]] == [("Overseas", 10), ("Mainland", 20)]
-    assert set(strategies["templates"]) == {"strategy", "mainland", "custom"}
+    assert set(strategies["templates"]) == {"strategy", "mainland", "custom", "typst"}
     for key, environment in (("strategy", "Overseas"), ("mainland", "Mainland")):
         items = strategies["templates"][key]["items"]
         defaults = {name: field["default"] for name, field in items.items()}

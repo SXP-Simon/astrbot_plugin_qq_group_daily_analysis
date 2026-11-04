@@ -1,13 +1,6 @@
 import { useState, useCallback } from "react";
 import { message } from "antd";
 import {
-  fetchPluginDataOverview,
-  clearAvatarCache,
-  clearReports,
-  clearTempFiles,
-  clearCustomTemplates,
-  clearConfigFiles,
-  clearConfigBackups,
   fetchIncrementalGroups,
   fetchIncrementalBatches,
   fetchIncrementalBatchDetail,
@@ -17,28 +10,13 @@ import {
   fetchCheckpointsList,
   fetchCheckpointDetail,
   deleteCheckpoint,
-  PluginDataOverview,
   IncrementalBatchItem,
   IncrementalCursorInfo,
   CheckpointItem,
   CheckpointDetail,
 } from "../../../entities/plugin-data/api/pluginDataApi";
 
-const EMPTY_OVERVIEW: PluginDataOverview = {
-  avatars: { count: 0, size_bytes: 0 },
-  custom_templates: { count: 0, size_bytes: 0 },
-  config_files: { count: 0, size_bytes: 0 },
-  config_backups: { count: 0, size_bytes: 0 },
-  reports: { count: 0, size_bytes: 0 },
-  temp_files: { count: 0, size_bytes: 0 },
-};
-
 export function usePluginDataViewModel() {
-  // 1. 全景概览与存储分区
-  const [overview, setOverview] = useState<PluginDataOverview>(EMPTY_OVERVIEW);
-  const [loadingOverview, setLoadingOverview] = useState(false);
-  const [clearing, setClearing] = useState<string | null>(null);
-
   // 2. 增量分析批次管理
   const [incrGroups, setIncrGroups] = useState<string[]>([]);
   const [selectedIncrGroup, setSelectedIncrGroup] = useState<string>("");
@@ -62,37 +40,6 @@ export function usePluginDataViewModel() {
   const [ckptDetailModalOpen, setCkptDetailModalOpen] = useState(false);
   const [selectedCkptDetail, setSelectedCkptDetail] = useState<CheckpointDetail | null>(null);
   const [loadingCkptDetail, setLoadingCkptDetail] = useState(false);
-
-  // 刷新存储概览
-  const refreshOverview = useCallback(async () => {
-    setLoadingOverview(true);
-    try {
-      const data = await fetchPluginDataOverview();
-      setOverview(data);
-    } catch {
-      message.error("加载数据概览失败");
-    } finally {
-      setLoadingOverview(false);
-    }
-  }, []);
-
-  // 清理指定存储分区
-  const runClear = async (
-    key: string,
-    fn: () => Promise<number>,
-    label: string
-  ) => {
-    setClearing(key);
-    try {
-      const deleted = await fn();
-      message.success(`已清除 ${deleted} 个${label}文件`);
-      await refreshOverview();
-    } catch {
-      message.error(`清除${label}失败`);
-    } finally {
-      setClearing(null);
-    }
-  };
 
   // 刷新增量群列表
   const refreshIncrGroups = useCallback(async () => {
@@ -167,7 +114,6 @@ export function usePluginDataViewModel() {
       if (ok) {
         message.success(`已成功删除批次 ${batchId}`);
         await loadIncrementalData(groupId);
-        await refreshOverview();
       } else {
         message.error("删除批次失败：批次不存在或已被移除");
       }
@@ -183,7 +129,6 @@ export function usePluginDataViewModel() {
       message.success(`已重置群 ${groupId} 增量状态，清理了 ${res.deleted_batches} 个批次`);
       await loadIncrementalData(groupId);
       await refreshIncrGroups();
-      await refreshOverview();
     } catch {
       message.error("重置群增量状态异常");
     }
@@ -304,7 +249,6 @@ export function usePluginDataViewModel() {
         );
         await loadCheckpoints();
         await refreshCheckpointGroups();
-        await refreshOverview();
       } else {
         message.error("删除快照失败");
       }
@@ -316,28 +260,12 @@ export function usePluginDataViewModel() {
   // 全局刷新
   const refreshAll = useCallback(async () => {
     await Promise.all([
-      refreshOverview(),
       refreshIncrGroups(),
       refreshCheckpointGroups(),
     ]);
-  }, [refreshOverview, refreshIncrGroups, refreshCheckpointGroups]);
+  }, [refreshIncrGroups, refreshCheckpointGroups]);
 
   return {
-    // 1. 全景
-    overview,
-    loadingOverview,
-    clearing,
-    refreshOverview,
-    clearAvatarCache: () => runClear("avatars", clearAvatarCache, "头像缓存"),
-    clearReports: () => runClear("reports", clearReports, "历史报告"),
-    clearTempFiles: () => runClear("temp_files", clearTempFiles, "临时渲染缓存"),
-    clearCustomTemplates: () =>
-      runClear("custom_templates", clearCustomTemplates, "自定义报告模板"),
-    clearConfigFiles: () =>
-      runClear("config_files", clearConfigFiles, "配置参考素材"),
-    clearConfigBackups: () =>
-      runClear("config_backups", clearConfigBackups, "配置历史自动备份"),
-
     // 2. 增量
     incrGroups,
     selectedIncrGroup,

@@ -16,7 +16,10 @@ from collections.abc import Iterable
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING
 
-from ....shared.constants import PLUGIN_NAME
+from astrbot.api.star import StarTools
+
+from ....shared.constants import DEFAULT_CDN_HOST, PLUGIN_NAME
+from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
 from ...config.config_migrator import LEGACY_RENDERING_RESOURCE_KEYS
 from ...config.rendering_config import (
@@ -29,6 +32,10 @@ from ...config.rendering_config import (
 from ...reporting.cdn_probe import probe_template_cdn
 from ...reporting.custom_t2i_client import render_custom_t2i, validate_t2i_image
 from ...reporting.html_renderer import bind_group_html_renderer
+from ...reporting.typst_fonts import FONT_SOURCES, THEME_FONTS
+from ...reporting.typst_renderer import render_typst_probe
+from ...reporting.typst_resources import download_typst_fonts, typst_font_status
+from ..download_control import DownloadCancelled, DownloadControl
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
@@ -223,11 +230,89 @@ class ConfigRoutes:
         report_dispatcher: ReportDispatcher | None = None,
         context: Context | None = None,
         auto_scheduler: AutoScheduler | None = None,
+        downloads: DownloadControl | None = None,
     ) -> None:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
         self.context = context
         self.auto_scheduler = auto_scheduler
+        self._typst_font_lock = asyncio.Lock()
+        self.downloads = downloads or DownloadControl()
+
+    async def api_typst_fonts(self) -> WebApiResponse:
+        """读取插件 data 目录中可用的 Typst 字体状态。
+
+        Returns:
+            已安装文件和仍需下载的预设字体，不扫描宿主系统。
+        """
+        return json_response(
+            {
+                "status": "ok",
+                "data": typst_font_status(Path(StarTools.get_data_dir(PLUGIN_NAME))),
+            }
+        )
+
+    async def api_download_typst_fonts(self) -> WebApiResponse:
+        """从选定 CDN 下载固定字体预设到插件自己的数据目录。
+
+        Returns:
+            下载后的字体状态；错误地址返回 400，重复请求返回 409。
+        """
+        try:
+            body = await request.json()
+            if type(body) is not dict:
+                raise ValueError("无效请求")
+            raw_cdn = body.get("cdn_base_url", DEFAULT_CDN_HOST)
+            if not isinstance(raw_cdn, str):
+                raise ValueError("CDN 必须是字符串")
+            source = body.get("source", "cdn")
+            if source not in ("cdn", "github"):
+                raise ValueError("未知字体下载来源")
+            cdn = (
+                DEFAULT_CDN_HOST
+                if source == "github"
+                else normalize_cdn_base_url(raw_cdn or DEFAULT_CDN_HOST)
+            )
+            theme = body.get("theme")
+            if theme is not None and (
+                not isinstance(theme, str) or theme not in THEME_FONTS
+            ):
+                raise ValueError("未知 Typst 模板")
+            name = body.get("name")
+            allowed = THEME_FONTS[theme] if isinstance(theme, str) else FONT_SOURCES
+            if name is not None and (not isinstance(name, str) or name not in allowed):
+                raise ValueError("请选择所选模板使用的预设字体")
+        except (ValueError, TypeError):
+            return error_response("请选择有效的模板、字体和下载来源", status_code=400)
+        if self._typst_font_lock.locked():
+            return error_response("字体正在下载，请等待完成后刷新", status_code=409)
+        try:
+            async with (
+                self.downloads.track(body.get("download_id")),
+                self._typst_font_lock,
+            ):
+                status = await download_typst_fonts(
+                    Path(StarTools.get_data_dir(PLUGIN_NAME)),
+                    cdn or DEFAULT_CDN_HOST,
+                    theme=theme,
+                    name=name,
+                    source=source,
+                    on_progress=lambda value: self.downloads.update_progress(
+                        body.get("download_id"), value
+                    ),
+                )
+            return json_response({"status": "ok", "data": status})
+        except DownloadCancelled:
+            return error_response("下载已取消，已完成的字体会保留", status_code=409)
+        except ValueError as exc:
+            logger.warning(f"Typst 字体下载未完成：{exc}")
+            return error_response(str(exc), status_code=502)
+        except Exception as exc:
+            logger.warning(f"Typst 字体下载未完成：{type(exc).__name__}: {exc}")
+            return error_response(
+                "字体下载未完成，请检查插件服务器网络、代理与目录写入权限；已下载的字体会保留",
+                status_code=502,
+            )
 
     async def api_get_config(self) -> WebApiResponse:
         """获取插件当前配置数据与完整 Schema 结构定义"""
@@ -343,7 +428,7 @@ class ConfigRoutes:
             if type(body) is not dict:
                 raise ValueError("请提供有效的 T2I 测试配置")
             service = body.get("render_service", "custom")
-            if service not in ("astrbot", "custom"):
+            if service not in ("astrbot", "custom", "typst"):
                 raise ValueError("请选择有效的渲染服务")
             group_id = body.get("group_id", "")
             platform_id = body.get("platform_id", "")
@@ -366,6 +451,7 @@ class ConfigRoutes:
                                 "service_token",
                                 "timeout",
                                 "request_timeout",
+                                "raster_ppi",
                             )
                             if key in body
                         },
@@ -374,7 +460,8 @@ class ConfigRoutes:
             )[0]
         except (ValueError, TypeError):
             return error_response(
-                "请检查渲染服务、地址、Token、超时和测试群聊是否有效", status_code=400
+                "请检查渲染服务、地址、Token、超时、导出清晰度和测试群聊是否有效",
+                status_code=400,
             )
 
         started = time.perf_counter()
@@ -393,7 +480,16 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
 <body><strong>T2I 渲染测试</strong><p>这是一张测试图片。</p>
 <p>HTML → PNG · 0123456789</p></body></html>"""
         try:
-            if service == "custom":
+            if service == "typst":
+                image = await render_typst_probe(
+                    Path(StarTools.get_data_dir(PLUGIN_NAME)),
+                    {
+                        "render_service": "typst",
+                        "timeout": plan["timeout"],
+                        "raster_ppi": plan.get("raster_ppi", 144),
+                    },
+                )
+            elif service == "custom":
                 image = await render_custom_t2i(
                     plan["service_endpoint"],
                     html,
@@ -451,7 +547,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
         except TimeoutError as exc:
             message = (
                 str(exc)
-                if service == "custom"
+                if service in ("custom", "typst")
                 else "T2I 服务响应超时，请检查服务状态和网络，并查看 AstrBot 日志。"
             )
             return error_response(message, status_code=502)
@@ -459,7 +555,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
             # 宿主和第三方包装器的异常可能含服务地址或凭据，不直接回显。
             message = (
                 str(exc)
-                if service == "custom"
+                if service in ("custom", "typst")
                 else (
                     "AstrBot 没有返回可用的测试图片，请查看 AstrBot 和 T2I 服务日志。"
                 )
@@ -576,21 +672,30 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 cfg_mgr.save_config()
 
             saved_revision = _config_revision(config_obj)
+            save_message = "配置已成功保存并持久化生效"
 
             if self.auto_scheduler is not None and self.context is not None:
-                self.auto_scheduler.schedule_jobs(self.context)
-                if self.auto_scheduler.incremental_trigger is not None:
-                    await (
-                        self.auto_scheduler.incremental_trigger.refresh_target_states()
+                try:
+                    self.auto_scheduler.schedule_jobs(self.context)
+                    if self.auto_scheduler.incremental_trigger is not None:
+                        # 配置已落盘，调度刷新不能无限占用保存请求或伪装成写盘失败。
+                        await asyncio.wait_for(
+                            self.auto_scheduler.incremental_trigger.refresh_target_states(),
+                            timeout=5,
+                        )
+                except Exception:
+                    logger.warning("配置已保存，但调度刷新未完成。", exc_info=True)
+                    save_message = (
+                        "配置已保存，但调度刷新未完成；请检查运行日志并重新加载插件。"
                     )
 
             logger.info("WebUI 配置中心已更新并保存插件配置。")
+            # 只返回保存回执；宿主会自动解包 data，回传整份配置会丢失状态和新版本。
             return json_response(
                 {
                     "status": "ok",
-                    "message": "配置已成功保存并持久化生效",
+                    "message": save_message,
                     "revision": saved_revision,
-                    "data": dict(config_obj),
                 }
             )
         except Exception as e:

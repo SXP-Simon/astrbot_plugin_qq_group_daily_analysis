@@ -3,7 +3,8 @@
 AstrBot 的 /stop 是协作式取消：它给本会话的活跃事件打上 ``agent_stop_requested``
 标记。命令式插件需要主动读取标记，才能取消自己创建的工作任务。
 
-本模块只读宿主的公开事件状态（``event.get_extra``），把它翻译成一个可等待的停止请求。
+本模块读取宿主的公开事件状态（``event.get_extra``），并将停止监听任务登记到
+宿主的后台任务表，使内置 stop 能发现独立执行的群分析；不注册同名命令。
 
 两点刻意的取舍：
 
@@ -11,7 +12,7 @@ AstrBot 的 /stop 是协作式取消：它给本会话的活跃事件打上 ``ag
   ``event.stop_event()`` 都会置位，与用户主动停止无关，混用会误杀正常运行的任务。
 - 不向宿主注册停止回调。宿主的回调槽位是每个事件一个（dict[event, callback]），
   注册会覆盖 Agent 运行器已有的回调、注销会把槽位删掉，属于侵入宿主内部状态。
-  0.5 秒轮询对分钟级任务没有体感差异，且只依赖公开接口。
+  新版宿主通过后台任务登记立即取消监听器，旧版保留前台事件标记轮询。
 """
 
 from __future__ import annotations
@@ -53,8 +54,11 @@ class FrontendStopWatcher:
         self._event: AstrMessageEvent = event
         self._poll_interval = poll_interval
         self._poll_task: asyncio.Task[None] | None = None
+        self._host_stop_signal: asyncio.Event | None = None
         self._stop_request = StopRequest(self._read_host_stop)
         self._read_error_logged = False
+        origin = getattr(event, "unified_msg_origin", "")
+        self._origin = origin if isinstance(origin, str) else ""
 
     @property
     def stop_request(self) -> StopRequest:
@@ -81,6 +85,35 @@ class FrontendStopWatcher:
             )
             return
         self._poll_task = asyncio.create_task(self._poll_loop())
+        # 内置 stop 可能在首次调度前取消监听器，完成回调也必须传递停止标记。
+        self._poll_task.add_done_callback(
+            lambda task: (
+                self._stop_request.request()
+                if task.cancelled() and task is self._poll_task
+                else None
+            )
+        )
+        if self._origin:
+            try:
+                from astrbot.core.utils.active_event_registry import (
+                    active_event_registry,
+                )
+
+                register_background: (
+                    Callable[[AstrMessageEvent, asyncio.Task[None]], None] | None
+                ) = getattr(active_event_registry, "register_background_task", None)
+                if callable(register_background):
+                    self._host_stop_signal = (
+                        active_event_registry.get_background_stop_signal(self._event)
+                    )
+                    register_background(self._event, self._poll_task)
+            except ImportError:
+                logger.debug("宿主未提供后台任务登记接口，继续监听前台事件停止标记")
+            except Exception as error:
+                logger.warning(
+                    "登记宿主停止监听任务失败，继续读取事件停止标记: %s", error
+                )
+        logger.debug("已启动群分析停止监听: umo=%s", self._origin or "未知")
 
     async def stop(self) -> None:
         """停止监听，可重复调用。
@@ -111,6 +144,9 @@ class FrontendStopWatcher:
         Returns:
             是否观察到宿主的停止请求；读取失败时保持当前任务继续运行。
         """
+        # Agent 收尾可能清空事件布尔标记，共享停止信号在本事件结束前保持置位。
+        if self._host_stop_signal is not None and self._host_stop_signal.is_set():
+            return True
         get_extra = cast(
             "Callable[[str], object] | None", getattr(self._event, "get_extra", None)
         )

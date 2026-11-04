@@ -1,9 +1,21 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { apiGet, apiPost, extractData, fetchContext, subscribeSSE } from "../bridge";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { apiGet, apiPost, apiUpload, extractData, fetchContext, subscribeSSE } from "../bridge";
 
 describe("API 通信网桥 (Shared API Bridge)", () => {
   beforeEach(() => {
     delete (window as { AstrBotPluginPage?: unknown }).AstrBotPluginPage;
+  });
+
+  it("二进制上传使用宿主允许的不带查询参数路径并兼容扁平回执", async () => {
+    const upload = vi.fn(async (path: string, file: File) => {
+      expect(path).not.toContain("?");
+      expect(file.size).toBe(20);
+      return { received: 20, total: 20, complete: true };
+    });
+    window.AstrBotPluginPage = { upload } as unknown as NonNullable<Window["AstrBotPluginPage"]>;
+    const file = new File([new Uint8Array(20)], "font.ttf");
+    expect(await apiUpload("plugin-data/files/upload/uuid/0", file)).toMatchObject({ received: 20 });
+    expect(upload).toHaveBeenCalledWith("plugin-data/files/upload/uuid/0", file);
   });
 
   it("当 window 上不存在 AstrBotPluginPage 时，应当平滑降级至本地 devBridge", async () => {
@@ -57,5 +69,36 @@ describe("API 通信网桥 (Shared API Bridge)", () => {
     if (unsubscribe) {
       unsubscribe();
     }
+  });
+
+  it.each([0, 1, 2])("解包 %i 层响应时保留记录的业务 data 和版本", (layers) => {
+    const record = { locator: { kind: "history", key: "report" }, revision: "current", data: { data: { topics: [] } } };
+    let response: unknown = record;
+    for (let depth = 0; depth < layers; depth += 1) response = { status: "ok", data: response };
+    expect(extractData(response)).toEqual(record);
+    const checkpoint = { stage_name: "LLM_ANALYSIS", status: "error", data: { error: "业务失败记录" } };
+    expect(extractData({ status: "ok", data: checkpoint })).toEqual(checkpoint);
+  });
+
+  it.each([
+    { status: "error", message: "操作未完成", data: { success: true } },
+    { status: "ok", data: { status: "error", message: "操作未完成", data: null } },
+    { code: 500, message: "操作未完成", data: {} },
+  ])("实际桥接和 Mock 的错误响应均不能被当成成功：%j", async (response) => {
+    window.AstrBotPluginPage = {
+      ready: async () => ({}), apiGet: vi.fn().mockResolvedValue(response), apiPost: vi.fn().mockResolvedValue(response),
+      subscribeSSE: async () => "unused", unsubscribeSSE: () => {},
+    };
+    await expect(apiGet("test")).rejects.toThrow("操作未完成");
+    await expect(apiPost("test")).rejects.toThrow("操作未完成");
+  });
+
+  it("未收到桥接响应时明确报错", async () => {
+    window.AstrBotPluginPage = {
+      ready: async () => ({}), apiGet: vi.fn().mockResolvedValue(null), apiPost: vi.fn().mockResolvedValue(null),
+      subscribeSSE: async () => "unused", unsubscribeSSE: () => {},
+    };
+    await expect(apiGet("test")).rejects.toThrow("未收到");
+    await expect(apiPost("test")).rejects.toThrow("未收到");
   });
 });

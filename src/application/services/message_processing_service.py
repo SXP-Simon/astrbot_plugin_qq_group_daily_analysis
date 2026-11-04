@@ -5,6 +5,7 @@ import re
 from collections import Counter, OrderedDict
 from typing import TYPE_CHECKING
 
+from ...infrastructure.platform.qq_official_faces import extract_qq_face_features
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -130,7 +131,23 @@ class MessageProcessingService:
                 return False
 
         # 5. 提取消息内容
+        platform_name = str(event.get_platform_name() or "").strip().lower()
+        face_features = (
+            extract_qq_face_features(event)
+            if platform_name in _QQ_OFFICIAL_PLATFORM_NAMES
+            else []
+        )
         message_parts = self._extract_message_parts(event)
+        if not message_parts and face_features:
+            message_parts = [
+                {
+                    "type": "plain",
+                    "text": "".join(
+                        f"[表情:{face['name'] or face['face_id'] or '未知'}]"
+                        for face in face_features
+                    ),
+                }
+            ]
         if not message_parts:
             # 尝试记录一条警告但不中断流程（或者视为错误）
             # 原逻辑是抛出 RuntimeError
@@ -142,7 +159,6 @@ class MessageProcessingService:
         msg_obj = getattr(event, "message_obj", None)
         event_message_id = str(getattr(msg_obj, "message_id", "") or "").strip()
 
-        platform_name = str(event.get_platform_name() or "").strip().lower()
         reserved_event_id = False
         dedup_key = ""
         if event_message_id:
@@ -170,6 +186,7 @@ class MessageProcessingService:
             history_content["_qq_official"] = {
                 "message_id": event_message_id,
                 "timestamp": event_timestamp,
+                "faces": face_features,
             }
 
         # 7. 存储到数据库
@@ -368,6 +385,7 @@ class MessageProcessingService:
                         message_parts.append({"type": "plain", "text": text})
 
                 elif seg_type in ("Image", "image"):
+                    # QQ 官方图片附件缺少可确认的表情标记，不能凭 URL、GIF 后缀或文件名推断表情包。
                     url = getattr(seg, "url", None) or (
                         seg_data.get("url") if isinstance(seg_data, dict) else None
                     )

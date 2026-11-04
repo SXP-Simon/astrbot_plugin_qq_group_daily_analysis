@@ -5,7 +5,22 @@
 
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from runpy import run_path
+from typing import Any, cast
+
+if __package__:
+    from .managed_data_spec import FILE_PATHS as _file_paths
+    from .managed_data_spec import FILE_SCHEMAS as _file_schemas
+    from .managed_data_spec import RECORD_PATHS as _record_paths
+    from .managed_data_spec import RECORD_SCHEMAS as _record_schemas
+else:
+    # 独立导出脚本不初始化插件包，避免依赖已启动的 AstrBot 宿主。
+    _managed_specs = run_path(str(Path(__file__).with_name("managed_data_spec.py")))
+    _file_paths = cast("dict[str, object]", _managed_specs["FILE_PATHS"])
+    _file_schemas = cast("dict[str, object]", _managed_specs["FILE_SCHEMAS"])
+    _record_paths = cast("dict[str, object]", _managed_specs["RECORD_PATHS"])
+    _record_schemas = cast("dict[str, object]", _managed_specs["RECORD_SCHEMAS"])
 
 
 def generate_openapi_spec() -> dict[str, Any]:
@@ -22,6 +37,8 @@ def generate_openapi_spec() -> dict[str, Any]:
             "description": "REST API and data contract specification for AstrBot QQ Group Daily Analysis Dashboard",
         },
         "paths": {
+            **_file_paths,
+            **_record_paths,
             "/config": {
                 "get": {
                     "summary": "读取插件配置、表单定义和内容版本",
@@ -93,7 +110,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                     "responses": {
                         "200": {
-                            "description": "配置保存成功，返回新版本供后续保存使用",
+                            "description": "配置保存成功，返回独立回执与新版本，避免页面桥接解包时丢失版本",
                             "content": {
                                 "application/json": {
                                     "schema": {
@@ -101,16 +118,12 @@ def generate_openapi_spec() -> dict[str, Any]:
                                         "properties": {
                                             "status": {"const": "ok"},
                                             "message": {"type": "string"},
-                                            "data": {
-                                                "type": "object",
-                                                "additionalProperties": True,
-                                            },
                                             "revision": {
                                                 "type": "string",
                                                 "pattern": "^[0-9a-f]{64}$",
                                             },
                                         },
-                                        "required": ["status", "data", "revision"],
+                                        "required": ["status", "revision"],
                                     }
                                 }
                             },
@@ -122,6 +135,294 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "500": {"description": "配置保存失败"},
                     },
                 },
+            },
+            "/config/downloads/cancel": {
+                "post": {
+                    "summary": "取消指定下载，保留已经完成的文件",
+                    "operationId": "cancelDownload",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["download_id"],
+                                    "properties": {
+                                        "download_id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                        }
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "取消已确认，网络连接及临时文件已清理",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["status", "data"],
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "type": "object",
+                                                "required": [
+                                                    "download_id",
+                                                    "cancelled",
+                                                ],
+                                                "properties": {
+                                                    "download_id": {"type": "string"},
+                                                    "cancelled": {"type": "boolean"},
+                                                },
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/config/downloads/progress": {
+                "post": {
+                    "summary": "读取当前下载的来源、字节数和等待时长",
+                    "operationId": "getDownloadProgress",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["download_id"],
+                                    "properties": {
+                                        "download_id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                        }
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "当前进度；请求未启动或已结束时为 null",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["status", "data"],
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "type": "object",
+                                                "nullable": True,
+                                                "required": [
+                                                    "name",
+                                                    "url",
+                                                    "received",
+                                                    "total",
+                                                    "phase",
+                                                    "elapsed_seconds",
+                                                    "idle_seconds",
+                                                ],
+                                                "properties": {
+                                                    "name": {"type": "string"},
+                                                    "url": {"type": "string"},
+                                                    "received": {
+                                                        "type": "integer",
+                                                        "minimum": 0,
+                                                    },
+                                                    "total": {
+                                                        "type": "integer",
+                                                        "nullable": True,
+                                                    },
+                                                    "phase": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "connecting",
+                                                            "downloading",
+                                                            "validating",
+                                                        ],
+                                                    },
+                                                    "elapsed_seconds": {
+                                                        "type": "number"
+                                                    },
+                                                    "idle_seconds": {"type": "number"},
+                                                },
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "无效下载标识"},
+                    },
+                },
+            },
+            "/config/template-resources": {
+                "get": {
+                    "summary": "查询内置主题的本地素材",
+                    "operationId": "getTemplateResources",
+                    "responses": {
+                        "200": {
+                            "description": "仅查询本地资源，不联网",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["status", "data"],
+                                        "properties": {
+                                            "status": {"const": "ok"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/TemplateResourceStatus"
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/config/template-resources/download": {
+                "post": {
+                    "summary": "从选定CDN补齐一个固定素材",
+                    "operationId": "downloadTemplateResource",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["name", "cdn_base_url"],
+                                    "properties": {
+                                        "download_id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                        },
+                                        "name": {"type": "string"},
+                                        "cdn_base_url": {"type": "string"},
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "素材已就绪，已存在则不联网",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["status", "data"],
+                                        "properties": {
+                                            "status": {"const": "ok"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/TemplateResourceFile"
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "非法CDN或不在清单中的资源名"},
+                        "502": {"description": "下载失败，可切换CDN重试；已有资源保留"},
+                    },
+                }
+            },
+            "/config/typst-fonts": {
+                "get": {
+                    "summary": "读取受管理的 Typst 字体状态",
+                    "operationId": "getTypstFonts",
+                    "responses": {
+                        "200": {
+                            "description": "字体状态",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/TypstFontStatus"
+                                            },
+                                        },
+                                        "required": ["status", "data"],
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/config/typst-fonts/download": {
+                "post": {
+                    "summary": "按模板或完整预设下载字体到插件自己的 data 目录",
+                    "operationId": "downloadTypstFonts",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "download_id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                        },
+                                        "name": {
+                                            "type": "string",
+                                            "maxLength": 128,
+                                            "description": "逐文件下载的预设文件名，必须属于所选模板",
+                                        },
+                                        "cdn_base_url": {
+                                            "type": "string",
+                                            "maxLength": 2048,
+                                        },
+                                        "source": {
+                                            "type": "string",
+                                            "enum": ["cdn", "github"],
+                                            "default": "cdn",
+                                            "description": "CDN 优先（大字库固定来源直连），或全部使用 GitHub Raw",
+                                        },
+                                        "theme": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64,
+                                            "description": "内置模板名称；省略则下载全部预设字体",
+                                        },
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "字体状态",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/TypstFontStatus"
+                                            },
+                                        },
+                                        "required": ["status", "data"],
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "无效模板或 CDN 地址"},
+                        "409": {"description": "字体正在下载"},
+                        "502": {"description": "下载未完成，已成功的文件会保留"},
+                    },
+                }
             },
             "/config/test-t2i": {
                 "post": {
@@ -612,6 +913,18 @@ def generate_openapi_spec() -> dict[str, Any]:
                 "get": {
                     "summary": "Get available report visual templates",
                     "operationId": "getReportTemplates",
+                    "parameters": [
+                        {
+                            "name": "render_format",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "enum": ["all", "configured", "image", "html"],
+                                "default": "all",
+                            },
+                            "description": "按当前首选渲染引擎与目标输出格式筛选；all 返回全部入口能力",
+                        }
+                    ],
                     "responses": {
                         "200": {
                             "description": "List of templates",
@@ -776,6 +1089,8 @@ def generate_openapi_spec() -> dict[str, Any]:
         },
         "components": {
             "schemas": {
+                **_file_schemas,
+                **_record_schemas,
                 "GroupItem": {
                     "type": "object",
                     "properties": {
@@ -785,12 +1100,84 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                     "required": ["group_id", "group_name", "platform"],
                 },
+                "TemplateResourceFile": {
+                    "type": "object",
+                    "required": ["name", "available"],
+                    "properties": {
+                        "name": {"type": "string"},
+                        "available": {"type": "boolean"},
+                    },
+                },
+                "TemplateResourceGroup": {
+                    "type": "object",
+                    "required": ["theme", "files"],
+                    "properties": {
+                        "theme": {"type": "string"},
+                        "files": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/components/schemas/TemplateResourceFile"
+                            },
+                        },
+                    },
+                },
+                "TemplateResourceStatus": {
+                    "type": "object",
+                    "required": ["directory", "groups"],
+                    "properties": {
+                        "directory": {"type": "string"},
+                        "groups": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/components/schemas/TemplateResourceGroup"
+                            },
+                        },
+                    },
+                },
+                "TypstFontStatus": {
+                    "type": "object",
+                    "properties": {
+                        "presets": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/TypstFontPreset"},
+                        },
+                        "directory": {"type": "string"},
+                        "files": {"type": "array", "items": {"type": "string"}},
+                        "missing": {"type": "array", "items": {"type": "string"}},
+                        "ready": {"type": "boolean"},
+                        "groups": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/TypstFontGroup"},
+                        },
+                    },
+                    "required": ["directory", "files", "missing", "ready"],
+                },
+                "TypstFontGroup": {
+                    "type": "object",
+                    "properties": {
+                        "theme": {"type": "string"},
+                        "required": {"type": "array", "items": {"type": "string"}},
+                        "missing": {"type": "array", "items": {"type": "string"}},
+                        "ready": {"type": "boolean"},
+                    },
+                    "required": ["theme", "required", "missing", "ready"],
+                },
+                "TypstFontPreset": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "download_url": {"type": "string", "format": "uri"},
+                        "upstream_url": {"type": "string", "format": "uri"},
+                        "cdn_path": {"type": "string", "nullable": True},
+                    },
+                    "required": ["name", "download_url", "upstream_url", "cdn_path"],
+                },
                 "T2iProbeRequest": {
                     "type": "object",
                     "properties": {
                         "render_service": {
                             "type": "string",
-                            "enum": ["astrbot", "custom"],
+                            "enum": ["astrbot", "custom", "typst"],
                             "default": "custom",
                         },
                         "group_id": {"type": "string", "maxLength": 256},
@@ -804,6 +1191,11 @@ def generate_openapi_spec() -> dict[str, Any]:
                             "type": "string",
                             "maxLength": 4096,
                             "writeOnly": True,
+                        },
+                        "raster_ppi": {
+                            "type": "integer",
+                            "enum": [144, 180, 216],
+                            "description": "Typst 导出密度，版心不变，最高成品宽 1410px",
                         },
                         "timeout": {
                             "type": "integer",
@@ -1226,6 +1618,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "can_uninstall": {"type": "boolean", "nullable": True},
                         "has_image": {"type": "boolean", "nullable": True},
                         "has_html": {"type": "boolean", "nullable": True},
+                        "has_typst": {"type": "boolean", "nullable": True},
                     },
                     "required": ["id", "label"],
                 },

@@ -53,18 +53,19 @@ class RenderingStrategyOptions(ScreenshotOptions, total=False):
 
     resource_environment: Literal["Mainland", "Overseas"]
     resource_urls: RenderingResourceConfig
-    render_service: Literal["astrbot", "custom"]
+    render_service: Literal["astrbot", "custom", "typst"]
     service_endpoint: str
     service_token: str
     request_timeout: int
     font_mode: FontMode
     strategy_name: str
     strategy_priority: int
+    raster_ppi: int
 
 
 RenderingTemplateMarker = TypedDict(
     "RenderingTemplateMarker",
-    {"__template_key": Literal["strategy", "mainland", "custom"]},
+    {"__template_key": Literal["strategy", "mainland", "custom", "typst"]},
 )
 
 
@@ -87,7 +88,7 @@ class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     name: str
     priority: int
     environment: Literal["Mainland", "Overseas"]
-    render_service: Literal["astrbot", "custom"]
+    render_service: Literal["astrbot", "custom", "typst"]
     service_endpoint: str
     service_token: str
     type: Literal["png", "jpeg"]
@@ -96,6 +97,7 @@ class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     timeout: int
     request_timeout: NotRequired[int]
     font_mode: NotRequired[FontMode]
+    raster_ppi: NotRequired[int]
 
 
 def normalize_t2i_endpoint(value: str) -> str:
@@ -175,7 +177,9 @@ def parse_rendering_strategies(
         )
         render_service = item.get(
             "render_service",
-            "custom" if item.get("__template_key") == "custom" else "astrbot",
+            item.get("__template_key")
+            if item.get("__template_key") in ("custom", "typst")
+            else "astrbot",
         )
         endpoint = item.get(
             "service_endpoint",
@@ -183,13 +187,15 @@ def parse_rendering_strategies(
         )
         token = item.get("service_token", "")
         image_type = item.get("type", "png")
-        scale = item.get("device_scale", "high")
+        scale = (
+            "high" if render_service == "typst" else item.get("device_scale", "high")
+        )
         if not isinstance(name, str):
             raise ValueError(f"第 {index} 个渲染方案的名称必须是文字")
         if environment not in ("Mainland", "Overseas"):
             raise ValueError(f"第 {index} 个渲染方案请选择内地或海外环境")
-        if render_service not in ("astrbot", "custom"):
-            raise ValueError(f"第 {index} 个渲染方案请选择跟随 AstrBot 或自定义服务")
+        if render_service not in ("astrbot", "custom", "typst"):
+            raise ValueError(f"第 {index} 个渲染方案请选择 AstrBot、自定义服务或 Typst")
         if not isinstance(endpoint, str):
             raise ValueError(f"第 {index} 个渲染方案的服务地址必须是文字")
         if (
@@ -215,6 +221,9 @@ def parse_rendering_strategies(
             ("google_fonts", "Google Fonts 地址"),
             ("gstatic", "字体文件地址"),
         ):
+            if render_service == "typst" and key != "cdn_base_url":
+                resources[key] = defaults[key]
+                continue
             candidate = item.get(key)
             if candidate == CUSTOM_RESOURCE_OPTION:
                 candidate = item.get(f"custom_{key}")
@@ -262,7 +271,13 @@ def parse_rendering_strategies(
         for key, label, default, lower, upper in (
             ("priority", "优先级", 10, 0, 10000),
             ("quality", "图片质量", 80, 1, 100),
-            ("timeout", "渲染超时", 20000, 1000, 300000),
+            (
+                "timeout",
+                "渲染超时",
+                30000 if render_service == "typst" else 20000,
+                1000,
+                300000,
+            ),
         ):
             number = item.get(key, default)
             if type(number) is not int or not lower <= number <= upper:
@@ -272,7 +287,9 @@ def parse_rendering_strategies(
             integers[key] = number
         plan: RenderingStrategyConfig = {
             "__template_key": (
-                "custom"
+                "typst"
+                if render_service == "typst"
+                else "custom"
                 if render_service == "custom"
                 else "mainland"
                 if environment == "Mainland"
@@ -292,7 +309,9 @@ def parse_rendering_strategies(
             "device_scale": scale,
             "timeout": integers["timeout"],
         }
-        if render_service == "custom" or "request_timeout" in item:
+        if render_service == "custom" or (
+            render_service != "typst" and "request_timeout" in item
+        ):
             request_timeout = item.get(
                 "request_timeout", DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS
             )
@@ -304,6 +323,13 @@ def parse_rendering_strategies(
                     f"第 {index} 个渲染方案的请求等待上限必须是 1000 到 300000 的整数"
                 )
             plan["request_timeout"] = request_timeout
+        if render_service == "typst":
+            raster_ppi = item.get("raster_ppi", 144)
+            if type(raster_ppi) is not int or raster_ppi not in (144, 180, 216):
+                raise ValueError(
+                    f"第 {index} 个 Typst 方案的导出密度请选择 144、180 或 216 PPI"
+                )
+            plan["raster_ppi"] = raster_ppi
         if render_service == "custom":
             font_mode = item.get("font_mode", "network")
             if font_mode not in ("network", "local"):

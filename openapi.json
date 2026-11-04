@@ -6,6 +6,749 @@
     "description": "REST API and data contract specification for AstrBot QQ Group Daily Analysis Dashboard"
   },
   "paths": {
+    "/plugin-data/partitions": {
+      "get": {
+        "operationId": "getManagedPartitions",
+        "summary": "getManagedPartitions",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ManagedPartition"
+                          }
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "不支持的操作或非法文件"
+          },
+          "404": {
+            "description": "文件不存在"
+          },
+          "409": {
+            "description": "文件已变更或目标已存在"
+          },
+          "500": {
+            "description": "目录读取或文件操作失败"
+          }
+        }
+      }
+    },
+    "/plugin-data/files": {
+      "get": {
+        "operationId": "getManagedFiles",
+        "summary": "getManagedFiles",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ManagedFile"
+                          }
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "groups": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ManagedFileGroup"
+                          }
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "total"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "不支持的操作或非法文件"
+          },
+          "404": {
+            "description": "文件不存在"
+          },
+          "409": {
+            "description": "文件已变更或目标已存在"
+          },
+          "500": {
+            "description": "目录读取或文件操作失败"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "partition",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "extensions",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "directory",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/plugin-data/files/content": {
+      "get": {
+        "operationId": "getManagedFileContent",
+        "summary": "getManagedFileContent",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ManagedFileContent"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "不支持的操作或非法文件"
+          },
+          "404": {
+            "description": "文件不存在"
+          },
+          "409": {
+            "description": "文件已变更或目标已存在"
+          },
+          "500": {
+            "description": "目录读取或文件操作失败"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "partition",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/plugin-data/files/mutate": {
+      "post": {
+        "operationId": "mutateManagedFile",
+        "summary": "mutateManagedFile",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "success"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "不支持的操作或非法文件"
+          },
+          "404": {
+            "description": "文件不存在"
+          },
+          "409": {
+            "description": "文件已变更或目标已存在"
+          },
+          "500": {
+            "description": "目录读取或文件操作失败"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedFileMutation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plugin-data/files/delete-many": {
+      "post": {
+        "operationId": "deleteManagedFiles",
+        "summary": "Delete only selected files with revisions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedFileDeleteMany"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "逐项操作结果，允许部分成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ManagedFileDeleteResult"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法分区或选择列表"
+          }
+        }
+      }
+    },
+    "/plugin-data/files/upload/start": {
+      "post": {
+        "operationId": "startManagedFileUpload",
+        "summary": "固定上传目标及大小",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "download_id": {
+                    "type": "string"
+                  },
+                  "partition": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "operation": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "string"
+                  },
+                  "total": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 33554432
+                  }
+                },
+                "required": [
+                  "download_id",
+                  "partition",
+                  "name",
+                  "operation",
+                  "total"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "上传标识回执"
+          },
+          "400": {
+            "description": "目标不合法"
+          },
+          "409": {
+            "description": "已取消"
+          }
+        }
+      }
+    },
+    "/plugin-data/files/upload/{upload_id}/{offset}": {
+      "post": {
+        "operationId": "uploadManagedFileChunk",
+        "summary": "接收不超过 1 MiB 的二进制分块",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "offset",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "服务器已接收的字节数及完整保存状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ManagedUploadReceipt"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "上传参数或内容不合法"
+          },
+          "409": {
+            "description": "取消、重复或文件修订冲突"
+          }
+        }
+      }
+    },
+    "/plugin-data/files/upload/cancel": {
+      "post": {
+        "operationId": "cancelManagedFileUpload",
+        "summary": "取消上传并清理暂存分块",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "download_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "download_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "上传取消已确认"
+          },
+          "400": {
+            "description": "无效标识"
+          }
+        }
+      }
+    },
+    "/plugin-data/records": {
+      "get": {
+        "operationId": "listManagedRecords",
+        "summary": "listManagedRecords",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ManagedRecordEntry"
+                          }
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "total"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法记录或不支持的操作"
+          },
+          "404": {
+            "description": "记录不存在或已过期"
+          },
+          "409": {
+            "description": "记录冲突或群任务正在执行"
+          },
+          "500": {
+            "description": "存储操作失败"
+          },
+          "503": {
+            "description": "存储暂不可用"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/plugin-data/records/detail": {
+      "get": {
+        "operationId": "getManagedRecord",
+        "summary": "getManagedRecord",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ManagedRecord"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法记录或不支持的操作"
+          },
+          "404": {
+            "description": "记录不存在或已过期"
+          },
+          "409": {
+            "description": "记录冲突或群任务正在执行"
+          },
+          "500": {
+            "description": "存储操作失败"
+          },
+          "503": {
+            "description": "存储暂不可用"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "batch_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_str",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage_name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trace_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/plugin-data/records/mutate": {
+      "post": {
+        "operationId": "mutateManagedRecord",
+        "summary": "mutateManagedRecord",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "success"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法记录或不支持的操作"
+          },
+          "404": {
+            "description": "记录不存在或已过期"
+          },
+          "409": {
+            "description": "记录冲突或群任务正在执行"
+          },
+          "500": {
+            "description": "存储操作失败"
+          },
+          "503": {
+            "description": "存储暂不可用"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedRecordMutation"
+              }
+            }
+          }
+        }
+      }
+    },
     "/config": {
       "get": {
         "summary": "读取插件配置、表单定义和内容版本",
@@ -86,7 +829,7 @@
         },
         "responses": {
           "200": {
-            "description": "配置保存成功，返回新版本供后续保存使用",
+            "description": "配置保存成功，返回独立回执与新版本，避免页面桥接解包时丢失版本",
             "content": {
               "application/json": {
                 "schema": {
@@ -98,10 +841,6 @@
                     "message": {
                       "type": "string"
                     },
-                    "data": {
-                      "type": "object",
-                      "additionalProperties": true
-                    },
                     "revision": {
                       "type": "string",
                       "pattern": "^[0-9a-f]{64}$"
@@ -109,7 +848,6 @@
                   },
                   "required": [
                     "status",
-                    "data",
                     "revision"
                   ]
                 }
@@ -124,6 +862,360 @@
           },
           "500": {
             "description": "配置保存失败"
+          }
+        }
+      }
+    },
+    "/config/downloads/cancel": {
+      "post": {
+        "summary": "取消指定下载，保留已经完成的文件",
+        "operationId": "cancelDownload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "download_id"
+                ],
+                "properties": {
+                  "download_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "取消已确认，网络连接及临时文件已清理",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "download_id",
+                        "cancelled"
+                      ],
+                      "properties": {
+                        "download_id": {
+                          "type": "string"
+                        },
+                        "cancelled": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/downloads/progress": {
+      "post": {
+        "summary": "读取当前下载的来源、字节数和等待时长",
+        "operationId": "getDownloadProgress",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "download_id"
+                ],
+                "properties": {
+                  "download_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "当前进度；请求未启动或已结束时为 null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "required": [
+                        "name",
+                        "url",
+                        "received",
+                        "total",
+                        "phase",
+                        "elapsed_seconds",
+                        "idle_seconds"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        },
+                        "received": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "total": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "connecting",
+                            "downloading",
+                            "validating"
+                          ]
+                        },
+                        "elapsed_seconds": {
+                          "type": "number"
+                        },
+                        "idle_seconds": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "无效下载标识"
+          }
+        }
+      }
+    },
+    "/config/template-resources": {
+      "get": {
+        "summary": "查询内置主题的本地素材",
+        "operationId": "getTemplateResources",
+        "responses": {
+          "200": {
+            "description": "仅查询本地资源，不联网",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TemplateResourceStatus"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/template-resources/download": {
+      "post": {
+        "summary": "从选定CDN补齐一个固定素材",
+        "operationId": "downloadTemplateResource",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "cdn_base_url"
+                ],
+                "properties": {
+                  "download_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "cdn_base_url": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "素材已就绪，已存在则不联网",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TemplateResourceFile"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "非法CDN或不在清单中的资源名"
+          },
+          "502": {
+            "description": "下载失败，可切换CDN重试；已有资源保留"
+          }
+        }
+      }
+    },
+    "/config/typst-fonts": {
+      "get": {
+        "summary": "读取受管理的 Typst 字体状态",
+        "operationId": "getTypstFonts",
+        "responses": {
+          "200": {
+            "description": "字体状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TypstFontStatus"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/typst-fonts/download": {
+      "post": {
+        "summary": "按模板或完整预设下载字体到插件自己的 data 目录",
+        "operationId": "downloadTypstFonts",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "download_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "逐文件下载的预设文件名，必须属于所选模板"
+                  },
+                  "cdn_base_url": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "cdn",
+                      "github"
+                    ],
+                    "default": "cdn",
+                    "description": "CDN 优先（大字库固定来源直连），或全部使用 GitHub Raw"
+                  },
+                  "theme": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "内置模板名称；省略则下载全部预设字体"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "字体状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TypstFontStatus"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "无效模板或 CDN 地址"
+          },
+          "409": {
+            "description": "字体正在下载"
+          },
+          "502": {
+            "description": "下载未完成，已成功的文件会保留"
           }
         }
       }
@@ -739,6 +1831,23 @@
       "get": {
         "summary": "Get available report visual templates",
         "operationId": "getReportTemplates",
+        "parameters": [
+          {
+            "name": "render_format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "configured",
+                "image",
+                "html"
+              ],
+              "default": "all"
+            },
+            "description": "按当前首选渲染引擎与目标输出格式筛选；all 返回全部入口能力"
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of templates",
@@ -939,6 +2048,345 @@
   },
   "components": {
     "schemas": {
+      "ManagedFileGroup": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "size_bytes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "directory",
+          "count",
+          "size_bytes"
+        ]
+      },
+      "ManagedPartition": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string"
+          },
+          "writable": {
+            "type": "boolean"
+          },
+          "deletable": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "size_bytes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "directory",
+          "description",
+          "impact",
+          "writable",
+          "deletable",
+          "count",
+          "size_bytes"
+        ]
+      },
+      "ManagedFile": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "modified_at": {
+            "type": "number"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "downloadable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revision",
+          "name",
+          "size_bytes",
+          "modified_at",
+          "media_type",
+          "editable",
+          "downloadable"
+        ]
+      },
+      "ManagedFileContent": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "content_base64": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "content_base64",
+          "text",
+          "revision",
+          "media_type"
+        ]
+      },
+      "ManagedFileMutation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "partition": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "content_base64": {
+            "type": "string"
+          },
+          "new_name": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "create",
+              "replace",
+              "rename",
+              "delete"
+            ]
+          }
+        },
+        "required": [
+          "partition",
+          "name",
+          "operation"
+        ]
+      },
+      "ManagedFileDeleteMany": {
+        "type": "object",
+        "properties": {
+          "partition": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "revision"
+              ]
+            }
+          }
+        },
+        "required": [
+          "partition",
+          "files"
+        ]
+      },
+      "ManagedFileDeleteResult": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "deleted",
+          "failed"
+        ]
+      },
+      "ManagedUploadReceipt": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "complete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "received",
+          "total",
+          "complete"
+        ]
+      },
+      "RecordLocator": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "group_id": {
+            "type": "string"
+          },
+          "batch_id": {
+            "type": "string"
+          },
+          "date_str": {
+            "type": "string"
+          },
+          "stage_name": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "ManagedRecord": {
+        "type": "object",
+        "properties": {
+          "locator": {
+            "$ref": "#/components/schemas/RecordLocator"
+          },
+          "data": {
+            "$ref": "#/components/schemas/BackupJsonValue"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "locator",
+          "data",
+          "revision"
+        ]
+      },
+      "ManagedRecordEntry": {
+        "type": "object",
+        "properties": {
+          "locator": {
+            "$ref": "#/components/schemas/RecordLocator"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "locator",
+          "name",
+          "size_bytes"
+        ]
+      },
+      "ManagedRecordMutation": {
+        "type": "object",
+        "properties": {
+          "locator": {
+            "$ref": "#/components/schemas/RecordLocator"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "create",
+              "replace",
+              "delete"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/BackupJsonValue"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "locator",
+          "operation"
+        ]
+      },
       "GroupItem": {
         "type": "object",
         "properties": {
@@ -959,6 +2407,153 @@
           "platform"
         ]
       },
+      "TemplateResourceFile": {
+        "type": "object",
+        "required": [
+          "name",
+          "available"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TemplateResourceGroup": {
+        "type": "object",
+        "required": [
+          "theme",
+          "files"
+        ],
+        "properties": {
+          "theme": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateResourceFile"
+            }
+          }
+        }
+      },
+      "TemplateResourceStatus": {
+        "type": "object",
+        "required": [
+          "directory",
+          "groups"
+        ],
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateResourceGroup"
+            }
+          }
+        }
+      },
+      "TypstFontStatus": {
+        "type": "object",
+        "properties": {
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TypstFontPreset"
+            }
+          },
+          "directory": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TypstFontGroup"
+            }
+          }
+        },
+        "required": [
+          "directory",
+          "files",
+          "missing",
+          "ready"
+        ]
+      },
+      "TypstFontGroup": {
+        "type": "object",
+        "properties": {
+          "theme": {
+            "type": "string"
+          },
+          "required": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ready": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "theme",
+          "required",
+          "missing",
+          "ready"
+        ]
+      },
+      "TypstFontPreset": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "download_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "upstream_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "cdn_path": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "download_url",
+          "upstream_url",
+          "cdn_path"
+        ]
+      },
       "T2iProbeRequest": {
         "type": "object",
         "properties": {
@@ -966,7 +2561,8 @@
             "type": "string",
             "enum": [
               "astrbot",
-              "custom"
+              "custom",
+              "typst"
             ],
             "default": "custom"
           },
@@ -987,6 +2583,15 @@
             "type": "string",
             "maxLength": 4096,
             "writeOnly": true
+          },
+          "raster_ppi": {
+            "type": "integer",
+            "enum": [
+              144,
+              180,
+              216
+            ],
+            "description": "Typst 导出密度，版心不变，最高成品宽 1410px"
           },
           "timeout": {
             "type": "integer",
@@ -1757,6 +3362,10 @@
             "nullable": true
           },
           "has_html": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "has_typst": {
             "type": "boolean",
             "nullable": true
           }

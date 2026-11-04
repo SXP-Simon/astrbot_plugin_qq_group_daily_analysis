@@ -185,7 +185,29 @@ class ActiveTaskManager:
                         TaskEvent.CANCEL,
                         error_message="由 WebUI 手动取消任务",
                     )
-                except (KeyError, ValueError, RuntimeError) as e:
+                except KeyError as e:
+                    # 刚提交的协程可能尚未开始，不能因 Trace 尚未创建而放弃取消。
+                    if task_info.asyncio_task is None or task_info.asyncio_task.done():
+                        logger.info(f"拒绝取消缺少追踪记录的任务 {task_id}: {e}")
+                        return False
+                    # 查询状态的线程执行期间，后台可能已绑定但尚未落库；先补齐再取消。
+                    active_trace = TraceContext.get_active_trace(task_id)
+                    if active_trace is not None:
+                        try:
+                            await active_trace.persist_snapshot_async()
+                            await asyncio.to_thread(
+                                self.lifecycle_service.transition,
+                                task_id,
+                                TaskEvent.CANCEL,
+                                error_message="由 WebUI 手动取消任务",
+                            )
+                        except (KeyError, ValueError, RuntimeError) as retry_error:
+                            logger.info(
+                                f"拒绝取消初始化状态冲突的任务 {task_id}: {retry_error}"
+                            )
+                            return False
+                    logger.info(f"取消尚未初始化追踪记录的 WebUI 任务: {task_id}")
+                except (ValueError, RuntimeError) as e:
                     logger.info(f"拒绝取消已结束或状态冲突的任务 {task_id}: {e}")
                     return False
 
@@ -194,6 +216,9 @@ class ActiveTaskManager:
 
             self._tasks.pop(task_id, None)
 
+        logger.info(
+            f"已请求中止 WebUI 活跃任务: {task_id}，群: {task_info.group_id}，平台: {task_info.platform}"
+        )
         await self._broadcast_event(
             {"event": "task_canceled", "data": {"task_id": task_id}}
         )

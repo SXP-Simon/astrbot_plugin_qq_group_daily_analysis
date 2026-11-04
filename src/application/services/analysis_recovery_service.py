@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import datetime as dt
 import re
 import shutil
@@ -23,6 +22,7 @@ from ...domain.value_objects import (
 )
 from ...domain.value_objects.unified_message import UnifiedMessage
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
+from ...infrastructure.reporting.report_image import save_report_image
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -205,16 +205,13 @@ class AnalysisRecoveryService:
                     ),
                     template_theme=template_name,
                 )
-                if image_url and image_url.startswith("base64://"):
-                    data = base64.b64decode(image_url[9:], validate=True)
-                    await asyncio.to_thread(dest.write_bytes, data)
-                elif image_url and Path(image_url).is_file():
-                    await asyncio.to_thread(shutil.copy2, image_url, dest)
-                else:
+                if not image_url:
                     return {
                         "success": False,
                         "reason": "图片报告生成失败，未产生可用文件",
                     }
+                dest = await asyncio.to_thread(save_report_image, image_url, dest)
+                filename = dest.name
             if not dest.is_file() or dest.stat().st_size == 0:
                 return {"success": False, "reason": "报告生成失败，产物内容为空"}
         except Exception as e:
@@ -276,6 +273,8 @@ class AnalysisRecoveryService:
             )
         if template_name and template_name != "auto":
             trace.metadata["override_template_name"] = str(template_name)
+        trace.metadata["checkpoint_trace_id"] = checkpoint_trace_id
+        trace.metadata["analysis_date"] = date_str
 
         topic_enabled = self.config_manager.get_topic_analysis_enabled()
         user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
@@ -293,6 +292,16 @@ class AnalysisRecoveryService:
             group_id, date_str, checkpoint_trace_id
         )
         if cached_result is not None:
+            # 续跑任务拥有独立 ID，复用产物也必须归档到新任务，供再次续跑读取。
+            if self.checkpoint_store:
+                await asyncio.to_thread(
+                    self.checkpoint_store.save_checkpoint,
+                    group_id=group_id,
+                    date_str=date_str,
+                    stage_name=AnalysisStage.LLM_ANALYSIS.value,
+                    data=AnalysisResultSerializer.serialize(dict(cached_result)),
+                    trace_id=trace.trace_id,
+                )
             cached_topics = cached_result.get("topics", [])
             cached_titles = cached_result.get("user_titles", [])
             cached_stats = cached_result.get("statistics")
@@ -377,6 +386,15 @@ class AnalysisRecoveryService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
+            if self.checkpoint_store:
+                await asyncio.to_thread(
+                    self.checkpoint_store.save_checkpoint,
+                    group_id=group_id,
+                    date_str=date_str,
+                    stage_name=AnalysisStage.CLEAN_MESSAGES.value,
+                    data=clean_checkpoint,
+                    trace_id=trace.trace_id,
+                )
             cleaned_result, unified_messages, top_users = (
                 self._restore_clean_checkpoint(clean_checkpoint, group_id)
             )

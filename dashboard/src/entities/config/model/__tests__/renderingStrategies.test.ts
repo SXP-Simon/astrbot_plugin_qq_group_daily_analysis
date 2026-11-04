@@ -6,6 +6,13 @@ import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../configCon
 import { renderingRuntimeSchema, renderingStrategySchema } from "../renderingConfig";
 import { validateSingleFieldWithZod } from "../validation";
 
+it("Typst 固定排版不保留旧宽度和 PPI 配置", () => {
+  const plan = renderingStrategySchema.parse({ __template_key: "typst", typst_width: 1280, typst_ppi: 288 });
+  expect(plan).not.toHaveProperty("typst_width");
+  expect(plan).not.toHaveProperty("typst_ppi");
+  expect(schema.t2i_rendering.items.t2i_rendering_strategies.templates.typst.items).not.toHaveProperty("typst_width");
+});
+
 describe("可扩展渲染方案", () => {
   it("真实配置提供海外优先、内地备用两项默认方案", () => {
     expect(schema.t2i_rendering.items.t2i_rendering_strategies.type).toBe("template_list");
@@ -168,4 +175,14 @@ it("保存按优先级稳定排序，保留相同优先级、扩展字段和原�
   expect(result.t2i_rendering?.t2i_rendering_strategies?.map((plan) => plan.name)).toEqual(["同级甲", "同级乙", "后执行"]);
   expect(result.t2i_rendering?.t2i_rendering_strategies?.[2].future).toEqual({ keep: true });
   expect(draft).toEqual(before);
+});
+
+
+it("原生保存移除浏览器布局与网络字体字段，旧错误值不阻断静态渲染", () => {
+  const result = renderingStrategySchema.parse({ __template_key: "typst", device_scale: "unused", viewport_width: 3000, full_page: false, google_fonts: "unused", gstatic: "unused", request_timeout: "unused" });
+  for (const key of ["device_scale", "viewport_width", "full_page", "google_fonts", "gstatic", "request_timeout"]) expect(result).not.toHaveProperty(key);
+  expect(renderingStrategySchema.parse({}).device_scale).toBe("high");
+  expect(renderingStrategySchema.parse({ __template_key: "typst" }).timeout).toBe(30000);
+  expect(renderingStrategySchema.parse({ __template_key: "typst", timeout: 15000 }).timeout).toBe(15000);
+  expect(renderingStrategySchema.parse({}).timeout).toBe(20000);
 });

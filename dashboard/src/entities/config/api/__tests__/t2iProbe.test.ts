@@ -46,3 +46,13 @@ it.each([null, { elapsed_ms: -1, image_data_url: result.image_data_url }, { elap
   vi.mocked(apiPost).mockResolvedValue({ status: "ok", data });
   await expect(testT2i({})).rejects.toThrow();
 });
+
+
+it("Typst 检测使用所选密度并拒绝超过 1410px 的设置", async () => {
+  vi.mocked(apiPost).mockResolvedValue({ status: "ok", data: result });
+  await testT2i({ render_service: "typst", raster_ppi: 216 });
+  expect(apiPost).toHaveBeenCalledWith("config/test-t2i", { render_service: "typst", timeout: 30000, raster_ppi: 216 });
+  vi.mocked(apiPost).mockClear();
+  await expect(testT2i({ render_service: "typst", raster_ppi: 288 })).rejects.toThrow();
+  expect(apiPost).not.toHaveBeenCalled();
+});

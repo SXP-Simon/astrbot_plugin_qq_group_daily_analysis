@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../model/configContract";
 import { cdnBaseUrlSchema } from "../model/renderingConfig";
+import { fontTransferSchema, typstFontStatusSchema, type FontDownloadSource, type FontTransfer, type TypstFontStatus } from "../model/typstFonts";
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { PluginConfigData } from "../model/types";
 import {
@@ -31,7 +32,7 @@ export async function testTemplateCdn(baseUrl: string): Promise<TemplateCdnProbe
 }
 
 export async function testT2i(input: T2iProbeInput): Promise<T2iProbe> {
-  const parsed = t2iProbeRequestSchema.safeParse({ ...input, __template_key: input.render_service === "astrbot" ? "strategy" : "custom" });
+  const parsed = t2iProbeRequestSchema.safeParse({ ...input, __template_key: input.render_service === "typst" ? "typst" : input.render_service === "astrbot" ? "strategy" : "custom" });
   if (!parsed.success) throw new Error(parsed.error.issues[0].message);
   const response = await apiPost<unknown>("config/test-t2i", parsed.data);
   // 宿主和插件都可能返回错误信封，不能把外层 ok 当成渲染成功。
@@ -130,6 +131,29 @@ export async function savePluginConfig(
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, message: msg || "保存配置请求失败" };
   }
+}
+
+export async function fetchTypstFonts(): Promise<TypstFontStatus> {
+  const response = await apiGet<unknown>("config/typst-fonts");
+  const parsed = typstFontStatusSchema.safeParse(extractData(response));
+  if (!parsed.success) throw new Error(response?.message || "未能读取字体状态，请刷新重试。");
+  return parsed.data;
+}
+
+export async function downloadTypstFonts(cdnBaseUrl: string, theme?: string, name?: string, downloadId?: string, source: FontDownloadSource = "cdn"): Promise<TypstFontStatus> {
+  const parsedCdn = cdnBaseUrlSchema.safeParse(source === "github" ? "" : cdnBaseUrl);
+  if (!parsedCdn.success) throw new Error(parsedCdn.error.issues[0].message);
+  const response = await apiPost<unknown>("config/typst-fonts/download", { source, ...(downloadId ? { download_id: downloadId } : {}), cdn_base_url: parsedCdn.data, ...(theme === undefined ? {} : { theme }), ...(name === undefined ? {} : { name }) });
+  const parsed = typstFontStatusSchema.safeParse(extractData(response));
+  if (!parsed.success) throw new Error(response?.message || "字体下载未完成，请检查 CDN 后重试。");
+  return parsed.data;
+}
+
+export async function fetchFontDownloadProgress(downloadId: string): Promise<FontTransfer | null> {
+  const response = await apiPost<unknown>("config/downloads/progress", { download_id: downloadId });
+  const parsed = fontTransferSchema.nullable().safeParse(extractData(response));
+  if (!parsed.success) throw new Error("无法读取下载进度，请刷新或取消后重试");
+  return parsed.data;
 }
 
 export async function uploadConfigFile(

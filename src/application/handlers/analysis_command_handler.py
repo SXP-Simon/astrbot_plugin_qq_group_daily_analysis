@@ -24,10 +24,12 @@ from astrbot.core.message.components import File
 from ...domain.repositories.platform_adapter_repository import (
     GroupAlbumSupportProtocol,
     GroupFileSupportProtocol,
+    MarkdownImageSupportProtocol,
     PlatformAdapterProtocol,
 )
 from ...domain.value_objects.task_event import TaskEvent
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
+from ...infrastructure.reporting.report_image import save_report_image
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -765,6 +767,9 @@ class AnalysisCommandHandler:
                             self.html_render, group_id, adapter.platform_id
                         ),
                         mention_style="qq",
+                        summary_image_uploader=adapter.upload_markdown_image
+                        if isinstance(adapter, MarkdownImageSupportProtocol)
+                        else None,
                     ),
                     stop_request,
                 )
@@ -804,13 +809,7 @@ class AnalysisCommandHandler:
             eff_trace_id = trace_id or (cur_trace.trace_id if cur_trace else "")
             trace_suffix = f"_{eff_trace_id}" if eff_trace_id else ""
             dest = reports_dir / f"report_{group_id}_{ts_str}{trace_suffix}.jpg"
-            if Path(image_url).exists():
-                import shutil
-
-                shutil.copy2(image_url, dest)
-            elif image_url.startswith("base64://"):
-                data = base64.b64decode(image_url[9:])
-                dest.write_bytes(data)
+            dest = save_report_image(image_url, dest)
 
             if cur_trace:
                 rfiles = cur_trace.metadata.setdefault("report_files", [])

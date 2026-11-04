@@ -10,10 +10,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
+from ...domain.repositories.platform_adapter_repository import (
+    MarkdownImageSupportProtocol,
+)
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from .html_renderer import bind_group_html_renderer
+from .report_image import save_report_image
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -135,7 +139,7 @@ class ReportDispatcher:
 
         # 1. 检查渲染函数
         if not self._html_render_func and not any(
-            plan["render_service"] == "custom"
+            plan["render_service"] in ("custom", "typst")
             for plan in self.config_manager.get_t2i_rendering_strategy_config()
         ):
             logger.warning(f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。")
@@ -237,14 +241,8 @@ class ReportDispatcher:
                         else f"report_{group_id}_{ts_str}.jpg"
                     )
                     dest = reports_dir / filename
+                    dest = save_report_image(image_url, dest)
                     dest_filename = dest.name
-                    if os.path.exists(image_url):
-                        import shutil
-
-                        shutil.copy2(image_url, dest)
-                    elif image_url.startswith("base64://"):
-                        data = base64.b64decode(image_url[9:])
-                        dest.write_bytes(data)
 
                     # 关联到 TraceContext 并在数据库中更新元数据
                     if trace_ctx:
@@ -544,6 +542,7 @@ class ReportDispatcher:
             logger.error("[分发器] 报告生成器未初始化，无法生成文本报告。")
             return False
         is_qq_official = self._is_qq_official(platform_id)
+        adapter = self.message_sender.bot_manager.get_adapter(platform_id)
         fallback_report = None
         if is_qq_official:
             (
@@ -553,6 +552,9 @@ class ReportDispatcher:
                 analysis_result,
                 bind_group_html_renderer(self._html_render_func, group_id, platform_id),
                 mention_style="qq",
+                summary_image_uploader=adapter.upload_markdown_image
+                if isinstance(adapter, MarkdownImageSupportProtocol)
+                else None,
             )
         elif self._uses_shared_markdown_report(platform_id):
             # 支持富文本 Markdown 但无 QQ @ 提及能力的平台（如 Telegram / Discord）走通用 Markdown 排版（身份降级为昵称）
@@ -564,7 +566,6 @@ class ReportDispatcher:
             )
         else:
             text_report = self.report_generator.generate_text_report(analysis_result)
-        adapter = self.message_sender.bot_manager.get_adapter(platform_id)
         # 尝试通过适配器发送文本报告
         logger.debug(f"[分发器] 正在尝试通过适配器发送文本报告。群: {group_id}")
 

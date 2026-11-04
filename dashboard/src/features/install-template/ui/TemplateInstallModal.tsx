@@ -43,7 +43,7 @@ const NAMING_GUIDE = (
     <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.6 }}>
       模板名建议使用小写英文蛇形并带命名空间前缀（如{" "}
       <Text code style={{ fontSize: 12 }}>gda_miku_dream</Text>
-      ）：仅含小写字母、数字、下划线，长度不超过 50。避免空格与特殊字符，
+      ）：建议只用小写字母、数字、下划线，长度不超过 50。避免空格与特殊字符，
       以免报告文件名、预览图与 CDN 链接出错，并与内置模板（scrapbook 等）区分。
       不填写时将从压缩包 / 仓库名自动推断（GitHub 归档的 -main 后缀会被自动去除）。
       中文显示名可在模板根目录下放置可选的{" "}
@@ -216,7 +216,7 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
             ),
             children: (
               <Form form={fileForm} layout="vertical">
-                <Form.Item label="zip 压缩包（需包含 image_template.html 或 html_template.html）">
+                <Form.Item label="zip 压缩包（需包含 image_template.html、html_template.html 或 report.typ）">
                   <Dragger
                     accept=".zip"
                     maxCount={1}
@@ -231,7 +231,7 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
                     </p>
                     <p className="ant-upload-text">点击或拖拽 zip 到此处</p>
                     <p className="ant-upload-hint">
-                      单个文件，打包时请保留模板根目录（建议仅包含 7 个 HTML 模板文件与可选 template.json）
+                      单个文件，打包时请保留模板根目录（可包含 HTML 或 Typst 主文件、相对导入组件、资源与可选 template.json）
                     </p>
                   </Dragger>
                 </Form.Item>
@@ -258,10 +258,10 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
       />
       <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
         <BulbOutlined style={{ marginRight: 6, color: "#faad14" }} />
-        模板结构参考：内置模板位于插件目录{" "}
+        模板根目录至少提供 report.typ（Typst）、image_template.html（HTML 长图）或
+        html_template.html（HTML 网页）中的一种入口，并保留相对导入的组件与资源。
+        template.json 可提供显示名和说明。内置模板参考目录：{" "}
         <Text code style={{ fontSize: 12 }}>src/infrastructure/reporting/templates/scrapbook/</Text>
-        ，完整 7 件套为 image_template.html / html_template.html / topic_item.html /
-        user_title_item.html / quote_item.html / activity_chart.html / chat_quality_item.html。
       </Paragraph>
     </Modal>
   );

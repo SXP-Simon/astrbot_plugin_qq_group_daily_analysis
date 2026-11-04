@@ -9,10 +9,7 @@ import {
   fetchProviderList,
   LLMProviderItem,
 } from "../../../entities/trace/api/traceApi";
-import {
-  fetchReportTemplates,
-} from "../../../entities/report/api/reportApi";
-import { ReportTemplateItem } from "../../../entities/report/model/templates";
+import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
 import { GroupItem } from "../../../entities/group/model/types";
 
 export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void) {
@@ -27,32 +24,24 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
   const [loadingPlatforms, setLoadingPlatforms] = useState(false);
   const [providers, setProviders] = useState<LLMProviderItem[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
-  const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const { templates, loading: loadingTemplates, ready, error: templatesError, refresh: refreshTemplates } = useReportTemplates("configured", open);
 
   const loadOptions = async () => {
     try {
       setLoadingPlatforms(true);
       setLoadingProviders(true);
-      setLoadingTemplates(true);
-      const [platList, provList, tmplList] = await Promise.allSettled([
+      const [platList, provList] = await Promise.allSettled([
         fetchConnectedPlatforms(),
         fetchProviderList(),
-        fetchReportTemplates(),
       ]);
       if (platList.status === "fulfilled") setConnectedPlatforms(platList.value);
       if (provList.status === "fulfilled") setProviders(provList.value);
-      if (tmplList.status === "fulfilled") setTemplates(tmplList.value);
-      else {
-        // 模板列表失败：下拉回退内置模板（formatTemplateOptions 兜底），显式提示避免静默
-        message.warning("模板列表获取失败，已回退显示内置模板");
-      }
+
     } catch {
       // Ignore background failure, fallback options will be displayed
     } finally {
       setLoadingPlatforms(false);
       setLoadingProviders(false);
-      setLoadingTemplates(false);
     }
   };
 
@@ -90,6 +79,10 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
       return;
     }
 
+    if (templateName !== "auto" && (!ready || !templates.some((item) => item.id === templateName))) {
+      message.warning(templatesError || "请选择当前支持的模板");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await triggerNewTask(
@@ -134,6 +127,8 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
     loadingProviders,
     templates,
     loadingTemplates,
+    templatesError,
+    refreshTemplates,
     handleOpen,
     handleClose,
     handleSubmit,

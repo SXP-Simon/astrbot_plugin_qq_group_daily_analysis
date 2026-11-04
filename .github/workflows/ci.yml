@@ -164,6 +164,8 @@ jobs:
   python-lint:
     name: Python Lint, Type Check & Test
     runs-on: ubuntu-latest
+    env:
+      TYPST_TEST_FONTS: .cache/typst-tests/typst/fonts
     needs: detect-changes
     if: |
       github.event_name == 'workflow_dispatch' ||
@@ -193,6 +195,25 @@ jobs:
         run: |
           uv venv .venv
           uv pip install -r requirements-dev.txt
+
+      - name: Restore Typst Test Fonts
+        uses: actions/cache@v4
+        with:
+          path: .cache/typst-tests/typst/fonts
+          key: typst-fonts-${{ hashFiles('src/infrastructure/reporting/typst_fonts.py') }}
+
+      - name: Prepare Typst Test Fonts
+        run: |
+          .venv/bin/python - <<'PY'
+          import asyncio
+          import runpy
+          from pathlib import Path
+
+          runpy.run_path("tests/conftest.py")
+          from src.infrastructure.reporting.typst_resources import download_typst_fonts
+
+          asyncio.run(download_typst_fonts(Path(".cache/typst-tests"), "", source="github"))
+          PY
 
       - name: Set up Node.js for Pyright
         uses: actions/setup-node@v4

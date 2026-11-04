@@ -11,6 +11,7 @@ import {
 } from "@ant-design/icons";
 import { TraceRecord, TraceSpan } from "../model/types";
 import { formatStageName, formatDuration } from "../../../shared/lib/formatters";
+import { buildSpanTree, spanGroupKey } from "../model/spanTree";
 import { useTheme } from "../../../shared/lib/useTheme";
 
 const { Text } = Typography;
@@ -53,10 +54,10 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     >();
 
     for (const span of spans) {
-      const existing = stats.get(span.stage_name);
+      const existing = stats.get(spanGroupKey(span));
       const dur = span.duration_ms ?? 0;
       if (!existing) {
-        stats.set(span.stage_name, {
+        stats.set(spanGroupKey(span), {
           attempts: [span],
           totalDuration: dur,
           retryOverhead: 0,
@@ -84,10 +85,10 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
   const retrySummary = useMemo(() => {
     let totalOverheadMs = 0;
     const retriedStages: string[] = [];
-    for (const [stage, stat] of stageStats) {
+    for (const [, stat] of stageStats) {
       if (stat.attempts.length > 1) {
         totalOverheadMs += stat.retryOverhead;
-        retriedStages.push(`${formatStageName(stage)} (${stat.attempts.length}次)`);
+        retriedStages.push(`${formatStageName(stat.attempts[0].stage_name)} (${stat.attempts.length}次)`);
       }
     }
     return {
@@ -100,18 +101,21 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
   // 全量阶段明细（按时间顺序消歧，避免 ECharts 同名 category 重叠碰撞）
   const processedAllSpans: ProcessedSpanItem[] = useMemo(() => {
     const stageAttemptCounters = new Map<string, number>();
+    const labels = new Map<string, number>();
 
     return spans.map((span) => {
-      const stat = stageStats.get(span.stage_name);
+      const stat = stageStats.get(spanGroupKey(span));
       const totalAttempts = stat?.attempts.length || 1;
-      const currentAttemptIdx = (stageAttemptCounters.get(span.stage_name) || 0) + 1;
-      stageAttemptCounters.set(span.stage_name, currentAttemptIdx);
+      const currentAttemptIdx = (stageAttemptCounters.get(spanGroupKey(span)) || 0) + 1;
+      stageAttemptCounters.set(spanGroupKey(span), currentAttemptIdx);
 
       const isRetry = currentAttemptIdx > 1;
       const isFinal = currentAttemptIdx === totalAttempts;
       const baseFormatted = formatStageName(span.stage_name);
 
-      let displayName = baseFormatted;
+      const ordinal = (labels.get(span.stage_name) || 0) + 1;
+      labels.set(span.stage_name, ordinal);
+      let displayName = baseFormatted + (typeof span.payload?.parent_span_id === "string" && ordinal > 1 ? ` #${ordinal}` : "");
       if (totalAttempts > 1) {
         if (currentAttemptIdx === 1) {
           displayName = `${baseFormatted} #1 (初次${span.status === "failed" ? "·失败" : ""})`;
@@ -138,15 +142,16 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
   // 精简有效流水线（每个阶段仅展示最终有效 Span，并汇总前序重试耗时）
   const effectiveSpans: ProcessedSpanItem[] = useMemo(() => {
     const list: ProcessedSpanItem[] = [];
+    const byId = new Map(processedAllSpans.map(item => [item.rawSpan.span_id, item]));
 
-    for (const [stageName, stat] of stageStats) {
+    for (const [, stat] of stageStats) {
       const latestSpan = stat.attempts[stat.attempts.length - 1];
       const totalAttempts = stat.attempts.length;
-      const baseFormatted = formatStageName(stageName);
+      const baseFormatted = formatStageName(latestSpan.stage_name);
 
       list.push({
         rawSpan: latestSpan,
-        displayName: baseFormatted,
+        displayName: byId.get(latestSpan.span_id)?.displayName || baseFormatted,
         stageNameFormatted: baseFormatted,
         durationMs: latestSpan.duration_ms ?? 0,
         attemptIndex: totalAttempts,
@@ -156,8 +161,17 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
       });
     }
 
-    return list;
-  }, [stageStats]);
+    const eligible = new Set(list.map(item => item.rawSpan.span_id));
+    const stack = buildSpanTree(spans).filter(node => eligible.has(node.span.span_id));
+    const visible = new Set<string>();
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (!eligible.has(node.span.span_id)) continue;
+      visible.add(node.span.span_id);
+      stack.push(...node.children);
+    }
+    return list.filter(item => visible.has(item.rawSpan.span_id));
+  }, [stageStats, spans, processedAllSpans]);
 
   // 当前激活展示的 Span 列表
   const currentSpans = useMemo(() => {
@@ -169,9 +183,9 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
 
   // 1. 阶段耗时瀑布 / 柱状图 Option
   const durationChartOption = useMemo(() => {
-    const stageNames = currentSpans.map((s) => s.displayName);
+    const stageNames = currentSpans.map((s) => `${typeof s.rawSpan.payload?.parent_span_id === "string" ? "↳ " : ""}${s.displayName}`);
     const durations = currentSpans.map((s) => s.durationMs);
-    const totalMs = durations.reduce((acc, v) => acc + v, 0) || trace.duration_ms || 1;
+    const totalMs = trace.duration_ms || durations.reduce((acc, v) => acc + v, 0) || 1;
 
     return {
       backgroundColor: "transparent",
@@ -192,7 +206,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
           const dur = item.durationMs;
           const pct = ((dur / totalMs) * 100).toFixed(1);
 
-          const stat = stageStats.get(s.stage_name);
+          const stat = stageStats.get(spanGroupKey(s));
           const attemptsCount = stat?.attempts.length || 1;
           const retryOverhead = stat?.retryOverhead || 0;
 
@@ -210,7 +224,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
               ${item.displayName}
             </div>
             <div style="font-size: 12px; color: #2563eb; margin-bottom: 2px;">
-              ${pipelineMode === "effective" && attemptsCount > 1 ? "有效耗时" : "阶段耗时"}: <b style="font-family: monospace;">${dur.toLocaleString()} ms</b> (${pct}%)
+              ${pipelineMode === "effective" && attemptsCount > 1 ? "有效耗时" : "阶段耗时"}: <b style="font-family: monospace;">${dur.toLocaleString()} ms</b> (占任务总耗时 ${pct}%)
             </div>
             <div style="font-size: 11px; color: ${isDark ? "#8b949e" : "#64748b"};">
               执行状态: <b>${s.status}</b> ${pipelineMode === "all" && item.totalAttempts > 1 ? `(第 ${item.attemptIndex}/${item.totalAttempts} 次尝试)` : ""}
@@ -281,7 +295,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     const labels: string[] = ["起点 (Init)"];
     const memValues: number[] = [perf?.init_memory_mb || 0];
 
-    const sourceSpans = pipelineMode === "effective" ? effectiveSpans : processedAllSpans;
+    const sourceSpans = [...(pipelineMode === "effective" ? effectiveSpans : processedAllSpans)].sort((a, b) => (a.rawSpan.started_at * 1000 + a.durationMs) - (b.rawSpan.started_at * 1000 + b.durationMs));
 
     sourceSpans.forEach((item) => {
       labels.push(item.displayName);
@@ -327,10 +341,10 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
               ${stageName}
             </div>
             <div style="font-size: 12px; color: #0d9488; margin-bottom: 2px;">
-              当前进程 RSS: <b style="font-family: monospace;">${curVal.toFixed(1)} MB</b>
+              宿主阶段边界 RSS: <b style="font-family: monospace;">${curVal.toFixed(1)} MiB</b>
             </div>
             <div style="font-size: 11px; color: ${deltaColor};">
-              阶段内存增量: <b>${Number(delta) > 0 ? `+${delta}` : delta} MB</b>
+              宿主 RSS 净变化: <b>${Number(delta) > 0 ? `+${delta}` : delta} MiB</b>
             </div>
           `;
         },
@@ -370,7 +384,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
       },
       series: [
         {
-          name: "内存 RSS",
+          name: "宿主 RSS 采样",
           type: "line",
           smooth: true,
           showSymbol: true,
@@ -399,7 +413,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
           markLine: {
             symbol: ["none", "none"],
             label: {
-              formatter: "峰值: {c} MB",
+              formatter: "宿主采样峰值: {c} MiB",
               position: "insideEndTop",
               fontSize: 10,
               color: isDark ? "#fbbf24" : "#d97706",
@@ -563,7 +577,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
           <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#1e293b" }}>
             全链路性能指标与运行期资源观测
           </Text>
-          <Tooltip title="精准采集各生命周期耗时瀑布、Python 进程 RSS 内存阶梯演进、T2I 渲染链路细分与 Base64 传输体积膨胀比">
+          <Tooltip title="生命周期耗时、阶段边界的宿主 RSS 采样及传输体积。宿主采样不包含 Typst 子进程开销，隔离编译峰值请查看对应编译阶段。">
             <InfoCircleOutlined style={{ color: isDark ? "#8b949e" : "#94a3b8", fontSize: 11, cursor: "pointer" }} />
           </Tooltip>
         </Space>
@@ -599,7 +613,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
                 icon: <ClockCircleOutlined />,
               },
               {
-                label: "内存演进",
+                label: "宿主 RSS 采样",
                 value: "memory",
                 icon: <LineChartOutlined />,
               },
@@ -632,14 +646,14 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
         </span>
         <span style={{ color: isDark ? "#30363d" : "#e2e8f0" }}>|</span>
         <span style={{ fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
-          峰值内存: <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>{perf?.peak_memory_mb ? `${perf.peak_memory_mb.toFixed(1)} MB` : "--"}</b>
+          宿主采样峰值: <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>{perf?.peak_memory_mb ? `${perf.peak_memory_mb.toFixed(1)} MiB` : "--"}</b>
         </span>
         {perf?.delta_memory_mb !== undefined && (
           <Tag
             color={perf.delta_memory_mb > 15 ? "orange" : "default"}
             style={{ margin: 0, padding: "0 4px", fontSize: 10, lineHeight: "16px", height: 16 }}
           >
-            增量: {perf.delta_memory_mb > 0 ? `+${perf.delta_memory_mb.toFixed(1)}` : perf.delta_memory_mb.toFixed(1)} MB
+            宿主净变化: {perf.delta_memory_mb > 0 ? `+${perf.delta_memory_mb.toFixed(1)}` : perf.delta_memory_mb.toFixed(1)} MiB
           </Tag>
         )}
         {hasRetries && (

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .download_control import DownloadControl
 from .openapi_spec import generate_openapi_spec
 from .routes import (
     ConfigRoutes,
@@ -22,6 +23,10 @@ from .routes import (
     TraceRoutes,
 )
 from .routes.config_routes import _config_key_to_folder, _sanitize_path_segment
+from .routes.managed_file_routes import ManagedFileRoutes
+from .routes.managed_record_routes import ManagedRecordRoutes
+from .routes.managed_upload_routes import ManagedUploadRoutes
+from .routes.template_resource_routes import TemplateResourceRoutes
 from .web_compat import (
     WebApiResponse,
     error_response,
@@ -95,6 +100,8 @@ class PluginPageWebUIBridge:
             report_dispatcher=self.report_dispatcher,
             report_output_dir=self.report_output_dir,
         )
+        self.downloads = DownloadControl()
+        self.template_resource_routes = TemplateResourceRoutes(self.downloads)
         self.template_routes = TemplateRoutes(
             analysis_service=self.analysis_service,
             report_dispatcher=self.report_dispatcher,
@@ -107,16 +114,42 @@ class PluginPageWebUIBridge:
             report_dispatcher=self.report_dispatcher,
             context=self.context,
             auto_scheduler=self.auto_scheduler,
+            downloads=self.downloads,
         )
         self.data_management_routes = DataManagementRoutes(
             trace_store=self.trace_store,
             analysis_service=self.analysis_service,
             report_output_dir=self.report_output_dir,
         )
+        self.managed_file_routes = ManagedFileRoutes(self.report_output_dir)
+        self.managed_upload_routes = ManagedUploadRoutes(
+            self.managed_file_routes, self.downloads
+        )
+        self.managed_record_routes = ManagedRecordRoutes(
+            self.analysis_service, self.active_task_manager
+        )
 
     def register_routes(self) -> None:
         """向 AstrBot 注册所有 Web API 端点"""
         routes = [
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/upload/start",
+                self.managed_upload_routes.api_start,
+                ["POST"],
+                "初始化文件上传元数据",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/upload/<upload_id>/<offset>",
+                self.managed_upload_routes.api_upload,
+                ["POST"],
+                "接收二进制文件分块",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/upload/cancel",
+                self.managed_upload_routes.api_cancel,
+                ["POST"],
+                "取消文件上传并清理暂存",
+            ),
             # 1. 活跃任务与控制
             (
                 f"/{PLUGIN_NAME}/tasks/active",
@@ -285,6 +318,42 @@ class PluginPageWebUIBridge:
                 "Test AstrBot or custom T2I with a fixed HTML page without saving configuration",
             ),
             (
+                f"/{PLUGIN_NAME}/config/downloads/cancel",
+                self.downloads.api_cancel,
+                ["POST"],
+                "取消指定字体或模板素材下载并清理临时文件",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/downloads/progress",
+                self.downloads.api_progress,
+                ["POST"],
+                "读取下载的实际来源、字节进度与等待时长",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/template-resources",
+                self.template_resource_routes.api_get_resources,
+                ["GET"],
+                "读取各主题本地素材状态",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/template-resources/download",
+                self.template_resource_routes.api_download_resource,
+                ["POST"],
+                "按固定清单补齐单个模板素材",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/typst-fonts",
+                self.config_routes.api_typst_fonts,
+                ["GET"],
+                "读取插件数据目录中的 Typst 字体状态",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/typst-fonts/download",
+                self.config_routes.api_download_typst_fonts,
+                ["POST"],
+                "从配置的 CDN 下载固定 Typst 字体预设",
+            ),
+            (
                 f"/{PLUGIN_NAME}/config/test-template-cdn",
                 self.config_routes.api_test_template_cdn,
                 ["POST"],
@@ -303,6 +372,54 @@ class PluginPageWebUIBridge:
                 "Get thumbnail or content of a config file path",
             ),
             # 6. 插件数据管理（存储分区清理）
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/delete-many",
+                self.managed_file_routes.api_delete_many,
+                ["POST"],
+                "Delete explicitly selected managed files",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/records",
+                self.managed_record_routes.api_list,
+                ["GET"],
+                "List plugin history or avatar entries",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/records/detail",
+                self.managed_record_routes.api_detail,
+                ["GET"],
+                "Read a business record with revision",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/records/mutate",
+                self.managed_record_routes.api_mutate,
+                ["POST"],
+                "Import, revise or delete a business record",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/partitions",
+                self.managed_file_routes.api_partitions,
+                ["GET"],
+                "List managed file partitions",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files",
+                self.managed_file_routes.api_files,
+                ["GET"],
+                "Search files in a managed partition",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/content",
+                self.managed_file_routes.api_content,
+                ["GET"],
+                "Read managed file content",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/files/mutate",
+                self.managed_file_routes.api_mutate,
+                ["POST"],
+                "Create, replace, rename or delete a managed file",
+            ),
             (
                 f"/{PLUGIN_NAME}/plugin-data/overview",
                 self.data_management_routes.api_get_plugin_data_overview,

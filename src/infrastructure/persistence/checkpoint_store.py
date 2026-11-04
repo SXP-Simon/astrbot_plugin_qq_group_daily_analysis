@@ -337,6 +337,33 @@ class CheckpointStore(ICheckpointStore):
             )
             return cursor.rowcount > 0
 
+    def replace_checkpoint_data(
+        self, checkpoint_id: str, expected_data: object, data: object
+    ) -> bool:
+        """在同一事务中比较并替换产物，原样保留快照生命周期。
+
+        Args:
+            checkpoint_id: 列表中选定的精确主键。
+            expected_data: 编辑前的产物。
+            data: 新产物。
+
+        Returns:
+            未过期且内容未被其他任务修改时返回真。
+        """
+        payload = json.dumps(data, ensure_ascii=False, allow_nan=False)
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT data_json FROM stage_checkpoints WHERE checkpoint_id = ? AND expire_at >= ?",
+                (checkpoint_id, time.time()),
+            ).fetchone()
+            if not row or json.loads(row["data_json"]) != expected_data:
+                return False
+            updated = conn.execute(
+                "UPDATE stage_checkpoints SET data_json = ? WHERE checkpoint_id = ? AND data_json = ?",
+                (payload, checkpoint_id, row["data_json"]),
+            )
+            return updated.rowcount == 1
+
     def list_all_checkpoints(
         self,
         limit: int = 50,

@@ -17,10 +17,12 @@ export function T2iProbe({ input }: { input: T2iProbeInput }) {
         {loading ? "正在生成测试图…" : "测试渲染"}
       </Button>
       <Typography.Text type="secondary">
-        {hostService
+        {input.render_service === "typst"
+          ? "测试插件数据目录中的字体和 Typst 独立编译器，不调用 AstrBot 渲染服务。"
+          : hostService
           ? "无需保存即可测试 T2I（文字转图片）服务。未绑定配置的群使用默认配置；旧版 AstrBot 可能只支持默认配置。"
           : "无需保存即可测试当前 T2I（文字转图片）服务地址和 Token。"}
-        测试检查 T2I 服务是否可用，不检查模板图片和字体；不会调用大模型或发到群里。
+        {input.render_service === "typst" ? "不会下载角色素材、调用大模型或发到群里。" : "测试检查 T2I 服务是否可用，不检查模板图片和字体；不会调用大模型或发到群里。"}
       </Typography.Text>
       {error && <Alert type="error" showIcon message={error} />}
       {result && <>

@@ -210,9 +210,9 @@
         "items": {
             "enable_t2i_activity_histogram": {
                 "type": "bool",
-                "description": "启用 T2I 群聊概览图",
+                "description": "启用群聊概览图",
                 "default": true,
-                "hint": "在 QQ 官方 Markdown 报告中嵌入透明背景的日期、基础统计与 24 小时直方图。渲染失败时自动回退为完整文字报告。"
+                "hint": "在 QQ 官方 Markdown 报告内嵌入透明背景的日期、基础统计与 24 小时直方图。首选渲染方案为 Typst 时，本地生成 PNG，上传 QQ 素材后与正文同条发送，无需公网图床；HTML/T2I 沿用公网图片 URL。生成、上传或转存失败时恢复完整文字报告。Typst 需先在数据管理中下载中文字体。"
             }
         }
     },
@@ -754,6 +754,94 @@
                             }
                         },
                         "description": "直接连接自己的T2I服务，默认本地地址；资源可选内地或海外预设。"
+                    },
+                    "typst": {
+                        "name": "Typst 本地排版",
+                        "display_item": "name",
+                        "description": "独立生成固定 940px 版心的静态长图，可按清晰度导出至最高 1410px，高度随内容延伸；不调用 AstrBot 或浏览器，字体和素材由插件数据目录管理。",
+                        "items": {
+                            "name": {
+                                "type": "string",
+                                "description": "方案名称",
+                                "default": "Typst 本地排版"
+                            },
+                            "priority": {
+                                "type": "int",
+                                "description": "优先级（越小越先）",
+                                "default": 10,
+                                "min": 0,
+                                "max": 10000
+                            },
+                            "type": {
+                                "type": "string",
+                                "description": "输出格式",
+                                "default": "png",
+                                "options": [
+                                    "png",
+                                    "jpeg"
+                                ]
+                            },
+                            "raster_ppi": {
+                                "type": "int",
+                                "description": "导出清晰度（PPI）",
+                                "default": 144,
+                                "options": [144, 180, 216],
+                                "labels": ["标准 · 940px（144 PPI）", "清晰 · 1175px（180 PPI）", "高清 · 1410px（216 PPI）"],
+                                "hint": "只提高栅格密度，排版仍固定为 940px。最高输出 1410px；高密度增加编译时间、内存和文件体积，超长报告超出像素预算时自动降低密度。PNG 无损，不受 JPEG 质量影响。"
+                            },
+                            "quality": {
+                                "type": "int",
+                                "description": "JPEG 质量",
+                                "default": 90,
+                                "min": 1,
+                                "max": 100
+                            },
+                            "timeout": {
+                                "type": "int",
+                                "description": "单次编译超时（毫秒）",
+                                "hint": "每次 Typst 编译的等待上限，默认 30 秒。主题与基础恢复分别计时，素材准备和排队另计。主题失败后会尝试基础排版恢复图片。",
+                                "default": 30000,
+                                "min": 1000,
+                                "max": 300000
+                            },
+                            "cdn_base_url": {
+                                "type": "string",
+                                "description": "模板资源 CDN",
+                                "default": "",
+                                "hint": "用于字体预设、角色装饰和人格素材下载；首次下载后会缓存在插件数据目录。",
+                                "options": [
+                                    "",
+                                    "https://cdn.jsdmirror.com",
+                                    "https://cdn.jsdmirror.cn",
+                                    "https://jsd.cdn.noisework.cn",
+                                    "https://cdn.bili33.top",
+                                    "https://cdn.jsdelivr.net",
+                                    "https://fastly.jsdelivr.net",
+                                    "https://gcore.jsdelivr.net",
+                                    "__custom__"
+                                ],
+                                "labels": [
+                                    "跟随资源环境预设",
+                                    "JSDMirror（默认） · https://cdn.jsdmirror.com",
+                                    "JSDMirror CN · https://cdn.jsdmirror.cn",
+                                    "NOISE · https://jsd.cdn.noisework.cn",
+                                    "哔哩 CDN · https://cdn.bili33.top",
+                                    "jsDelivr · https://cdn.jsdelivr.net",
+                                    "Fastly · https://fastly.jsdelivr.net",
+                                    "Gcore · https://gcore.jsdelivr.net",
+                                    "自定义地址…"
+                                ]
+                            },
+                            "custom_cdn_base_url": {
+                                "type": "string",
+                                "description": "自定义模板资源 CDN",
+                                "default": "",
+                                "condition": {
+                                    "cdn_base_url": "__custom__"
+                                },
+                                "hint": "填写完整 HTTP(S) 地址。保存并重新打开配置页后，地址会作为可选项保留。"
+                            }
+                        }
                     }
                 }
             },

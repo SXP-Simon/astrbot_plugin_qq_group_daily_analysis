@@ -1,5 +1,6 @@
 import { ApiResponse, AstrBotContext, SSEEventWrapper } from "./bridge";
 import { mockHandlers, mockSSEService } from "../../mocks";
+import { mockFontDownloads } from "../../mocks/data/fontDownloads";
 
 const PLUGIN_BASE_PATH = "/api/plugins/astrbot_plugin_qq_group_daily_analysis";
 
@@ -129,8 +130,32 @@ export async function devApiPost<T = unknown>(
 
   // 模拟异步网络延迟
   await new Promise((resolve) => setTimeout(resolve, 50));
+  // 下载保留可操作的等待窗口，让演示模式也能检查取消及部分完成状态。
+  if (["config/typst-fonts/download", "config/template-resources/download"].includes(path)) {
+    const download = typeof body === "object" && body !== null ? body as Record<string, unknown> : {};
+    const id = typeof download.download_id === "string" ? download.download_id : "";
+    if (path === "config/typst-fonts/download" && id) mockFontDownloads.set(id, { name: String(download.name), source: String(download.source || "cdn"), started: Date.now() });
+    try {
+      await new Promise(resolve => setTimeout(resolve, path === "config/typst-fonts/download" ? 1600 : 800));
+      return matchMockHandler("POST", path, undefined, body) as ApiResponse<T>;
+    } finally { if (id) mockFontDownloads.delete(id); }
+  }
   const res = matchMockHandler("POST", path, undefined, body);
   return res as ApiResponse<T>;
+}
+
+/** 开发环境保持二进制分块传输，与宿主上传的请求形态一致。 */
+export async function devApiUpload(path: string, file: File): Promise<unknown> {
+  if (getDevBridgeMode() === "proxy") {
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch(`${PLUGIN_BASE_PATH}/${path}`, { method: "POST", body });
+    return await response.json();
+  }
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const matched = /^plugin-data\/files\/upload\/([^/]+)\/(\d+)$/.exec(path);
+  if (!matched) throw new Error("未知上传路径");
+  return matchMockHandler("POST", "plugin-data/files/upload", undefined, { download_id: matched[1], offset: Number(matched[2]), chunk_bytes: file.size });
 }
 
 export function devSubscribeSSE(handlers: {

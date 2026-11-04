@@ -1,5 +1,5 @@
 import { ReportItem } from "../../entities/report/model/types";
-import { ReportTemplateItem } from "../../entities/report/model/templates";
+import { DEFAULT_REPORT_TEMPLATES, ReportTemplateItem } from "../../entities/report/model/templates";
 
 /**
  * 历史产物报告 Mock 数据矩阵
@@ -95,7 +95,7 @@ export const mockReportHistory: ReportItem[] = [
   },
 ];
 
-export const mockReportTemplates: ReportTemplateItem[] = [
+const templateExamples: ReportTemplateItem[] = [
   {
     id: "scrapbook",
     label: "Scrapbook (默认手账风)",
@@ -105,6 +105,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "orange",
     is_custom: false,
     has_image: true,
+    has_typst: true,
     has_html: true,
   },
   {
@@ -116,6 +117,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "red",
     is_custom: false,
     has_image: true,
+    has_typst: true,
     has_html: true,
   },
   {
@@ -127,6 +129,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "lime",
     is_custom: false,
     has_image: true,
+    has_typst: true,
     has_html: true,
   },
   {
@@ -138,6 +141,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "purple",
     is_custom: false,
     has_image: true,
+    has_typst: true,
   },
   {
     id: "ATRI",
@@ -148,6 +152,7 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     tag_color: "blue",
     is_custom: false,
     has_image: true,
+    has_typst: true,
   },
   {
     id: "custom_hacker",
@@ -159,5 +164,16 @@ export const mockReportTemplates: ReportTemplateItem[] = [
     is_custom: true,
     can_uninstall: true,
     has_image: true,
+    has_typst: false,
   },
+  { id: "custom_native", label: "原生极简示例", is_custom: true, can_uninstall: true,
+    has_image: false, has_html: false, has_typst: true, desc: "仅支持 Typst 图片，用于检查引擎筛选与能力标签" },
+];
+
+
+export const mockReportTemplates: ReportTemplateItem[] = [
+  { id: "my_miku", label: "我的初音模板 (my_miku)", display_name: "我的初音模板", desc: "自定义的 Miku 日报，源码和角色素材放在同一个模板包内。", is_custom: true, has_typst: true, can_uninstall: true },
+  { id: "my_maria", label: "我的 Maria 模板 (my_maria)", display_name: "我的 Maria 模板", desc: "手动维护的 Maria 模板。", is_custom: true, has_typst: true, can_uninstall: true },
+  ...DEFAULT_REPORT_TEMPLATES.map((item) => ({ ...item, ...templateExamples.find((example) => example.id === item.id) })),
+  ...templateExamples.filter((item) => item.is_custom),
 ];

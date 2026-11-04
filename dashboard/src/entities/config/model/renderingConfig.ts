@@ -76,7 +76,9 @@ export const t2iEndpointSchema = z.string({ error: "服务地址必须是文字"
   });
 
 // 方案结构与后端 rendering_config 保持一致，保存时保留扩展字段。
-export const renderingStrategySchema = z.object({
+export const typstRasterPpiSchema = z.union([z.literal(144), z.literal(180), z.literal(216)], { error: "导出密度请选择 144、180 或 216 PPI" });
+
+const renderingStrategyInputSchema = z.object({
   name: z.string({ error: "方案名称必须是文字" }).default("渲染方案"),
   priority: z.number({ error: "优先级必须是数字" }).int("优先级必须是整数").min(0, "优先级不能小于 0").max(10000, "优先级不能大于 10000").default(10),
   environment: z.enum(["Mainland", "Overseas"], { error: "请选择内地或海外资源环境" }).optional(),
@@ -84,14 +86,15 @@ export const renderingStrategySchema = z.object({
   cdn_base_url: z.union([cdnBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   google_fonts: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
   gstatic: z.union([fontBaseUrlSchema, z.literal(CUSTOM_RESOURCE_OPTION)]).optional(),
-  render_service: z.enum(["astrbot", "custom"], { error: "请选择有效的渲染方案类型" }).optional(),
+  render_service: z.enum(["astrbot", "custom", "typst"], { error: "请选择有效的渲染方案类型" }).optional(),
   service_endpoint: z.string({ error: "服务地址必须是文字" }).trim().optional(),
   service_token: z.string({ error: "服务 Token 必须是文字" }).max(4096, "服务 Token 不能超过 4096 个字符").regex(/^[\x20-\x7e]*$/, "服务 Token 请使用英文、数字或常用符号，不能换行").transform((value) => value.trim()).default(""),
   type: z.enum(["png", "jpeg"], { error: "请选择 PNG 或 JPEG 格式" }).default("png"),
   quality: z.number({ error: "图片质量必须是数字" }).int("图片质量必须是整数").min(1, "图片质量不能小于 1").max(100, "图片质量不能大于 100").default(80),
-  device_scale: z.enum(["normal", "high", "ultra"], { error: "请选择有效的分辨率等级" }).default("high"),
+  device_scale: z.enum(["normal", "high", "ultra"], { error: "请选择有效的分辨率等级" }).optional(),
+  raster_ppi: typstRasterPpiSchema.optional(),
   request_timeout: z.number({ error: "请求等待上限必须是数字" }).int("请求等待上限必须是整数").min(1000, "请求等待上限不能小于 1000 毫秒").max(300000, "请求等待上限不能大于 300000 毫秒").optional(),
-  timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").default(20000),
+  timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").optional(),
 }).catchall(z.unknown()).superRefine((value, ctx) => {
   for (const key of ["cdn_base_url", "google_fonts", "gstatic"] as const) {
     if (value[key] !== CUSTOM_RESOURCE_OPTION) continue;
@@ -99,7 +102,7 @@ export const renderingStrategySchema = z.object({
     const parsed = (key === "cdn_base_url" ? cdnBaseUrlSchema : fontBaseUrlSchema).safeParse(raw);
     if (!parsed.success || !parsed.data) ctx.addIssue({ code: "custom", path: [`custom_${key}`], message: "请填写完整的自定义资源地址" });
   }
-  const service = value.render_service ?? (value.__template_key === "custom" ? "custom" : "astrbot");
+  const service = value.render_service ?? (value.__template_key === "typst" ? "typst" : value.__template_key === "custom" ? "custom" : "astrbot");
   if (service === "custom") {
     const endpoint = t2iEndpointSchema.safeParse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT);
     if (!endpoint.success) ctx.addIssue({ code: "custom", path: ["service_endpoint"], message: endpoint.error.issues[0].message });
@@ -112,17 +115,29 @@ export const renderingStrategySchema = z.object({
       value[`custom_${key}`] = address;
     }
   }
-  const service = value.render_service ?? (value.__template_key === "custom" ? "custom" as const : "astrbot" as const);
+  const service = value.render_service ?? (value.__template_key === "typst" ? "typst" as const : value.__template_key === "custom" ? "custom" as const : "astrbot" as const);
   const environment = value.environment ?? (value.__template_key === "mainland" ? "Mainland" as const : "Overseas" as const);
   // 旧调用方式只用于迁移，保存后由条目类型唯一决定服务。
-  const { render_service: _legacyService, font_mode: _fontMode, ...plan } = value;
+  const { device_scale: _scale, render_service: _legacyService, font_mode: _fontMode, typst_width: _legacyWidth, typst_ppi: _legacyPpi, raster_ppi: _rasterPpi, ...plan } = value;
   return Object.assign(plan, {
+    timeout: value.timeout ?? (service === "typst" ? 30000 : 20000),
     environment,
+    ...(service === "typst" ? { raster_ppi: value.raster_ppi ?? 144 } : { device_scale: value.device_scale ?? "high" as const }),
     ...(service === "custom" ? { request_timeout: value.request_timeout ?? DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS, font_mode: value.font_mode ?? "network" } : {}),
     service_endpoint: service === "custom" ? t2iEndpointSchema.parse(value.service_endpoint ?? DEFAULT_CUSTOM_T2I_ENDPOINT) : value.service_endpoint ?? "",
-    __template_key: service === "custom" ? "custom" : environment === "Mainland" ? "mainland" : "strategy",
+    __template_key: service === "typst" ? "typst" : service === "custom" ? "custom" : environment === "Mainland" ? "mainland" : "strategy",
   });
 });
+
+// 原生图片不使用旧浏览器布局参数；导出密度单独校验，不改变固定版心。
+export const renderingStrategySchema = z.preprocess((input) => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const value = input as Record<string, unknown>;
+  const service = value.render_service ?? value.__template_key;
+  if (service !== "typst") return value;
+  const ignored = new Set(["typst_width", "typst_ppi", "device_scale", "device_scale_factor_level", "viewport_width", "viewport_height", "full_page", "google_fonts", "gstatic", "custom_google_fonts", "custom_gstatic", "request_timeout"]);
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !ignored.has(key)));
+}, renderingStrategyInputSchema);
 
 export const renderingConfigSchema = z.object({
   t2i_rendering_strategies: z.array(renderingStrategySchema).optional(),
@@ -156,7 +171,7 @@ const renderingResolvedSchema = renderingConfigSchema.transform((value) => Objec
 
 export const renderingRuntimeSchema = renderingResolvedSchema.transform((value) => {
   const first = [...(value.t2i_rendering_strategies || [])].sort((a, b) => a.priority - b.priority)[0];
-  return { t2i_cdn_base_url: first?.cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL };
+  return { t2i_cdn_base_url: first?.cdn_base_url || DEFAULT_TEMPLATE_CDN_BASE_URL, template_engine: first?.__template_key === "typst" ? "typst" as const : "html" as const };
 });
 
 export const renderingSaveSchema = renderingResolvedSchema.transform((value) => {

@@ -84,6 +84,66 @@ async def test_webui_returns_success_and_refreshes_scheduler_after_write(manager
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["schedule", "refresh"])
+async def test_scheduler_failure_after_persistence_keeps_success_and_revision(manager, failure):
+    scheduler = MagicMock()
+    scheduler.incremental_trigger.refresh_target_states = AsyncMock()
+    if failure == "schedule":
+        scheduler.schedule_jobs.side_effect = RuntimeError("调度注册失败")
+    else:
+        scheduler.incremental_trigger.refresh_target_states.side_effect = RuntimeError("增量状态不可用")
+    routes = ConfigRoutes(MagicMock(config_manager=manager), context=MagicMock(), auto_scheduler=scheduler)
+    revision = (await routes.api_get_config())["data"]["data"]["revision"]
+    with patch("src.infrastructure.webui.routes.config_routes.request") as request:
+        request.json = AsyncMock(return_value={"config": {"basic": {"max_topics": 5}}, "revision": revision})
+        response = await routes.api_save_config()
+        assert response["status_code"] == 200
+        assert response["data"]["status"] == "ok"
+        assert "配置已保存" in response["data"]["message"]
+        assert "调度" in response["data"]["message"]
+        latest = (await routes.api_get_config())["data"]["data"]
+        assert response["data"]["revision"] == latest["revision"]
+        assert latest["config"]["basic"]["max_topics"] == 5
+        manager.config.save_config.assert_called_once()
+        scheduler.schedule_jobs.side_effect = None
+        scheduler.incremental_trigger.refresh_target_states.side_effect = None
+        request.json = AsyncMock(return_value={"config": {"basic": {"max_topics": 7}}, "revision": latest["revision"]})
+        assert (await routes.api_save_config())["status_code"] == 200
+
+
+@pytest.mark.asyncio
+async def test_scheduler_refresh_timeout_releases_wait_without_losing_saved_receipt(manager):
+    cancelled = asyncio.Event()
+
+    async def refresh():
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    scheduler = MagicMock()
+    scheduler.incremental_trigger.refresh_target_states = AsyncMock(side_effect=refresh)
+    routes = ConfigRoutes(MagicMock(config_manager=manager), context=MagicMock(), auto_scheduler=scheduler)
+    real_wait_for = asyncio.wait_for
+
+    async def fast_wait_for(awaitable, timeout):
+        assert timeout == 5
+        return await real_wait_for(awaitable, timeout=0.01)
+
+    with (
+        patch("src.infrastructure.webui.routes.config_routes.request") as request,
+        patch("src.infrastructure.webui.routes.config_routes.asyncio.wait_for", new=fast_wait_for),
+    ):
+        request.json = AsyncMock(return_value={"config": {"basic": {"max_topics": 5}}})
+        response = await real_wait_for(routes.api_save_config(), timeout=0.5)
+    assert response["status_code"] == 200
+    assert response["data"]["revision"]
+    assert "调度" in response["data"]["message"]
+    assert cancelled.is_set()
+    manager.config.save_config.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_two_page_saves_reject_stale_snapshot_without_mutation(manager):
     manager.config.update({"basic": {"max_topics": 3}, "future": {"keep": True}})
     routes = ConfigRoutes(MagicMock(config_manager=manager))
@@ -113,6 +173,27 @@ async def test_two_page_saves_reject_stale_snapshot_without_mutation(manager):
             }
         )
         assert (await routes.api_save_config())["status_code"] == 200
+
+
+@pytest.mark.asyncio
+async def test_page_bridge_keeps_saved_revision_for_the_next_save(manager):
+    routes = ConfigRoutes(MagicMock(config_manager=manager))
+    revision = (await routes.api_get_config())["data"]["data"]["revision"]
+    with patch("src.infrastructure.webui.routes.config_routes.request") as request:
+        for value in (5, 7):
+            request.json = AsyncMock(return_value={
+                "config": {"basic": {"max_topics": value}}, "revision": revision,
+            })
+            response = await routes.api_save_config()
+            assert response["status_code"] == 200
+            body = response["data"]
+            # 宿主 PluginViewPage 会执行 response.data?.data ?? response.data。
+            forwarded = body.get("data", body)
+            assert forwarded["status"] == "ok"
+            assert forwarded["revision"] != revision
+            revision = forwarded["revision"]
+    assert manager.config["basic"]["max_topics"] == 7
+    assert manager.config.save_config.call_count == 2
 
 
 @pytest.mark.asyncio

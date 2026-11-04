@@ -52,6 +52,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
 
   const {
     templateCdnBaseUrl,
+    templateRequirements,
     loading,
     configLoaded,
     saving,
@@ -396,6 +397,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                           fieldSchema={field.schema}
                           value={field.value}
                           templateCdnBaseUrl={templateCdnBaseUrl}
+                          templateRequirements={templateRequirements}
                           providers={providers}
                           personas={personas}
                           fullKeyPath={`${activeCategory}.${field.key}`}

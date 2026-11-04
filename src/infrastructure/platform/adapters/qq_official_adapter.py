@@ -27,6 +27,8 @@ from ....domain.value_objects.unified_message import (
 )
 from ....utils.logger import logger
 from ..base import PlatformAdapter
+from ..qq_official_faces import restore_qq_face_features
+from .qq_markdown_images import QQMarkdownImages
 
 if TYPE_CHECKING:
     from astrbot.api.event import MessageChain
@@ -68,6 +70,7 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         self.appid = self._resolve_appid(config or {})
         self._markdown_msg_seq = random.randint(1, 10000)
         self._member_profiles: dict[str, QQOfficialMemberProfile] = {}
+        self._markdown_images: QQMarkdownImages | None = None
 
     @property
     def platform_id(self) -> str:
@@ -278,6 +281,8 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
                             )
                         )
 
+            contents.extend(restore_qq_face_features(metadata))
+
             message_id = str(
                 metadata.get("message_id", "") or content.get("message_id", "") or ""
             )
@@ -313,6 +318,7 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         result: list[dict] = []
         for message in messages:
             chain: list[dict] = []
+            # 表情特征段补充统计语义；原正文已保留可读表示，此处不重复拼接。
             for content in message.contents:
                 if content.type == MessageContentType.TEXT:
                     chain.append({"type": "text", "data": {"text": content.text}})
@@ -366,7 +372,40 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         content: str,
         fallback_content: str | None = None,
     ) -> bool:
-        """Send long reports as QQ custom Markdown with plain-text fallback."""
+        """发送图文 Markdown 报告，并在结束后释放本次上传的图片素材。"""
+        try:
+            return await self._send_text_report_chunks(
+                group_id, content, fallback_content
+            )
+        finally:
+            if self._markdown_images is not None:
+                await self._markdown_images.release(content)
+
+    async def upload_markdown_image(self, image: bytes) -> str | None:
+        """上传本地 PNG 素材，供报告内嵌使用，不发送独立消息。
+
+        Args:
+            image: 原生渲染生成的 PNG 字节。
+
+        Returns:
+            当前机器人拥有的素材引用；客户端不支持时返回 None。
+        """
+        if self._markdown_images is None:
+            # 旧版 botpy 尚未封装素材接口，沿用其鉴权 HTTP 客户端请求新端点。
+            api = self.bot.api if self.bot else None
+            http = getattr(api, "_http", None)
+            if http is None:
+                return None
+            self._markdown_images = QQMarkdownImages(http)
+        return await self._markdown_images.upload(image)
+
+    async def _send_text_report_chunks(
+        self,
+        group_id: str,
+        content: str,
+        fallback_content: str | None,
+    ) -> bool:
+        """按 QQ 长度限制发送 Markdown 分片，失败时恢复文字报告。"""
         chunks = self._split_markdown_report(str(content))
         if not chunks:
             return True
@@ -413,11 +452,13 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         try:
             from botpy.types.message import MarkdownPayload
 
-            markdown: object = MarkdownPayload(content=content)
+            markdown: dict[str, object] = dict(MarkdownPayload(content=content))
         except ImportError:
-            # Allows lightweight test environments while botpy is provided by
-            # AstrBot in production.
+            # 轻量测试环境可能未安装 botpy，生产环境由 AstrBot 提供。
             markdown = {"content": content}
+        if re.search(r"!\[[^\]]*\]\((?:https?://|qqbot-media://)", content):
+            # 要求 QQ 明确返回转存失败，才能恢复包含统计的完整文字报告。
+            markdown["force_verify_image_resource"] = True
 
         call_result = api.post_group_message(
             group_openid=str(group_id),
@@ -429,7 +470,7 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
             result = await call_result
         else:
             result = call_result
-        return result is not None
+        return isinstance(result, dict) and bool(result.get("id"))
 
     def _next_markdown_msg_seq(self) -> int:
         self._markdown_msg_seq = (self._markdown_msg_seq % 10000) + 1

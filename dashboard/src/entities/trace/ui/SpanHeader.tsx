@@ -6,6 +6,7 @@ import {
   DownOutlined,
   RightOutlined,
 } from "@ant-design/icons";
+import { resolveSpanOutcome } from "../model/spanOutcome";
 import { getStageSlaThreshold } from "../model/sla";
 import { formatDuration, formatStageName } from "../../../shared/lib/formatters";
 
@@ -18,6 +19,8 @@ interface SpanHeaderProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   payload?: Record<string, unknown>;
+  parentStageName?: string;
+  hasChildren?: boolean;
 }
 
 export const SpanHeader: React.FC<SpanHeaderProps> = ({
@@ -29,10 +32,14 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   isExpanded,
   onToggleExpand,
   payload,
+  parentStageName,
+  hasChildren = false,
 }) => {
   const { token } = theme.useToken();
 
-  const isRunning = status === "running";
+  const outcome = resolveSpanOutcome(status, payload);
+  const isRunning = outcome === "running";
+  const isCancelled = outcome === "cancelled";
   const duration =
     durationMs !== null && durationMs !== undefined
       ? durationMs
@@ -40,23 +47,23 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
 
   const durationPct = isRunning
     ? 100
-    : Math.min(100, Math.max(2, Math.round((duration / Math.max(1, totalDurationMs)) * 100)));
+    : Math.min(100, Math.max(0, (duration / Math.max(1, totalDurationMs)) * 100));
+  const durationPercentLabel = durationPct > 0 && durationPct < 0.1
+    ? "<0.1"
+    : durationPct.toFixed(1).replace(/\.0$/, "");
 
   const { thresholdMs, description: slaDesc } = getStageSlaThreshold(stageName);
-  const isSlaExceeded = !isRunning && duration > thresholdMs;
-  const isFailed = status === "failed" || status === "error" || Boolean(payload?.error);
-  const isWarning =
-    !isFailed &&
-    (status === "warning" ||
-      status === "partial_success" ||
-      payload?.success === false ||
-      Boolean(payload?.warning) ||
-      (Array.isArray(payload?.subtask_errors) && payload.subtask_errors.length > 0));
+  const isSlaExceeded = !isRunning && !isCancelled && duration > thresholdMs;
+  const isFailed = outcome === "failed";
+  const isWarning = outcome === "warning";
 
   let color = "#52c41a";
   let tagColor = "success";
 
-  if (isFailed) {
+  if (isCancelled) {
+    color = token.colorTextDisabled;
+    tagColor = "default";
+  } else if (isFailed) {
     color = "#ff4d4f";
     tagColor = "error";
   } else if (isRunning) {
@@ -90,7 +97,9 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           )}
           <span style={{ fontWeight: 600, fontSize: 13, color: token.colorText }}>
             {formatStageName(stageName)}
+            {stageName === "IMAGE_RENDER_ATTEMPT" && typeof payload?.strategy_name === "string" && <span style={{ fontWeight: 400 }}> · {payload.strategy_name}</span>}
           </span>
+          {hasChildren && <Tag style={{ margin: 0, fontSize: 10 }}>含子阶段</Tag>}
           {isSlaExceeded && (
             <Tooltip title={`该阶段耗时已超出预期的健康基线 (${slaDesc})`}>
               <Tag
@@ -106,9 +115,11 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
 
         <Space size={6}>
           {!isRunning && (
-            <span style={{ fontSize: 11, color: token.colorTextSecondary }}>
-              占 {durationPct}%
-            </span>
+            <Tooltip title={parentStageName ? `相对于「${formatStageName(parentStageName)}」的耗时，父子阶段不能重复累加` : "相对于本次任务的总耗时"}>
+              <span style={{ fontSize: 11, color: token.colorTextSecondary, whiteSpace: "nowrap" }}>
+                {parentStageName ? "占父阶段" : "占总耗时"} {durationPercentLabel}%
+              </span>
+            </Tooltip>
           )}
           <Tag
             color={tagColor}
@@ -120,7 +131,9 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
               fontWeight: 600,
             }}
           >
-            {isRunning
+            {isCancelled
+              ? `已取消 (${formatDuration(durationMs ?? 0)})`
+              : isRunning
               ? `执行中 (${formatDuration(duration)})`
               : isWarning
               ? `警告 (${formatDuration(durationMs ?? 0)})`

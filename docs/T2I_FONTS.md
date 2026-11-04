@@ -28,13 +28,13 @@
 
 ## 按模板安装，不必一开始装全套
 
-下表列出模板主动使用的设计字体，不要求安装 `Microsoft YaHei`、`PingFang SC`、`Consolas` 等所有备用字体。
+下表列出模板主动使用的设计字体。内置模板已移除明确指定的微软雅黑、苹方、楷体等系统商业字体候选；缺字最终由浏览器通用字体回退。
 
 | 模板 | 对应字体 |
 | --- | --- |
 | simple | Noto Sans SC、Noto Sans TC |
 | deepseek_maid | Noto Sans SC |
-| HatsuneMiku | Noto Sans SC、Noto Sans TC、Noto Sans JP、Outfit、Share Tech Mono；英文报告另用 Inter |
+| HatsuneMiku | cjkFonts 全瀨體 1.11（中文主标题）、Noto Sans SC、Noto Sans TC、Noto Sans JP、Outfit、Share Tech Mono；英文报告另用 Inter |
 | hack | Noto Sans SC、Noto Sans TC、Inter、JetBrains Mono |
 | format | Noto Serif SC、Noto Serif TC、Inter |
 | maria、art_nouveau | Noto Serif SC、Noto Serif TC、Cinzel、Cormorant Garamond、JetBrains Mono |
@@ -42,9 +42,21 @@
 | scrapbook | Noto Sans SC、Noto Sans TC、ZCOOL KuaiLe、Long Cang、Patrick Hand |
 | spring_festival | Noto Serif SC、Noto Serif TC、Ma Shan Zheng、ZCOOL XiaoWei |
 | ATRI | LXGW WenKai Regular、LXGW WenKai Medium、LXGW WenKai Mono Regular |
-| BlueArchive | Blueaka 的常规与粗体；见下方的来源和名称说明 |
+| BlueArchive | Noto Sans SC、Noto Sans TC |
 
 QQ 官方摘要卡使用自己的系统字体列表，不受这个选项控制。
+
+独立 Typst 方案的字体统一放在插件数据目录 `typst/fonts/`，通过 WebUI 的字体下载入口管理，无需按下文为浏览器安装系统字体。Art Nouveau 的 Typst 花饰额外使用 Noto Sans Symbols 2；手账与春节的 Unicode emoji 使用 Noto Color Emoji 彩色字体，不提取为图片。春节的书法与标题沿用受管理的 Ma Shan Zheng、ZCOOL XiaoWei。升级后可再次点击下载补齐，HTML 模板的字体要求仍以上表为准。
+
+配置中心的 Typst 字体区域和数据管理的字体管理页均提供「字体下载来源」：默认「CDN 优先（大字库直连）」，也可选择「GitHub Raw 直连（全部字体）」。两种方式使用相同版本的字体，Raw 模式绕过所选镜像 CDN；ATRI 的三个文楷大字库原本就从固定版本 GitHub Raw 下载，更换 CDN 不会改变它们的地址。下载由 **AstrBot 插件服务器** 执行，浏览器能访问 GitHub 不代表服务器或容器也能访问；服务端沿用代理环境变量。
+
+字体管理有两个入口：原入口「数据管理 → 存储空间概览 → 存储分区明细与管理 → Typst 字体 → 管理」继续保留；也可从「配置中心 → 图片渲染策略 → Typst 方案 → Typst 字体」点击「管理 / 上传字体」，直接打开同一管理抽屉，并带上当前模板、CDN 和下载来源。点击「返回 Typst 方案」回到配置中心，未保存的配置仍然保留；管理中上传、下载或移除字体后，方案内的状态会同步刷新。
+
+点击补齐字体后会先重新核对缺失清单，只下载缺失文件。CDN 下载失败时，对有独立 Raw 来源的字体自动切换一次，并在进度中显示切换情况；原本已经直连 Raw 的大字库不会重复请求同一地址。浏览器访问正常、服务器下载失败时，可在对应字体行点击「查看上游」核对版本或「直接下载」，再使用该行的「上传此字体」。上游原始文件名与插件名不同也无需手动改名，例如 `LXGWWenKai-Regular.ttf` 会按对应预设保存为 `LXGWWenKai.ttf`；普通「上传字体」保留上传文件名，适合添加自定义字体。
+
+下载中可查看当前文件、实际来源、已接收字节、总大小（上游提供时）和等待时长；文件处理进度与单文件字节进度分别显示。连接最多等待 10 秒、连续无数据最多 20 秒、单文件总计最多 180 秒，失败展示 HTTP 状态或连接／超时原因。取消会关闭连接并清理未完成临时文件，已经完成的字体保留，重试只下载缺失项。Raw 访问受限时应检查服务器网络或代理，也可以在字体管理页上传同名字体，无需重复下载已完成文件。
+
+BlueArchive 的 HTML 和 Typst 统一使用 Noto Sans SC／TC。旧 Blueaka 文件内包含方正版权声明，但所引用的文件未提供明确使用授权，因此已移除其预设下载和模板引用；已有本地文件不会被自动删除。此次替换可能改变字形宽度及换行，主题配色与布局规则保持不变。
 
 ## 完整字体清单与下载入口
 
@@ -71,17 +83,27 @@ Google Fonts 链接指向[官方字体仓库](https://github.com/google/fonts)�
 | ZCOOL XiaoWei | 400 | [官方字体目录](https://github.com/google/fonts/tree/main/ofl/zcoolxiaowei) |
 | LXGW WenKai | Regular、Medium | [霞鹜文楷发布页](https://github.com/lxgw/LxgwWenKai/releases) |
 | LXGW WenKai Mono | Regular | [霞鹜文楷发布页](https://github.com/lxgw/LxgwWenKai/releases) |
-| Blueaka | 模板 CSS 映射到 400、700 | [当前网页字体来源](https://github.com/VanillaNahida/BA-Spark-Cursor/tree/main/fonts)；完整桌面字体包尚未核验，见下文 |
 
 ### 字体名称和特殊映射
 
 安装时认字体内部名称，文件改名不会修改字体家族名。
 
+- Miku 的 HTML 中文主标题默认从当前方案 CDN 的 `/assets/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.woff2` 加载，不依赖远程 T2I 安装字体。这个约 5.4 KB 的网页字库只覆盖固定标题“群聊日常分析看板”的八个字，保留官方原始字形轮廓；内部名称改为 `Miku AllSeto Title`，原版权及 OFL 全文保存在字体元数据中。标题文字变更时需要重新生成该子集。该资源放在 `assets`，不打入 release。
+- Typst 的 Miku 按需字体包含完整的 `cjkFonts_allseto_v1.11.ttf`，来自 [AIRI 固定提交](https://github.com/moeru-ai/airi/blob/1eb62e912fe7936387804aa920ff98c9f1137d80/packages/font-cjkfonts-allseto/src/files/cjkFonts_allseto_v1.11.ttf)，已核对与 [cjkFonts 官方 1.11 字体包](https://cjkfonts.io/blog/cjkfonts_allseto) 的 TTF 逐字节一致。约 30 MiB，超过常见 CDN 的单文件限制，所以从固定完整文件来源下载到插件 data 目录。Typst 实际登记的字体族为 `cjkFonts`，不能直接填写 HTML 的 `cjkfonts AllSeto` 别名。
+- 全瀨體只影响中文主标题；正文继续使用 Noto，英文使用 Outfit／Inter，日文使用 Noto Sans JP。完整字体尚未下载时，Typst 保留 Noto 标题回退。HTML 的“已安装字体”模式仍需用户显式选择；在这个模式下才使用 `local()`，不会把机器人本地路径交给远程 T2I。
+
 - 部分系统包提供的是 `Noto Sans CJK SC`，模板使用的是 `Noto Sans SC`。它们可能互为备用，但不能据此认定原字体已经匹配。需要尽量保持原设计时，安装上表链接中的对应家族。
 - ATRI 使用 `LXGWWenKai-Regular.ttf`、`LXGWWenKai-Medium.ttf` 和 `LXGWWenKaiMono-Regular.ttf`。模板保留本地映射：`LXGW WenKai`／`LXGWWenKai-Regular` 对应 400，`LXGW WenKai Medium`／`LXGWWenKai-Medium` 对应原模板的 600，`LXGW WenKai Mono`／`LXGWWenKaiMono-Regular` 对应 400。Medium 文件自身的字重与模板声明可能不同，保留映射可继续使用该文件。
-- BlueArchive 的上游 CSS 将 `BlueakaBeta2GBK DemiBold` 映射到 `Blueaka` 400，将 `BlueakaBeta2GBK` 映射到 700。本地模式保留这些名称及 `Blueaka`／`Blueaka Bold` 候选。当前来源主要是分片网页字体，**尚未核验完整、可直接安装的桌面字体包**，请向字体提供者确认完整文件和使用许可。没有对应字体而又希望保留原设计时，继续使用在线字体；接受备用字体时才尝试本地模式。
 
-插件不附带字体安装包，也不自动安装这些字体。
+插件不在 release 包中附带字体或额外的许可文本。Typst 可从 WebUI 按模板下载上游原始字体文件到插件 data 目录；自定义 T2I 则仍需安装到实际浏览器所在环境。
+
+### 预设字体授权
+
+[cjkFonts 全瀨體](https://cjkfonts.io/blog/cjkfonts_allseto) 的官方 1.11 包按 SIL OFL 1.1 发布，允许个人与商业使用。网页标题子集已更名以遵守原保留字体名要求，版权和许可仍保留在字库元数据中，不额外下载许可文本。
+
+当前预设字体均按 SIL Open Font License 1.1 提供：Google Fonts 的字体在各家族的 `ofl/<家族>/OFL.txt` 中声明授权（例如 [Noto Sans SC](https://github.com/google/fonts/blob/main/ofl/notosanssc/OFL.txt)）；[Noto Emoji](https://github.com/googlefonts/noto-emoji/blob/main/LICENSE) 和 [霞鹜文楷 v1.522](https://github.com/lxgw/LxgwWenKai/blob/v1.522/OFL.txt) 也提供各自的许可与版权声明。下载保持上游字体原样，不删除其内嵌版权和许可元数据，不另外下载许可证。字体属于原作者，插件自身的开源协议不替代字体许可；另行打包分发字体时须遵守对应字体的许可条件。
+
+CSS 中出现系统字体名称与分发字体文件是不同的行为。[微软官方字体 FAQ](https://learn.microsoft.com/en-us/typography/fonts/font-faq#web) 明确允许在网页字体栈中引用 Windows 字体；本次采用明确开源字体作为默认候选，是为了降低部署差异及来源不明字库被误用的风险，不能据此把所有系统字体引用都认定为侵权。自行上传的字体由使用者确认授权。
 
 ## 按模板批量下载字体
 
@@ -110,13 +132,14 @@ TEMPLATES = {
     "maria": "notoserifsc notoseriftc cinzel cormorantgaramond jetbrainsmono",
     "art_nouveau": "notoserifsc notoseriftc cinzel cormorantgaramond jetbrainsmono",
     "retro_futurism": "notosanssc notosanstc oswald jetbrainsmono",
-    "scrapbook": "notosanssc notosanstc zcoolkuaile longcang patrickhand",
+    "scrapbook": "notosanssc notosanstc zcoolkuaile longcang patrickhand lxgw",
     "spring_festival": "notoserifsc notoseriftc mashanzheng zcoolxiaowei",
     "ATRI": "lxgw",
+    "BlueArchive": "notosanssc notosanstc",
 }
 selected = os.environ.get("FONT_TEMPLATES", "HatsuneMiku").replace(",", " ").split()
 if not selected or any(name not in TEMPLATES and name != "all" for name in selected):
-    raise SystemExit("请填写表中的模板目录名或 all；BlueArchive 暂无已核验的完整安装包。")
+    raise SystemExit("请填写表中的模板目录名或 all；Typst 字体也可直接使用 WebUI 按模板下载。")
 if "all" in selected:
     selected = list(TEMPLATES)
 families = sorted({family for name in selected for family in TEMPLATES[name].split()})

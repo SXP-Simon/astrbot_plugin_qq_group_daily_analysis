@@ -1,7 +1,9 @@
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
+
+import pytest
 
 from src.infrastructure.platform.adapters.qq_official_adapter import QQOfficialAdapter
 from src.infrastructure.platform.factory import PlatformAdapterFactory
@@ -315,3 +317,28 @@ def test_qq_official_platform_id_and_appid_fallback():
     )
     assert adapter2.platform_id == "qq_official"
     assert adapter2.appid == ""
+
+
+@pytest.mark.asyncio
+async def test_hosted_image_transfer_failure_uses_full_text():
+    calls = []
+
+    async def post_message(**kwargs):
+        calls.append(kwargs)
+        assert kwargs["markdown"]["force_verify_image_resource"] is True
+        raise RuntimeError("image transfer failed")
+
+    adapter = QQOfficialAdapter(SimpleNamespace(api=SimpleNamespace(post_group_message=post_message), platform=None))
+    adapter.send_text = AsyncMock(return_value=True)
+    assert await adapter.send_text_report("GROUP", "![概览](https://example.com/chart.png)\n\n正文", fallback_content="完整统计及正文")
+    adapter.send_text.assert_awaited_once_with("GROUP", "完整统计及正文")
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response", [None, {}, {"code": 400}, {"id": ""}])
+async def test_invalid_message_response_does_not_hide_delivery_failure(response):
+    adapter = QQOfficialAdapter(SimpleNamespace(api=SimpleNamespace(post_group_message=AsyncMock(return_value=response)), platform=None))
+    adapter.send_text = AsyncMock(return_value=True)
+    assert await adapter.send_text_report("GROUP", "Markdown", fallback_content="完整正文")
+    adapter.send_text.assert_awaited_once_with("GROUP", "完整正文")

@@ -1,6 +1,7 @@
 import {
   devApiGet,
   devApiPost,
+  devApiUpload,
   devFetchContext,
   devSubscribeSSE,
 } from "./devBridge";
@@ -31,6 +32,7 @@ export interface ApiResponse<T = unknown> {
 }
 
 export interface AstrBotPluginPageBridge {
+  upload?: <T = unknown>(path: string, file: File) => Promise<ApiResponse<T> | null>;
   ready: () => Promise<AstrBotContext>;
   onContext?: (callback: (ctx: AstrBotContext) => void) => () => void;
   apiGet: <T = unknown>(
@@ -57,6 +59,28 @@ declare global {
   }
 }
 
+/** 使用宿主二进制上传能力，避免大文件膨胀为 Base64 JSON。 */
+export async function apiUpload(path: string, file: File): Promise<unknown> {
+  const bridge = getBridge();
+  let response: unknown;
+  let pending: Promise<unknown>;
+  if (bridge) {
+    if (typeof bridge.upload !== "function") throw new Error("当前宿主不支持二进制文件上传，请升级 AstrBot 后重试。");
+    pending = bridge.upload(path, file);
+  } else if (import.meta.env.DEV) pending = devApiUpload(path, file);
+  else throw new Error("宿主上传接口不可用");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    // 与宿主 files:upload 的 60 秒上限一致；失败后业务层会请求后端取消并清理。
+    response = await Promise.race([pending, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("上传分块超过 60 秒未收到回执，将停止后续传输并清理暂存；请检查到插件服务器的连接。")), 60_000);
+    })]);
+  } finally { clearTimeout(timer); }
+  if (!response) throw new Error("未收到上传回执，请检查连接并刷新文件状态。");
+  extractData(response);
+  return response;
+}
+
 function getBridge(): AstrBotPluginPageBridge | null {
   return window.AstrBotPluginPage || null;
 }
@@ -77,13 +101,15 @@ export async function apiGet<T = unknown>(
   params?: Record<string, unknown>
 ): Promise<ApiResponse<T> | null> {
   const bridge = getBridge();
+  let response: ApiResponse<T> | null = null;
   if (bridge && typeof bridge.apiGet === "function") {
-    return await bridge.apiGet<T>(path, params);
+    response = await bridge.apiGet<T>(path, params);
+  } else if (import.meta.env.DEV) {
+    response = await devApiGet<T>(path, params);
   }
-  if (import.meta.env.DEV) {
-    return await devApiGet<T>(path, params);
-  }
-  return null;
+  if (!response) throw new Error("未收到接口响应，请检查连接后重试。");
+  extractData(response);
+  return response;
 }
 
 export async function apiPost<T = unknown>(
@@ -91,13 +117,15 @@ export async function apiPost<T = unknown>(
   body?: unknown
 ): Promise<ApiResponse<T> | null> {
   const bridge = getBridge();
+  let response: ApiResponse<T> | null = null;
   if (bridge && typeof bridge.apiPost === "function") {
-    return await bridge.apiPost<T>(path, body);
+    response = await bridge.apiPost<T>(path, body);
+  } else if (import.meta.env.DEV) {
+    response = await devApiPost<T>(path, body);
   }
-  if (import.meta.env.DEV) {
-    return await devApiPost<T>(path, body);
-  }
-  return null;
+  if (!response) throw new Error("未收到接口响应，请检查连接后重试。");
+  extractData(response);
+  return response;
 }
 
 export function subscribeSSE(handlers: {
@@ -138,28 +166,24 @@ export function subscribeSSE(handlers: {
 }
 
 /**
- * 健壮地解包 AstrBot 插件 Web API 返回的数据结构
- * 兼容 AstrBot 标准响应封装与嵌套 data 结构
+ * 仅解包响应信封，保留业务对象的 data，并拒绝任一层的错误回执。
  */
 export function extractData<T>(res: unknown): T | null {
   if (!res || typeof res !== "object") return null;
-  const anyRes = res as Record<string, unknown>;
-
-  // 1. 深度嵌套解包：res.data.data (标准 json_response 经由 AstrBot PageBridge 转发)
-  if (
-    anyRes.data &&
-    typeof anyRes.data === "object" &&
-    "data" in (anyRes.data as Record<string, unknown>)
-  ) {
-    return (anyRes.data as Record<string, unknown>).data as T;
+  let current: unknown = res;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) break;
+    const layer = current as Record<string, unknown>;
+    // 记录、快照等业务对象也有 data；存在业务字段时保留整个对象。
+    if (!Object.keys(layer).every(key => ["status", "code", "message", "error", "data", "status_code", "headers"].includes(key))) break;
+    if (layer.status === "error" || layer.error ||
+        (typeof layer.code === "number" && ![0, 200].includes(layer.code)) ||
+        (typeof layer.status_code === "number" && layer.status_code >= 400)) {
+      throw new Error(typeof layer.message === "string" && layer.message ? layer.message : "接口操作失败，请刷新后重试。");
+    }
+    if (layer.data === undefined) break;
+    current = layer.data;
   }
-
-  // 2. 单层解包：res.data
-  if (anyRes.data !== undefined) {
-    return anyRes.data as T;
-  }
-
-  // 3. 顶层对象
-  return anyRes as unknown as T;
+  return current as T | null;
 }
 

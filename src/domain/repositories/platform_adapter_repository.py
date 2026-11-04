@@ -18,6 +18,15 @@ if TYPE_CHECKING:
 
 
 @runtime_checkable
+class MarkdownImageSupportProtocol(Protocol):
+    """支持将本地图片上传为 Markdown 素材引用的平台扩展能力。"""
+
+    async def upload_markdown_image(self, image: bytes) -> str | None:
+        """上传图片并返回可内嵌的引用，不发送独立图片消息。"""
+        ...
+
+
+@runtime_checkable
 class PlatformAdapterProtocol(Protocol):
     """跨平台适配器标准行为协议。"""
 

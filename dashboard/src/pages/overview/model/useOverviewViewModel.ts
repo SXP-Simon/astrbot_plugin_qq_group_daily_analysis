@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { message } from "antd";
 import { fetchActiveTasks, cancelActiveTask } from "../../../entities/task/api/taskApi";
 import { fetchMetricsSummary } from "../../../entities/metric/api/metricApi";
 import { ActiveTask } from "../../../entities/task/model/types";
@@ -76,7 +77,7 @@ export function useOverviewViewModel() {
             )
           );
         }
-      } else if (evt.event === "task_finished") {
+      } else if (["task_finished", "task_canceled", "task_timed_out"].includes(evt.event)) {
         const finishData = evt.data as { task_id?: string } | undefined;
         if (finishData?.task_id) {
           setActiveTasks((prev) =>
@@ -91,7 +92,14 @@ export function useOverviewViewModel() {
   );
 
   const handleCancelTask = async (taskId: string) => {
-    await cancelActiveTask(taskId);
+    const accepted = await cancelActiveTask(taskId);
+    if (accepted) {
+      ++reqIdRef.current;
+      setActiveTasks(prev => prev.filter(task => task.task_id !== taskId));
+      message.success("已请求中止分析任务，后台正在清理资源。");
+    } else {
+      message.error("中止请求未成功，任务可能已结束或连接异常，请刷新后确认。");
+    }
     await loadData(true);
   };
 

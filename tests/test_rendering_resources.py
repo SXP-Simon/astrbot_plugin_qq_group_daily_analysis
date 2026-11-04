@@ -9,6 +9,34 @@ import pytest
 from test_rendering_strategies import rendering as rendering
 from test_template_section_conditional_rendering import create_analysis_result
 
+from src.domain.value_objects import QualityReview
+
+
+@pytest.mark.asyncio
+async def test_scrapbook_character_follows_the_current_cdn(rendering):
+    """验证角色图使用本轮 CDN，HTML 不再重复携带内嵌 JPEG。
+
+    Args:
+        rendering: 已隔离配置与图片输出的报告生成器。
+    """
+    _, generator, _ = rendering
+    result = create_analysis_result()
+    result["chat_quality_review"] = QualityReview(
+        title="今日交流", subtitle="讨论记录", summary="保留群聊结论。", dimensions=[],
+    )
+    for cdn in ("https://one.example", "https://two.example"):
+        data = await generator._prepare_render_data(
+            result, template_theme="scrapbook", resources={
+                "cdn_base_url": cdn,
+                "google_fonts": "https://fonts.example",
+                "gstatic": "https://static.example",
+            },
+        )
+        html = generator._render_prepared_html("image_template.html", "scrapbook", data)
+        assert f'{data["cdn_assets_base"]}/scrapbook/assistant.jpg' in html
+        assert cdn in data["cdn_assets_base"]
+        assert "data:image/jpeg;base64," not in html
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("changed", ["cdn_base_url", "google_fonts", "gstatic"])

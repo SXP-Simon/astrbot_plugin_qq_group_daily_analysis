@@ -4,11 +4,29 @@ export interface ReportTemplateItem {
   is_custom?: boolean;
   has_image?: boolean;
   has_html?: boolean;
+  has_typst?: boolean;
   can_uninstall?: boolean;
   display_name?: string;
   desc?: string;
   tag?: string;
   tag_color?: string;
+}
+
+export interface TemplateRequirements {
+  engine: "typst" | "html";
+  formats: readonly string[];
+}
+
+/** 只有实际入口支持当前引擎与全部输出格式时才允许选择。 */
+export function supportsTemplate(template: ReportTemplateItem, requirements?: TemplateRequirements): boolean {
+  if (!requirements) return true;
+  if (requirements.formats.includes("html") && !(template.has_html || template.has_image)) return false;
+  if (!requirements.formats.includes("image")) return true;
+  return requirements.engine === "typst" ? template.has_typst === true : template.has_image === true;
+}
+
+export function templateCapabilities(template: ReportTemplateItem): string[] {
+  return [template.has_image ? "HTML 图片" : "", template.has_html ? "HTML 网页" : "", template.has_typst ? "Typst 图片" : ""].filter(Boolean);
 }
 
 export interface SelectOptionItem {
@@ -128,27 +146,27 @@ export function getTemplateCdnUrl(templateKey: string, cdnBaseUrl: string | null
 }
 
 export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [
-  { id: "HatsuneMiku", label: "初音未来 (HatsuneMiku / 默认)", is_custom: false },
-  { id: "scrapbook", label: "手账风格 (Scrapbook)", is_custom: false },
-  { id: "ATRI", label: "亚托莉 (ATRI)", is_custom: false },
-  { id: "spring_festival", label: "新春佳节 (Spring Festival)", is_custom: false },
-  { id: "retro_futurism", label: "复古未来 (Retro Futurism)", is_custom: false },
-  { id: "hack", label: "黑客赛博 (Hack)", is_custom: false },
-  { id: "BlueArchive", label: "蔚蓝档案 (BlueArchive)", is_custom: false },
-  { id: "simple", label: "极简黑白 (Simple)", is_custom: false },
-  { id: "art_nouveau", label: "新艺术运动 (Art Nouveau)", is_custom: false },
-  { id: "deepseek_maid", label: "DeepSeek 鲸鱼女仆娘", is_custom: false },
-  { id: "maria", label: "圣母在上 (Maria)", is_custom: false },
-  { id: "format", label: "标准卡片 (Format)", is_custom: false },
+  { id: "HatsuneMiku", label: "初音未来 (HatsuneMiku / 默认)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "scrapbook", label: "手账风格 (Scrapbook)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "ATRI", label: "亚托莉 (ATRI)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "spring_festival", label: "新春佳节 (Spring Festival)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "retro_futurism", label: "复古未来 (Retro Futurism)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "hack", label: "黑客赛博 (Hack)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "BlueArchive", label: "蔚蓝档案 (BlueArchive)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "simple", label: "极简黑白 (Simple)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "art_nouveau", label: "新艺术运动 (Art Nouveau)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "deepseek_maid", label: "DeepSeek 鲸鱼女仆娘", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "maria", label: "圣母在上 (Maria)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  { id: "format", label: "标准卡片 (Format)", is_custom: false, has_image: true, has_html: true, has_typst: true },
 ];
 
 export function formatTemplateOptions(
   templates: ReportTemplateItem[],
   includeAuto = false
 ): SelectOptionItem[] {
-  const list = templates && templates.length > 0 ? templates : DEFAULT_REPORT_TEMPLATES;
+  const list = templates;
   const options: SelectOptionItem[] = list.map((t) => ({
-    label: t.label || `${t.id}${t.is_custom ? " (自定义)" : ""}`,
+    label: `${t.label || t.id}${templateCapabilities(t).length ? ` [${templateCapabilities(t).join(" / ")}]` : ""}`,
     value: t.id,
     is_custom: Boolean(t.is_custom),
   }));
