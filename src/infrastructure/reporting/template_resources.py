@@ -130,8 +130,17 @@ class TemplateResourceStore:
                         size += len(chunk)
                         if size > 8 * 1024 * 1024:
                             raise ValueError("模板资源超过 8 MiB，请检查 CDN 响应")
-                        await asyncio.to_thread(output.write, chunk)
-            await asyncio.to_thread(self._validate, temporary, name)
+                        # 有界小块写入，避免取消后线程仍使用已经关闭的文件。
+                        output.write(chunk)
+            validation = asyncio.create_task(
+                asyncio.to_thread(self._validate, temporary, name)
+            )
+            try:
+                await asyncio.shield(validation)
+            except asyncio.CancelledError:
+                # 校验可能仍在读取临时文件，退出线程后才能删除（兼容 Windows）。
+                await asyncio.shield(asyncio.gather(validation, return_exceptions=True))
+                raise
             temporary.replace(target)
             self.downloads += 1
             return target
