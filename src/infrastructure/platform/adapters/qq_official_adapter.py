@@ -27,6 +27,7 @@ from ....domain.value_objects.unified_message import (
 )
 from ....utils.logger import logger
 from ..base import PlatformAdapter
+from ..qq_official_faces import restore_qq_face_features
 from .qq_markdown_images import QQMarkdownImages
 
 if TYPE_CHECKING:
@@ -280,6 +281,8 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
                             )
                         )
 
+            contents.extend(restore_qq_face_features(metadata))
+
             message_id = str(
                 metadata.get("message_id", "") or content.get("message_id", "") or ""
             )
@@ -315,6 +318,7 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         result: list[dict] = []
         for message in messages:
             chain: list[dict] = []
+            # 表情特征段补充统计语义；原正文已保留可读表示，此处不重复拼接。
             for content in message.contents:
                 if content.type == MessageContentType.TEXT:
                     chain.append({"type": "text", "data": {"text": content.text}})
