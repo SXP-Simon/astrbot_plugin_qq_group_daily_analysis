@@ -212,7 +212,7 @@ jobs:
           runpy.run_path("tests/conftest.py")
           from src.infrastructure.reporting.typst_resources import download_typst_fonts
 
-          asyncio.run(download_typst_fonts(Path(".cache/typst-tests"), "https://cdn.jsdelivr.net"))
+          asyncio.run(download_typst_fonts(Path(".cache/typst-tests"), "", source="github"))
           PY
 
       - name: Set up Node.js for Pyright
