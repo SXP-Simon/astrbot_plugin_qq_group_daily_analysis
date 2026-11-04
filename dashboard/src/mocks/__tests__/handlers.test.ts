@@ -8,6 +8,18 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import configSchema from "../../../../_conf_schema.json";
 import { mockPluginConfig } from "../data/configs";
+import { mockCheckpoints } from "../data/pluginData";
+import { extractData } from "../../shared/api/bridge";
+
+it("快照 Mock 按请求身份读取真实 data 结构，并拒绝缺失或不匹配的身份", () => {
+  const item = mockCheckpoints.items[1];
+  const params = { group_id: item.group_id, date_str: item.date_str, stage_name: item.stage_name, trace_id: item.trace_id };
+  expect(extractData(mockHandlers["GET data/checkpoint/detail"](params))).toMatchObject({
+    ...params, checkpoint_id: item.checkpoint_id, data: { group_id: item.group_id, stage_name: item.stage_name },
+  });
+  expect(mockHandlers["GET data/checkpoint/detail"]({ ...params, trace_id: "missing" }).status).toBe("error");
+  expect(mockHandlers["GET data/checkpoint/detail"]().status).toBe("error");
+});
 
 it("配置 Mock 持久保留修改、更新回执版本并拒绝过期快照", () => {
   const initial = mockHandlers["GET config"]().data;

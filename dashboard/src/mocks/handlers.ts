@@ -305,14 +305,16 @@ export const mockHandlers = {
     }
     return { status: "ok", data: { total: items.length, items } };
   },
-  "GET data/checkpoint/detail": () => ({
-    status: "ok",
-    data: {
-      detail: {
-        ...mockCheckpoints.items[0],
-        payload: { sample: "Checkpoint Context Snapshot Data" },
-      },
-    },
-  }),
+  "GET data/checkpoint/detail": (params?: Record<string, unknown>) => {
+    if (!params?.group_id || !params.date_str || !params.stage_name) {
+      return { status: "error", message: "请提供群、日期和阶段以读取快照。" };
+    }
+    const item = mockCheckpoints.items.find(item => item.group_id === params.group_id && item.date_str === params.date_str && item.stage_name === params.stage_name && (!params.trace_id || item.trace_id === params.trace_id));
+    if (!item) return { status: "error", message: "快照不存在或已过期，请刷新列表。" };
+    return {
+      status: "ok",
+      data: { ...item, data: { sample: "快照业务产物", group_id: item.group_id, stage_name: item.stage_name, trace_id: item.trace_id } },
+    };
+  },
   "POST data/checkpoint": () => ({ status: "ok", data: { deleted: true } }),
 };
