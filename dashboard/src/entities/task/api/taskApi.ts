@@ -15,10 +15,10 @@ export async function fetchActiveTasks(): Promise<ActiveTask[]> {
 export async function cancelActiveTask(taskId: string): Promise<boolean> {
   try {
     const res = await apiPost("tasks/cancel", { task_id: taskId });
-    if (!res) return false;
-    const raw = res as Record<string, unknown>;
-    if (raw.status === "error" || raw.error) return false;
-    return true;
+    return z.union([
+      z.object({ status: z.enum(["ok", "success"]) }),
+      z.object({ success: z.literal(true) }),
+    ]).safeParse(extractData<unknown>(res)).success;
   } catch {
     return false;
   }
@@ -61,19 +61,14 @@ export async function triggerNewTask(
   const res = await apiPost<{ trace_id?: string; message?: string }>("tasks/trigger", payload);
 
 
-  const data = extractData<{ trace_id?: string; message?: string }>(res);
-  const rawObj = (res && typeof res === "object" ? res : {}) as Record<string, unknown>;
-  const traceId = data?.trace_id || (rawObj.trace_id as string | undefined);
-  const isOk =
-    rawObj.status === "ok" ||
-    rawObj.status === "success" ||
-    !!traceId ||
-    (typeof rawObj.message === "string" && rawObj.message.includes("successfully"));
-
+  const result = z.object({
+    trace_id: z.string().trim().min(1), message: z.string().optional(), status: z.enum(["ok", "success"]).optional(),
+  }).passthrough().safeParse(extractData<unknown>(res));
+  if (!result.success) throw new Error("未收到有效的任务提交回执，请刷新任务列表后确认。");
   return {
-    status: isOk ? "ok" : "error",
-    trace_id: traceId,
-    data: data || undefined,
-    message: data?.message || (rawObj.message as string | undefined) || (isOk ? "任务提交成功" : "任务提交失败"),
+    status: "ok",
+    trace_id: result.data.trace_id,
+    data: result.data,
+    message: result.data.message || "任务提交成功",
   };
 }

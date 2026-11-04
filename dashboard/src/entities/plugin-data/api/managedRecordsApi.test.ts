@@ -17,4 +17,9 @@ describe("业务记录响应信封", () => {
     vi.mocked(apiGet).mockResolvedValue({ status: "error", message: "快照已过期" });
     await expect(fetchManagedRecord({ kind: "checkpoint" })).rejects.toThrow("快照已过期");
   });
+  it("业务产物中的记录字段不能替代外层记录的标识与版本", async () => {
+    const outer = { ...record, data: { locator: { kind: "avatar", key: "inner" }, revision: "inner", data: {} } };
+    vi.mocked(apiGet).mockResolvedValue(outer);
+    expect(await fetchManagedRecord(record.locator)).toEqual(outer);
+  });
 });

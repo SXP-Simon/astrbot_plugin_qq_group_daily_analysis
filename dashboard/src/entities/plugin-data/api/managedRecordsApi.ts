@@ -20,13 +20,8 @@ export async function fetchManagedRecords(kind: string, search: string, page: nu
 
 export async function fetchManagedRecord(locator: RecordLocator) {
   const response = await apiGet("plugin-data/records/detail", locator);
-  // 记录本身也含 data，必须先按结构识别，避免把业务产物误当成响应信封。
-  for (const candidate of [response?.data, extractData<unknown>(response), response]) {
-    const parsed = managedRecordSchema.safeParse(candidate);
-    if (parsed.success) return parsed.data;
-    const error = z.object({ status: z.literal("error"), message: z.string() }).safeParse(candidate);
-    if (error.success) throw new Error(error.data.message);
-  }
+  const parsed = managedRecordSchema.safeParse(extractData<unknown>(response));
+  if (parsed.success) return parsed.data;
   throw new Error("记录内容格式异常，请刷新后重试");
 }
 
