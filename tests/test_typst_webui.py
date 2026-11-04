@@ -12,17 +12,18 @@ from src.infrastructure.webui.routes import config_routes
 
 
 @pytest.mark.asyncio
-async def test_typst_probe_uses_plugin_data_and_no_host(probe, tmp_path, monkeypatch):
+@pytest.mark.parametrize("ppi", [144, 180, 216])
+async def test_typst_probe_uses_plugin_data_and_no_host(probe, tmp_path, monkeypatch, ppi):
     routes, request, _ = probe
     monkeypatch.setattr(config_routes.StarTools, "get_data_dir", lambda name: tmp_path)
     output = BytesIO()
     Image.new("RGB", (480, 180), "#39c5bb").save(output, format="PNG")
     renderer = AsyncMock(return_value=output.getvalue())
     monkeypatch.setattr(config_routes, "render_typst_probe", renderer)
-    request.json.return_value = {"render_service": "typst", "typst_ppi": 120, "timeout": 30000}
+    request.json.return_value = {"render_service": "typst", "typst_ppi": 120, "timeout": 30000, "raster_ppi": ppi}
     result = await routes.api_test_t2i()
     assert result["data"]["status"] == "ok"
-    assert renderer.await_args.args == (tmp_path, {"render_service": "typst", "timeout": 30000})
+    assert renderer.await_args.args == (tmp_path, {"render_service": "typst", "timeout": 30000, "raster_ppi": ppi})
     routes.analysis_service.html_render.assert_not_called()
 
 
@@ -104,7 +105,7 @@ async def test_font_download_selects_only_known_theme(probe, tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name,valid", [("Outfit.ttf", True), ("Cinzel.ttf", False), ("../outside.ttf", False), ([], False)])
+@pytest.mark.parametrize("name,valid", [("Outfit.ttf", True), ("BlueakaBeta2GBK-Bold.ttf", False), ("Cinzel.ttf", False), ("../outside.ttf", False), ([], False)])
 async def test_font_file_route_validates_theme_membership(probe, tmp_path, monkeypatch, name, valid):
     routes, request, _ = probe
     monkeypatch.setattr(config_routes.StarTools, "get_data_dir", lambda _: tmp_path)

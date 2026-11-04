@@ -437,6 +437,7 @@ class ConfigRoutes:
                                 "service_token",
                                 "timeout",
                                 "request_timeout",
+                                "raster_ppi",
                             )
                             if key in body
                         },
@@ -445,7 +446,8 @@ class ConfigRoutes:
             )[0]
         except (ValueError, TypeError):
             return error_response(
-                "请检查渲染服务、地址、Token、超时和测试群聊是否有效", status_code=400
+                "请检查渲染服务、地址、Token、超时、导出清晰度和测试群聊是否有效",
+                status_code=400,
             )
 
         started = time.perf_counter()
@@ -470,6 +472,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     {
                         "render_service": "typst",
                         "timeout": plan["timeout"],
+                        "raster_ppi": plan.get("raster_ppi", 144),
                     },
                 )
             elif service == "custom":

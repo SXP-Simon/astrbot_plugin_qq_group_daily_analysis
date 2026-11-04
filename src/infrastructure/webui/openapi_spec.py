@@ -1095,6 +1095,11 @@ def generate_openapi_spec() -> dict[str, Any]:
                             "maxLength": 4096,
                             "writeOnly": True,
                         },
+                        "raster_ppi": {
+                            "type": "integer",
+                            "enum": [144, 180, 216],
+                            "description": "Typst 导出密度，版心不变，最高成品宽 1410px",
+                        },
                         "timeout": {
                             "type": "integer",
                             "minimum": 1000,
