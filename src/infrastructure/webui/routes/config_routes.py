@@ -655,12 +655,12 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     )
 
             logger.info("WebUI 配置中心已更新并保存插件配置。")
+            # 只返回保存回执；宿主会自动解包 data，回传整份配置会丢失状态和新版本。
             return json_response(
                 {
                     "status": "ok",
                     "message": "配置已成功保存并持久化生效",
                     "revision": saved_revision,
-                    "data": dict(config_obj),
                 }
             )
         except Exception as e:

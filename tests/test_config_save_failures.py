@@ -116,6 +116,27 @@ async def test_two_page_saves_reject_stale_snapshot_without_mutation(manager):
 
 
 @pytest.mark.asyncio
+async def test_page_bridge_keeps_saved_revision_for_the_next_save(manager):
+    routes = ConfigRoutes(MagicMock(config_manager=manager))
+    revision = (await routes.api_get_config())["data"]["data"]["revision"]
+    with patch("src.infrastructure.webui.routes.config_routes.request") as request:
+        for value in (5, 7):
+            request.json = AsyncMock(return_value={
+                "config": {"basic": {"max_topics": value}}, "revision": revision,
+            })
+            response = await routes.api_save_config()
+            assert response["status_code"] == 200
+            body = response["data"]
+            # 宿主 PluginViewPage 会执行 response.data?.data ?? response.data。
+            forwarded = body.get("data", body)
+            assert forwarded["status"] == "ok"
+            assert forwarded["revision"] != revision
+            revision = forwarded["revision"]
+    assert manager.config["basic"]["max_topics"] == 7
+    assert manager.config.save_config.call_count == 2
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("revision", [None, 1, "", "a" * 63, "z" * 64])
 async def test_invalid_revision_does_not_change_config(manager, revision):
     routes = ConfigRoutes(MagicMock(config_manager=manager))

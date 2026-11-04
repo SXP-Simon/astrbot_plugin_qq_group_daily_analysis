@@ -110,7 +110,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                     "responses": {
                         "200": {
-                            "description": "配置保存成功，返回新版本供后续保存使用",
+                            "description": "配置保存成功，返回独立回执与新版本，避免页面桥接解包时丢失版本",
                             "content": {
                                 "application/json": {
                                     "schema": {
@@ -118,16 +118,12 @@ def generate_openapi_spec() -> dict[str, Any]:
                                         "properties": {
                                             "status": {"const": "ok"},
                                             "message": {"type": "string"},
-                                            "data": {
-                                                "type": "object",
-                                                "additionalProperties": True,
-                                            },
                                             "revision": {
                                                 "type": "string",
                                                 "pattern": "^[0-9a-f]{64}$",
                                             },
                                         },
-                                        "required": ["status", "data", "revision"],
+                                        "required": ["status", "revision"],
                                     }
                                 }
                             },

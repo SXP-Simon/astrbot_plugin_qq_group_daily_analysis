@@ -1557,7 +1557,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 配置保存成功，返回新版本供后续保存使用 */
+            /** @description 配置保存成功，返回独立回执与新版本，避免页面桥接解包时丢失版本 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1567,9 +1567,6 @@ export interface operations {
                         /** @constant */
                         status: "ok";
                         message?: string;
-                        data: {
-                            [key: string]: unknown;
-                        };
                         revision: string;
                     };
                 };
