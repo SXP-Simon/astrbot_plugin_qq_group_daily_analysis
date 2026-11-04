@@ -67,8 +67,9 @@ it("按方案选定模板并给出同版来源，上传上游原文件时自动�
   render(<ConfigProvider theme={{ token: { motion: false } }}><FontManager onChanged={onChanged} initialSelection={{ theme: "ATRI", cdnBaseUrl: "https://cdn.jsdelivr.net", source: "github" }} /></ConfigProvider>);
   await screen.findByText("已安装 0 / 1 个字体，缺少 1 个");
   const row = screen.getByText(name).closest("tr")!;
+  expect(screen.queryByText(preset.upstream_url)).not.toBeInTheDocument();
   fireEvent.click(within(row).getByRole("button", { name: "查看上游" }));
-  await waitFor(() => expect(screen.getByText(preset.upstream_url)).toBeVisible());
+  expect(await screen.findByText(preset.upstream_url)).toBeInTheDocument();
   expect(within(row).getByRole("button", { name: "直接下载" })).toBeVisible();
   expect(within(row).queryByRole("link")).not.toBeInTheDocument();
   const file = new File([new Uint8Array([0, 1, 0, 0, ...Array(1024).fill(0)])], "LXGWWenKai-Regular.ttf", { type: "font/ttf" });
