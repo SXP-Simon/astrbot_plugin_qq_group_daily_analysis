@@ -199,7 +199,7 @@ async def test_theme_has_full_compile_budget_and_recovery_uses_separate_limit(na
         image, html = await native.generate_image_report(create_analysis_result(), "test", None)
         assert image and image.startswith("base64://") and html is None
         assert [call[1] for call in calls] == [216, 144]
-        assert [call[0] for call in calls] == [2, 10]
+        assert [call[0] for call in calls] == [2, 2]
         spans = {span["stage_name"]: span for span in trace._spans}
         assert spans["TYPST_COMPILE"]["status"] == "warning"
         assert "主题编译超过" in spans["TYPST_COMPILE"]["payload"]["failure_reason"]
@@ -272,7 +272,6 @@ async def test_custom_typst_keeps_relative_modules_and_isolated_root(native, tmp
 @pytest.mark.asyncio
 @pytest.mark.parametrize("boundary", ["avatar", "nickname"])
 async def test_optional_network_timeout_preserves_report_text(native, monkeypatch, boundary):
-    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.PREPARATION_TIMEOUT_SECONDS", 1.0)
     fonts = native.data_dir / "typst/fonts"
     fonts.mkdir(parents=True)
     (fonts / "test.ttf").write_bytes(b"font")

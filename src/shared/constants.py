@@ -14,6 +14,8 @@ from ..domain.value_objects.task_status import TaskStatus as TaskStatus
 # 当前 Python 进程与实例生命周期唯一凭据 (用于区分进程崩溃与热重载)
 PROCESS_PID: int = os.getpid()
 PROCESS_BOOT_ID: str = f"{PROCESS_PID}:{uuid.uuid4().hex[:8]}:{int(time.time())}"
+# 沿用图片生成的整体上限，供服务编排和独立 Typst 入口共同使用。
+IMAGE_RENDER_TOTAL_TIMEOUT_SECONDS = 300
 
 
 class Platform(str, Enum):

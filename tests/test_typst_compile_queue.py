@@ -35,7 +35,10 @@ async def test_queued_compile_does_not_spawn_and_preserves_next_slot(tmp_path, m
     monkeypatch.setattr(typst_process, "_execute_typst_worker", execute)
     first = asyncio.create_task(typst_process.run_typst_worker(tmp_path / "first", tmp_path, 5))
     await started.wait()
-    second = asyncio.create_task(typst_process.run_typst_worker(tmp_path / "second", tmp_path, 5 if cancel else .02))
+    async def waiting():
+        async with asyncio.timeout(5 if cancel else .02):
+            await typst_process.run_typst_worker(tmp_path / "second", tmp_path, 5)
+    second = asyncio.create_task(waiting())
     if cancel:
         await asyncio.sleep(0)
         second.cancel()
@@ -65,7 +68,7 @@ async def test_queue_wait_does_not_consume_compilation_timeout(tmp_path, monkeyp
 
     async def next_compile():
         queued.set()
-        await typst_process.run_typst_worker(tmp_path / "second", tmp_path, 5)
+        await typst_process.run_typst_worker(tmp_path / "second", tmp_path, .01)
 
     monkeypatch.setattr(typst_process, "_execute_typst_worker", execute)
     first = asyncio.create_task(typst_process.run_typst_worker(tmp_path / "first", tmp_path, 5))
@@ -76,7 +79,7 @@ async def test_queue_wait_does_not_consume_compilation_timeout(tmp_path, monkeyp
     assert not remaining
     release.set()
     await asyncio.gather(first, second)
-    assert remaining == [5]
+    assert remaining == [.01]
 
 
 @pytest.mark.asyncio

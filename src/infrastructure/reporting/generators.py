@@ -21,6 +21,9 @@ from PIL import Image
 
 from ...domain.repositories.report_repository import IReportGenerator
 from ...shared.constants import (
+    IMAGE_RENDER_TOTAL_TIMEOUT_SECONDS as _RENDER_TOTAL_TIMEOUT_SECONDS,
+)
+from ...shared.constants import (
     AnalysisStage,
 )
 from ...shared.trace_context import TraceContext
@@ -62,8 +65,6 @@ _TRACE_META_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _HTML_HEAD_PATTERN = re.compile(r"<head(?:\s[^>]*)?>", re.IGNORECASE)
-# 与单个方案允许的最长超时一致，防止多轮等待无限叠加占用渲染队列。
-_RENDER_TOTAL_TIMEOUT_SECONDS = 300
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable

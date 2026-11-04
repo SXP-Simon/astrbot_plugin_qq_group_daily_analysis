@@ -23,7 +23,6 @@ if TYPE_CHECKING:
 _compile_slots: WeakValueDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
     WeakValueDictionary()
 )
-COMPILE_QUEUE_TIMEOUT_SECONDS = 5.0
 
 
 class TypstWorkerError(RuntimeError):
@@ -60,7 +59,7 @@ async def run_typst_worker(
     Args:
         job_dir: 本次编译专用目录。
         font_dir: 受管理字体目录。
-        timeout_seconds: 编译进程允许的最长秒数；排队单独限时，最多五秒。
+        timeout_seconds: 编译进程允许的最长秒数；排队由调用方整体时限与取消控制。
         raster_ppi: 144、180 或 216 PPI，最高输出 1410px 宽。
 
     Returns:
@@ -76,13 +75,7 @@ async def run_typst_worker(
         slot = asyncio.Semaphore(1)
         _compile_slots[loop] = slot
     # 活跃调用持有名额对象，空闲后自动移除，不留下已关闭事件循环的引用。
-    queue_budget = min(COMPILE_QUEUE_TIMEOUT_SECONDS, max(0.0, timeout_seconds))
-    deadline = loop.time() + queue_budget
-    details: dict[str, object] = {
-        "render_service": "typst",
-        "scope": "native_compile",
-        "queue_budget_ms": queue_budget * 1000,
-    }
+    details: dict[str, object] = {"render_service": "typst", "scope": "native_compile"}
     trace = TraceContext.current()
     parent = (
         next(
@@ -102,15 +95,8 @@ async def run_typst_worker(
     acquired = False
     try:
         async with render_span("IMAGE_RENDER_QUEUE", details):
-            try:
-                async with asyncio.timeout_at(deadline):
-                    await slot.acquire()
-                    acquired = True
-            except TimeoutError as error:
-                raise TypstWorkerTimeoutError(
-                    f"等待 Typst 编译名额超过 {queue_budget:.2f} 秒，本次尚未启动编译进程",
-                    None,
-                ) from error
+            await slot.acquire()
+            acquired = True
         return await _execute_typst_worker(
             job_dir, font_dir, timeout_seconds, raster_ppi
         )
