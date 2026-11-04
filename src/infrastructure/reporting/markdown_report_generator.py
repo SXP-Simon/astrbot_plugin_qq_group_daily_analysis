@@ -6,18 +6,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .render_trace import render_span
+from .summary_dashboard import SummaryBar, SummaryMetric, render_native_summary
 
 if TYPE_CHECKING:
-    import asyncio
     from collections.abc import Awaitable, Callable, Sequence
+    from pathlib import Path
 
     from ...domain.value_objects import AnalysisResultPayload, GroupStatistics
     from ..config.config_manager import ConfigManager
+    from ..config.rendering_config import RenderingStrategyOptions
     from .templates import HTMLTemplates
 
 
@@ -39,16 +44,19 @@ class MarkdownReportGenerator:
         config_manager: ConfigManager,
         html_templates: HTMLTemplates | None = None,
         render_semaphore: asyncio.Semaphore | None = None,
+        data_dir: Path | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.html_templates = html_templates
         self.render_semaphore = render_semaphore
+        self.data_dir = data_dir
 
     async def generate_markdown_report(
         self,
         analysis_result: AnalysisResultPayload,
         html_render_func: Callable[..., Awaitable[str | None]] | None = None,
         mention_style: str = MENTION_STYLE_NAME,
+        summary_image_uploader: Callable[[bytes], Awaitable[str | None]] | None = None,
     ) -> tuple[str, str]:
         """生成结构化 Markdown 报告（含可选概览图）与备选降级报告。
 
@@ -56,6 +64,7 @@ class MarkdownReportGenerator:
             analysis_result: 分析结果载荷。
             html_render_func: HTML 异步渲染函数。
             mention_style: 提及展示风格（'name' 为昵称文本，'qq' 为 QQ 官方真提及）。
+            summary_image_uploader: 本地概览图的素材上传回调，返回同条 Markdown 可用的引用。
 
         Returns:
             tuple[str, str]: (主报告内容, 降级报告内容)
@@ -67,35 +76,43 @@ class MarkdownReportGenerator:
             return fallback_report, fallback_report
 
         enabled = self.config_manager.get_qq_official_t2i_summary_dashboard_enabled()
-        if not enabled or not callable(html_render_func) or self.html_templates is None:
+        if not enabled:
             return fallback_report, fallback_report
 
-        dashboard_url = await self._generate_summary_dashboard_url(
-            analysis_result, html_render_func
+        dashboard = await self._generate_summary_dashboard(
+            analysis_result, html_render_func, summary_image_uploader
         )
-        if not dashboard_url:
+        if not dashboard:
             return fallback_report, fallback_report
         return (
             self._generate_markdown_report(
                 analysis_result,
-                summary_dashboard_url=dashboard_url,
+                summary_dashboard_url=dashboard,
                 mention_style=mention_style,
             ),
             fallback_report,
         )
 
-    async def _generate_summary_dashboard_url(
+    async def _generate_summary_dashboard(
         self,
         analysis_result: AnalysisResultPayload,
-        html_render_func: Callable[..., Awaitable[str | None]],
+        html_render_func: Callable[..., Awaitable[str | None]] | None,
+        summary_image_uploader: Callable[[bytes], Awaitable[str | None]] | None,
     ) -> str | None:
-        """生成 T2I 概览图并返回可访问 URL。"""
-        if not self.html_templates:
-            return None
+        """准备概览图，失败时保留对应的文字统计。
+
+        Args:
+            analysis_result: 报告统计与正文。
+            html_render_func: 原有 HTML 图片服务的渲染回调。
+            summary_image_uploader: 原生 PNG 对应的 QQ 素材上传回调。
+
+        Returns:
+            HTML 服务的图片 URL 或 QQ 素材引用，失败返回 None。
+        """
         stats = analysis_result["statistics"]
         hourly_counts = self.get_hourly_counts(stats)
         max_count = max(hourly_counts, default=0)
-        chart_data = [
+        chart_data: list[SummaryBar] = [
             {
                 "hour": f"{hour:02d}",
                 "count": count,
@@ -107,7 +124,7 @@ class MarkdownReportGenerator:
             }
             for hour, count in enumerate(hourly_counts)
         ]
-        metrics = [
+        metrics: list[SummaryMetric] = [
             {"value": self.format_metric(stats.message_count), "label": "消息"},
             {"value": self.format_metric(stats.participant_count), "label": "参与"},
             {"value": self.format_metric(stats.total_characters), "label": "字符"},
@@ -117,6 +134,17 @@ class MarkdownReportGenerator:
                 "label": "高峰",
             },
         ]
+        if self.data_dir is not None:
+            strategy = self.config_manager.get_t2i_rendering_strategies()[0]
+            if strategy.get("render_service") == "typst":
+                if summary_image_uploader is None:
+                    return None
+                return await self._upload_native_summary(
+                    metrics, chart_data, strategy, summary_image_uploader
+                )
+
+        if not callable(html_render_func) or self.html_templates is None:
+            return None
         html_content = self.html_templates.render_platform_template(
             "qq_official",
             "summary_dashboard.html",
@@ -155,6 +183,65 @@ class MarkdownReportGenerator:
                 return await render()
         except Exception as exc:
             logger.warning("[MarkdownReport] T2I 群聊概览图生成失败: %s", exc)
+            return None
+
+    async def _upload_native_summary(
+        self,
+        metrics: list[SummaryMetric],
+        chart: list[SummaryBar],
+        strategy: RenderingStrategyOptions,
+        uploader: Callable[[bytes], Awaitable[str | None]],
+    ) -> str | None:
+        """生成原生概览图并上传为同条 Markdown 可引用的素材。
+
+        Args:
+            metrics: 五项格式化统计指标。
+            chart: 二十四小时的直方图数据。
+            strategy: 优先级最高的原生渲染方案。
+            uploader: 平台素材上传回调，未返回引用时保留完整报告。
+
+        Returns:
+            QQ 素材引用，上传失败时返回 None。
+        """
+        data_dir = self.data_dir
+        if data_dir is None:
+            return None
+        try:
+            # 排队和编译共用时限，素材上传另设超时，避免阻塞文字报告。
+            async with asyncio.timeout(strategy.get("timeout", 30000) / 1000):
+                async with self.render_semaphore or asyncio.Semaphore(1):
+                    image = await render_native_summary(
+                        data_dir,
+                        datetime.now().strftime("%Y.%m.%d"),
+                        metrics,
+                        chart,
+                        strategy.get("timeout", 30000) / 1000,
+                    )
+            async with render_span(
+                "DISPATCH_REPORT", {"kind": "qq_summary_upload", "format": "image"}
+            ) as span:
+                async with asyncio.timeout(30):
+                    reference = await uploader(image)
+                valid = isinstance(reference, str) and bool(
+                    re.fullmatch(r"qqbot-media://image/v1/[A-Za-z0-9_-]+", reference)
+                )
+                if span:
+                    span["payload"]["success"] = valid
+                    if not valid:
+                        span["status"] = "warning"
+                        span["payload"]["warning"] = (
+                            "概览图上传失败，已保留完整文字报告"
+                        )
+                if not valid and (trace := TraceContext.current()):
+                    trace.metadata["has_warnings"] = True
+                return reference if valid else None
+        except Exception as exc:
+            if trace := TraceContext.current():
+                trace.metadata["has_warnings"] = True
+            logger.warning(
+                "[MarkdownReport] Typst 概览图不可用，已保留完整文字报告: %s",
+                type(exc).__name__,
+            )
             return None
 
     def _collect_identity_names(
@@ -251,8 +338,13 @@ class MarkdownReportGenerator:
             return self._render_identity_names(text, identity_names)
 
         if summary_dashboard_url:
+            width, height = (
+                (940, 423)
+                if summary_dashboard_url.startswith("qqbot-media://")
+                else (800, 360)
+            )
             lines = [
-                f"![群聊分析概览 #800px #360px]({summary_dashboard_url})",
+                f"![群聊分析概览 #{width}px #{height}px]({summary_dashboard_url})",
                 "",
             ]
         else:

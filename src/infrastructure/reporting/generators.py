@@ -116,6 +116,7 @@ class ReportGenerator(IReportGenerator):
             config_manager,
             self.html_templates,
             self._render_semaphore,
+            self.data_dir,
         )
 
         self._avatar_service_inst = AvatarService(self.data_dir)
@@ -660,6 +661,7 @@ class ReportGenerator(IReportGenerator):
         analysis_result: AnalysisResultPayload,
         html_render_func: Callable | None = None,
         mention_style: str = "name",
+        summary_image_uploader: Callable[[bytes], Awaitable[str | None]] | None = None,
     ) -> tuple[str, str]:
         """生成 Markdown 格式分析报告。
 
@@ -667,6 +669,7 @@ class ReportGenerator(IReportGenerator):
             analysis_result: 分析结果字典。
             html_render_func: 可选的图片渲染函数。
             mention_style: 提及展示风格（'name' 为昵称，'qq' 为 QQ 官方真提及）。
+            summary_image_uploader: QQ 原生概览图的素材上传回调，供 Markdown 同条引用。
 
         Returns:
             元组 (markdown_text, fallback_text)。
@@ -675,6 +678,7 @@ class ReportGenerator(IReportGenerator):
             analysis_result,
             html_render_func,
             mention_style=mention_style,
+            summary_image_uploader=summary_image_uploader,
         )
 
     @property
@@ -690,6 +694,7 @@ class ReportGenerator(IReportGenerator):
             self.config_manager,
             templates,
             sem,
+            getattr(self, "data_dir", None),
         )
         self._markdown_generator_inst = inst
         return inst
