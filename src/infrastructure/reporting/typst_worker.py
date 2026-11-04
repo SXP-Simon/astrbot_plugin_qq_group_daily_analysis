@@ -25,6 +25,9 @@ class TypstWorkerMetrics(TypedDict, total=False):
     font_setup_ms: float
     layout_ms: float
     raster_ms: float
+    raster_cpu_ms: float
+    worker_cpu_ms: float
+    cpu_quota_cores: float
     raster_ppi: float
     worker_peak_rss_mb: float
     worker_start_rss_mb: float
@@ -135,6 +138,8 @@ def compile_report(
     Raises:
         RuntimeError: 缺少中文字体、依赖或报告超过像素预算。
     """
+    cpu_started = time.process_time()
+    _collect_cpu_quota(metrics)
     _collect_peak(metrics, baseline=True)
     _publish_metrics(metrics, "font_setup")
     try:
@@ -178,6 +183,7 @@ def compile_report(
                 )
         phase_start = time.perf_counter()
         _publish_metrics(metrics, "raster")
+        raster_cpu_started = time.process_time()
         compiler.compile(
             output=str(job_dir / "report.png"), format="png", ppi=raster_ppi
         )
@@ -185,9 +191,50 @@ def compile_report(
             raise RuntimeError("Typst 报告超过 32 MiB，无法发送")
         if metrics is not None:
             metrics["raster_ms"] = round((time.perf_counter() - phase_start) * 1000, 2)
+            metrics["raster_cpu_ms"] = round(
+                (time.process_time() - raster_cpu_started) * 1000, 2
+            )
         _publish_metrics(metrics, "complete")
     finally:
+        if metrics is not None:
+            metrics["worker_cpu_ms"] = round(
+                (time.process_time() - cpu_started) * 1000, 2
+            )
         _collect_peak(metrics)
+
+
+def _collect_cpu_quota(metrics: TypstWorkerMetrics | None) -> None:
+    """读取常见容器挂载根的 CPU 配额，未知时省略而不猜测无限制。
+
+    Args:
+        metrics: 已有遥测开关控制的目标，不扫描宿主或其他进程。
+    """
+    if metrics is None or sys.platform != "linux":
+        return
+    for quota_path, period_path in (
+        (Path("/sys/fs/cgroup/cpu.max"), None),
+        (
+            Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us"),
+            Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us"),
+        ),
+        (
+            Path("/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us"),
+            Path("/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us"),
+        ),
+    ):
+        try:
+            if period_path is None:
+                quota, period = quota_path.read_text(encoding="ascii").split()
+            else:
+                quota, period = (
+                    quota_path.read_text(encoding="ascii"),
+                    period_path.read_text(encoding="ascii"),
+                )
+            if quota.strip() != "max" and int(quota) > 0 and int(period) > 0:
+                metrics["cpu_quota_cores"] = int(quota) / int(period)
+            return
+        except (OSError, ValueError):
+            continue
 
 
 def _collect_peak(

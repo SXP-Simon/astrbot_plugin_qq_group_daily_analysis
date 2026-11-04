@@ -17,6 +17,29 @@ def test_metrics_keep_last_complete_frame_after_process_was_interrupted():
     assert _parse_worker_metrics(stdout) == {"worker_phase": "raster", "layout_ms": 15}
 
 
+@pytest.mark.parametrize("kind,content,expected", [("v2", "50000 100000", .5), ("v1", "150000", 1.5), ("v2", "max 100000", None), ("v1", "-1", None), ("missing", "", None)])
+def test_container_cpu_quota_is_optional_and_never_guessed(monkeypatch, kind, content, expected):
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    def read(path, **kwargs):
+        if kind == "v2" and path.name == "cpu.max":
+            return content
+        if kind == "v1" and path.parent.name == "cpu":
+            return content if path.name == "cpu.cfs_quota_us" else "100000"
+        raise FileNotFoundError
+
+    monkeypatch.setattr(Path, "read_text", read)
+    metrics = {}
+    worker._collect_cpu_quota(metrics)
+    assert metrics.get("cpu_quota_cores") == expected
+
+
+def test_process_boundary_keeps_cpu_durations_and_rejects_invalid_values():
+    raw = {"raster_cpu_ms": 1250, "worker_cpu_ms": 1500, "cpu_quota_cores": .5, "raster_ms": 2000}
+    assert _parse_worker_metrics(json.dumps(raw).encode()) == raw
+    assert _parse_worker_metrics(b'{"raster_cpu_ms":true,"worker_cpu_ms":-1,"cpu_quota_cores":"unknown"}') == {}
+
+
 def test_linux_peak_ignores_inherited_resource_high_water_mark(monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     inherited = Mock(return_value=SimpleNamespace(ru_maxrss=2 * 1024 * 1024))
