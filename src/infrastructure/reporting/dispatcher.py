@@ -17,6 +17,7 @@ from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from .html_renderer import bind_group_html_renderer
+from .report_image import save_report_image
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -240,14 +241,8 @@ class ReportDispatcher:
                         else f"report_{group_id}_{ts_str}.jpg"
                     )
                     dest = reports_dir / filename
+                    dest = save_report_image(image_url, dest)
                     dest_filename = dest.name
-                    if os.path.exists(image_url):
-                        import shutil
-
-                        shutil.copy2(image_url, dest)
-                    elif image_url.startswith("base64://"):
-                        data = base64.b64decode(image_url[9:])
-                        dest.write_bytes(data)
 
                     # 关联到 TraceContext 并在数据库中更新元数据
                     if trace_ctx:
