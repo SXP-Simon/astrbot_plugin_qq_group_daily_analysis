@@ -338,7 +338,7 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
     snapshots = []
     real_worker = typst_renderer.run_typst_worker
 
-    async def record_worker(job, fonts, timeout):
+    async def record_worker(job, fonts, timeout, raster_ppi=144):
         snapshots.append(json.loads((job / "data.json").read_text(encoding="utf-8")))
         if len(snapshots) == 1:
             if fault == "image":
@@ -346,7 +346,7 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
                     path.write_bytes(b"broken image")
             if fault == "timeout":
                 timeout = min(timeout, .05)
-        return await real_worker(job, fonts, timeout)
+        return await real_worker(job, fonts, timeout, raster_ppi)
 
     worker = AsyncMock(side_effect=record_worker)
     monkeypatch.setattr(typst_renderer, "run_typst_worker", worker)
@@ -458,3 +458,18 @@ async def test_custom_canvas_is_measured_before_rasterization(compiler, tmp_path
     assert worker.await_count == attempts
     with Image.open(BytesIO(base64.b64decode(image.removeprefix("base64://")))) as output:
         assert output.width == 940
+
+
+@pytest.mark.asyncio
+async def test_high_density_survives_generator_and_history_copy(compiler, tmp_path):
+    from src.infrastructure.reporting.report_image import save_report_image
+
+    config, generator, _ = compiler
+    config.config["t2i_rendering"]["t2i_rendering_strategies"][0]["raster_ppi"] = 216
+    source, html = await generator.generate_image_report(create_analysis_result(), "density", None, template_theme="simple")
+    assert source and html is None
+    output = save_report_image(source, tmp_path / "report.jpg")
+    payload = base64.b64decode(source.removeprefix("base64://"))
+    assert output.suffix == ".png" and output.read_bytes() == payload
+    with Image.open(output) as image:
+        assert image.format == "PNG" and image.width == 1410

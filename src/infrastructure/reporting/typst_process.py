@@ -38,7 +38,7 @@ class TypstWorkerError(RuntimeError):
 
 
 async def run_typst_worker(
-    job_dir: Path, font_dir: Path, timeout_seconds: float
+    job_dir: Path, font_dir: Path, timeout_seconds: float, raster_ppi: int = 144
 ) -> TypstWorkerMetrics | None:
     """限时执行隔离编译，取消或超时后等待子进程退出再清理目录。
 
@@ -46,6 +46,7 @@ async def run_typst_worker(
         job_dir: 本次编译专用目录。
         font_dir: 受管理字体目录。
         timeout_seconds: 编译允许的最长秒数。
+        raster_ppi: 144、180 或 216 PPI，最高输出 1410px 宽。
 
     Returns:
         遥测开启时返回隔离编译的阶段耗时和峰值工作集；缺失遥测不影响报告。
@@ -84,7 +85,7 @@ async def run_typst_worker(
                 await slot.acquire()
                 acquired = True
             return await _execute_typst_worker(
-                job_dir, font_dir, deadline - loop.time()
+                job_dir, font_dir, deadline - loop.time(), raster_ppi
             )
         finally:
             if acquired:
@@ -92,7 +93,7 @@ async def run_typst_worker(
 
 
 async def _execute_typst_worker(
-    job_dir: Path, font_dir: Path, timeout_seconds: float
+    job_dir: Path, font_dir: Path, timeout_seconds: float, raster_ppi: int = 144
 ) -> TypstWorkerMetrics | None:
     """持有当前事件循环的共享编译名额期间执行、回收隔离进程。
 
@@ -100,6 +101,7 @@ async def _execute_typst_worker(
         job_dir: 本次任务目录。
         font_dir: 插件受管理字体目录。
         timeout_seconds: 排队后剩余的执行时限。
+        raster_ppi: 固定版心的栅格化密度。
 
     Returns:
         通过边界校验的可选编译测量值。
@@ -117,6 +119,8 @@ async def _execute_typst_worker(
         str(Path(__file__).with_name("typst_worker.py")),
         str(job_dir),
         str(font_dir),
+        "--ppi",
+        str(raster_ppi),
         *(["--metrics"] if collect_metrics else []),
         stdout=asyncio.subprocess.PIPE
         if collect_metrics
@@ -166,6 +170,7 @@ def _parse_worker_metrics(stdout: bytes | None) -> TypstWorkerMetrics | None:
         "font_setup_ms",
         "layout_ms",
         "raster_ms",
+        "raster_ppi",
         "worker_peak_rss_mb",
         "worker_start_rss_mb",
         "worker_peak_delta_mb",

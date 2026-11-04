@@ -61,7 +61,7 @@ def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch, t
     directory.mkdir(parents=True)
     (directory / "test.ttf").write_bytes(b"font")
     captured = {}
-    async def worker(job, fonts, timeout):
+    async def worker(job, fonts, timeout, raster_ppi=144):
         captured.update(json.loads((job / "data.json").read_text(encoding="utf-8")))
         (job / "report.png").write_bytes(png_bytes())
         assert fonts == directory
@@ -153,7 +153,7 @@ async def test_custom_typst_keeps_relative_modules_and_isolated_root(native, tmp
     (custom / "main.typ").write_text("invalid", encoding="utf-8")
     (custom / "parts/card.typ").write_text('#let card = [hello]', encoding="utf-8")
     monkeypatch.setattr(native.config_manager, "get_custom_report_template_dir", lambda _: custom)
-    async def worker(job, font_dir, timeout):
+    async def worker(job, font_dir, timeout, raster_ppi=144):
         assert (job / "main.typ").read_text(encoding="utf-8") == '#import "parts/card.typ": card'
         assert (job / "parts/card.typ").is_file()
         assert json.loads((job / "data.json").read_text(encoding="utf-8"))["message_count"] >= 0
@@ -180,7 +180,7 @@ async def test_optional_network_timeout_preserves_report_text(native, monkeypatc
     if boundary == "avatar":
         native._avatar_service.get_user_avatar.side_effect = unavailable
     captured = {}
-    async def worker(job, font_dir, timeout):
+    async def worker(job, font_dir, timeout, raster_ppi=144):
         captured.update(json.loads((job / "data.json").read_text(encoding="utf-8")))
         assert list(job.glob("*.svg")), "网络预算过期后仍需使用本地图标"
         (job / "report.png").write_bytes(png_bytes())
@@ -228,7 +228,7 @@ async def test_native_trace_tracks_stages_and_cancel(native, monkeypatch, cancel
     fonts = native.data_dir / "typst/fonts"
     fonts.mkdir(parents=True)
     (fonts / "test.ttf").write_bytes(b"font")
-    async def worker(job, font_dir, timeout):
+    async def worker(job, font_dir, timeout, raster_ppi=144):
         if cancel:
             raise asyncio.CancelledError()
         (job / "report.png").write_bytes(png_bytes())

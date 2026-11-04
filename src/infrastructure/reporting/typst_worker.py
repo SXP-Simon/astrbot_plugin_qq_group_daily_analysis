@@ -25,6 +25,7 @@ class TypstWorkerMetrics(TypedDict, total=False):
     font_setup_ms: float
     layout_ms: float
     raster_ms: float
+    raster_ppi: float
     worker_peak_rss_mb: float
     worker_start_rss_mb: float
     worker_peak_delta_mb: float
@@ -57,18 +58,26 @@ def _custom_page_size(svg: bytes | list[bytes] | None) -> tuple[float, float]:
         raise RuntimeError("无法读取 Typst 自定义模板的实际画布尺寸") from error
 
 
-def _check_canvas(compiler: Compiler, *, custom: bool) -> None:
+def _check_canvas(
+    compiler: Compiler, *, custom: bool, raster_ppi: int = REPORT_PPI
+) -> int:
     """在分配像素面之前测量真实版心并校验静态报告预算。
 
     Args:
         compiler: 已加载模板与字体的编译器。
         custom: 自定义模板使用实际矢量画布，不信任尺寸元数据。
+        raster_ppi: 期望的导出密度。
+
+    Returns:
+        像素预算允许的最高密度；超长图逐档回落，排版保持不变。
 
     Raises:
         RuntimeError: 模板语法、宽度、页数或像素预算不符合要求。
     """
     from typst import TypstError
 
+    if type(raster_ppi) is not int or raster_ppi not in (144, 180, 216):
+        raise RuntimeError("Typst 导出密度只允许 144、180 或 216 PPI")
     try:
         if custom:
             pixel_width, pixel_height = _custom_page_size(
@@ -97,10 +106,21 @@ def _check_canvas(compiler: Compiler, *, custom: bool) -> None:
         )
     if pixel_height > 30000 or pixel_height * pixel_width > 40_000_000:
         raise RuntimeError("Typst 报告超过单图像素预算，请减少展示条数")
+    for candidate in (216, 180, 144):
+        if candidate > raster_ppi:
+            continue
+        scale = candidate / REPORT_PPI
+        width, height = math.ceil(pixel_width * scale), math.ceil(pixel_height * scale)
+        if width <= 1410 and height <= 30000 and width * height <= 40_000_000:
+            return candidate
+    raise RuntimeError("Typst 报告超过单图像素预算，请减少展示条数")
 
 
 def compile_report(
-    job_dir: Path, font_dir: Path, metrics: TypstWorkerMetrics | None = None
+    job_dir: Path,
+    font_dir: Path,
+    metrics: TypstWorkerMetrics | None = None,
+    raster_ppi: int = REPORT_PPI,
 ) -> None:
     """先测量像素预算，再直接编译 PNG。
 
@@ -108,6 +128,7 @@ def compile_report(
         job_dir: 只含模板、JSON 和已校验图片的任务根目录。
         font_dir: 插件 data 目录内的受管理字体目录。
         metrics: 遥测开启时填充阶段测量值；默认不收集。
+        raster_ppi: 受限的栅格密度；字体与排版仍按 144 PPI 的逻辑尺寸处理。
 
     Raises:
         RuntimeError: 缺少中文字体、依赖或报告超过像素预算。
@@ -139,7 +160,13 @@ def compile_report(
             )
         phase_start = time.perf_counter()
         try:
-            _check_canvas(compiler, custom=(job_dir / CUSTOM_TEMPLATE_MARKER).is_file())
+            raster_ppi = _check_canvas(
+                compiler,
+                custom=(job_dir / CUSTOM_TEMPLATE_MARKER).is_file(),
+                raster_ppi=raster_ppi,
+            )
+            if metrics is not None:
+                metrics["raster_ppi"] = raster_ppi
         finally:
             if metrics is not None:
                 metrics["layout_ms"] = round(
@@ -147,7 +174,7 @@ def compile_report(
                 )
         phase_start = time.perf_counter()
         compiler.compile(
-            output=str(job_dir / "report.png"), format="png", ppi=REPORT_PPI
+            output=str(job_dir / "report.png"), format="png", ppi=raster_ppi
         )
         if (job_dir / "report.png").stat().st_size > 32 * 1024 * 1024:
             raise RuntimeError("Typst 报告超过 32 MiB，无法发送")
@@ -211,7 +238,12 @@ def _collect_peak(
 if __name__ == "__main__":
     telemetry: TypstWorkerMetrics | None = {} if "--metrics" in sys.argv[3:] else None
     try:
-        compile_report(Path(sys.argv[1]), Path(sys.argv[2]), telemetry)
+        ppi = (
+            int(sys.argv[sys.argv.index("--ppi") + 1])
+            if "--ppi" in sys.argv
+            else REPORT_PPI
+        )
+        compile_report(Path(sys.argv[1]), Path(sys.argv[2]), telemetry, raster_ppi=ppi)
     except Exception as error:
         sys.stderr.buffer.write(f"Typst 编译失败：{error}\n".encode())
         sys.exit(1)

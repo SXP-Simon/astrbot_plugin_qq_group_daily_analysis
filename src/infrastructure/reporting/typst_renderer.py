@@ -66,7 +66,10 @@ async def render_typst_probe(
             encoding="utf-8",
         )
         await run_typst_worker(
-            job_dir, data_dir / "typst" / "fonts", options.get("timeout", 30000) / 1000
+            job_dir,
+            data_dir / "typst" / "fonts",
+            options.get("timeout", 30000) / 1000,
+            options.get("raster_ppi", 144),
         )
         return await asyncio.to_thread((job_dir / "report.png").read_bytes)
 
@@ -174,7 +177,9 @@ class TypstReportRenderer:
                     identity or TypstIdentityOptions(),
                     deadline,
                 )
-                await self._compile(job, deadline, template.parent.name)
+                await self._compile(
+                    job, deadline, template.parent.name, options.get("raster_ppi", 144)
+                )
                 async with _span(
                     "TYPST_ENCODE", {"format": options.get("type", "png")}
                 ) as span:
@@ -307,13 +312,16 @@ class TypstReportRenderer:
                 trace.metadata["has_warnings"] = True
                 trace.metadata["typst_network_budget_exhausted"] = True
 
-    async def _compile(self, job: Path, deadline: float, theme: str) -> None:
+    async def _compile(
+        self, job: Path, deadline: float, theme: str, raster_ppi: int
+    ) -> None:
         """主题失败后在剩余预算内使用独立基础排版，取消不触发恢复。
 
         Args:
             job: 本次隔离编译目录。
             deadline: 整条渲染链路的单调时钟截止时间。
             theme: 本轮主题，用于诊断记录。
+            raster_ppi: 配置中校验过的导出密度，不影响版心尺寸。
 
         Raises:
             RuntimeError: 基础恢复也失败。
@@ -325,10 +333,15 @@ class TypstReportRenderer:
         compile_span = None
         try:
             async with _span(
-                "TYPST_COMPILE", {"template": theme, "width": REPORT_WIDTH}
+                "TYPST_COMPILE",
+                {
+                    "template": theme,
+                    "width": REPORT_WIDTH,
+                    "requested_raster_ppi": raster_ppi,
+                },
             ) as compile_span:
                 metrics = await run_typst_worker(
-                    job, fonts, remaining - min(2.0, remaining / 5)
+                    job, fonts, remaining - min(2.0, remaining / 5), raster_ppi
                 )
                 if compile_span and metrics:
                     compile_span["payload"].update(metrics)
@@ -348,14 +361,18 @@ class TypstReportRenderer:
                 trace.metadata["has_warnings"] = True
             async with _span(
                 "TYPST_RECOVERY",
-                {"mode": "basic", "reason": str(error)[:1800] or type(error).__name__},
+                {
+                    "mode": "basic",
+                    "reason": str(error)[:1800] or type(error).__name__,
+                    "requested_raster_ppi": raster_ppi,
+                },
             ) as recovery_span:
                 # 恢复入口不导入主题、组件或图片，原始结构化文字保持完整。
                 shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job / "main.typ")
                 (job / "report.png").unlink(missing_ok=True)
                 (job / CUSTOM_TEMPLATE_MARKER).unlink(missing_ok=True)
                 metrics = await run_typst_worker(
-                    job, fonts, max(0.0, deadline - loop.time())
+                    job, fonts, max(0.0, deadline - loop.time()), raster_ppi
                 )
                 if recovery_span and metrics:
                     recovery_span["payload"].update(metrics)

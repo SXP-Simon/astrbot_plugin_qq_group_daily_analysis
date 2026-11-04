@@ -19,7 +19,7 @@ async def test_queued_compile_does_not_spawn_and_preserves_next_slot(tmp_path, m
     maximum = 0
     calls = []
 
-    async def execute(job, fonts, timeout):
+    async def execute(job, fonts, timeout, raster_ppi=144):
         nonlocal active, maximum
         calls.append(job.name)
         active += 1
@@ -56,7 +56,7 @@ async def test_pending_compilation_receives_remaining_deadline(tmp_path, monkeyp
     queued = asyncio.Event()
     remaining = []
 
-    async def execute(job, fonts, timeout):
+    async def execute(job, fonts, timeout, raster_ppi=144):
         if job.name == "first":
             started.set()
             await release.wait()
