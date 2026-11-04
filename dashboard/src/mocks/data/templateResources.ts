@@ -179,6 +179,7 @@ const fonts = [
   "NotoSansJP.ttf",
   "NotoSansSymbols2.ttf",
   "NotoColorEmoji.ttf",
+  "cjkFonts_allseto_v1.11.ttf",
   "Outfit.ttf",
   "ShareTechMono.ttf",
   "Inter.ttf",
@@ -201,7 +202,8 @@ const themeFonts: Record<string, string[]> = {
   "HatsuneMiku": [
     "Outfit.ttf",
     "ShareTechMono.ttf",
-    "Inter.ttf"
+    "Inter.ttf",
+    "cjkFonts_allseto_v1.11.ttf"
   ],
   "simple": [],
   "hack": [

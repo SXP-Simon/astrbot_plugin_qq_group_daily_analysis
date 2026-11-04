@@ -176,7 +176,12 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
 
 it("Typst演示覆盖本地缓存、下载、超时、恢复、失败和取消，活跃详情保持一致", () => {
   const native = mockTraces.filter(trace => trace.trace_id.startsWith("trace-typst-"));
-  expect(native).toHaveLength(10);
+  expect(native).toHaveLength(11);
+  const titleFallback = native.find(trace => trace.trace_id === "trace-typst-title-font");
+  expect(titleFallback?.status).toBe("warning");
+  expect(titleFallback?.spans?.find(span => span.stage_name === "TYPST_RESOURCES")?.payload).toMatchObject({
+    title_font: "Noto Sans SC", warning: expect.stringContaining("全瀨體尚未下载"),
+  });
   for (const trace of native) {
     for (const span of trace.spans || []) {
       const measured = ["font_setup_ms", "layout_ms", "raster_ms"].reduce((sum, key) => sum + (typeof span.payload?.[key] === "number" ? Number(span.payload[key]) : 0), 0);

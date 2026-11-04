@@ -16,9 +16,11 @@ interface Scene {
   validation?: "fonts" | "theme";
   htmlFirst?: boolean;
   theme?: string;
+  titleFontMissing?: boolean;
 }
 const scenes: Scene[] = [
   { id: "cached", name: "本地素材命中", status: "succeeded" },
+  { id: "title-font", name: "缺全瀨體时标题回退", status: "warning", titleFontMissing: true },
   { id: "live", name: "CDN 下载中", status: "running" },
   { id: "network", name: "资源超时仍完成", status: "warning" },
   { id: "recovered", name: "基础排版恢复", status: "warning", recovered: true },
@@ -42,6 +44,8 @@ function nativeSteps(scene: Scene): Step[] {
     { stage: "TYPST_VALIDATE", ms: 3, payload: { template: theme, width: 940 } },
     { stage: "TYPST_DATA", ms: 120, payload: { topics: 3, portraits: 4, quotes: 2 } },
     { stage: "TYPST_RESOURCES", ms: resourceTimeout ? 19800 : scene.id === "live" ? 7797 : 60, status: scene.id === "live" ? "running" : "success", payload: {
+      ...(theme === "HatsuneMiku" ? { title_font: scene.titleFontMissing ? "Noto Sans SC" : "cjkFonts" } : {}),
+      ...(scene.titleFontMissing ? { warning: "全瀨體尚未下载，中文标题暂用 Noto；可在 WebUI 补齐 Miku 模板字体" } : {}),
       local_resources: scene.id === "cached" ? 10 : 2, image_cache_hits: scene.id === "cached" ? 9 : 0,
       downloaded_resources: scene.id === "live" ? 4 : 0, missing_resources: resourceTimeout ? 2 : 0,
       missing_images: resourceTimeout ? 1 : 0, network_budget_exhausted: resourceTimeout,

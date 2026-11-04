@@ -39,3 +39,10 @@ it("长图降档同时展示请求与实际密度，说明固定排版未改变"
   expect(screen.getByText("180 PPI")).toBeVisible();
   expect(screen.getByText("长图像素预算已限制导出密度，排版与内容保持不变。")).toBeVisible();
 });
+
+
+it("显示实际标题字体，便于检查全瀨體是否加载或回退", () => {
+  render(<StageMetricsBadges stageName="TYPST_RESOURCES" payload={{ title_font: "cjkFonts" }} />);
+  expect(screen.getByText("标题字体:")).toBeVisible();
+  expect(screen.getByText("cjkFonts")).toBeVisible();
+});

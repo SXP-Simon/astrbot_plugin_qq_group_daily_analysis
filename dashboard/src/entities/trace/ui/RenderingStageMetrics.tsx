@@ -14,6 +14,7 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
     ["strategy_name", "方案", ""],
     ["service_type", "引擎", ""],
     ["font_mode", "字体来源", ""],
+    ["title_font", "标题字体", ""],
     ["resource_environment", "资源环境", ""],
     ["viewport", "视口", ""],
     ["width", "固定宽度", "px"],

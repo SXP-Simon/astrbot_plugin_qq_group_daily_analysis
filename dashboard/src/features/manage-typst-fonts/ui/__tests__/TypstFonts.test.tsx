@@ -20,7 +20,7 @@ beforeEach(() => {
 
 it("仅下载所选模板，其他模板字体仍可继续按需或全部下载", async () => {
   render(<TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" />);
-  expect(await screen.findByText("所选模板还需下载 6 / 8 个字体文件")).toBeVisible();
+  expect(await screen.findByText("所选模板还需下载 7 / 9 个字体文件")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "下载所选模板字体" }));
   expect(await screen.findByText("所选模板字体已就绪")).toBeVisible();
   expect(downloadTypstFonts).toHaveBeenCalledWith("https://cdn.jsdelivr.net", "HatsuneMiku", expect.any(String), expect.any(String));
@@ -39,9 +39,9 @@ it("下载中断后刷新已完成的文件状态并保留可读错误", async (
     throw new Error("CDN 下载中断，请切换 CDN 后重试");
   });
   render(<TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" />);
-  await screen.findByText("所选模板还需下载 6 / 8 个字体文件");
+  await screen.findByText("所选模板还需下载 7 / 9 个字体文件");
   fireEvent.click(screen.getByRole("button", { name: "下载所选模板字体" }));
-  expect(await screen.findByText("所选模板还需下载 5 / 8 个字体文件")).toBeVisible();
+  expect(await screen.findByText("所选模板还需下载 6 / 9 个字体文件")).toBeVisible();
   expect(screen.getAllByText(/CDN 下载中断，请切换 CDN 后重试/).length).toBeGreaterThan(0);
 }, 15000);
 
@@ -60,12 +60,12 @@ it("可从字体进度取消当前文件且不启动后续字体", async () => {
     return { status: "ok", data: { download_id: activeId, cancelled: true } };
   });
   render(<TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" />);
-  await screen.findByText("所选模板还需下载 6 / 8 个字体文件");
+  await screen.findByText("所选模板还需下载 7 / 9 个字体文件");
   fireEvent.click(screen.getByRole("button", { name: "下载所选模板字体" }));
   fireEvent.click(await screen.findByRole("button", { name: "取消下载" }));
   await act(async () => { await Promise.resolve(); });
   expect(await screen.findByText(/下载已取消，已完成的字体会保留/)).toBeVisible();
   expect(downloadTypstFonts).toHaveBeenCalledTimes(1);
-  expect(screen.getByText(/字体处理 0\/6，成功 0，失败 0/)).toBeVisible();
+  expect(screen.getByText(/字体处理 0\/7，成功 0，失败 0/)).toBeVisible();
   cancelApi.mockRestore();
 });

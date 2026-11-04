@@ -17,7 +17,7 @@ export function FontManager({ onChanged }: { onChanged: () => void }) {
   const affected = vm.groups.filter(group => selectedFiles.some(file => group.required.includes(file.name)));
 
   return <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-    <Typography.Text>按模板检查缺失字体并补齐；共享字体只保存一份。替换或移除会影响所有依赖该字体的模板。</Typography.Text>
+    <Typography.Text>按模板检查缺失字体并补齐；共享字体只保存一份。大字库可能使用固定来源直连，不经过所选 CDN；下载失败也可上传同名文件。替换或移除会影响所有依赖该字体的模板。</Typography.Text>
     <Space wrap>
       <Select aria-label="管理字体的模板" value={vm.theme} disabled={disabled} style={{ minWidth: 260 }} onChange={vm.selectTheme} options={[{ value: "__all__", label: "全部预设与自定义字体" }, ...vm.groups.map(group => ({ value: group.theme, label: themeName(group.theme) }))]} />
       <Select aria-label="字体下载 CDN" value={cdn} disabled={disabled} options={TEMPLATE_CDN_PRESETS} onChange={setCdn} style={{ width: 350, maxWidth: "100%" }} />
