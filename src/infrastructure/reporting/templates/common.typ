@@ -12,8 +12,13 @@
     let w=measured.width/t.u
     let h=measured.height/t.u
     let pad=blur*2+calc.abs(dy)
-    // 滤镜只计算 SVG 画布内可见的像素，避免为大卡片分配三倍宽高的离屏区域。
-    let svg="<svg xmlns='http://www.w3.org/2000/svg' width='"+str(w+2*pad)+"' height='"+str(h+2*pad)+"' viewBox='0 0 "+str(w+2*pad)+" "+str(h+2*pad)+"'><defs><filter id='s' filterUnits='userSpaceOnUse' x='0' y='0' width='"+str(w+2*pad)+"' height='"+str(h+2*pad)+"'><feGaussianBlur stdDeviation='"+str(blur/2)+"'/></filter></defs><rect x='"+str(pad)+"' y='"+str(pad+dy)+"' width='"+str(w)+"' height='"+str(h)+"' rx='"+str(radius)+"' fill='"+color.to-hex()+"' filter='url(#s)'/></svg>"
+    // 保留原画布与像素对齐；三倍标准差外另留两像素，覆盖小半径滤镜的离散舍入。
+    let spread=calc.ceil(blur*1.5)+2
+    let fx=calc.max(0,pad - spread)
+    let fy=calc.max(0,pad+dy - spread)
+    let fw=calc.min(w+2*pad,pad+w+spread) - fx
+    let fh=calc.min(h+2*pad,pad+dy+h+spread) - fy
+    let svg="<svg xmlns='http://www.w3.org/2000/svg' width='"+str(w+2*pad)+"' height='"+str(h+2*pad)+"' viewBox='0 0 "+str(w+2*pad)+" "+str(h+2*pad)+"'><defs><filter id='s' filterUnits='userSpaceOnUse' x='"+str(fx)+"' y='"+str(fy)+"' width='"+str(fw)+"' height='"+str(fh)+"'><feGaussianBlur stdDeviation='"+str(blur/2)+"'/></filter></defs><rect x='"+str(pad)+"' y='"+str(pad+dy)+"' width='"+str(w)+"' height='"+str(h)+"' rx='"+str(radius)+"' fill='"+color.to-hex()+"' filter='url(#s)'/></svg>"
     [#place(top+left,dx:-pad*t.u,dy:-pad*t.u,image(bytes(svg),format:"svg",width:(w+2*pad)*t.u,height:(h+2*pad)*t.u))#body]
   }
   // 固定尺寸直接绘制，避免嵌套测量复制整棵布局；自适应内容仍按原约束测量。
