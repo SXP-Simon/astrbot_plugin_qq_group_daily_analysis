@@ -3,6 +3,7 @@
 import base64
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
+from test_report_image import long_png as long_png
 
 import pytest
 
@@ -93,6 +94,19 @@ async def test_rerender_returns_existing_file(recovery, tmp_path, fmt):
     assert dest.parent == tmp_path / "reports"
     assert dest.read_bytes() == source.read_bytes()
     assert result["from_checkpoint"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["base64://", "data:image/png;base64,"])
+async def test_rerender_png_artifact_matches_filename_and_format(recovery, long_png, prefix):
+    service, generator = recovery
+    generator.generate_image_report.return_value = (prefix + base64.b64encode(long_png).decode(), None)
+    result = await service.rerender_report("123", "2026-11-04", "test")
+    assert result["success"] is True
+    path = Path(result["report_path"])
+    assert result["filename"] == path.name
+    assert path.suffix == ".png"
+    assert path.read_bytes() == long_png
 
 
 @pytest.mark.asyncio
