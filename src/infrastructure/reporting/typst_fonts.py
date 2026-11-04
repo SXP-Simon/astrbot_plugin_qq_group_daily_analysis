@@ -17,6 +17,8 @@ FONT_SOURCES = {
     "NotoSansJP.ttf": "gh/google/fonts@main/ofl/notosansjp/NotoSansJP[wght].ttf",
     "NotoSansSymbols2.ttf": "gh/google/fonts@main/ofl/notosanssymbols2/NotoSansSymbols2-Regular.ttf",
     "NotoColorEmoji.ttf": "gh/googlefonts/noto-emoji@main/2D/fonts/Noto-COLRv1.ttf",
+    # 与 cjkFonts 官方 1.11 包逐字节一致；完整 TTF 约 30 MiB，超过常见 CDN 文件上限。
+    "cjkFonts_allseto_v1.11.ttf": "https://raw.githubusercontent.com/moeru-ai/airi/1eb62e912fe7936387804aa920ff98c9f1137d80/packages/font-cjkfonts-allseto/src/files/cjkFonts_allseto_v1.11.ttf",
     "Outfit.ttf": "gh/google/fonts@main/ofl/outfit/Outfit[wght].ttf",
     "ShareTechMono.ttf": "gh/google/fonts@main/ofl/sharetechmono/ShareTechMono-Regular.ttf",
     "Inter.ttf": "gh/google/fonts@main/ofl/inter/Inter[opsz,wght].ttf",
@@ -49,7 +51,12 @@ BASE_FONTS = (
 THEME_FONTS = {
     theme: BASE_FONTS + fonts
     for theme, fonts in {
-        "HatsuneMiku": ("Outfit.ttf", "ShareTechMono.ttf", "Inter.ttf"),
+        "HatsuneMiku": (
+            "Outfit.ttf",
+            "ShareTechMono.ttf",
+            "Inter.ttf",
+            "cjkFonts_allseto_v1.11.ttf",
+        ),
         "simple": (),
         # JetBrains Mono 的中文等宽回退需要保留，避免按需安装后改变字形。
         "hack": ("Inter.ttf", "JetBrainsMono.ttf", "LXGWWenKaiMono.ttf"),

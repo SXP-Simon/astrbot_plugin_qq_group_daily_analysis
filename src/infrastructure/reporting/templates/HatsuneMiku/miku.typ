@@ -14,8 +14,9 @@
   set par(leading:0pt,spacing:0pt)
   let edge=(lh - 1)/2
   let family=if font==none {t.fonts.first()}else if type(font)==array {font.first()}else{font}
-  let baseline=if family=="Outfit" {0.87}else if family=="Share Tech Mono" {0.8215}else if family=="Inter" {0.86377}else{0.936}
-  text(size:size*t.u,weight:weight,fill:fill,top-edge:(baseline+edge)*1em,bottom-edge:-(1-baseline+edge)*1em,font:if font==none {t.fonts}else if type(font)==array {font}else{(font,..t.fonts)})[#body]
+  let baseline=if family=="Outfit" {0.87}else if family=="Share Tech Mono" {0.8215}else if family=="Inter" {0.86377}else if family=="cjkFonts" {880/1024}else{0.936}
+  // 全瀨體只有常规字重，描边补齐浏览器对标题粗体的合成效果。
+  text(size:size*t.u,weight:weight,fill:fill,stroke:if family=="cjkFonts" and weight>=600 {0.035em+fill}else{none},top-edge:(baseline+edge)*1em,bottom-edge:-(1-baseline+edge)*1em,font:if font==none {t.fonts}else if type(font)==array {font}else{(font,..t.fonts)})[#body]
 }
 // 标题、统计标签和峰值标签沿用原版的半像素缩字号规则及下限。
 #let fitted(t,body,width,size:24,minimum:0.78,..style) = context {
@@ -76,7 +77,7 @@
 #let heading(t,d) = context {
   let date=copy(t,[#words(d).log #text("//") #d.date],size:17.6,weight:700,fill:dark,font:"Outfit",lh:26/17.6)
   grid(columns:(1fr,auto),align:bottom,gutter:15*t.u,
-    [#let title=fitted(t,text(tracking:if t.english {-0.018em}else{0pt},words(d).title),818 - measure(date).width/t.u - 15,size:44.8,minimum:0.68,weight:800,font:t.title-font,lh:if t.english {1.26}else{65/44.8})
+    [#let title=fitted(t,text(tracking:if t.english {-0.018em}else{0pt},words(d).title),818 - measure(date).width/t.u - 15,size:44.8,minimum:0.68,weight:800,font:t.title-font,lh:if t.english {1.26}else if t.allseto {1}else{65/44.8})
       #box(width:measure(title).width)[#place(bottom,rect(width:100%,height:8*t.u,radius:4*t.u,fill:gradient.linear(dark.transparentize(40%),base.transparentize(40%),angle:0deg),stroke:none))#title]],
     date)
   v(40*t.u)
@@ -250,7 +251,9 @@
   let font=if d.at("font_language",default:d.language)=="zh-Hant" {"Noto Sans TC"} else if d.language=="ja" {"Noto Sans JP"}else{"Noto Sans SC"}
   t.insert("english",d.language=="en")
   t.insert("fonts",if t.english {("Inter","Outfit",font,"Noto Sans JP")}else{(font,"Noto Sans SC","Noto Sans JP")})
-  t.insert("title-font",if t.english {("Outfit","Inter",font)}else{(font,"Noto Sans SC")})
+  t.insert("allseto",d.language in ("zh-Hans","zh-Hant") and d.at("miku_allseto",default:false))
+  // Typst 将官方 1.11 字库登记为 cjkFonts；AllSeto 是 HTML 的字体别名。
+  t.insert("title-font",if t.english {("Outfit","Inter",font)}else if t.allseto {("cjkFonts",font,"Noto Sans SC")}else{(font,"Noto Sans SC")})
   set page(width:940*t.u,height:auto,margin:0pt,fill:soft)
   set text(font:t.fonts,size:16*t.u,fill:ink,cjk-latin-spacing:none,overhang:false,lang:if d.language=="ja" {"ja"}else if d.language=="en" {"en"}else{"zh"},region:if d.language=="ja" {"JP"}else if d.font_language=="zh-Hant" {"TW"}else{"CN"})
   set par(spacing:0pt,leading:0pt)

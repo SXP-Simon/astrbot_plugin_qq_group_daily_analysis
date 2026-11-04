@@ -473,3 +473,38 @@ async def test_high_density_survives_generator_and_history_copy(compiler, tmp_pa
     assert output.suffix == ".png" and output.read_bytes() == payload
     with Image.open(output) as image:
         assert image.format == "PNG" and image.width == 1410
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("language", ["zh-Hans", "zh-Hant", "en", "ja"])
+async def test_miku_title_uses_allseto_only_for_chinese_and_keeps_font_fallback(compiler, tmp_path, monkeypatch, language):
+    config, generator, _ = compiler
+    font = generator.data_dir / "typst/fonts/cjkFonts_allseto_v1.11.ttf"
+    assert font.is_file(), "真实 Miku 编译需要按需字体清单中的全瀨體"
+    config.config["basic"]["report_language"] = language
+    real_worker = typst_renderer.run_typst_worker
+    results = []
+
+    async def compare(job, fonts, timeout, raster_ppi=144):
+        data = json.loads((job / "data.json").read_text(encoding="utf-8"))
+        assert data["miku_allseto"] is True and data["language"] == language
+        metrics = await real_worker(job, fonts, timeout, raster_ppi)
+        original = (job / "report.png").read_bytes()
+        clone = tmp_path / "fallback"
+        shutil.copytree(job, clone)
+        data["miku_allseto"] = False
+        (clone / "data.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        await real_worker(clone, fonts, timeout, raster_ppi)
+        results.extend([original, (clone / "report.png").read_bytes()])
+        return metrics
+
+    monkeypatch.setattr(typst_renderer, "run_typst_worker", compare)
+    source, html = await generator.generate_image_report(create_analysis_result(), "allseto", None, template_theme="HatsuneMiku")
+    assert source and html is None and len(results) == 2
+    assert base64.b64decode(source.removeprefix("base64://")) == results[0]
+    with Image.open(BytesIO(results[0])) as actual, Image.open(BytesIO(results[1])) as fallback:
+        if language.startswith("zh"):
+            assert 19 <= fallback.height - actual.height <= 21
+            assert actual.crop((50, 75, 500, 130)).tobytes() != fallback.crop((50, 75, 500, 130)).tobytes()
+        else:
+            assert actual.size == fallback.size and actual.tobytes() == fallback.tobytes()

@@ -285,6 +285,10 @@ class TypstReportRenderer:
                 # 保留相对导入，上传包不能覆盖运行时生成的数据和入口。
                 shutil.copytree(template.parent, job, dirs_exist_ok=True)
                 (job / CUSTOM_TEMPLATE_MARKER).touch()
+            if builtin and theme == "HatsuneMiku":
+                data["miku_allseto"] = (
+                    self.data_dir / "typst/fonts/cjkFonts_allseto_v1.11.ttf"
+                ).is_file()
             shutil.copyfile(template, job / "main.typ")
             (job / "data.json").write_text(
                 json.dumps(data, ensure_ascii=False), encoding="utf-8"
@@ -303,6 +307,30 @@ class TypstReportRenderer:
                     span["payload"]["warning"] = (
                         "部分图片或图标缺失，已使用占位；可在配置中心下载主题素材或切换 CDN"
                     )
+            if (
+                builtin
+                and theme == "HatsuneMiku"
+                and data["language"] in ("zh-Hans", "zh-Hant")
+            ):
+                available = data.get("miku_allseto", False)
+                if span:
+                    span["payload"]["title_font"] = (
+                        "cjkFonts"
+                        if available
+                        else "Noto Sans TC"
+                        if data["font_language"] == "zh-Hant"
+                        else "Noto Sans SC"
+                    )
+                if not available:
+                    warning = "全瀨體尚未下载，中文标题暂用 Noto；可在 WebUI 补齐 Miku 模板字体"
+                    if span:
+                        previous = span["payload"].get("warning")
+                        span["payload"]["warning"] = (
+                            f"{previous}；{warning}" if previous else warning
+                        )
+                    trace = TraceContext.current()
+                    if trace:
+                        trace.metadata["has_warnings"] = True
         if assets.network_budget_exhausted or store.network_budget_exhausted:
             logger.warning(
                 "Typst 部分可选网络资源超时，保留正文并继续排版；可检查网络或在 WebUI 补齐主题素材"

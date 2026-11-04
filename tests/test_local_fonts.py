@@ -76,6 +76,9 @@ async def test_builtin_templates_keep_assets_and_conditionally_load_fonts(
         assert "/ATRI/file/" in html and ".webp" in html
     if theme == "HatsuneMiku":
         assert "/HatsuneMiku/retouch_" in html
+        assert ("/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.woff2" in html) is (mode == "network")
+        assert ("local('cjkFonts 全瀨體')" in html) is (mode == "local")
+        assert "raw.githubusercontent.com" not in html
     if theme == "retro_futurism":
         assert 'local("Impact")' not in html
     if theme == "BlueArchive" and mode == "local":

@@ -34,7 +34,7 @@
 | --- | --- |
 | simple | Noto Sans SC、Noto Sans TC |
 | deepseek_maid | Noto Sans SC |
-| HatsuneMiku | Noto Sans SC、Noto Sans TC、Noto Sans JP、Outfit、Share Tech Mono；英文报告另用 Inter |
+| HatsuneMiku | cjkFonts 全瀨體 1.11（中文主标题）、Noto Sans SC、Noto Sans TC、Noto Sans JP、Outfit、Share Tech Mono；英文报告另用 Inter |
 | hack | Noto Sans SC、Noto Sans TC、Inter、JetBrains Mono |
 | format | Noto Serif SC、Noto Serif TC、Inter |
 | maria、art_nouveau | Noto Serif SC、Noto Serif TC、Cinzel、Cormorant Garamond、JetBrains Mono |
@@ -80,12 +80,18 @@ Google Fonts 链接指向[官方字体仓库](https://github.com/google/fonts)�
 
 安装时认字体内部名称，文件改名不会修改字体家族名。
 
+- Miku 的 HTML 中文主标题默认从当前方案 CDN 的 `/assets/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.woff2` 加载，不依赖远程 T2I 安装字体。这个约 5.4 KB 的网页字库只覆盖固定标题“群聊日常分析看板”的八个字，保留官方原始字形轮廓；内部名称改为 `Miku AllSeto Title`，原版权及 OFL 全文保存在字体元数据中。标题文字变更时需要重新生成该子集。该资源放在 `assets`，不打入 release。
+- Typst 的 Miku 按需字体包含完整的 `cjkFonts_allseto_v1.11.ttf`，来自 [AIRI 固定提交](https://github.com/moeru-ai/airi/blob/1eb62e912fe7936387804aa920ff98c9f1137d80/packages/font-cjkfonts-allseto/src/files/cjkFonts_allseto_v1.11.ttf)，已核对与 [cjkFonts 官方 1.11 字体包](https://cjkfonts.io/blog/cjkfonts_allseto) 的 TTF 逐字节一致。约 30 MiB，超过常见 CDN 的单文件限制，所以从固定完整文件来源下载到插件 data 目录。Typst 实际登记的字体族为 `cjkFonts`，不能直接填写 HTML 的 `cjkfonts AllSeto` 别名。
+- 全瀨體只影响中文主标题；正文继续使用 Noto，英文使用 Outfit／Inter，日文使用 Noto Sans JP。完整字体尚未下载时，Typst 保留 Noto 标题回退。HTML 的“已安装字体”模式仍需用户显式选择；在这个模式下才使用 `local()`，不会把机器人本地路径交给远程 T2I。
+
 - 部分系统包提供的是 `Noto Sans CJK SC`，模板使用的是 `Noto Sans SC`。它们可能互为备用，但不能据此认定原字体已经匹配。需要尽量保持原设计时，安装上表链接中的对应家族。
 - ATRI 使用 `LXGWWenKai-Regular.ttf`、`LXGWWenKai-Medium.ttf` 和 `LXGWWenKaiMono-Regular.ttf`。模板保留本地映射：`LXGW WenKai`／`LXGWWenKai-Regular` 对应 400，`LXGW WenKai Medium`／`LXGWWenKai-Medium` 对应原模板的 600，`LXGW WenKai Mono`／`LXGWWenKaiMono-Regular` 对应 400。Medium 文件自身的字重与模板声明可能不同，保留映射可继续使用该文件。
 
 插件不在 release 包中附带字体或额外的许可文本。Typst 可从 WebUI 按模板下载上游原始字体文件到插件 data 目录；自定义 T2I 则仍需安装到实际浏览器所在环境。
 
 ### 预设字体授权
+
+[cjkFonts 全瀨體](https://cjkfonts.io/blog/cjkfonts_allseto) 的官方 1.11 包按 SIL OFL 1.1 发布，允许个人与商业使用。网页标题子集已更名以遵守原保留字体名要求，版权和许可仍保留在字库元数据中，不额外下载许可文本。
 
 当前预设字体均按 SIL Open Font License 1.1 提供：Google Fonts 的字体在各家族的 `ofl/<家族>/OFL.txt` 中声明授权（例如 [Noto Sans SC](https://github.com/google/fonts/blob/main/ofl/notosanssc/OFL.txt)）；[Noto Emoji](https://github.com/googlefonts/noto-emoji/blob/main/LICENSE) 和 [霞鹜文楷 v1.522](https://github.com/lxgw/LxgwWenKai/blob/v1.522/OFL.txt) 也提供各自的许可与版权声明。下载保持上游字体原样，不删除其内嵌版权和许可元数据，不另外下载许可证。字体属于原作者，插件自身的开源协议不替代字体许可；另行打包分发字体时须遵守对应字体的许可条件。
 

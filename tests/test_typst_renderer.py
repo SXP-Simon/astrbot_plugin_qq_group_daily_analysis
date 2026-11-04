@@ -222,6 +222,7 @@ async def test_cancel_during_avatar_preparation_does_not_recover_or_send(native,
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cancel", [False, True])
 async def test_native_trace_tracks_stages_and_cancel(native, monkeypatch, cancel):
+    native.config_manager.config["basic"]["report_language"] = "zh-Hans"
     from src.domain.value_objects.task_event import TaskEvent
     trace = TraceContext(trace_id=f"native-stages-{cancel}", group_id="test")
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
@@ -248,7 +249,10 @@ async def test_native_trace_tracks_stages_and_cancel(native, monkeypatch, cancel
         assert compile_span["payload"]["parent_span_id"] == spans[1]["span_id"]
         if not cancel:
             assert compile_span["payload"]["worker_peak_rss_mb"] == 120.5
-        assert trace.status == ("aborted" if cancel else "succeeded")
+        assert trace.status == ("aborted" if cancel else "warning")
+        resources = next(span for span in spans if span["stage_name"] == "TYPST_RESOURCES")
+        assert resources["payload"]["title_font"] in ("Noto Sans SC", "Noto Sans TC")
+        assert "全瀨體尚未下载" in resources["payload"]["warning"]
     finally:
         await native.close()
 

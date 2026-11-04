@@ -1,9 +1,9 @@
-"""Typed input and output contracts for native report preparation."""
+"""原生报告准备阶段的强类型输入与输出契约。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -74,6 +74,7 @@ class TypstReportData(TypedDict):
     review: TypstReview | None
     tokens: list[int]
     decorations: list[str]
+    miku_allseto: NotRequired[bool]
 
 
 @dataclass(frozen=True, slots=True)

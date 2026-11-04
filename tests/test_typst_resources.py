@@ -15,7 +15,8 @@ from src.infrastructure.reporting import typst_fonts, typst_resources
 
 
 @pytest.mark.asyncio
-async def test_font_file_download_is_limited_to_the_selected_preset(tmp_path, monkeypatch):
+@pytest.mark.parametrize("filename", ["Outfit.ttf", "cjkFonts_allseto_v1.11.ttf"])
+async def test_font_file_download_is_limited_to_the_selected_preset(tmp_path, monkeypatch, filename):
     calls = []
 
     async def download(session, url, target):
@@ -23,13 +24,13 @@ async def test_font_file_download_is_limited_to_the_selected_preset(tmp_path, mo
         target.write_bytes(b"\x00\x01\x00\x00" + bytes(1024))
 
     monkeypatch.setattr(typst_fonts, "_download_font", download)
-    status = await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test", "HatsuneMiku", name="Outfit.ttf")
-    assert calls == ["Outfit.ttf"]
-    assert status["files"] == ["Outfit.ttf"]
+    status = await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test", "HatsuneMiku", name=filename)
+    assert calls == [filename]
+    assert status["files"] == [filename]
     for name in ("../outside.ttf", "Cinzel.ttf"):
         with pytest.raises(ValueError, match="字体"):
             await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test", "HatsuneMiku", name=name)
-    assert calls == ["Outfit.ttf"]
+    assert calls == [filename]
 
 
 @pytest.mark.asyncio

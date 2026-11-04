@@ -35,9 +35,20 @@
         href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+JP:wght@400;700&family=Outfit:wght@400;600;800&family=Share+Tech+Mono{# 英文报告才加载 Inter（拉丁正文字体）：中文/繁体报告一个字节都不多下 #}{% if REPORT_LANG == 'en' %}&family=Inter:wght@400;500;600;700{% endif %}&display=swap"
         rel="stylesheet">
     {% endif %}
-    <!-- 全瀨體保留为标题首选候选；当前不主动下载，未安装时按后续字体回退。 -->
+    <!-- 默认通过方案 CDN 加载全瀨體的静态标题字形；本地模式由用户显式选择。 -->
     <!-- 图标已内联为 SVG（11 个），不再依赖 lucide CDN -->
     <style>
+        @font-face {
+            font-family: 'cjkfonts AllSeto';
+            {% if t2i_font_mode|default('network') == 'local' %}
+            src: local('cjkFonts 全瀨體'), local('cjkFonts');
+            {% else %}
+            src: url('{{ cdn_assets_base }}/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.woff2') format('woff2');
+            {% endif %}
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+        }
         :root {
             --miku-base: #39C5BB;
             --miku-light: #A7E7E3;
