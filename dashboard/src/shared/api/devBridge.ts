@@ -1,5 +1,6 @@
 import { ApiResponse, AstrBotContext, SSEEventWrapper } from "./bridge";
 import { mockHandlers, mockSSEService } from "../../mocks";
+import { mockFontDownloads } from "../../mocks/data/fontDownloads";
 
 const PLUGIN_BASE_PATH = "/api/plugins/astrbot_plugin_qq_group_daily_analysis";
 
@@ -131,7 +132,13 @@ export async function devApiPost<T = unknown>(
   await new Promise((resolve) => setTimeout(resolve, 50));
   // 下载保留可操作的等待窗口，让演示模式也能检查取消及部分完成状态。
   if (["config/typst-fonts/download", "config/template-resources/download"].includes(path)) {
-    await new Promise(resolve => setTimeout(resolve, 800));
+    const download = typeof body === "object" && body !== null ? body as Record<string, unknown> : {};
+    const id = typeof download.download_id === "string" ? download.download_id : "";
+    if (path === "config/typst-fonts/download" && id) mockFontDownloads.set(id, { name: String(download.name), source: String(download.source || "cdn"), started: Date.now() });
+    try {
+      await new Promise(resolve => setTimeout(resolve, path === "config/typst-fonts/download" ? 1600 : 800));
+      return matchMockHandler("POST", path, undefined, body) as ApiResponse<T>;
+    } finally { if (id) mockFontDownloads.delete(id); }
   }
   const res = matchMockHandler("POST", path, undefined, body);
   return res as ApiResponse<T>;

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Alert, Button, Select, Space, Tag, Typography } from "antd";
 import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
 import { useTypstFonts } from "../model/useTypstFonts";
+import { FONT_DOWNLOAD_SOURCES } from "../../../entities/config/model/typstFonts";
 
 export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
   const vm = useTypstFonts(cdnBaseUrl);
@@ -24,13 +25,14 @@ export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
       <Space wrap>{group?.required.map(file => <Tag key={file} color={group.missing.includes(file) ? "default" : "success"}>{file}</Tag>)}</Space>
     </>}
     <Space wrap>
+      <Select aria-label="字体下载来源" value={vm.downloadQueue.source} disabled={vm.loading} options={FONT_DOWNLOAD_SOURCES} onChange={vm.downloadQueue.setSource} style={{ width: 300, maxWidth: "100%" }} />
       <Button loading={vm.operation === "selected"} disabled={vm.loading || !group || group.ready} onClick={() => void vm.run(true, theme)}>
         下载所选模板字体
       </Button>
       <Button loading={vm.operation === "all"} disabled={vm.loading || !vm.status || vm.status.ready} onClick={() => void vm.run(true)}>下载全部预设字体</Button>
       <Button loading={vm.operation === "refresh"} disabled={vm.loading} onClick={() => void vm.run(false)}>刷新字体状态</Button>
     </Space>
-    <Typography.Text type="secondary">常规字体使用本方案 CDN；超出 CDN 体积限制的完整字库使用固定来源直连，不经过所选 CDN。失败后已下载文件会保留，重试仅补缺失文件；固定来源无法访问时可在字体管理中上传同名文件。自定义模板可将其额外字体放入上述目录。</Typography.Text>
+    <Typography.Text type="secondary">CDN 优先模式下，大字库（含 ATRI 文楷）仍从固定 GitHub Raw 来源直连；也可选择全部字体走 Raw，绕过镜像 CDN 的体积限制。下载由插件服务器执行，Raw 无法访问时需检查服务器网络或代理；更换 CDN 不会改变直连地址。失败重试仅补缺失文件，也可在字体管理中上传同名文件。</Typography.Text>
     <Typography.Text type="secondary">预设字体采用 <Typography.Link href="https://openfontlicense.org/open-font-license-official-text/" target="_blank" rel="noreferrer">SIL OFL 1.1</Typography.Link>，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。</Typography.Text>
     <FontDownloadProgress download={vm.downloadQueue} />
     {vm.error && <Alert type="error" showIcon message={vm.error} />}

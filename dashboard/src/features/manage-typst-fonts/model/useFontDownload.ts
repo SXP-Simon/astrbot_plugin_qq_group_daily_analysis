@@ -1,13 +1,16 @@
 import { DownloadBatch } from "../../../entities/config/api/downloadBatch";
 import { useEffect, useRef, useState } from "react";
-import { downloadTypstFonts, fetchTypstFonts } from "../../../entities/config/api/configApi";
+import { downloadTypstFonts, fetchTypstFonts, fetchFontDownloadProgress } from "../../../entities/config/api/configApi";
 import { cdnBaseUrlSchema } from "../../../entities/config/model/renderingConfig";
-import type { TypstFontStatus } from "../../../entities/config/model/typstFonts";
+import type { FontDownloadSource, FontTransfer, TypstFontStatus } from "../../../entities/config/model/typstFonts";
 
 export function useFontDownload(onStatus: (status: TypstFontStatus) => void) {
   const [progress, setProgress] = useState({ done: 0, total: 0, current: "", failed: [] as { name: string; message: string }[] });
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [source, setSource] = useState<FontDownloadSource>("cdn");
+  const [transfer, setTransfer] = useState<FontTransfer | null>(null);
+  const [progressError, setProgressError] = useState("");
   const mounted = useRef(false);
   const busy = useRef(false);
   const batch = useRef(new DownloadBatch());
@@ -26,7 +29,7 @@ export function useFontDownload(onStatus: (status: TypstFontStatus) => void) {
 
   const download = async (cdnBaseUrl: string, status: TypstFontStatus, theme?: string) => {
     if (busy.current) return;
-    const cdn = cdnBaseUrlSchema.safeParse(cdnBaseUrl);
+    const cdn = cdnBaseUrlSchema.safeParse(source === "github" ? "" : cdnBaseUrl);
     if (!cdn.success) { setError(cdn.error.issues[0].message); return; }
     const group = status.groups?.find(item => item.theme === theme);
     if (theme && !group) { setError("模板字体清单已变化，请刷新状态后重试。"); return; }
@@ -41,11 +44,28 @@ export function useFontDownload(onStatus: (status: TypstFontStatus) => void) {
       for (const name of queue) {
         if (!mounted.current || batch.current.stopped) break;
         setProgress(value => ({ ...value, current: name }));
+        setTransfer(null); setProgressError("");
         try {
-          const value = await batch.current.run(id => downloadTypstFonts(cdn.data, theme, name, id));
+          const value = await batch.current.run(async id => {
+            let active = true;
+            let timer: ReturnType<typeof setTimeout>;
+            // 按请求读取真实字节数；不重叠轮询，也不让旧文件的迟到响应覆盖下一份。
+            const poll = async () => {
+              try {
+                const snapshot = await fetchFontDownloadProgress(id);
+                if (active && mounted.current) { setTransfer(snapshot); setProgressError(""); }
+              } catch {
+                if (active && mounted.current) setProgressError("进度暂时读取失败，下载可能仍在继续；可以取消或等待结果。");
+              }
+              if (active && mounted.current) timer = setTimeout(() => void poll(), 1000);
+            };
+            timer = setTimeout(() => void poll(), 500);
+            try { return await downloadTypstFonts(cdn.data, theme, name, id, source); }
+            finally { active = false; clearTimeout(timer); }
+          });
           if (mounted.current) { onStatus(value); setProgress(value => ({ ...value, done: value.done + 1 })); }
         } catch (cause) {
-          if (mounted.current && !batch.current.stopped) setProgress(value => ({ ...value, done: value.done + 1, failed: [...value.failed, { name, message: cause instanceof Error ? cause.message : "字体下载失败，请更换 CDN 后重试" }] }));
+          if (mounted.current && !batch.current.stopped) setProgress(value => ({ ...value, done: value.done + 1, failed: [...value.failed, { name, message: cause instanceof Error ? cause.message : "字体下载失败，请检查实际来源与服务器网络" }] }));
         }
       }
       if (mounted.current) {
@@ -54,8 +74,8 @@ export function useFontDownload(onStatus: (status: TypstFontStatus) => void) {
       }
     } finally {
       busy.current = false;
-      if (mounted.current) { setRunning(false); setProgress(value => ({ ...value, current: "" })); }
+      if (mounted.current) { setRunning(false); setTransfer(null); setProgressError(""); setProgress(value => ({ ...value, current: "" })); }
     }
   };
-  return { progress, running, error, download, cancel, cancelled, cancelling };
+  return { progress, running, error, download, cancel, cancelled, cancelling, source, setSource, transfer, progressError };
 }

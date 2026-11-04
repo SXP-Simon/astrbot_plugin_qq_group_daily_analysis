@@ -3,6 +3,7 @@ import { managedMockFiles, putManagedMockFile, managedFileMockHandlers } from ".
 import { mockTemplateResources, mockTypstFonts } from "./data/templateResources";
 import { supportsTemplate } from "../entities/report/model/templates";
 import { renderingRuntimeSchema } from "../entities/config/model/renderingConfig";
+import { mockFontDownloadProgress, mockFontDownloads } from "./data/fontDownloads";
 import { mockMetricsSummary, mockAnalyticsTrends } from "./data/metrics";
 import { mockActiveTasks, mockConnectedPlatforms } from "./data/tasks";
 import { mockTraces } from "./data/traces";
@@ -37,8 +38,10 @@ export const mockHandlers = {
     if (typeof body?.download_id !== "string") return { status: "error", message: "下载标识无效" };
     if (cancelledDownloads.size >= 1024) cancelledDownloads.clear();
     cancelledDownloads.add(body.download_id);
+    mockFontDownloads.delete(body.download_id);
     return { status: "ok", data: { download_id: body.download_id, cancelled: true } };
   },
+  "POST config/downloads/progress": (body?: Record<string, unknown>) => ({ status: "ok", data: mockFontDownloadProgress(String(body?.download_id)) }),
   ...configMockHandlers,
   ...managedFileMockHandlers,
   ...managedRecordMockHandlers,
@@ -77,6 +80,7 @@ export const mockHandlers = {
     return { status: "ok", data: mockTypstFonts };
   },
   "POST config/typst-fonts/download": (body?: Record<string, unknown>) => {
+    if (body?.source != null && !["cdn", "github"].includes(String(body.source))) return { status: "error", message: "未知字体下载来源" };
     if (typeof body?.download_id === "string" && cancelledDownloads.has(body.download_id)) {
       return { status: "error", message: "下载已取消，已完成的文件会保留" };
     }
@@ -85,7 +89,7 @@ export const mockHandlers = {
     if (theme != null && !selected) return { status: "error", message: "未知 Typst 模板" };
     const allowed = selected?.required || [...new Set(mockTypstFonts.groups?.flatMap(group => group.required) || [])];
     if (body?.name != null && (typeof body.name !== "string" || !allowed.includes(body.name))) return { status: "error", message: "字体不属于所选预设" };
-    if (body?.name === "Cinzel.ttf" && String(body.cdn_base_url).includes("jsdmirror")) return { status: "error", message: "演示：字体下载超时，可切换 CDN 或上传本地字体后重试" };
+    if (body?.source !== "github" && body?.name === "Cinzel.ttf" && String(body.cdn_base_url).includes("jsdmirror")) return { status: "error", message: "演示：Cinzel.ttf 来源返回 HTTP 403，可切换 GitHub Raw 后重试，或上传同名字体" };
     const names = (selected?.missing || mockTypstFonts.missing).filter(name => body?.name == null || name === body.name);
     names.forEach(name => putManagedMockFile("typst_fonts", name, null, "AAEAAAAA"));
     mockTypstFonts.files = [...new Set([...mockTypstFonts.files, ...names])];

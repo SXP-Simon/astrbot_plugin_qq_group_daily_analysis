@@ -38,7 +38,7 @@ it("字体管理展示缺失和共享依赖，不提供无意义的二进制查�
   expect(fetchManagedContent).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText("补齐所选模板字体"));
   expect(await screen.findByText("已安装 2 / 2 个字体，已就绪")).toBeVisible();
-  expect(downloadTypstFonts).toHaveBeenCalledWith(expect.any(String), "HatsuneMiku", "Inter.ttf", expect.any(String));
+  expect(downloadTypstFonts).toHaveBeenCalledWith(expect.any(String), "HatsuneMiku", "Inter.ttf", expect.any(String), "cdn");
   expect(mutateManagedFile).not.toHaveBeenCalled();
 }, 15000);
 

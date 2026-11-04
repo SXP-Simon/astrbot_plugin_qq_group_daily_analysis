@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../model/configContract";
 import { cdnBaseUrlSchema } from "../model/renderingConfig";
-import { typstFontStatusSchema, type TypstFontStatus } from "../model/typstFonts";
+import { fontTransferSchema, typstFontStatusSchema, type FontDownloadSource, type FontTransfer, type TypstFontStatus } from "../model/typstFonts";
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { PluginConfigData } from "../model/types";
 import {
@@ -140,12 +140,19 @@ export async function fetchTypstFonts(): Promise<TypstFontStatus> {
   return parsed.data;
 }
 
-export async function downloadTypstFonts(cdnBaseUrl: string, theme?: string, name?: string, downloadId?: string): Promise<TypstFontStatus> {
-  const parsedCdn = cdnBaseUrlSchema.safeParse(cdnBaseUrl);
+export async function downloadTypstFonts(cdnBaseUrl: string, theme?: string, name?: string, downloadId?: string, source: FontDownloadSource = "cdn"): Promise<TypstFontStatus> {
+  const parsedCdn = cdnBaseUrlSchema.safeParse(source === "github" ? "" : cdnBaseUrl);
   if (!parsedCdn.success) throw new Error(parsedCdn.error.issues[0].message);
-  const response = await apiPost<unknown>("config/typst-fonts/download", { ...(downloadId ? { download_id: downloadId } : {}), cdn_base_url: parsedCdn.data, ...(theme === undefined ? {} : { theme }), ...(name === undefined ? {} : { name }) });
+  const response = await apiPost<unknown>("config/typst-fonts/download", { source, ...(downloadId ? { download_id: downloadId } : {}), cdn_base_url: parsedCdn.data, ...(theme === undefined ? {} : { theme }), ...(name === undefined ? {} : { name }) });
   const parsed = typstFontStatusSchema.safeParse(extractData(response));
   if (!parsed.success) throw new Error(response?.message || "字体下载未完成，请检查 CDN 后重试。");
+  return parsed.data;
+}
+
+export async function fetchFontDownloadProgress(downloadId: string): Promise<FontTransfer | null> {
+  const response = await apiPost<unknown>("config/downloads/progress", { download_id: downloadId });
+  const parsed = fontTransferSchema.nullable().safeParse(extractData(response));
+  if (!parsed.success) throw new Error("无法读取下载进度，请刷新或取消后重试");
   return parsed.data;
 }
 

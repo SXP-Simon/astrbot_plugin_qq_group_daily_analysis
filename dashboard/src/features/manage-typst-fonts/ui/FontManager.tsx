@@ -6,6 +6,7 @@ import { useManagedFonts, type ManagedFontRow } from "../model/useManagedFonts";
 import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
 import { DEFAULT_TEMPLATE_CDN_BASE_URL, TEMPLATE_CDN_PRESETS } from "../../../entities/config/model/renderingConfig";
 import { formatBytes } from "../../../shared/lib/formatters";
+import { FONT_DOWNLOAD_SOURCES } from "../../../entities/config/model/typstFonts";
 
 export function FontManager({ onChanged }: { onChanged: () => void }) {
   const vm = useManagedFonts(onChanged);
@@ -20,7 +21,8 @@ export function FontManager({ onChanged }: { onChanged: () => void }) {
     <Typography.Text>按模板检查缺失字体并补齐；共享字体只保存一份。大字库可能使用固定来源直连，不经过所选 CDN；下载失败也可上传同名文件。替换或移除会影响所有依赖该字体的模板。</Typography.Text>
     <Space wrap>
       <Select aria-label="管理字体的模板" value={vm.theme} disabled={disabled} style={{ minWidth: 260 }} onChange={vm.selectTheme} options={[{ value: "__all__", label: "全部预设与自定义字体" }, ...vm.groups.map(group => ({ value: group.theme, label: themeName(group.theme) }))]} />
-      <Select aria-label="字体下载 CDN" value={cdn} disabled={disabled} options={TEMPLATE_CDN_PRESETS} onChange={setCdn} style={{ width: 350, maxWidth: "100%" }} />
+      <Select aria-label="字体下载来源" value={vm.downloadQueue.source} disabled={disabled} options={FONT_DOWNLOAD_SOURCES} onChange={vm.downloadQueue.setSource} style={{ width: 300, maxWidth: "100%" }} />
+      <Select aria-label="字体下载 CDN" value={cdn} disabled={disabled || vm.downloadQueue.source === "github"} options={TEMPLATE_CDN_PRESETS} onChange={setCdn} style={{ width: 350, maxWidth: "100%" }} />
       <Button type="primary" disabled={disabled || !vm.status || !vm.missing} loading={vm.busy} onClick={() => void vm.download(cdn)}>{vm.theme === "__all__" ? "补齐全部预设字体" : "补齐所选模板字体"}</Button>
       <Button disabled={vm.busy} loading={vm.loading} onClick={() => void vm.refresh()}>刷新字体状态</Button>
     </Space>

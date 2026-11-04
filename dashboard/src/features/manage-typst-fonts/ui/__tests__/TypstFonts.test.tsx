@@ -1,35 +1,56 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { TypstFonts } from "../TypstFonts";
-import { downloadTypstFonts, fetchTypstFonts } from "../../../../entities/config/api/configApi";
+import { downloadTypstFonts, fetchTypstFonts, fetchFontDownloadProgress } from "../../../../entities/config/api/configApi";
 import { mockTypstFonts } from "../../../../mocks/data/templateResources";
 import { mockHandlers } from "../../../../mocks/handlers";
 
-vi.mock("../../../../entities/config/api/configApi", () => ({ downloadTypstFonts: vi.fn(), fetchTypstFonts: vi.fn() }));
+vi.mock("../../../../entities/config/api/configApi", () => ({ downloadTypstFonts: vi.fn(), fetchTypstFonts: vi.fn(), fetchFontDownloadProgress: vi.fn().mockResolvedValue(null) }));
 const initial = structuredClone(mockTypstFonts);
 
 beforeEach(() => {
   vi.resetAllMocks();
   Object.assign(mockTypstFonts, structuredClone(initial));
   vi.mocked(fetchTypstFonts).mockImplementation(async () => structuredClone(mockTypstFonts));
+  vi.mocked(fetchFontDownloadProgress).mockResolvedValue(null);
   vi.mocked(downloadTypstFonts).mockImplementation(async (_cdn, theme, name) => {
     mockHandlers["POST config/typst-fonts/download"]({ theme, name });
     return structuredClone(mockTypstFonts);
   });
 });
 
+it("选择 Raw 后传递来源，展示真实字节与等待时间，失败原因不会被覆盖", async () => {
+  let rejectDownload: ((error: Error) => void) | undefined;
+  vi.mocked(downloadTypstFonts).mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectDownload = reject; }));
+  vi.mocked(fetchFontDownloadProgress).mockResolvedValue({
+    name: "NotoSansJP.ttf", url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansjp/NotoSansJP[wght].ttf",
+    received: 1048576, total: 5242880, phase: "downloading", elapsed_seconds: 12, idle_seconds: 7,
+  });
+  render(<TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" />);
+  await screen.findByText("所选模板还需下载 7 / 9 个字体文件");
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "字体下载来源" }));
+  fireEvent.click(screen.getByText("GitHub Raw 直连（全部字体）"));
+  fireEvent.click(screen.getByRole("button", { name: "下载所选模板字体" }));
+  expect(await screen.findByText(/正在接收字体：1\.0 MB \/ 5\.0 MB/)).toBeVisible();
+  expect(screen.getByText(/已 7 秒未收到新数据/)).toBeVisible();
+  expect(downloadTypstFonts).toHaveBeenCalledWith("", "HatsuneMiku", expect.any(String), expect.any(String), "github");
+  await act(async () => rejectDownload?.(new Error("NotoSansJP.ttf：来源返回 HTTP 403")));
+  expect(await screen.findByText(/NotoSansJP.ttf：来源返回 HTTP 403/)).toBeVisible();
+  await waitFor(() => expect(screen.getByRole("button", { name: "下载全部预设字体" })).toBeEnabled());
+}, 15000);
+
 it("仅下载所选模板，其他模板字体仍可继续按需或全部下载", async () => {
   render(<TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" />);
   expect(await screen.findByText("所选模板还需下载 7 / 9 个字体文件")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "下载所选模板字体" }));
   expect(await screen.findByText("所选模板字体已就绪")).toBeVisible();
-  expect(downloadTypstFonts).toHaveBeenCalledWith("https://cdn.jsdelivr.net", "HatsuneMiku", expect.any(String), expect.any(String));
+  expect(downloadTypstFonts).toHaveBeenCalledWith("https://cdn.jsdelivr.net", "HatsuneMiku", expect.any(String), expect.any(String), "cdn");
   expect(mockTypstFonts.ready).toBe(false);
   expect(mockTypstFonts.missing).toContain("Cinzel.ttf");
   await waitFor(() => expect(screen.getByRole("button", { name: "下载全部预设字体" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "下载全部预设字体" }));
   await waitFor(() => expect(mockTypstFonts.ready).toBe(true));
-  expect(downloadTypstFonts).toHaveBeenLastCalledWith("https://cdn.jsdelivr.net", undefined, expect.any(String), expect.any(String));
+  expect(downloadTypstFonts).toHaveBeenLastCalledWith("https://cdn.jsdelivr.net", undefined, expect.any(String), expect.any(String), "cdn");
 }, 15000);
 
 it("下载中断后刷新已完成的文件状态并保留可读错误", async () => {
