@@ -111,6 +111,8 @@ src/application/services/
    - `resume_from_checkpoint`：根据已生成的阶段快照跳过已耗费 Token 的 LLM 阶段，无缝续跑剩余流程；
    - `rerender_report`：纯前端/排版重绘，免 LLM 消耗快速切换视觉模板。
 
+续跑使用源任务的分析日期与专属快照。已经复用的 LLM 产物、需要继续分析的清洗上下文也会保存为新续跑任务的专属快照，重复续跑不因更换 Trace ID 丢失已完成结果；当前 Trace 的 `checkpoint_trace_id` 与 `analysis_date` 保留来源。快照仍按群组、日期和任务隔离，不退回读取同群其他任务的产物。
+
 ---
 
 ## 4. 基础设施层解耦规范 (Infrastructure Layer)

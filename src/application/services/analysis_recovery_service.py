@@ -273,6 +273,8 @@ class AnalysisRecoveryService:
             )
         if template_name and template_name != "auto":
             trace.metadata["override_template_name"] = str(template_name)
+        trace.metadata["checkpoint_trace_id"] = checkpoint_trace_id
+        trace.metadata["analysis_date"] = date_str
 
         topic_enabled = self.config_manager.get_topic_analysis_enabled()
         user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
@@ -290,6 +292,16 @@ class AnalysisRecoveryService:
             group_id, date_str, checkpoint_trace_id
         )
         if cached_result is not None:
+            # 续跑任务拥有独立 ID，复用产物也必须归档到新任务，供再次续跑读取。
+            if self.checkpoint_store:
+                await asyncio.to_thread(
+                    self.checkpoint_store.save_checkpoint,
+                    group_id=group_id,
+                    date_str=date_str,
+                    stage_name=AnalysisStage.LLM_ANALYSIS.value,
+                    data=AnalysisResultSerializer.serialize(dict(cached_result)),
+                    trace_id=trace.trace_id,
+                )
             cached_topics = cached_result.get("topics", [])
             cached_titles = cached_result.get("user_titles", [])
             cached_stats = cached_result.get("statistics")
@@ -374,6 +386,15 @@ class AnalysisRecoveryService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
+            if self.checkpoint_store:
+                await asyncio.to_thread(
+                    self.checkpoint_store.save_checkpoint,
+                    group_id=group_id,
+                    date_str=date_str,
+                    stage_name=AnalysisStage.CLEAN_MESSAGES.value,
+                    data=clean_checkpoint,
+                    trace_id=trace.trace_id,
+                )
             cleaned_result, unified_messages, top_users = (
                 self._restore_clean_checkpoint(clean_checkpoint, group_id)
             )
