@@ -182,4 +182,7 @@ it("原生保存移除浏览器布局与网络字体字段，旧错误值不阻�
   const result = renderingStrategySchema.parse({ __template_key: "typst", device_scale: "unused", viewport_width: 3000, full_page: false, google_fonts: "unused", gstatic: "unused", request_timeout: "unused" });
   for (const key of ["device_scale", "viewport_width", "full_page", "google_fonts", "gstatic", "request_timeout"]) expect(result).not.toHaveProperty(key);
   expect(renderingStrategySchema.parse({}).device_scale).toBe("high");
+  expect(renderingStrategySchema.parse({ __template_key: "typst" }).timeout).toBe(30000);
+  expect(renderingStrategySchema.parse({ __template_key: "typst", timeout: 15000 }).timeout).toBe(15000);
+  expect(renderingStrategySchema.parse({}).timeout).toBe(20000);
 });

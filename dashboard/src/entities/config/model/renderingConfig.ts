@@ -94,7 +94,7 @@ const renderingStrategyInputSchema = z.object({
   device_scale: z.enum(["normal", "high", "ultra"], { error: "请选择有效的分辨率等级" }).optional(),
   raster_ppi: typstRasterPpiSchema.optional(),
   request_timeout: z.number({ error: "请求等待上限必须是数字" }).int("请求等待上限必须是整数").min(1000, "请求等待上限不能小于 1000 毫秒").max(300000, "请求等待上限不能大于 300000 毫秒").optional(),
-  timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").default(20000),
+  timeout: z.number({ error: "渲染超时必须是数字" }).int("渲染超时必须是整数").min(1000, "渲染超时不能小于 1000 毫秒").max(300000, "渲染超时不能大于 300000 毫秒").optional(),
 }).catchall(z.unknown()).superRefine((value, ctx) => {
   for (const key of ["cdn_base_url", "google_fonts", "gstatic"] as const) {
     if (value[key] !== CUSTOM_RESOURCE_OPTION) continue;
@@ -120,6 +120,7 @@ const renderingStrategyInputSchema = z.object({
   // 旧调用方式只用于迁移，保存后由条目类型唯一决定服务。
   const { device_scale: _scale, render_service: _legacyService, font_mode: _fontMode, typst_width: _legacyWidth, typst_ppi: _legacyPpi, raster_ppi: _rasterPpi, ...plan } = value;
   return Object.assign(plan, {
+    timeout: value.timeout ?? (service === "typst" ? 30000 : 20000),
     environment,
     ...(service === "typst" ? { raster_ppi: value.raster_ppi ?? 144 } : { device_scale: value.device_scale ?? "high" as const }),
     ...(service === "custom" ? { request_timeout: value.request_timeout ?? DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS, font_mode: value.font_mode ?? "network" } : {}),

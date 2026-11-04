@@ -176,7 +176,11 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
 
 it("Typst演示覆盖本地缓存、下载、超时、恢复、失败和取消，活跃详情保持一致", () => {
   const native = mockTraces.filter(trace => trace.trace_id.startsWith("trace-typst-"));
-  expect(native).toHaveLength(11);
+  expect(native).toHaveLength(12);
+  const timeout = native.find(trace => trace.trace_id === "trace-typst-compile-timeout");
+  expect(timeout?.status).toBe("warning");
+  expect(timeout?.spans?.find(span => span.stage_name === "TYPST_COMPILE")?.payload).toMatchObject({ requested_raster_ppi: 180, worker_metrics_partial: true, worker_phase: "raster", failure_reason: expect.stringContaining("20.00 秒预算（请求 180 PPI）") });
+  expect(timeout?.spans?.find(span => span.stage_name === "TYPST_RECOVERY")?.payload).toMatchObject({ original_raster_ppi: 180, raster_ppi: 144 });
   const titleFallback = native.find(trace => trace.trace_id === "trace-typst-title-font");
   expect(titleFallback?.status).toBe("warning");
   expect(titleFallback?.spans?.find(span => span.stage_name === "TYPST_RESOURCES")?.payload).toMatchObject({

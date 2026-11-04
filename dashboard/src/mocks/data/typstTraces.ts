@@ -17,12 +17,15 @@ interface Scene {
   htmlFirst?: boolean;
   theme?: string;
   titleFontMissing?: boolean;
+  rasterPpi?: 144 | 180 | 216;
+  compileTimeoutMs?: number;
 }
 const scenes: Scene[] = [
-  { id: "cached", name: "本地素材命中", status: "succeeded" },
+  { id: "cached", name: "本地素材命中", status: "succeeded", rasterPpi: 216 },
   { id: "title-font", name: "缺全瀨體时标题回退", status: "warning", titleFontMissing: true },
   { id: "live", name: "CDN 下载中", status: "running" },
-  { id: "network", name: "资源超时仍完成", status: "warning" },
+  { id: "network", name: "资源超时仍完成", status: "warning", rasterPpi: 216 },
+  { id: "compile-timeout", name: "主题编译超时后恢复图片", status: "warning", recovered: true, rasterPpi: 180, compileTimeoutMs: 20000 },
   { id: "recovered", name: "基础排版恢复", status: "warning", recovered: true },
   { id: "failed", name: "编译与恢复均失败", status: "failed", recovered: true },
   { id: "cancelled", name: "编译阶段取消", status: "aborted" },
@@ -32,13 +35,16 @@ const scenes: Scene[] = [
   { id: "html-native", name: "无 HTML 入口后原生恢复", status: "warning", htmlFirst: true, theme: "custom_native" },
 ];
 
-const workerMetrics = { raster_ppi: 144, requested_raster_ppi: 144, font_setup_ms: 85, layout_ms: 190, raster_ms: 670, worker_start_rss_mb: 11.7, worker_peak_rss_mb: 156.9, worker_peak_delta_mb: 145.2, worker_rss_source: "linux_proc_status" };
+const workerMetrics = { raster_ppi: 144, font_setup_ms: 85, layout_ms: 190, raster_ms: 670, worker_start_rss_mb: 11.7, worker_peak_rss_mb: 156.9, worker_peak_delta_mb: 145.2, worker_rss_source: "linux_proc_status" };
 const restored = { warning: "后续渲染方案已恢复图片报告" };
 
 function nativeSteps(scene: Scene): Step[] {
   const theme = scene.theme || "HatsuneMiku";
-  const reason = scene.validation === "fonts" ? "请先在 WebUI 下载 Typst 字体到插件数据目录" : "该主题没有 report.typ，请选择支持 Typst 的主题或 HTML 渲染方案";
-  if (scene.validation) return [{ stage: "TYPST_VALIDATE", ms: 3, status: "warning", payload: { template: theme, width: 940, failure_reason: reason, ...restored } }];
+  const requestedPpi = scene.rasterPpi ?? 144;
+  const compileTimeout = scene.compileTimeoutMs !== undefined;
+  const compileBudgetMs = scene.compileTimeoutMs ?? 30000;
+  const validationReason = scene.validation === "fonts" ? "请先在 WebUI 下载 Typst 字体到插件数据目录" : "该主题没有 report.typ，请选择支持 Typst 的主题或 HTML 渲染方案";
+  if (scene.validation) return [{ stage: "TYPST_VALIDATE", ms: 3, status: "warning", payload: { template: theme, width: 940, failure_reason: validationReason, ...restored } }];
   const resourceTimeout = scene.id === "network";
   const steps: Step[] = [
     { stage: "TYPST_VALIDATE", ms: 3, payload: { template: theme, width: 940 } },
@@ -54,22 +60,25 @@ function nativeSteps(scene: Scene): Step[] {
   ];
   if (scene.status === "running") return steps;
   const compileFailed = scene.recovered;
-  steps.push({ stage: "TYPST_COMPILE", ms: compileFailed ? 310 : scene.id === "cached" ? 1752 : 945,
+  const reason = compileTimeout ? `Typst 栅格导出超过 ${(compileBudgetMs / 1000).toFixed(2)} 秒预算（请求 ${requestedPpi} PPI），已终止并回收子进程` : "主题第 18 行：预期长度，得到字符串";
+  steps.push({ stage: "TYPST_COMPILE", ms: compileTimeout ? compileBudgetMs + 100 : compileFailed ? 310 : scene.id === "cached" ? 1752 : 945,
+    children: [{ stage: "IMAGE_RENDER_QUEUE", ms: 1, payload: { scope: "native_compile" } }],
     status: scene.status === "aborted" ? "cancelled" : compileFailed ? scene.status === "failed" ? "failed" : "warning" : "success",
-    payload: { template: theme, width: 940, ...(scene.status === "aborted" ? {} : compileFailed ? { font_setup_ms: 85, layout_ms: 190, worker_start_rss_mb: 12, worker_peak_rss_mb: 103.5, worker_peak_delta_mb: 91.5, worker_rss_source: "linux_proc_status" } : { ...workerMetrics, ...(scene.id === "cached" ? { requested_raster_ppi: 216, raster_ppi: 216, font_setup_ms: 25.74, layout_ms: 109.57, raster_ms: 1616, worker_start_rss_mb: 20.61, worker_peak_rss_mb: 222.07, worker_peak_delta_mb: 201.46 } : scene.id === "network" ? { requested_raster_ppi: 216, raster_ppi: 180 } : {}) }),
-      ...(compileFailed ? scene.status === "failed" ? { error: "主题第 18 行：预期长度，得到字符串" } : { failure_reason: "主题第 18 行：预期长度，得到字符串", warning: scene.fallback ? restored.warning : "主题编译失败，基础排版已恢复完整报告" } : {}),
+    payload: { template: theme, width: 940, requested_raster_ppi: requestedPpi, ...(compileTimeout ? { worker_phase: "raster", worker_metrics_partial: true } : {}), ...(scene.status === "aborted" ? {} : compileFailed ? { font_setup_ms: 85, layout_ms: 190, worker_start_rss_mb: 12, worker_peak_rss_mb: 103.5, worker_peak_delta_mb: 91.5, worker_rss_source: "linux_proc_status" } : { ...workerMetrics, ...(scene.id === "cached" ? { raster_ppi: requestedPpi, font_setup_ms: 25.74, layout_ms: 109.57, raster_ms: 1616, worker_start_rss_mb: 20.61, worker_peak_rss_mb: 222.07, worker_peak_delta_mb: 201.46 } : scene.id === "network" ? { raster_ppi: 180 } : {}) }),
+      ...(compileFailed ? scene.status === "failed" ? { error: reason } : { failure_reason: reason, warning: scene.fallback ? restored.warning : "主题编译失败，基础排版已恢复完整报告" } : {}),
       ...(scene.status === "aborted" ? { cancelled: true } : {}),
     } });
   if (scene.recovered) steps.push({ stage: "TYPST_RECOVERY", ms: 530,
+    children: [{ stage: "IMAGE_RENDER_QUEUE", ms: 1, payload: { scope: "native_compile" } }],
     status: scene.status === "failed" ? "failed" : scene.fallback ? "warning" : "success",
-    payload: { mode: "basic", reason: "主题类型错误", font_setup_ms: 82, layout_ms: 65, requested_raster_ppi: 144, raster_ppi: 144, worker_start_rss_mb: 11.8, worker_peak_rss_mb: 119.3, worker_peak_delta_mb: 107.5, worker_rss_source: "linux_proc_status", ...(!scene.fallback && scene.status !== "failed" ? { raster_ms: 380 } : {}),
+    payload: { mode: "basic", reason, original_raster_ppi: requestedPpi, font_setup_ms: 82, layout_ms: 65, requested_raster_ppi: 144, raster_ppi: 144, worker_start_rss_mb: 11.8, worker_peak_rss_mb: 119.3, worker_peak_delta_mb: 107.5, worker_rss_source: "linux_proc_status", ...(!scene.fallback && scene.status !== "failed" ? { raster_ms: 380 } : {}),
       ...(scene.status === "failed" ? { error: "基础恢复也超出本轮编译预算" } : scene.fallback ? { failure_reason: "基础排版编译失败", ...restored } : {}),
     } });
   if (!scene.fallback && scene.status !== "failed" && scene.status !== "aborted") steps.push({ stage: "TYPST_ENCODE", ms: 9, payload: { format: "png", image_bytes: 382910 } });
   return steps;
 }
 
-/** Flatten a small recipe tree while keeping parent timing inclusive. */
+/** 展开阶段树，父阶段包含子阶段以及实际编译过程本身的耗时。 */
 function appendSteps(steps: Step[], traceId: string, started: number, spans: TraceSpan[], parent?: string, offset = 0): number {
   let elapsed = offset;
   for (const step of steps) {
@@ -83,7 +92,7 @@ function appendSteps(steps: Step[], traceId: string, started: number, spans: Tra
       payload: { ...step.payload, ...(parent ? { parent_span_id: parent } : {}) },
     };
     spans.push(span);
-    elapsed = step.children ? appendSteps(step.children, traceId, started, spans, id, elapsed) : elapsed + (step.ms || 0);
+    elapsed = step.children ? Math.max(start + (step.ms || 0), appendSteps(step.children, traceId, started, spans, id, elapsed)) : elapsed + (step.ms || 0);
     span.duration_ms = status === "running" ? null : elapsed - start;
   }
   return elapsed;
@@ -98,14 +107,14 @@ export const mockTypstTraces: TraceRecord[] = scenes.map((scene, index) => {
     { stage: "IMAGE_HTML_PREPARE", ms: 40, status: "warning", payload: { failure_reason: "该主题只有 report.typ，没有 image_template.html", ...restored } },
   ] });
   attempts.push({ stage: "IMAGE_RENDER_ATTEMPT", status: scene.fallback ? "warning" : scene.status === "running" ? "running" : scene.status === "failed" ? "failed" : scene.status === "aborted" ? "cancelled" : "success",
-    payload: { attempt: attempts.length + 1, service_type: "typst", strategy_name: "Typst 本地方案", ...(scene.fallback ? restored : {}) }, children: nativeSteps(scene) });
+    payload: { attempt: attempts.length + 1, service_type: "typst", strategy_name: "Typst 本地方案", font_mode: "local", execution_location: "本地隔离进程", asset_policy: "本地优先，缺失时按方案 CDN 获取", ...(scene.fallback ? restored : {}) }, children: nativeSteps(scene) });
   if (scene.fallback) attempts.push({ stage: "IMAGE_RENDER_ATTEMPT", payload: { attempt: 2, service_type: "astrbot", strategy_name: "HTML 后备方案" }, children: [
     { stage: "IMAGE_HTML_PREPARE", ms: 180, payload: { template: theme, resource_environment: "Mainland" } },
     { stage: "IMAGE_SERVICE_RENDER", ms: 940, payload: { service_type: "astrbot", viewport: "940x900" } },
   ] });
   const records = attempts.map((attempt, i) => ({ attempt: i + 1, strategy_name: attempt.payload?.strategy_name, service_type: attempt.payload?.service_type,
     status: attempt.status === "warning" ? "failed" : attempt.status || "success", font_mode: attempt.payload?.service_type === "typst" ? "local" : "network",
-    type: "png", render_timeout_ms: 30000, viewport: attempt.payload?.service_type === "typst" ? "Typst 固定 940px" : "940x900", started_at: started + .11,
+    type: "png", render_timeout_ms: attempt.payload?.service_type === "typst" ? scene.compileTimeoutMs ?? 30000 : 30000, viewport: attempt.payload?.service_type === "typst" ? "Typst 固定 940px" : "940x900", started_at: started + .11,
     ...(attempt.status === "warning" ? { error: scene.validation ? "原生模板或字体检查未通过" : "本轮渲染失败，后续方案已恢复" } : {}),
   }));
   const steps: Step[] = [{ stage: "CHECKPOINT_RESTORE", ms: 80, payload: { resumed_from: "mock-report-checkpoint" } }, {

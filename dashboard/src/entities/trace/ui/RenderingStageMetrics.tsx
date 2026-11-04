@@ -5,6 +5,9 @@ import { useTheme } from "../../../shared/lib/useTheme";
 export function RenderingStageMetrics({ payload, children }: { payload: Record<string, unknown>; children?: ReactNode }) {
   const { isDark } = useTheme();
   const ownProcessRss = ["linux_proc_status", "windows_working_set"].includes(String(payload.worker_rss_source));
+  const native = payload.service_type === "typst";
+  const phases: Record<string, string> = { font_setup: "字体初始化", layout: "布局测量", raster: "栅格导出" };
+  const workerPhase = typeof payload.worker_phase === "string" ? phases[payload.worker_phase] : undefined;
   const memoryHints: Record<string, string> = {
     worker_start_rss_mb: "子进程加载编译器前的 RSS，作为本次编译内存增长的基准。",
     worker_peak_rss_mb: "隔离进程自身的峰值常驻内存，进程退出后释放，不计入宿主 RSS 净变化。",
@@ -16,6 +19,8 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
     ["font_mode", "字体来源", ""],
     ["title_font", "标题字体", ""],
     ["resource_environment", "资源环境", ""],
+    ["execution_location", "执行位置", ""],
+    ["asset_policy", "素材获取", ""],
     ["viewport", "视口", ""],
     ["width", "固定宽度", "px"],
     ["requested_raster_ppi", "请求密度", "PPI"],
@@ -39,6 +44,7 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
   return (
     <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
       {metrics.map(([key, label, unit]) => {
+        if (native && key === "resource_environment") return null;
         const value = payload[key];
         if (unit === "" ? typeof value !== "string" || !value.trim() : typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
         const metricLabel = key === "worker_peak_rss_mb" && !ownProcessRss ? "进程历史 RSS 峰值" : label;
@@ -47,6 +53,9 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
       })}
       {payload.network_budget_exhausted === true && <MetricPill isDark={isDark} label="网络预算" value="已耗尽，保留正文" status="warning" isMono={false} />}
       {payload.mode === "basic" && <MetricPill isDark={isDark} label="恢复方案" value="基础排版" isMono={false} />}
+      {workerPhase && <MetricPill isDark={isDark} label="最后阶段" value={workerPhase} status="warning" isMono={false} />}
+      {payload.worker_metrics_partial === true && <span style={{ flexBasis: "100%", fontSize: 11 }}>指标为进程终止前的采样，未完成的阶段不显示完整耗时。</span>}
+      {payload.mode === "basic" && typeof payload.original_raster_ppi === "number" && typeof payload.requested_raster_ppi === "number" && payload.original_raster_ppi > payload.requested_raster_ppi && <span style={{ flexBasis: "100%", fontSize: 11 }}>基础恢复使用标准密度 {payload.requested_raster_ppi} PPI。</span>}
       {typeof payload.raster_ppi === "number" && typeof payload.requested_raster_ppi === "number" && payload.raster_ppi < payload.requested_raster_ppi && <span style={{ flexBasis: "100%", fontSize: 11 }}>长图像素预算已限制导出密度，排版与内容保持不变。</span>}
       {children}
       {typeof payload.worker_peak_rss_mb === "number" && Number.isFinite(payload.worker_peak_rss_mb) && payload.worker_peak_rss_mb >= 0 && <span style={{ flexBasis: "100%", fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>

@@ -5,6 +5,14 @@ import { TaskStageBadge } from "../../../task/ui/TaskStageBadge";
 
 vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 
+it("本地编译隐藏旧海外标签，并标出终止前的实际执行阶段", () => {
+  render(<StageMetricsBadges stageName="IMAGE_RENDER_ATTEMPT" payload={{ service_type: "typst", resource_environment: "Overseas", execution_location: "本地隔离进程", worker_phase: "raster", worker_metrics_partial: true }} />);
+  expect(screen.queryByText("Overseas")).not.toBeInTheDocument();
+  expect(screen.getByText("本地隔离进程")).toBeVisible();
+  expect(screen.getByText("栅格导出")).toBeVisible();
+  expect(screen.getByText(/指标为进程终止前的采样/)).toBeVisible();
+});
+
 it("区分编译进程峰值与宿主内存，隐藏非法遥测并提示预算耗尽", () => {
   render(<StageMetricsBadges stageName="TYPST_COMPILE" payload={{ worker_peak_rss_mb: 156.9, worker_start_rss_mb: 11.7, worker_peak_delta_mb: 145.2, worker_rss_source: "linux_proc_status", delta_memory_mb: 0, font_setup_ms: Number.NaN, network_budget_exhausted: true }} />);
   expect(screen.getByText("子进程 RSS 峰值:")).toBeVisible();
