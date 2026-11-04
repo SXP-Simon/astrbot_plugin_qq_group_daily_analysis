@@ -16,6 +16,7 @@ from PIL import Image
 from ...shared.constants import IMAGE_RENDER_TOTAL_TIMEOUT_SECONDS
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .render_trace import publish_typst_memory
 from .render_trace import render_span as _span
 from .template_asset_catalog import THEME_DECORATION_OPACITIES, THEME_DECORATIONS
 from .template_installer import is_path_within, validate_template_name
@@ -417,6 +418,9 @@ class TypstReportRenderer:
                 compile_span["payload"]["warning"] = (
                     "主题编译失败，基础排版已恢复完整报告"
                 )
+        finally:
+            # 主题错误的部分测量值在阶段退出后才补入；再次汇总仍取最大值。
+            publish_typst_memory(compile_span)
 
     async def _recover(
         self, job: Path, reason: str, original_ppi: int, timeout_seconds: float

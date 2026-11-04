@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -60,3 +61,57 @@ async def render_span(
                 summarize_render_error(str(error)) or type(error).__name__
             )
         raise
+    finally:
+        if stage in ("TYPST_COMPILE", "TYPST_RECOVERY"):
+            publish_typst_memory(span)
+
+
+def publish_typst_memory(span: SpanRecord | None) -> None:
+    """把串行 Typst 编译的最大峰值与增长量传递给真实父阶段。
+
+    Args:
+        span: 已填充子进程测量值的编译阶段；不修改宿主 RSS 口径。
+    """
+    trace = TraceContext.current()
+    if not trace or not span:
+        return
+    payload = span["payload"]
+    measurements = {}
+    for source, target in (
+        ("worker_peak_rss_mb", "typst_peak_rss_mb"),
+        ("worker_peak_delta_mb", "typst_peak_delta_mb"),
+    ):
+        value = payload.get(source)
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and value >= 0
+        ):
+            measurements[target] = value
+    if not measurements:
+        return
+    by_id = {record["span_id"]: record for record in trace._spans}
+    parent_id = payload.get("parent_span_id")
+    visited = {span["span_id"]}
+    while isinstance(parent_id, str) and parent_id not in visited:
+        parent = by_id.get(parent_id)
+        if parent is None:
+            break
+        visited.add(parent_id)
+        parent_payload = parent["payload"]
+        for key, value in measurements.items():
+            previous = parent_payload.get(key)
+            if (
+                not isinstance(previous, (int, float))
+                or not math.isfinite(previous)
+                or value >= previous
+            ):
+                parent_payload[key] = value
+                if key == "typst_peak_rss_mb":
+                    parent_payload["typst_rss_source"] = payload.get(
+                        "worker_rss_source", "unknown"
+                    )
+        if payload.get("worker_metrics_partial") is True:
+            parent_payload["typst_metrics_partial"] = True
+        parent_id = parent_payload.get("parent_span_id")
