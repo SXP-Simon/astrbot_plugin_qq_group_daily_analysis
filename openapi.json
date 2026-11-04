@@ -2280,6 +2280,12 @@
       "TypstFontStatus": {
         "type": "object",
         "properties": {
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TypstFontPreset"
+            }
+          },
           "directory": {
             "type": "string"
           },
@@ -2339,6 +2345,32 @@
           "required",
           "missing",
           "ready"
+        ]
+      },
+      "TypstFontPreset": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "download_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "upstream_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "cdn_path": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "download_url",
+          "upstream_url",
+          "cdn_path"
         ]
       },
       "T2iProbeRequest": {

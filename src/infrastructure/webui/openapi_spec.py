@@ -1137,6 +1137,10 @@ def generate_openapi_spec() -> dict[str, Any]:
                 "TypstFontStatus": {
                     "type": "object",
                     "properties": {
+                        "presets": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/TypstFontPreset"},
+                        },
                         "directory": {"type": "string"},
                         "files": {"type": "array", "items": {"type": "string"}},
                         "missing": {"type": "array", "items": {"type": "string"}},
@@ -1157,6 +1161,16 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "ready": {"type": "boolean"},
                     },
                     "required": ["theme", "required", "missing", "ready"],
+                },
+                "TypstFontPreset": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "download_url": {"type": "string", "format": "uri"},
+                        "upstream_url": {"type": "string", "format": "uri"},
+                        "cdn_path": {"type": "string", "nullable": True},
+                    },
+                    "required": ["name", "download_url", "upstream_url", "cdn_path"],
                 },
                 "T2iProbeRequest": {
                     "type": "object",

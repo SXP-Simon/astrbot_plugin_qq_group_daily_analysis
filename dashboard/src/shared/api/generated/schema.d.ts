@@ -686,6 +686,7 @@ export interface components {
             groups: components["schemas"]["TemplateResourceGroup"][];
         };
         TypstFontStatus: {
+            presets?: components["schemas"]["TypstFontPreset"][];
             directory: string;
             files: string[];
             missing: string[];
@@ -697,6 +698,14 @@ export interface components {
             required: string[];
             missing: string[];
             ready: boolean;
+        };
+        TypstFontPreset: {
+            name: string;
+            /** Format: uri */
+            download_url: string;
+            /** Format: uri */
+            upstream_url: string;
+            cdn_path: string | null;
         };
         T2iProbeRequest: {
             /**
