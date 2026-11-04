@@ -1,4 +1,4 @@
-"""Parent-aware spans shared by image rendering adapters."""
+"""图片渲染适配器共用的父子阶段记录。"""
 
 from __future__ import annotations
 
@@ -17,17 +17,17 @@ if TYPE_CHECKING:
 async def render_span(
     stage: str, payload: dict[str, object] | None = None
 ) -> AsyncIterator[SpanRecord | None]:
-    """Record a rendering step under the current attempt, if tracing is active.
+    """启用追踪时，将渲染步骤记录到当前尝试或明确指定的父阶段。
 
     Args:
-        stage: Stage identifier shown in the task panel.
-        payload: Diagnostic fields without report text or credentials.
+        stage: 任务面板使用的阶段标识。
+        payload: 不包含报告正文或凭据的诊断字段，可明确指定父阶段。
 
     Yields:
-        Mutable span record, or None for offline rendering.
+        可写的阶段记录；离线渲染时返回 None。
 
     Raises:
-        asyncio.CancelledError: Preserve cancellation after recording the stage.
+        asyncio.CancelledError: 记录取消状态后继续传播取消请求。
     """
     trace = TraceContext.current()
     if not trace:
@@ -44,7 +44,7 @@ async def render_span(
         None,
     )
     if parent:
-        details["parent_span_id"] = parent["span_id"]
+        details.setdefault("parent_span_id", parent["span_id"])
     span = None
     try:
         async with trace.span_async(stage, details) as span:

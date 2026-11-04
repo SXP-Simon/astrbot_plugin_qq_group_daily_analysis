@@ -10,19 +10,26 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
+from weakref import WeakValueDictionary
 
 from ...shared.trace_context import TraceContext
+from .render_trace import render_span
 
 if TYPE_CHECKING:
     from .typst_worker import TypstWorkerMetrics
 
 
+_compile_slots: WeakValueDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    WeakValueDictionary()
+)
+
+
 class TypstWorkerError(RuntimeError):
-    """Compilation error with validated diagnostics from the terminated worker.
+    """携带已退出编译进程的受限诊断与测量结果。
 
     Args:
-        message: Bounded compiler diagnostic text.
-        metrics: Optional validated measurements produced before failure.
+        message: 已限制长度的编译诊断文本。
+        metrics: 失败前产生并经过校验的可选测量结果。
     """
 
     def __init__(self, message: str, metrics: TypstWorkerMetrics | None) -> None:
@@ -44,8 +51,62 @@ async def run_typst_worker(
         遥测开启时返回隔离编译的阶段耗时和峰值工作集；缺失遥测不影响报告。
 
     Raises:
-        TimeoutError: 编译超时且进程已终止。
+        TimeoutError: 排队或编译超时，已启动的进程已终止。
         RuntimeError: 编译器返回失败。
+    """
+    loop = asyncio.get_running_loop()
+    slot = _compile_slots.get(loop)
+    if slot is None:
+        slot = asyncio.Semaphore(1)
+        _compile_slots[loop] = slot
+    # 活跃调用持有名额对象，空闲后自动移除，不留下已关闭事件循环的引用。
+    deadline = loop.time() + timeout_seconds
+    details: dict[str, object] = {"render_service": "typst", "scope": "native_compile"}
+    trace = TraceContext.current()
+    parent = (
+        next(
+            (
+                span
+                for span in reversed(trace._spans)
+                if span["stage_name"] == "TYPST_COMPILE" and span["status"] == "running"
+            ),
+            None,
+        )
+        if trace
+        else None
+    )
+    if parent:
+        details["parent_span_id"] = parent["span_id"]
+    async with asyncio.timeout_at(deadline):
+        acquired = False
+        try:
+            async with render_span("IMAGE_RENDER_QUEUE", details):
+                await slot.acquire()
+                acquired = True
+            return await _execute_typst_worker(
+                job_dir, font_dir, deadline - loop.time()
+            )
+        finally:
+            if acquired:
+                slot.release()
+
+
+async def _execute_typst_worker(
+    job_dir: Path, font_dir: Path, timeout_seconds: float
+) -> TypstWorkerMetrics | None:
+    """持有当前事件循环的共享编译名额期间执行、回收隔离进程。
+
+    Args:
+        job_dir: 本次任务目录。
+        font_dir: 插件受管理字体目录。
+        timeout_seconds: 排队后剩余的执行时限。
+
+    Returns:
+        通过边界校验的可选编译测量值。
+
+    Raises:
+        TimeoutError: 进程超时并已回收。
+        TypstWorkerError: 编译失败，保留失败前的可选测量值。
     """
     collect_metrics = (
         TraceContext.current() is not None and TraceContext.is_metrics_enabled()

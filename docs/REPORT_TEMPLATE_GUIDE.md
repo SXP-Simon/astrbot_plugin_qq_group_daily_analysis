@@ -57,6 +57,8 @@ HatsuneMiku/
 
 公共 Typst 代码放在 `templates/common.typ`。独立编译入口读取内置主题的 `report.typ`；缺少入口时会明确提示不支持该主题。
 
+同一宿主事件循环的 Typst 报告、概览图及连通性测试共享一个编译名额，避免多份长图同时栅格化叠加内存峰值。并发任务会排队，排队耗时计入原方案超时，并记录在任务面板的编译子阶段；取消或超时会释放名额并回收已经启动的进程。此限制控制同时编译的总占用，不降低图片宽度、分辨率或模板装饰。
+
 当前已提供 HatsuneMiku、simple、hack、Maria、ATRI、DeepSeek 鲸鱼女仆娘（`deepseek_maid`）、Art Nouveau（`art_nouveau`）、手账（`scrapbook`）、Format（`format`）、春节特供（`spring_festival`）、复古未来（`retro_futurism`）和 BlueArchive 的独立排版。各主题保留自己的阅读顺序和主要组件，不通过更换通用模板的颜色来代替适配。Maria、Art Nouveau 使用宋体、Cinzel 和 Cormorant Garamond；ATRI 使用文楷与文楷等宽字体。新增字体可通过现有下载入口补齐，无需配置系统字体或自定义目录。
 
 ATRI 的 GIF 装饰取首帧，输出仍为静态长图。页眉日期卡和英文小标题通过 SVG 对本地海景做局部模糊，玻璃区域随文字实测高度定位；分区与页脚沿用原配色的花点纹理，位于半透明渐变下面。分区标题保留原白色内高光与外阴影，外阴影只绘制在标题卡外侧，不透过半透明背景改变内部配色。其余玻璃卡片使用透明渐变，仍需继续校准细节。模板能正常编译与视觉复刻验收是两项检查，需对照相同数据的 HTML 样张分别验收。
