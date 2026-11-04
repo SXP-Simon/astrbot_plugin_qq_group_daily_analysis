@@ -113,7 +113,7 @@ async def _execute_typst_worker(
     Args:
         job_dir: 本次任务目录。
         font_dir: 插件受管理字体目录。
-        timeout_seconds: 排队后剩余的执行时限。
+        timeout_seconds: 获得编译名额后独立计时的进程执行上限。
         raster_ppi: 固定版心的栅格化密度。
 
     Returns:

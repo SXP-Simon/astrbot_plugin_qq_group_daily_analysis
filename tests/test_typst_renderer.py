@@ -135,6 +135,7 @@ def test_worker_is_dead_before_timeout_or_cancel_returns(tmp_path, monkeypatch, 
     async def check():
         stopped = asyncio.Event()
         class Process:
+            pid = 0
             returncode = None
             async def communicate(self):
                 await stopped.wait()
@@ -188,7 +189,7 @@ async def test_theme_has_full_compile_budget_and_recovery_uses_separate_limit(na
                 async with asyncio.timeout(timeout):
                     await asyncio.Event().wait()
         async with asyncio.timeout(timeout):
-            # 模拟冷启动与排版，恢复使用独立短时限，不再沿用主编译耗尽后的余额。
+            # 模拟冷启动与排版，恢复重新使用完整编译时限，不再沿用主题耗尽后的余额。
             await asyncio.sleep(.5)
             assert "恢复版独立" in (job / "main.typ").read_text(encoding="utf-8")
             (job / "report.png").write_bytes(png_bytes())
