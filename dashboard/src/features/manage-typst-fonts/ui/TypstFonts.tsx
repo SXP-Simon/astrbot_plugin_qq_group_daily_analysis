@@ -31,6 +31,7 @@ export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
       <Button loading={vm.operation === "refresh"} disabled={vm.loading} onClick={() => void vm.run(false)}>刷新字体状态</Button>
     </Space>
     <Typography.Text type="secondary">常规字体使用本方案 CDN；超出 CDN 体积限制的字体从官方源下载。失败后已下载文件会保留，重试仅补缺失文件。自定义模板可将其额外字体放入上述目录。</Typography.Text>
+    <Typography.Text type="secondary">预设字体采用 <Typography.Link href="https://openfontlicense.org/open-font-license-official-text/" target="_blank" rel="noreferrer">SIL OFL 1.1</Typography.Link>，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。</Typography.Text>
     <FontDownloadProgress download={vm.downloadQueue} />
     {vm.error && <Alert type="error" showIcon message={vm.error} />}
   </Space>;

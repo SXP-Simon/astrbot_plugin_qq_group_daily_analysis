@@ -25,6 +25,7 @@ export function FontManager({ onChanged }: { onChanged: () => void }) {
       <Button disabled={vm.busy} loading={vm.loading} onClick={() => void vm.refresh()}>刷新字体状态</Button>
     </Space>
     {vm.status && <Alert type={vm.missing ? "info" : "success"} showIcon message={`已安装 ${vm.installed} / ${vm.required} 个字体${vm.missing ? `，缺少 ${vm.missing} 个` : "，已就绪"}`} />}
+    <Typography.Text type="secondary">预设字体采用 <Typography.Link href="https://openfontlicense.org/open-font-license-official-text/" target="_blank" rel="noreferrer">SIL OFL 1.1</Typography.Link>，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。</Typography.Text>
     <FontDownloadProgress download={vm.downloadQueue} />
     {vm.error && <Alert type="error" showIcon message={vm.error} />}
     <Space wrap>

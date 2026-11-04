@@ -196,8 +196,6 @@ const fonts = [
   "LXGWWenKai.ttf",
   "LXGWWenKai-Medium.ttf",
   "LXGWWenKaiMono.ttf",
-  "BlueakaBeta2GBK-DemiBold.ttf",
-  "BlueakaBeta2GBK-Bold.ttf"
 ];
 const themeFonts: Record<string, string[]> = {
   "HatsuneMiku": [
@@ -259,8 +257,6 @@ const themeFonts: Record<string, string[]> = {
     "NotoSerifTC.ttf"
   ],
   "BlueArchive": [
-    "BlueakaBeta2GBK-DemiBold.ttf",
-    "BlueakaBeta2GBK-Bold.ttf"
   ]
 };
 export const mockTypstFonts: TypstFontStatus = {
