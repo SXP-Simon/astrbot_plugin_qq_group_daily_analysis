@@ -50,7 +50,7 @@ async def test_queued_compile_does_not_spawn_and_preserves_next_slot(tmp_path, m
 
 
 @pytest.mark.asyncio
-async def test_pending_compilation_receives_remaining_deadline(tmp_path, monkeypatch):
+async def test_queue_wait_does_not_consume_compilation_timeout(tmp_path, monkeypatch):
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: None))
     started, release = asyncio.Event(), asyncio.Event()
     queued = asyncio.Event()
@@ -76,7 +76,7 @@ async def test_pending_compilation_receives_remaining_deadline(tmp_path, monkeyp
     assert not remaining
     release.set()
     await asyncio.gather(first, second)
-    assert 0 < remaining[0] < 4.99
+    assert remaining == [5]
 
 
 @pytest.mark.asyncio
@@ -91,12 +91,13 @@ async def test_compiler_failure_does_not_hold_slot(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_compile_queue_is_child_of_actual_compile_span(tmp_path, monkeypatch):
+@pytest.mark.parametrize("stage", ["TYPST_COMPILE", "TYPST_RECOVERY"])
+async def test_compile_queue_is_child_of_actual_compile_span(tmp_path, monkeypatch, stage):
     trace = TraceContext(trace_id="native-compile-queue")
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
     monkeypatch.setattr(typst_process, "_execute_typst_worker", AsyncMock(return_value=None))
     async with trace.span_async("RENDER_REPORT"):
-        async with trace.span_async("TYPST_COMPILE") as parent:
+        async with trace.span_async(stage) as parent:
             await typst_process.run_typst_worker(tmp_path, tmp_path, 1)
     queue = next(span for span in trace._spans if span["stage_name"] == "IMAGE_RENDER_QUEUE")
     assert queue["payload"]["parent_span_id"] == parent["span_id"]

@@ -12,6 +12,11 @@ from src.infrastructure.reporting import typst_worker as worker
 from src.infrastructure.reporting.typst_process import _parse_worker_metrics
 
 
+def test_metrics_keep_last_complete_frame_after_process_was_interrupted():
+    stdout = b'{"worker_phase":"font_setup"}\n{"worker_phase":"raster","layout_ms":15}\n{"worker_phase":'
+    assert _parse_worker_metrics(stdout) == {"worker_phase": "raster", "layout_ms": 15}
+
+
 def test_linux_peak_ignores_inherited_resource_high_water_mark(monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     inherited = Mock(return_value=SimpleNamespace(ru_maxrss=2 * 1024 * 1024))

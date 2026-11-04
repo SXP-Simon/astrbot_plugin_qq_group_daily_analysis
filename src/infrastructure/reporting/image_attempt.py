@@ -141,6 +141,10 @@ class ImageRenderTelemetry:
                     span["stage_name"].startswith("TYPST_")
                     or span["stage_name"]
                     in ("IMAGE_RENDER_ATTEMPT", "IMAGE_HTML_PREPARE")
+                    or (
+                        span["stage_name"] == "IMAGE_RENDER_QUEUE"
+                        and span["payload"].get("scope") == "native_compile"
+                    )
                 ):
                     span["status"] = "warning"
                     span["payload"]["failure_reason"] = span["payload"].pop("error", "")

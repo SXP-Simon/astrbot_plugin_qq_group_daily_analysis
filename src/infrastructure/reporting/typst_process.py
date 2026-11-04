@@ -14,6 +14,7 @@ from weakref import WeakValueDictionary
 
 from ...shared.trace_context import TraceContext
 from .render_trace import render_span
+from .typst_worker import _collect_peak
 
 if TYPE_CHECKING:
     from .typst_worker import TypstWorkerMetrics
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 _compile_slots: WeakValueDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
     WeakValueDictionary()
 )
+COMPILE_QUEUE_TIMEOUT_SECONDS = 5.0
 
 
 class TypstWorkerError(RuntimeError):
@@ -37,6 +39,19 @@ class TypstWorkerError(RuntimeError):
         self.metrics = metrics
 
 
+class TypstWorkerTimeoutError(TimeoutError):
+    """编译超时并已回收进程，保留被终止前的有限阶段指标。
+
+    Args:
+        message: 包含预算、密度与执行阶段的诊断。
+        metrics: 被终止前已完成阶段及可用内存采样。
+    """
+
+    def __init__(self, message: str, metrics: TypstWorkerMetrics | None) -> None:
+        super().__init__(message)
+        self.metrics = metrics
+
+
 async def run_typst_worker(
     job_dir: Path, font_dir: Path, timeout_seconds: float, raster_ppi: int = 144
 ) -> TypstWorkerMetrics | None:
@@ -45,7 +60,7 @@ async def run_typst_worker(
     Args:
         job_dir: 本次编译专用目录。
         font_dir: 受管理字体目录。
-        timeout_seconds: 编译允许的最长秒数。
+        timeout_seconds: 编译进程允许的最长秒数；排队单独限时，最多五秒。
         raster_ppi: 144、180 或 216 PPI，最高输出 1410px 宽。
 
     Returns:
@@ -61,15 +76,21 @@ async def run_typst_worker(
         slot = asyncio.Semaphore(1)
         _compile_slots[loop] = slot
     # 活跃调用持有名额对象，空闲后自动移除，不留下已关闭事件循环的引用。
-    deadline = loop.time() + timeout_seconds
-    details: dict[str, object] = {"render_service": "typst", "scope": "native_compile"}
+    queue_budget = min(COMPILE_QUEUE_TIMEOUT_SECONDS, max(0.0, timeout_seconds))
+    deadline = loop.time() + queue_budget
+    details: dict[str, object] = {
+        "render_service": "typst",
+        "scope": "native_compile",
+        "queue_budget_ms": queue_budget * 1000,
+    }
     trace = TraceContext.current()
     parent = (
         next(
             (
                 span
                 for span in reversed(trace._spans)
-                if span["stage_name"] == "TYPST_COMPILE" and span["status"] == "running"
+                if span["stage_name"] in ("TYPST_COMPILE", "TYPST_RECOVERY")
+                and span["status"] == "running"
             ),
             None,
         )
@@ -78,18 +99,24 @@ async def run_typst_worker(
     )
     if parent:
         details["parent_span_id"] = parent["span_id"]
-    async with asyncio.timeout_at(deadline):
-        acquired = False
-        try:
-            async with render_span("IMAGE_RENDER_QUEUE", details):
-                await slot.acquire()
-                acquired = True
-            return await _execute_typst_worker(
-                job_dir, font_dir, deadline - loop.time(), raster_ppi
-            )
-        finally:
-            if acquired:
-                slot.release()
+    acquired = False
+    try:
+        async with render_span("IMAGE_RENDER_QUEUE", details):
+            try:
+                async with asyncio.timeout_at(deadline):
+                    await slot.acquire()
+                    acquired = True
+            except TimeoutError as error:
+                raise TypstWorkerTimeoutError(
+                    f"等待 Typst 编译名额超过 {queue_budget:.2f} 秒，本次尚未启动编译进程",
+                    None,
+                ) from error
+        return await _execute_typst_worker(
+            job_dir, font_dir, timeout_seconds, raster_ppi
+        )
+    finally:
+        if acquired:
+            slot.release()
 
 
 async def _execute_typst_worker(
@@ -113,6 +140,9 @@ async def _execute_typst_worker(
     collect_metrics = (
         TraceContext.current() is not None and TraceContext.is_metrics_enabled()
     )
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    if timeout_seconds <= 0:
+        raise TypstWorkerTimeoutError("Typst 编译预算已耗尽，未启动新进程", None)
     process = await asyncio.create_subprocess_exec(
         sys.executable,
         "-I",
@@ -130,15 +160,47 @@ async def _execute_typst_worker(
     )
     communication = asyncio.create_task(process.communicate())
     try:
-        async with asyncio.timeout(timeout_seconds):
+        async with asyncio.timeout_at(deadline):
             stdout, stderr = await asyncio.shield(communication)
-    except BaseException:
+    except BaseException as error:
+        sampled: TypstWorkerMetrics = {}
+        if isinstance(error, TimeoutError) and collect_metrics:
+            _collect_peak(sampled, pid=process.pid)
         if process.returncode is None:
             try:
                 process.kill()
             except ProcessLookupError:
                 pass
         await asyncio.shield(asyncio.gather(communication, return_exceptions=True))
+        if isinstance(error, TimeoutError):
+            try:
+                partial_stdout, _ = communication.result()
+            except (Exception, asyncio.CancelledError):
+                partial_stdout = None
+            metrics = _parse_worker_metrics(partial_stdout) if collect_metrics else None
+            if collect_metrics:
+                partial: TypstWorkerMetrics = metrics or {}
+                partial.update(sampled)
+                partial["worker_metrics_partial"] = True
+                metrics = partial
+                if "worker_peak_rss_mb" in metrics and "worker_start_rss_mb" in metrics:
+                    metrics["worker_peak_delta_mb"] = round(
+                        max(
+                            0.0,
+                            metrics["worker_peak_rss_mb"]
+                            - metrics["worker_start_rss_mb"],
+                        ),
+                        2,
+                    )
+            phase = {
+                "font_setup": "字体初始化",
+                "layout": "布局测量",
+                "raster": "栅格导出",
+            }.get((metrics or {}).get("worker_phase", ""), "编译进程")
+            raise TypstWorkerTimeoutError(
+                f"Typst {phase}超过 {timeout_seconds:.2f} 秒预算（请求 {raster_ppi} PPI），已终止并回收子进程",
+                metrics,
+            ) from error
         raise
     metrics = _parse_worker_metrics(stdout) if collect_metrics else None
     if process.returncode:
@@ -159,11 +221,15 @@ def _parse_worker_metrics(stdout: bytes | None) -> TypstWorkerMetrics | None:
     """
     if not stdout or len(stdout) > 4096:
         return None
-    try:
-        raw: object = json.loads(stdout)
-    except (ValueError, UnicodeDecodeError):
-        return None
-    if not isinstance(raw, dict):
+    # 终止可能截断最后一帧；回到最后一个完整且可校验的阶段快照。
+    for line in reversed(stdout.splitlines()):
+        try:
+            raw: object = json.loads(line)
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if isinstance(raw, dict):
+            break
+    else:
         return None
     metrics: TypstWorkerMetrics = {}
     for key in (
@@ -190,4 +256,12 @@ def _parse_worker_metrics(stdout: bytes | None) -> TypstWorkerMetrics | None:
         "posix_getrusage",
     ):
         metrics["worker_rss_source"] = source
+    phase = raw.get("worker_phase")
+    if isinstance(phase, str) and phase in (
+        "font_setup",
+        "layout",
+        "raster",
+        "complete",
+    ):
+        metrics["worker_phase"] = phase
     return metrics

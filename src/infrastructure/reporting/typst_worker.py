@@ -30,6 +30,8 @@ class TypstWorkerMetrics(TypedDict, total=False):
     worker_start_rss_mb: float
     worker_peak_delta_mb: float
     worker_rss_source: str
+    worker_phase: str
+    worker_metrics_partial: bool
 
 
 def _custom_page_size(svg: bytes | list[bytes] | None) -> tuple[float, float]:
@@ -134,6 +136,7 @@ def compile_report(
         RuntimeError: 缺少中文字体、依赖或报告超过像素预算。
     """
     _collect_peak(metrics, baseline=True)
+    _publish_metrics(metrics, "font_setup")
     try:
         import typst
     except ImportError as exc:
@@ -159,6 +162,7 @@ def compile_report(
                 (time.perf_counter() - phase_start) * 1000, 2
             )
         phase_start = time.perf_counter()
+        _publish_metrics(metrics, "layout")
         try:
             raster_ppi = _check_canvas(
                 compiler,
@@ -173,6 +177,7 @@ def compile_report(
                     (time.perf_counter() - phase_start) * 1000, 2
                 )
         phase_start = time.perf_counter()
+        _publish_metrics(metrics, "raster")
         compiler.compile(
             output=str(job_dir / "report.png"), format="png", ppi=raster_ppi
         )
@@ -180,27 +185,37 @@ def compile_report(
             raise RuntimeError("Typst 报告超过 32 MiB，无法发送")
         if metrics is not None:
             metrics["raster_ms"] = round((time.perf_counter() - phase_start) * 1000, 2)
+        _publish_metrics(metrics, "complete")
     finally:
         _collect_peak(metrics)
 
 
 def _collect_peak(
-    metrics: TypstWorkerMetrics | None, *, baseline: bool = False
+    metrics: TypstWorkerMetrics | None,
+    *,
+    baseline: bool = False,
+    pid: int | None = None,
 ) -> None:
     """记录隔离编译自身的 RSS 峰值，避免 Linux 启动前的继承统计污染。
 
     Args:
         metrics: 可选遥测目标，与宿主 RSS 分开保存。
         baseline: 在加载编译器前记录启动 RSS，供计算峰值增长量。
+        pid: 超时终止前读取指定子进程；省略时采集当前工作进程。
     """
     if metrics is None:
+        return
+    if pid is not None and (pid <= 0 or sys.platform not in ("win32", "linux")):
         return
     try:
         current: float | None = None
         if sys.platform == "win32":
             import psutil
 
-            info = psutil.Process().memory_info()
+            try:
+                info = psutil.Process(pid).memory_info()
+            except psutil.Error:
+                return
             peak = info._asdict()["peak_wset"] / 1024**2
             current = info.rss / 1024**2
             source = "windows_working_set"
@@ -208,7 +223,9 @@ def _collect_peak(
             # ru_maxrss 跨 exec 保留，可能带入 AstrBot 的大内存；VmHWM 属于当前映像。
             fields = dict(
                 line.split(":", 1)
-                for line in Path("/proc/self/status")
+                for line in (
+                    Path("/proc") / (str(pid) if pid is not None else "self") / "status"
+                )
                 .read_text(encoding="ascii")
                 .splitlines()
                 if line.startswith(("VmHWM:", "VmRSS:"))
@@ -235,6 +252,20 @@ def _collect_peak(
         pass
 
 
+def _publish_metrics(metrics: TypstWorkerMetrics | None, phase: str) -> None:
+    """在阶段切换时刷新有限遥测，进程被终止后仍可读取最后进度。
+
+    Args:
+        metrics: 仅在现有遥测开关启用时传入。
+        phase: 当前字体、布局、栅格化或完成阶段。
+    """
+    if metrics is not None:
+        metrics["worker_phase"] = phase
+        _collect_peak(metrics)
+        sys.stdout.write(json.dumps(metrics) + "\n")
+        sys.stdout.flush()
+
+
 if __name__ == "__main__":
     telemetry: TypstWorkerMetrics | None = {} if "--metrics" in sys.argv[3:] else None
     try:
@@ -249,4 +280,5 @@ if __name__ == "__main__":
         sys.exit(1)
     finally:
         if telemetry is not None:
-            sys.stdout.write(json.dumps(telemetry))
+            sys.stdout.write(json.dumps(telemetry) + "\n")
+            sys.stdout.flush()

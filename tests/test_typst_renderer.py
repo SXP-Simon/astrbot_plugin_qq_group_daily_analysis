@@ -15,7 +15,7 @@ from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.typst_renderer import run_typst_worker
 from src.infrastructure.reporting.typst_resources import TypstAssets
-from src.infrastructure.reporting.typst_process import TypstWorkerError
+from src.infrastructure.reporting.typst_process import TypstWorkerError, TypstWorkerTimeoutError
 from src.shared.trace_context import TraceContext
 
 
@@ -136,6 +136,74 @@ async def test_cancellation_does_not_start_recovery(native, monkeypatch):
         await native.close()
 
 
+@pytest.mark.asyncio
+async def test_theme_has_full_compile_budget_and_recovery_uses_separate_limit(native, monkeypatch):
+    native.config_manager.config["t2i_rendering"]["t2i_rendering_strategies"][0].update(timeout=2000, raster_ppi=216)
+    fonts = native.data_dir / "typst/fonts"
+    fonts.mkdir(parents=True)
+    (fonts / "test.ttf").write_bytes(b"font")
+    trace = TraceContext(trace_id="timeout-recovers-image")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    calls = []
+
+    async def worker(job, directory, timeout, raster_ppi=144):
+        calls.append((timeout, raster_ppi))
+        if len(calls) == 1:
+            from src.infrastructure.reporting.render_trace import render_span
+            async with render_span("IMAGE_RENDER_QUEUE", {"scope": "native_compile"}):
+                async with asyncio.timeout(timeout):
+                    await asyncio.Event().wait()
+        async with asyncio.timeout(timeout):
+            # 模拟冷启动与排版，恢复使用独立短时限，不再沿用主编译耗尽后的余额。
+            await asyncio.sleep(.5)
+            assert "恢复版独立" in (job / "main.typ").read_text(encoding="utf-8")
+            (job / "report.png").write_bytes(png_bytes())
+        return {"raster_ppi": raster_ppi}
+
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
+    try:
+        image, html = await native.generate_image_report(create_analysis_result(), "test", None)
+        assert image and image.startswith("base64://") and html is None
+        assert [call[1] for call in calls] == [216, 144]
+        assert [call[0] for call in calls] == [2, 10]
+        spans = {span["stage_name"]: span for span in trace._spans}
+        assert spans["TYPST_COMPILE"]["status"] == "warning"
+        assert "主题编译超过" in spans["TYPST_COMPILE"]["payload"]["failure_reason"]
+        assert spans["TYPST_RECOVERY"]["status"] == "success"
+        assert spans["TYPST_RECOVERY"]["payload"]["original_raster_ppi"] == 216
+        from src.domain.value_objects.task_event import TaskEvent
+        trace.finish(TaskEvent.SUCCEED)
+        assert trace.status == "warning"
+    finally:
+        await native.close()
+
+
+@pytest.mark.asyncio
+async def test_real_timeout_keeps_last_metrics_and_terminates_process(tmp_path, monkeypatch):
+    import sys
+    from src.infrastructure.reporting import typst_process
+
+    trace = TraceContext(trace_id="timeout-partial-metrics")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    monkeypatch.setattr(TraceContext, "_enable_metrics", True)
+    real_spawn = asyncio.create_subprocess_exec
+    processes = []
+
+    async def spawn(*args, **kwargs):
+        program = 'import sys,time,json; block=bytearray(16*1024*1024); print(json.dumps({"worker_phase":"raster","font_setup_ms":12,"layout_ms":25,"raster_ppi":216,"worker_start_rss_mb":8}),flush=True); time.sleep(60)'
+        process = await real_spawn(sys.executable, "-u", "-c", program, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+    with pytest.raises(TypstWorkerTimeoutError, match="栅格导出.*216 PPI") as caught:
+        await typst_process.run_typst_worker(tmp_path, tmp_path / "fonts", 2, 216)
+    assert processes[0].returncode is not None
+    assert caught.value.metrics["layout_ms"] == 25
+    assert caught.value.metrics["worker_metrics_partial"] is True
+    assert caught.value.metrics["worker_phase"] == "raster"
+
+
 
 
 @pytest.mark.asyncio
@@ -170,6 +238,7 @@ async def test_custom_typst_keeps_relative_modules_and_isolated_root(native, tmp
 @pytest.mark.asyncio
 @pytest.mark.parametrize("boundary", ["avatar", "nickname"])
 async def test_optional_network_timeout_preserves_report_text(native, monkeypatch, boundary):
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.PREPARATION_TIMEOUT_SECONDS", 1.0)
     fonts = native.data_dir / "typst/fonts"
     fonts.mkdir(parents=True)
     (fonts / "test.ttf").write_bytes(b"font")

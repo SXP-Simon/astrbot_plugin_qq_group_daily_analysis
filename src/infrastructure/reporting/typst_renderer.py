@@ -21,7 +21,7 @@ from .template_installer import is_path_within, validate_template_name
 from .template_resources import TemplateResourceStore
 from .typst_contracts import TypstIdentityOptions
 from .typst_data import TypstDataPreparer
-from .typst_process import TypstWorkerError, run_typst_worker
+from .typst_process import TypstWorkerError, TypstWorkerTimeoutError, run_typst_worker
 from .typst_resources import TypstAssets
 from .typst_worker import CUSTOM_TEMPLATE_MARKER, REPORT_PPI, REPORT_WIDTH
 
@@ -34,6 +34,9 @@ if TYPE_CHECKING:
 
 
 REPORT_TEMPLATES = Path(__file__).parent / "templates"
+PREPARATION_TIMEOUT_SECONDS = 15.0
+RECOVERY_TIMEOUT_SECONDS = 10.0
+ENCODE_TIMEOUT_SECONDS = 5.0
 
 
 async def render_typst_probe(
@@ -136,7 +139,7 @@ class TypstReportRenderer:
         options: RenderingStrategyOptions,
         identity: TypstIdentityOptions | None = None,
     ) -> bytes:
-        """在统一预算内准备、编译并导出静态报告。
+        """按阶段分别限时准备、编译、恢复并导出静态报告。
 
         Args:
             result: 完整领域分析结果。
@@ -163,35 +166,57 @@ class TypstReportRenderer:
                 )
         jobs = self.data_dir / "typst/jobs"
         jobs.mkdir(parents=True, exist_ok=True)
-        deadline = (
-            asyncio.get_running_loop().time() + options.get("timeout", 30000) / 1000
-        )
-        async with asyncio.timeout_at(deadline):
-            with TemporaryDirectory(prefix="report-", dir=jobs) as directory:
-                job = Path(directory)
-                await self._prepare(
-                    result,
-                    template,
-                    job,
-                    options,
-                    identity or TypstIdentityOptions(),
-                    deadline,
-                )
-                await self._compile(
-                    job, deadline, template.parent.name, options.get("raster_ppi", 144)
-                )
-                async with _span(
-                    "TYPST_ENCODE", {"format": options.get("type", "png")}
-                ) as span:
-                    if options.get("type", "png") == "jpeg":
-                        image = await asyncio.to_thread(
-                            _encode_jpeg, job / "report.png", options.get("quality", 90)
-                        )
-                    else:
-                        image = await asyncio.to_thread((job / "report.png").read_bytes)
-                    if span:
-                        span["payload"]["image_bytes"] = len(image)
-                return image
+        with TemporaryDirectory(prefix="report-", dir=jobs) as directory:
+            job = Path(directory)
+            prepare_deadline = (
+                asyncio.get_running_loop().time() + PREPARATION_TIMEOUT_SECONDS
+            )
+            try:
+                async with asyncio.timeout_at(prepare_deadline):
+                    await self._prepare(
+                        result,
+                        template,
+                        job,
+                        options,
+                        identity or TypstIdentityOptions(),
+                        prepare_deadline,
+                    )
+            except TimeoutError as error:
+                raise TimeoutError(
+                    f"Typst 素材与输入准备超过 {PREPARATION_TIMEOUT_SECONDS:g} 秒，尚未开始主题编译；请检查素材和头像请求或先在 WebUI 补齐本地资源。"
+                ) from error
+            await self._compile(
+                job,
+                options.get("timeout", 30000) / 1000,
+                template.parent.name,
+                options.get("raster_ppi", 144),
+            )
+            async with _span(
+                "TYPST_ENCODE",
+                {
+                    "format": options.get("type", "png"),
+                    "encode_budget_ms": ENCODE_TIMEOUT_SECONDS * 1000,
+                },
+            ) as span:
+                try:
+                    async with asyncio.timeout(ENCODE_TIMEOUT_SECONDS):
+                        if options.get("type", "png") == "jpeg":
+                            image = await asyncio.to_thread(
+                                _encode_jpeg,
+                                job / "report.png",
+                                options.get("quality", 90),
+                            )
+                        else:
+                            image = await asyncio.to_thread(
+                                (job / "report.png").read_bytes
+                            )
+                except TimeoutError as error:
+                    raise TimeoutError(
+                        f"Typst 图片读取或编码超过 {ENCODE_TIMEOUT_SECONDS:g} 秒"
+                    ) from error
+                if span:
+                    span["payload"]["image_bytes"] = len(image)
+            return image
 
     async def _prepare(
         self,
@@ -210,7 +235,7 @@ class TypstReportRenderer:
             job: 本次专用编译目录。
             options: 已固定的资源方案。
             identity: 平台身份与匿名选项。
-            deadline: 整条渲染链路的截止时间。
+            deadline: 素材与输入准备的独立截止时间。
         """
         theme = template.parent.name
         resources = options.get("resource_urls")
@@ -222,7 +247,7 @@ class TypstReportRenderer:
         base = self.config.get_template_assets_base_url(
             options.get("resource_environment"), cdn_base_url=cdn
         )
-        network_deadline = deadline - min(10.0, options.get("timeout", 30000) / 2000)
+        network_deadline = deadline - min(5.0, PREPARATION_TIMEOUT_SECONDS / 3)
         store = TemplateResourceStore(
             self.data_dir, base, network_deadline=network_deadline
         )
@@ -233,7 +258,10 @@ class TypstReportRenderer:
             preparer = TypstDataPreparer(
                 self.config, self.avatars, assets, result, identity
             )
-            async with _span("TYPST_DATA") as span:
+            async with _span(
+                "TYPST_DATA",
+                {"preparation_budget_ms": PREPARATION_TIMEOUT_SECONDS * 1000},
+            ) as span:
                 data = await preparer.prepare(self.profile_manifest, cdn, theme)
                 if span:
                     span["payload"].update(
@@ -341,23 +369,21 @@ class TypstReportRenderer:
                 trace.metadata["typst_network_budget_exhausted"] = True
 
     async def _compile(
-        self, job: Path, deadline: float, theme: str, raster_ppi: int
+        self, job: Path, timeout_seconds: float, theme: str, raster_ppi: int
     ) -> None:
-        """主题失败后在剩余预算内使用独立基础排版，取消不触发恢复。
+        """主题独享配置的编译时限，失败后另用短时限恢复完整图片。
 
         Args:
             job: 本次隔离编译目录。
-            deadline: 整条渲染链路的单调时钟截止时间。
+            timeout_seconds: 主题编译的独立时限，不含输入准备、排队和恢复。
             theme: 本轮主题，用于诊断记录。
-            raster_ppi: 配置中校验过的导出密度，不影响版心尺寸。
+            raster_ppi: 原方案请求的导出密度。
 
         Raises:
-            RuntimeError: 基础恢复也失败。
-            TimeoutError: 剩余预算耗尽。
+            RuntimeError: 主题和基础排版均编译失败。
+            TimeoutError: 恢复预算仍不足以完成图片。
         """
-        loop = asyncio.get_running_loop()
-        remaining = max(0.0, deadline - loop.time())
-        fonts = self.data_dir / "typst/fonts"
+        theme_budget = max(0.0, timeout_seconds)
         compile_span = None
         try:
             async with _span(
@@ -366,52 +392,95 @@ class TypstReportRenderer:
                     "template": theme,
                     "width": REPORT_WIDTH,
                     "requested_raster_ppi": raster_ppi,
+                    "compile_budget_ms": round(theme_budget * 1000, 2),
+                    "recovery_budget_ms": RECOVERY_TIMEOUT_SECONDS * 1000,
                 },
             ) as compile_span:
                 metrics = await run_typst_worker(
-                    job, fonts, remaining - min(2.0, remaining / 5), raster_ppi
+                    job, self.data_dir / "typst/fonts", theme_budget, raster_ppi
                 )
                 if compile_span and metrics:
                     compile_span["payload"].update(metrics)
         except (RuntimeError, TimeoutError) as error:
-            if compile_span and isinstance(error, TypstWorkerError) and error.metrics:
+            if (
+                compile_span
+                and isinstance(error, (TypstWorkerError, TypstWorkerTimeoutError))
+                and error.metrics
+            ):
                 compile_span["payload"].update(error.metrics)
+            reason = str(error).strip() or (
+                f"主题编译超过 {theme_budget:.2f} 秒预算（请求 {raster_ppi} PPI）"
+                if isinstance(error, TimeoutError)
+                else type(error).__name__
+            )
             logger.warning(
-                f"Typst 主题 {theme} 渲染失败，自动改用基础排版保留报告内容：{error}"
+                f"Typst 主题 {theme} 渲染失败，改用 {REPORT_PPI} PPI 基础排版：{reason}"
             )
             trace = TraceContext.current()
             if trace:
                 trace.metadata["typst_recovery"] = {
                     "theme": theme,
-                    "reason": str(error)[:1800] or type(error).__name__,
+                    "reason": reason[:1800],
                     "mode": "basic",
                 }
                 trace.metadata["has_warnings"] = True
-            async with _span(
-                "TYPST_RECOVERY",
-                {
-                    "mode": "basic",
-                    "reason": str(error)[:1800] or type(error).__name__,
-                    "requested_raster_ppi": raster_ppi,
-                },
-            ) as recovery_span:
-                # 恢复入口不导入主题、组件或图片，原始结构化文字保持完整。
-                shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job / "main.typ")
-                (job / "report.png").unlink(missing_ok=True)
-                (job / CUSTOM_TEMPLATE_MARKER).unlink(missing_ok=True)
-                metrics = await run_typst_worker(
-                    job, fonts, max(0.0, deadline - loop.time()), raster_ppi
-                )
-                if recovery_span and metrics:
-                    recovery_span["payload"].update(metrics)
+            await self._recover(job, reason, raster_ppi)
             if compile_span:
                 compile_span["status"] = "warning"
-                compile_span["payload"]["failure_reason"] = compile_span["payload"].pop(
-                    "error", str(error)
-                )
+                compile_span["payload"].pop("error", None)
+                compile_span["payload"]["failure_reason"] = reason
                 compile_span["payload"]["warning"] = (
                     "主题编译失败，基础排版已恢复完整报告"
                 )
+
+    async def _recover(self, job: Path, reason: str, original_ppi: int) -> None:
+        """使用标准密度恢复图片，不再承担原主题和高密度的开销。
+
+        Args:
+            job: 保留原始报告数据的隔离目录。
+            reason: 主编译的可读失败原因。
+            original_ppi: 原方案密度，仅用于解释恢复行为。
+
+        Raises:
+            RuntimeError: 基础排版自身编译失败。
+            TimeoutError: 恢复编译仍超时，异常包含两次失败原因。
+        """
+        budget = RECOVERY_TIMEOUT_SECONDS
+        async with _span(
+            "TYPST_RECOVERY",
+            {
+                "mode": "basic",
+                "reason": reason,
+                "requested_raster_ppi": REPORT_PPI,
+                "original_raster_ppi": original_ppi,
+                "compile_budget_ms": round(budget * 1000, 2),
+            },
+        ) as recovery_span:
+            # 恢复入口不导入主题、组件或图片，原始结构化文字保持完整。
+            shutil.copyfile(REPORT_TEMPLATES / "recovery.typ", job / "main.typ")
+            (job / "report.png").unlink(missing_ok=True)
+            (job / CUSTOM_TEMPLATE_MARKER).unlink(missing_ok=True)
+            try:
+                metrics = await run_typst_worker(
+                    job, self.data_dir / "typst/fonts", budget, REPORT_PPI
+                )
+                if recovery_span and metrics:
+                    recovery_span["payload"].update(metrics)
+            except (RuntimeError, TimeoutError) as error:
+                if (
+                    recovery_span
+                    and isinstance(error, (TypstWorkerError, TypstWorkerTimeoutError))
+                    and error.metrics
+                ):
+                    recovery_span["payload"].update(error.metrics)
+                detail = str(error).strip() or type(error).__name__
+                message = (
+                    f"Typst 主题失败：{reason}；基础排版（{REPORT_PPI} PPI，编译时限 {budget:.2f} 秒）"
+                    f"也未完成：{detail}。可降低导出 PPI 或适当增加本方案编译超时。"
+                )
+                if isinstance(error, TimeoutError):
+                    raise TimeoutError(message) from error
+                raise RuntimeError(message) from error
 
 
 def _encode_jpeg(payload: bytes | Path, quality: int) -> bytes:
