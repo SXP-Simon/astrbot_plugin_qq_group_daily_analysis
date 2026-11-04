@@ -4,6 +4,7 @@ import { TypstFonts } from "../TypstFonts";
 import { downloadTypstFonts, fetchTypstFonts, fetchFontDownloadProgress } from "../../../../entities/config/api/configApi";
 import { mockTypstFonts } from "../../../../mocks/data/templateResources";
 import { mockHandlers } from "../../../../mocks/handlers";
+import { FontManagementContext } from "../../model/FontManagementContext";
 
 vi.mock("../../../../entities/config/api/configApi", () => ({ downloadTypstFonts: vi.fn(), fetchTypstFonts: vi.fn(), fetchFontDownloadProgress: vi.fn().mockResolvedValue(null) }));
 const initial = structuredClone(mockTypstFonts);
@@ -17,6 +18,42 @@ beforeEach(() => {
     mockHandlers["POST config/typst-fonts/download"]({ theme, name });
     return structuredClone(mockTypstFonts);
   });
+});
+
+it("管理入口保留模板与来源，管理完成后刷新状态", async () => {
+  const open = vi.fn();
+  const { rerender } = render(<FontManagementContext.Provider value={{ open, version: 0, changed: vi.fn() }}><TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" /></FontManagementContext.Provider>);
+  await screen.findByText("所选模板还需下载 7 / 9 个字体文件");
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "字体模板" }));
+  fireEvent.click(screen.getByText("ATRI (亚托莉)"));
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "字体下载来源" }));
+  fireEvent.click(screen.getByText("GitHub Raw 直连（全部字体）"));
+  fireEvent.click(screen.getByRole("button", { name: "管理 / 上传字体" }));
+  expect(open).toHaveBeenCalledWith({ theme: "ATRI", cdnBaseUrl: "https://cdn.jsdelivr.net", source: "github" });
+  const group = mockTypstFonts.groups!.find(item => item.theme === "ATRI")!;
+  group.missing = []; group.ready = true;
+  rerender(<FontManagementContext.Provider value={{ open, version: 1, changed: vi.fn() }}><TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" /></FontManagementContext.Provider>);
+  expect(await screen.findByText("所选模板字体已就绪")).toBeVisible();
+});
+
+it("CDN 失败自动切换 Raw，而固定 Raw 大字库失败只尝试一次", async () => {
+  const fonts = structuredClone(initial);
+  const names = ["Outfit.ttf", "cjkFonts_allseto_v1.11.ttf"];
+  fonts.missing = [...names];
+  fonts.groups = [{ theme: "HatsuneMiku", required: names, missing: [...names], ready: false }];
+  vi.mocked(fetchTypstFonts).mockImplementation(async () => structuredClone(fonts));
+  vi.mocked(downloadTypstFonts).mockImplementation(async (_cdn, _theme, name, _id, source) => {
+    if (name !== "Outfit.ttf" || source === "cdn") throw new Error("网络不可用");
+    fonts.groups![0].missing = fonts.groups![0].missing.filter(item => item !== name);
+    fonts.missing = fonts.missing.filter(item => item !== name);
+    return structuredClone(fonts);
+  });
+  render(<TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" />);
+  await screen.findByText("所选模板还需下载 2 / 2 个字体文件");
+  fireEvent.click(screen.getByRole("button", { name: "下载所选模板字体" }));
+  expect(await screen.findByText("字体处理 2/2，成功 1，失败 1")).toBeVisible();
+  expect(vi.mocked(downloadTypstFonts).mock.calls.map(call => [call[2], call[4]])).toEqual([[names[0], "cdn"], [names[0], "github"], [names[1], "cdn"]]);
+  expect(screen.getByText(/已自动改用 GitHub Raw 重试：Outfit.ttf/)).toBeVisible();
 });
 
 it("选择 Raw 后传递来源，展示真实字节与等待时间，失败原因不会被覆盖", async () => {

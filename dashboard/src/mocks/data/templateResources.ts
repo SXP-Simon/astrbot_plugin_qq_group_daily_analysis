@@ -1,3 +1,4 @@
+import { mockFontPresets } from "./fontPresets";
 import type { TypstFontStatus } from "../../entities/config/model/typstFonts";
 import type { TemplateResourceStatus } from "../../entities/config/model/templateResources";
 
@@ -262,6 +263,7 @@ const themeFonts: Record<string, string[]> = {
   ]
 };
 export const mockTypstFonts: TypstFontStatus = {
+  presets: mockFontPresets,
   directory: "demo/data/typst/fonts", files: fonts.slice(0, 2), missing: fonts.slice(2), ready: false,
   groups: Object.entries(themeFonts).map(([theme, extra]) => {
     const required = [...fonts.slice(0, 5), ...extra];

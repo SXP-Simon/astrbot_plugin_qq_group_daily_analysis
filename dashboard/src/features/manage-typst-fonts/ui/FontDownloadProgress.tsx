@@ -3,9 +3,10 @@ import type { useFontDownload } from "../model/useFontDownload";
 import { formatBytes } from "../../../shared/lib/formatters";
 
 export function FontDownloadProgress({ download }: { download: ReturnType<typeof useFontDownload> }) {
-  const { progress, running, error, cancelled, cancelling, cancel, transfer, progressError } = download;
+  const { progress, running, error, cancelled, cancelling, cancel, transfer, progressError, fallbacks } = download;
   return <Space direction="vertical" style={{ width: "100%" }}>
     {error && <Alert type="error" showIcon message={error} />}
+    {fallbacks.length > 0 && <Alert type="info" showIcon message={`CDN 未完成，已自动改用 GitHub Raw 重试：${fallbacks.join("、")}`} />}
     {progress.total > 0 && <>
       <Progress percent={Math.round(progress.done / progress.total * 100)} status={cancelled ? "normal" : running ? "active" : progress.failed.length ? "exception" : "success"} />
       <Typography.Text>字体处理 {progress.done}/{progress.total}，成功 {progress.done - progress.failed.length}，失败 {progress.failed.length}{progress.current ? `；正在下载 ${progress.current}` : ""}</Typography.Text>

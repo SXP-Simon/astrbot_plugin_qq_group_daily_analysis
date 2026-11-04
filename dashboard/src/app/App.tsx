@@ -29,6 +29,7 @@ import { ConfigPage } from "../pages/config/ui/ConfigPage";
 import { useConfigViewModel } from "../pages/config/model/useConfigViewModel";
 import { PluginDataPage } from "../pages/plugin-data/ui/PluginDataPage";
 import { DevToolbar } from "../widgets/dev-bar/DevToolbar";
+import { FontManagementContext, type FontManagementRequest } from "../features/manage-typst-fonts/model/FontManagementContext";
 
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
@@ -37,6 +38,9 @@ export const App: React.FC = () => {
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [fontRequest, setFontRequest] = useState<FontManagementRequest | null>(null);
+  const [fontVersion, setFontVersion] = useState(0);
+  const fontNavigationSequence = useRef(0);
 
   const activeTabRef = useRef(activeTab);
   useEffect(() => {
@@ -248,7 +252,7 @@ export const App: React.FC = () => {
           <HddOutlined /> 数据管理
         </span>
       ),
-      children: <PluginDataPage onNavigate={handleTabChange} />,
+      children: <PluginDataPage onNavigate={handleTabChange} fontRequest={fontRequest} onFontRequestHandled={() => setFontRequest(null)} />,
     },
   ];
 
@@ -266,6 +270,10 @@ export const App: React.FC = () => {
         },
       }}
     >
+      <FontManagementContext.Provider value={{
+        open: selection => { setFontRequest({ ...selection, sequence: ++fontNavigationSequence.current }); handleTabChange("plugin-data"); },
+        changed: () => setFontVersion(value => value + 1), version: fontVersion,
+      }}>
       <div
         style={{
           minHeight: "100vh",
@@ -333,6 +341,7 @@ export const App: React.FC = () => {
         {/* 独立开发调试浮动工具栏 (Dev Only) */}
         {import.meta.env.DEV && <DevToolbar />}
       </div>
+      </FontManagementContext.Provider>
     </ConfigProvider>
   );
 };

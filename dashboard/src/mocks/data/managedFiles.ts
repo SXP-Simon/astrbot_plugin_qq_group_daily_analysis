@@ -62,7 +62,7 @@ putManagedMockFile("state", "traces.db", null, "AA==");
 export function managedMockPartitions(): ManagedPartition[] {
   return definitions.map(([key, name, description, writable, deletable]) => {
     const files = [...(managedMockFiles.get(key)?.values() || [])];
-    return { key, name, description, writable, deletable, directory: `demo/plugin_data/${key}/`,
+    return { key, name, description, writable, deletable, directory: key === "typst_fonts" ? "demo/data/typst/fonts" : `demo/plugin_data/${key}/`,
       impact: impacts[key],
       count: files.length, size_bytes: files.reduce((sum, file) => sum + atob(file.content_base64).length, 0) };
   });

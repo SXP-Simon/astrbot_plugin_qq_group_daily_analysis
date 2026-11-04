@@ -5,14 +5,15 @@ import type { TypstFontStatus } from "../../../entities/config/model/typstFonts"
 import { deleteManagedFiles, fetchManagedFiles, mutateManagedFile, type ManagedFile } from "../../../entities/plugin-data/api/managedFilesApi";
 
 import { useFontDownload } from "./useFontDownload";
+import type { FontManagementSelection } from "./FontManagementContext";
 
 export interface ManagedFontRow { name: string; file: ManagedFile | null; themes: string[] }
 
-export function useManagedFonts(onChanged: () => void) {
+export function useManagedFonts(onChanged: () => void, initialSelection?: FontManagementSelection) {
   const [status, setStatus] = useState<TypstFontStatus | null>(null);
-  const downloadQueue = useFontDownload(setStatus);
+  const downloadQueue = useFontDownload(setStatus, initialSelection?.source);
   const [files, setFiles] = useState<ManagedFile[]>([]);
-  const [theme, setTheme] = useState("HatsuneMiku");
+  const [theme, setTheme] = useState(initialSelection?.theme || "HatsuneMiku");
   const [search, setSearch] = useState("");
   const [format, setFormat] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -62,16 +63,19 @@ export function useManagedFonts(onChanged: () => void) {
     return success;
   };
 
-  const upload = async (file: File, existing?: ManagedFile | null) => {
+  const upload = async (file: File, existing?: ManagedFile | null, presetName?: string) => {
     if (!/\.(ttf|otf|ttc)$/i.test(file.name) || !file.size || file.size > 32 * 1024 * 1024) {
       setError("请选择非空的 TTF、OTF 或 TTC 字体文件，最大 32 MiB");
       return false;
     }
+    if (presetName && !status?.presets?.some(preset => preset.name === presetName)) {
+      setError("该字体预设已变化，请刷新状态后重新上传"); return false;
+    }
     const success = await run(async () => {
       const encoded = await readUploadFile(file);
-      await mutateManagedFile({ partition: "typst_fonts", name: existing?.name || file.name, operation: existing ? "replace" : "create", revision: existing?.revision, content_base64: encoded });
+      await mutateManagedFile({ partition: "typst_fonts", name: existing?.name || presetName || file.name, operation: existing ? "replace" : "create", revision: existing?.revision, content_base64: encoded });
     });
-    if (success && !existing && mounted.current) setTheme("__all__");
+    if (success && !existing && !presetName && mounted.current) setTheme("__all__");
     return success;
   };
 
@@ -85,7 +89,7 @@ export function useManagedFonts(onChanged: () => void) {
     status, files, groups, theme, search, format, selected, loading, busy, error, removed, downloadQueue, rows: visible,
     installed: rows.filter(row => row.file).length, required: required.length, missing: rows.filter(row => !row.file).length,
     refresh: async () => { setError(""); await refresh(); onChanged(); }, upload,
-    download: (cdn: string) => status ? run(() => downloadQueue.download(cdn, status, theme === "__all__" ? undefined : theme)) : Promise.resolve(false),
+    download: (cdn: string) => status ? run(() => downloadQueue.download(cdn, theme === "__all__" ? undefined : theme)) : Promise.resolve(false),
     remove: (targets: ManagedFile[]) => run(async () => {
       const result = await deleteManagedFiles("typst_fonts", targets.map(file => ({ name: file.name, revision: file.revision })));
       if (mounted.current) setRemoved(result);

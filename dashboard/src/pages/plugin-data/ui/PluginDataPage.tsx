@@ -12,10 +12,12 @@ import { IncrementalTab } from "./incremental/IncrementalTab";
 import { BatchDetailModal } from "./incremental/BatchDetailModal";
 import { CheckpointsTab } from "./checkpoints/CheckpointsTab";
 import { CheckpointDetailModal } from "./checkpoints/CheckpointDetailModal";
+import type { FontManagementRequest } from "../../../features/manage-typst-fonts/model/FontManagementContext";
 
-export const PluginDataPage: React.FC<{ onNavigate?: (page: "reports" | "config" | "traces") => void }> = ({ onNavigate }) => {
+export const PluginDataPage: React.FC<{ onNavigate?: (page: "reports" | "config" | "traces") => void; fontRequest?: FontManagementRequest | null; onFontRequestHandled?: () => void }> = ({ onNavigate, fontRequest, onFontRequestHandled }) => {
   const vm = usePluginDataViewModel();
   const [activeTab, setActiveTab] = useState<string>("partitions");
+  useEffect(() => { if (fontRequest) setActiveTab("partitions"); }, [fontRequest]);
 
   useEffect(() => {
     vm.refreshAll();
@@ -76,7 +78,7 @@ export const PluginDataPage: React.FC<{ onNavigate?: (page: "reports" | "config"
       </Card>
 
       {/* 1. 存储空间全景 */}
-      {activeTab === "partitions" && <ManagedFilesPanel onNavigate={onNavigate} onOpenDataTab={setActiveTab} />}
+      {activeTab === "partitions" && <ManagedFilesPanel onNavigate={onNavigate} onOpenDataTab={setActiveTab} fontRequest={fontRequest} onFontRequestHandled={onFontRequestHandled} />}
 
       {activeTab === "records" && <StoredRecordsTab />}
 

@@ -2,6 +2,10 @@ import { z } from "zod";
 import type { components, operations } from "../../../shared/api/generated/schema";
 
 export type TypstFontStatus = components["schemas"]["TypstFontStatus"];
+export type TypstFontPreset = components["schemas"]["TypstFontPreset"];
+const fontPresetSchema: z.ZodType<TypstFontPreset> = z.object({
+  name: z.string(), download_url: z.string().url(), upstream_url: z.string().url(), cdn_path: z.string().nullable(),
+});
 export type FontDownloadSource = "cdn" | "github";
 export const FONT_DOWNLOAD_SOURCES = [
   { value: "cdn", label: "CDN 优先（大字库直连）" },
@@ -19,6 +23,7 @@ export const typstFontStatusSchema: z.ZodType<TypstFontStatus> = z.object({
   files: z.array(z.string()),
   missing: z.array(z.string()),
   ready: z.boolean(),
+  presets: z.array(fontPresetSchema).optional(),
   groups: z.array(z.object({
     theme: z.string(), required: z.array(z.string()), missing: z.array(z.string()), ready: z.boolean(),
   })).optional(),

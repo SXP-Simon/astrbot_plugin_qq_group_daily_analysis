@@ -4,6 +4,7 @@ import { ConfigProvider } from "antd";
 import { FontManager } from "../../../../../features/manage-typst-fonts/ui/FontManager";
 import { downloadTypstFonts, fetchTypstFonts } from "../../../../../entities/config/api/configApi";
 import { deleteManagedFiles, fetchManagedContent, fetchManagedFiles, mutateManagedFile, type ManagedFile } from "../../../../../entities/plugin-data/api/managedFilesApi";
+import { mockFontPresets } from "../../../../../mocks/data/fontPresets";
 
 vi.mock("../../../../../entities/config/api/configApi", () => ({ downloadTypstFonts: vi.fn(), fetchTypstFonts: vi.fn() }));
 vi.mock("../../../../../entities/plugin-data/api/managedFilesApi", () => ({ deleteManagedFiles: vi.fn(), fetchManagedContent: vi.fn(), fetchManagedFiles: vi.fn(), mutateManagedFile: vi.fn() }));
@@ -52,4 +53,26 @@ it("移除共享字体会确认影响，使用列表版本并刷新为缺失状�
   fireEvent.click(within(confirm).getByText(/移.?除/));
   await waitFor(() => expect(deleteManagedFiles).toHaveBeenCalledWith("typst_fonts", [{ name: "NotoSansSC.ttf", revision: "stat:NotoSansSC.ttf" }]));
   expect(await screen.findByText("已安装 0 / 2 个字体，缺少 2 个")).toBeVisible();
+}, 15000);
+
+it("按方案选定模板并给出同版来源，上传上游原文件时自动使用插件目标名", async () => {
+  const name = "LXGWWenKai.ttf";
+  const preset = mockFontPresets.find(item => item.name === name)!;
+  vi.mocked(fetchTypstFonts).mockImplementation(async () => ({
+    directory: "/plugin/typst/fonts", files: files.map(file => file.name), missing: files.some(file => file.name === name) ? [] : [name], ready: files.some(file => file.name === name), presets: [preset],
+    groups: [{ theme: "ATRI", required: [name], missing: files.some(file => file.name === name) ? [] : [name], ready: files.some(file => file.name === name) }],
+  }));
+  vi.mocked(mutateManagedFile).mockImplementation(async input => { files.push(metadata(input.name)); });
+  const onChanged = vi.fn();
+  render(<FontManager onChanged={onChanged} initialSelection={{ theme: "ATRI", cdnBaseUrl: "https://cdn.jsdelivr.net", source: "github" }} />);
+  await screen.findByText("已安装 0 / 1 个字体，缺少 1 个");
+  const row = screen.getByText(name).closest("tr")!;
+  expect(within(row).getByRole("link", { name: "查看上游" })).toHaveAttribute("href", preset.upstream_url);
+  expect(within(row).getByRole("link", { name: "直接下载" })).toHaveAttribute("href", preset.download_url);
+  const file = new File([new Uint8Array([0, 1, 0, 0, ...Array(1024).fill(0)])], "LXGWWenKai-Regular.ttf", { type: "font/ttf" });
+  fireEvent.change(row.querySelector<HTMLInputElement>("input[type=file]")!, { target: { files: [file] } });
+  await waitFor(() => expect(mutateManagedFile).toHaveBeenCalledWith(expect.objectContaining({ partition: "typst_fonts", name, operation: "create" })));
+  expect(await screen.findByText("已安装 1 / 1 个字体，已就绪")).toBeVisible();
+  expect(onChanged).toHaveBeenCalled();
+  expect(screen.getByRole("combobox", { name: "字体下载 CDN" })).toBeDisabled();
 }, 15000);
