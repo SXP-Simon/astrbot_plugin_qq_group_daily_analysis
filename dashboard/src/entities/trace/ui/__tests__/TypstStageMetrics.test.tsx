@@ -5,6 +5,15 @@ import { TaskStageBadge } from "../../../task/ui/TaskStageBadge";
 
 vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 
+it("编译 CPU 耗时与墙钟独立展示，配额未知时不声称无限制", () => {
+  render(<StageMetricsBadges stageName="TYPST_COMPILE" payload={{ raster_ms: 44000, raster_cpu_ms: 11000, worker_cpu_ms: 12000, cpu_quota_cores: .5 }} />);
+  expect(screen.getByText("栅格导出:")).toBeVisible();
+  expect(screen.getByText("栅格 CPU 耗时:")).toBeVisible();
+  expect(screen.getByText("编译 CPU 耗时:")).toBeVisible();
+  expect(screen.getByText("容器 CPU 配额:")).toBeVisible();
+  expect(screen.getByText("0.5 核")).toBeVisible();
+});
+
 it("本地编译隐藏旧海外标签，并标出终止前的实际执行阶段", () => {
   render(<StageMetricsBadges stageName="IMAGE_RENDER_ATTEMPT" payload={{ service_type: "typst", resource_environment: "Overseas", execution_location: "本地隔离进程", worker_phase: "raster", worker_metrics_partial: true }} />);
   expect(screen.queryByText("Overseas")).not.toBeInTheDocument();

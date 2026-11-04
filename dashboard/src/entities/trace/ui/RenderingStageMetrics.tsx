@@ -9,7 +9,10 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
   const native = payload.service_type === "typst";
   const phases: Record<string, string> = { font_setup: "字体初始化", layout: "布局测量", raster: "栅格导出" };
   const workerPhase = typeof payload.worker_phase === "string" ? phases[payload.worker_phase] : undefined;
-  const memoryHints: Record<string, string> = {
+  const metricHints: Record<string, string> = {
+    raster_cpu_ms: "隔离进程在栅格阶段实际消耗的 CPU 时间，包含线程累计，可能超过墙钟时间；较大等待差距还需结合调度、配额或磁盘情况判断。",
+    worker_cpu_ms: "本次隔离编译实际消耗的 CPU 时间，不包含进程未获调度的等待。",
+    cpu_quota_cores: "从常见容器 cgroup 挂载根读取的 CPU 配额，不代表实时可用核数；可能另受上级配额、cpuset 或主机竞争限制。未显示不代表无限制。",
     worker_start_rss_mb: "子进程加载编译器前的 RSS，作为本次编译内存增长的基准。",
     worker_peak_rss_mb: "隔离进程自身的峰值常驻内存，进程退出后释放，不计入宿主 RSS 净变化。",
     worker_peak_delta_mb: "子进程峰值减去启动 RSS，表示本次编译的峰值增长，不是结束后的内存泄漏量。",
@@ -39,6 +42,9 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
     ["font_setup_ms", "字体初始化", "ms"],
     ["layout_ms", "布局测量", "ms"],
     ["raster_ms", "栅格导出", "ms"],
+    ["raster_cpu_ms", "栅格 CPU 耗时", "ms"],
+    ["worker_cpu_ms", "编译 CPU 耗时", "ms"],
+    ["cpu_quota_cores", "容器 CPU 配额", "核"],
     ["worker_start_rss_mb", "子进程启动 RSS", "MiB"],
     ["worker_peak_rss_mb", "子进程 RSS 峰值", "MiB"],
     ["worker_peak_delta_mb", "编译峰值增长", "MiB"],
@@ -53,7 +59,7 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
         const value = payload[key];
         if (unit === "" ? typeof value !== "string" || !value.trim() : typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
         const metricLabel = key === "worker_peak_rss_mb" && !ownProcessRss ? "进程历史 RSS 峰值" : key === "typst_peak_rss_mb" && !ownTypstRss ? "Typst 历史口径 RSS 峰值" : label;
-        const hint = key === "worker_peak_rss_mb" && !ownProcessRss ? "进程历史峰值可能包含启动时继承的内存，不等于本次隔离编译占用。" : memoryHints[key];
+        const hint = key === "worker_peak_rss_mb" && !ownProcessRss ? "进程历史峰值可能包含启动时继承的内存，不等于本次隔离编译占用。" : metricHints[key];
         return <span key={key} title={hint}><MetricPill isDark={isDark} label={metricLabel} value={`${typeof value === "number" ? value.toLocaleString() : String(value)} ${unit}`} status={key.startsWith("missing_") && typeof value === "number" && value > 0 ? "warning" : "default"} /></span>;
       })}
       {payload.network_budget_exhausted === true && <MetricPill isDark={isDark} label="网络预算" value="已耗尽，保留正文" status="warning" isMono={false} />}

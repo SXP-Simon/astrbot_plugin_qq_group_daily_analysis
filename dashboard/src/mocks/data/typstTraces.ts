@@ -35,7 +35,7 @@ const scenes: Scene[] = [
   { id: "html-native", name: "无 HTML 入口后原生恢复", status: "warning", htmlFirst: true, theme: "custom_native" },
 ];
 
-const workerMetrics = { raster_ppi: 144, font_setup_ms: 85, layout_ms: 190, raster_ms: 670, worker_start_rss_mb: 11.7, worker_peak_rss_mb: 156.9, worker_peak_delta_mb: 145.2, worker_rss_source: "linux_proc_status" };
+const workerMetrics = { raster_ppi: 144, font_setup_ms: 85, layout_ms: 190, raster_ms: 670, raster_cpu_ms: 625, worker_cpu_ms: 875, cpu_quota_cores: 1, worker_start_rss_mb: 11.7, worker_peak_rss_mb: 156.9, worker_peak_delta_mb: 145.2, worker_rss_source: "linux_proc_status" };
 const restored = { warning: "后续渲染方案已恢复图片报告" };
 
 function nativeSteps(scene: Scene): Step[] {
