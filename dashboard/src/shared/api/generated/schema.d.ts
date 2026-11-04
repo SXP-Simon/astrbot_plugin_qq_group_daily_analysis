@@ -692,6 +692,11 @@ export interface components {
             /** @description 自定义方案的服务地址，省略时使用 http://127.0.0.1:8999/text2img */
             service_endpoint?: string;
             service_token?: string;
+            /**
+             * @description Typst 导出密度，版心不变，最高成品宽 1410px
+             * @enum {integer}
+             */
+            raster_ppi?: 144 | 180 | 216;
             /** @default 20000 */
             timeout: number;
             /** @description 自定义方案的请求等待上限，省略时为 40000 毫秒 */

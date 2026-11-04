@@ -417,14 +417,11 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       );
     }
 
-    // 4. 单选下拉框 (带有 options 的 string)
-    if (type === "string" && Array.isArray(options) && options.length > 0) {
-      const currentVal =
-        typeof value === "string"
-          ? value
-          : typeof defaultValue === "string"
-          ? defaultValue
-          : "";
+    // 4. 单选下拉框保留字符串或数值选项的原始类型。
+    if (["string", "int", "float"].includes(type) && Array.isArray(options) && options.length > 0) {
+      const currentVal = type === "string"
+        ? typeof value === "string" ? value : typeof defaultValue === "string" ? defaultValue : ""
+        : typeof value === "number" ? value : typeof defaultValue === "number" ? defaultValue : Number(options[0]);
       // 显示名走官方键 labels（与 options 顺序一一对应）；缺标签时回退显示原始值
       const labels = fieldSchema.labels;
       return (
@@ -438,7 +435,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
             const raw = String(opt);
             return {
               label: resolveOptionLabel(raw, options, labels),
-              value: raw,
+              value: type === "string" ? raw : Number(opt),
             };
           })}
         />

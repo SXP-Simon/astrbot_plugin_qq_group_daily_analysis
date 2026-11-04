@@ -17,6 +17,8 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
     ["resource_environment", "资源环境", ""],
     ["viewport", "视口", ""],
     ["width", "固定宽度", "px"],
+    ["requested_raster_ppi", "请求密度", "PPI"],
+    ["raster_ppi", "实际导出密度", "PPI"],
     ["topics", "话题", "项"],
     ["portraits", "画像", "项"],
     ["quotes", "金句", "项"],
@@ -44,6 +46,7 @@ export function RenderingStageMetrics({ payload, children }: { payload: Record<s
       })}
       {payload.network_budget_exhausted === true && <MetricPill isDark={isDark} label="网络预算" value="已耗尽，保留正文" status="warning" isMono={false} />}
       {payload.mode === "basic" && <MetricPill isDark={isDark} label="恢复方案" value="基础排版" isMono={false} />}
+      {typeof payload.raster_ppi === "number" && typeof payload.requested_raster_ppi === "number" && payload.raster_ppi < payload.requested_raster_ppi && <span style={{ flexBasis: "100%", fontSize: 11 }}>长图像素预算已限制导出密度，排版与内容保持不变。</span>}
       {children}
       {typeof payload.worker_peak_rss_mb === "number" && Number.isFinite(payload.worker_peak_rss_mb) && payload.worker_peak_rss_mb >= 0 && <span style={{ flexBasis: "100%", fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
         {ownProcessRss ? "宿主净变化不含隔离编译开销；子进程结束后释放内存。" : "历史采集口径可能包含启动时继承的内存，不能直接作为本次编译占用。"}

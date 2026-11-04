@@ -30,7 +30,7 @@ const scenes: Scene[] = [
   { id: "html-native", name: "无 HTML 入口后原生恢复", status: "warning", htmlFirst: true, theme: "custom_native" },
 ];
 
-const workerMetrics = { font_setup_ms: 85, layout_ms: 190, raster_ms: 670, worker_start_rss_mb: 11.7, worker_peak_rss_mb: 156.9, worker_peak_delta_mb: 145.2, worker_rss_source: "linux_proc_status" };
+const workerMetrics = { raster_ppi: 144, requested_raster_ppi: 144, font_setup_ms: 85, layout_ms: 190, raster_ms: 670, worker_start_rss_mb: 11.7, worker_peak_rss_mb: 156.9, worker_peak_delta_mb: 145.2, worker_rss_source: "linux_proc_status" };
 const restored = { warning: "后续渲染方案已恢复图片报告" };
 
 function nativeSteps(scene: Scene): Step[] {
@@ -50,15 +50,15 @@ function nativeSteps(scene: Scene): Step[] {
   ];
   if (scene.status === "running") return steps;
   const compileFailed = scene.recovered;
-  steps.push({ stage: "TYPST_COMPILE", ms: compileFailed ? 310 : 945,
+  steps.push({ stage: "TYPST_COMPILE", ms: compileFailed ? 310 : scene.id === "cached" ? 1752 : 945,
     status: scene.status === "aborted" ? "cancelled" : compileFailed ? scene.status === "failed" ? "failed" : "warning" : "success",
-    payload: { template: theme, width: 940, ...(scene.status === "aborted" ? {} : compileFailed ? { font_setup_ms: 85, layout_ms: 190, worker_start_rss_mb: 12, worker_peak_rss_mb: 103.5, worker_peak_delta_mb: 91.5, worker_rss_source: "linux_proc_status" } : workerMetrics),
+    payload: { template: theme, width: 940, ...(scene.status === "aborted" ? {} : compileFailed ? { font_setup_ms: 85, layout_ms: 190, worker_start_rss_mb: 12, worker_peak_rss_mb: 103.5, worker_peak_delta_mb: 91.5, worker_rss_source: "linux_proc_status" } : { ...workerMetrics, ...(scene.id === "cached" ? { requested_raster_ppi: 216, raster_ppi: 216, font_setup_ms: 25.74, layout_ms: 109.57, raster_ms: 1616, worker_start_rss_mb: 20.61, worker_peak_rss_mb: 222.07, worker_peak_delta_mb: 201.46 } : scene.id === "network" ? { requested_raster_ppi: 216, raster_ppi: 180 } : {}) }),
       ...(compileFailed ? scene.status === "failed" ? { error: "主题第 18 行：预期长度，得到字符串" } : { failure_reason: "主题第 18 行：预期长度，得到字符串", warning: scene.fallback ? restored.warning : "主题编译失败，基础排版已恢复完整报告" } : {}),
       ...(scene.status === "aborted" ? { cancelled: true } : {}),
     } });
   if (scene.recovered) steps.push({ stage: "TYPST_RECOVERY", ms: 530,
     status: scene.status === "failed" ? "failed" : scene.fallback ? "warning" : "success",
-    payload: { mode: "basic", reason: "主题类型错误", font_setup_ms: 82, layout_ms: 65, worker_start_rss_mb: 11.8, worker_peak_rss_mb: 119.3, worker_peak_delta_mb: 107.5, worker_rss_source: "linux_proc_status", ...(!scene.fallback && scene.status !== "failed" ? { raster_ms: 380 } : {}),
+    payload: { mode: "basic", reason: "主题类型错误", font_setup_ms: 82, layout_ms: 65, requested_raster_ppi: 144, raster_ppi: 144, worker_start_rss_mb: 11.8, worker_peak_rss_mb: 119.3, worker_peak_delta_mb: 107.5, worker_rss_source: "linux_proc_status", ...(!scene.fallback && scene.status !== "failed" ? { raster_ms: 380 } : {}),
       ...(scene.status === "failed" ? { error: "基础恢复也超出本轮编译预算" } : scene.fallback ? { failure_reason: "基础排版编译失败", ...restored } : {}),
     } });
   if (!scene.fallback && scene.status !== "failed" && scene.status !== "aborted") steps.push({ stage: "TYPST_ENCODE", ms: 9, payload: { format: "png", image_bytes: 382910 } });
@@ -106,7 +106,7 @@ export const mockTypstTraces: TraceRecord[] = scenes.map((scene, index) => {
   }));
   const steps: Step[] = [{ stage: "CHECKPOINT_RESTORE", ms: 80, payload: { resumed_from: "mock-report-checkpoint" } }, {
     stage: "RENDER_REPORT", status: scene.status === "running" ? "running" : scene.status === "failed" ? "failed" : scene.status === "aborted" ? "cancelled" : "success",
-    payload: { template: theme, format: "image", render_attempts: records, ...(scene.status === "succeeded" || scene.status === "warning" ? { image_bytes: 382910, dimensions: "940x3250", image_format: "png", render_attempt: records.length } : {}) },
+    payload: { template: theme, format: "image", render_attempts: records, ...(scene.status === "succeeded" || scene.status === "warning" ? { image_bytes: 382910, dimensions: scene.id === "cached" ? "1410x4875" : scene.id === "network" ? "1175x25000" : "940x3250", image_format: "png", render_attempt: records.length } : {}) },
     children: [{ stage: "IMAGE_RENDER_QUEUE", ms: 30 }, ...attempts],
   }];
   if (scene.status === "succeeded" || scene.status === "warning") steps.push({ stage: "DISPATCH_REPORT", ms: 280, payload: { platform: "aiocqhttp", formats: ["image"], success: true } });

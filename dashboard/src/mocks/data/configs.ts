@@ -50,7 +50,7 @@ mockPluginConfig.config.daily_comic.comic_characters = [{
 // 演示原生渲染与 HTML 后备，生产默认值仍由配置契约管理。
 const rendering = mockPluginConfig.config.t2i_rendering;
 if (rendering) rendering.t2i_rendering_strategies = [
-  { __template_key: "typst", name: "Typst 本地排版", priority: 5, timeout: 30000, type: "png", quality: 90, cdn_base_url: "https://cdn.jsdmirror.com" },
+  { __template_key: "typst", name: "Typst 本地排版", raster_ppi: 144, priority: 5, timeout: 30000, type: "png", quality: 90, cdn_base_url: "https://cdn.jsdmirror.com" },
   ...(Array.isArray(rendering.t2i_rendering_strategies) ? rendering.t2i_rendering_strategies : []),
 ];
 

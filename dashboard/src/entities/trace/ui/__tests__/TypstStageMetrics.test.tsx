@@ -31,3 +31,11 @@ it("活跃任务显示可读的Typst阶段", () => {
   render(<TaskStageBadge stage="TYPST_RESOURCES" />);
   expect(screen.getByText("Typst 本地素材与下载")).toBeVisible();
 });
+
+
+it("长图降档同时展示请求与实际密度，说明固定排版未改变", () => {
+  render(<StageMetricsBadges stageName="TYPST_COMPILE" payload={{ requested_raster_ppi: 216, raster_ppi: 180 }} />);
+  expect(screen.getByText("216 PPI")).toBeVisible();
+  expect(screen.getByText("180 PPI")).toBeVisible();
+  expect(screen.getByText("长图像素预算已限制导出密度，排版与内容保持不变。")).toBeVisible();
+});
