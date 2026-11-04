@@ -119,8 +119,8 @@ export const App: React.FC = () => {
         // 1. 活跃任务状态变更：由 overviewVM 内存增量更新（0 HTTP 请求、0 毫秒延时）
         currentVMs.overviewVM.handleSSEEvent(eventPayload);
 
-        // 2. 终态事件（task_finished）：精准失效该条缓存并仅刷新当前展示的活跃 Tab
-        if (evt.event === "task_finished") {
+        // 2. 完成、取消和超时均为终态：精准失效缓存并刷新当前展示的 Tab。
+        if (["task_finished", "task_canceled", "task_timed_out"].includes(evt.event ?? "")) {
           const data = evt.data as { task_id?: string } | undefined;
           const taskId = data?.task_id;
           if (taskId) {
