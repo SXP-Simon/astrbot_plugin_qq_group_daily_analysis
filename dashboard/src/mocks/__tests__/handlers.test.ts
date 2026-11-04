@@ -7,6 +7,28 @@ import { groupItemSchema } from "../../entities/group/model/types";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import configSchema from "../../../../_conf_schema.json";
+import { mockPluginConfig } from "../data/configs";
+
+it("配置 Mock 持久保留修改、更新回执版本并拒绝过期快照", () => {
+  const initial = mockHandlers["GET config"]().data;
+  try {
+    const saved = mockHandlers["POST config"]({ config: { basic: { ...initial.config.basic, max_topics: 5 } }, revision: initial.revision });
+    expect(saved.status).toBe("ok");
+    expect(saved).not.toHaveProperty("data");
+    const updated = mockHandlers["GET config"]().data;
+    expect(saved).toHaveProperty("revision", updated.revision);
+    expect(updated.revision).not.toBe(initial.revision);
+    expect(updated.config.basic.max_topics).toBe(5);
+    const stale = mockHandlers["POST config"]({ config: { basic: { max_topics: 9 } }, revision: initial.revision });
+    expect(stale.status).toBe("error");
+    expect(mockHandlers["GET config"]().data.config.basic.max_topics).toBe(5);
+    const next = mockHandlers["POST config"]({ config: { basic: { max_topics: 7 } }, revision: updated.revision });
+    expect(next.status).toBe("ok");
+    expect(mockHandlers["GET config"]().data.config.basic.max_topics).toBe(7);
+  } finally {
+    mockPluginConfig.config = initial.config;
+  }
+});
 
 describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => {
   it("演示配置使用真实结构并提供Typst与默认HTML后备", () => {

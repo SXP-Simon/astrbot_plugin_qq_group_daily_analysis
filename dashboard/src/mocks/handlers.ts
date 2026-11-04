@@ -7,7 +7,7 @@ import { mockMetricsSummary, mockAnalyticsTrends } from "./data/metrics";
 import { mockActiveTasks, mockConnectedPlatforms } from "./data/tasks";
 import { mockTraces } from "./data/traces";
 import { mockReportHistory, mockReportTemplates } from "./data/reports";
-import { mockPluginConfig, mockProviders, mockPersonas } from "./data/configs";
+import { configMockHandlers, mockPluginConfig, mockProviders, mockPersonas } from "./data/configs";
 import { mockPluginLogs } from "./data/logs";
 import { mockConfigBackups } from "./data/configBackups";
 import { mockGroups } from "./data/groups";
@@ -31,6 +31,7 @@ export interface MockHandlerResponse<T = unknown> {
 }
 
 export const mockHandlers = {
+  ...configMockHandlers,
   ...managedFileMockHandlers,
   ...managedRecordMockHandlers,
   "POST config/test-t2i": () => ({
@@ -262,12 +263,6 @@ export const mockHandlers = {
   },
 
   // 6. 配置项
-  "GET config": () => ({ status: "ok", data: mockPluginConfig }),
-  "POST config": (body?: unknown) => ({
-    status: "ok",
-    data: { success: true, saved: body },
-    message: "配置保存成功",
-  }),
   "POST config/upload_file": () => ({
     status: "ok",
     data: { success: true, file_path: "files/custom_avatar.png" },
