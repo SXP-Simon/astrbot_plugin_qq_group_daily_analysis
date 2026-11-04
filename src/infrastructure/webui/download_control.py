@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
 
     from ..reporting.typst_fonts import FontDownloadProgress
 
@@ -75,7 +75,7 @@ class DownloadControl:
         return json_response({"status": "ok", "data": data})
 
     @asynccontextmanager
-    async def track(self, download_id: object) -> AsyncIterator[None]:
+    async def track(self, download_id: object) -> AsyncGenerator[None, None]:
         """将可选请求标识绑定到当前下载，取消后保留已完成文件。
 
         Args:

@@ -18,7 +18,7 @@ from ...config.config_backup_reader import ConfigBackupReader
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
 
     from ....application.dto.webui_dto import (
         CheckpointDeleteDTO,
@@ -60,7 +60,7 @@ class DataManagementRoutes:
         self.report_output_dir = report_output_dir
 
     @asynccontextmanager
-    async def _mutation_guard(self, group_id: str) -> AsyncIterator[None]:
+    async def _mutation_guard(self, group_id: str) -> AsyncGenerator[None, None]:
         """删除批次、重置游标和清理快照时，与群分析任务互斥。
 
         Args:
