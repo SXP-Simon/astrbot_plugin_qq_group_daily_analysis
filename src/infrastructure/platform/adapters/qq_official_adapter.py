@@ -413,11 +413,13 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         try:
             from botpy.types.message import MarkdownPayload
 
-            markdown: object = MarkdownPayload(content=content)
+            markdown: dict[str, object] = dict(MarkdownPayload(content=content))
         except ImportError:
-            # Allows lightweight test environments while botpy is provided by
-            # AstrBot in production.
+            # 轻量测试环境可能未安装 botpy，生产环境由 AstrBot 提供。
             markdown = {"content": content}
+        if re.search(r"!\[[^\]]*\]\(https?://", content):
+            # 要求 QQ 明确返回转存失败，才能恢复包含统计的完整文字报告。
+            markdown["force_verify_image_resource"] = True
 
         call_result = api.post_group_message(
             group_openid=str(group_id),
@@ -429,7 +431,7 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
             result = await call_result
         else:
             result = call_result
-        return result is not None
+        return isinstance(result, dict) and bool(result.get("id"))
 
     def _next_markdown_msg_seq(self) -> int:
         self._markdown_msg_seq = (self._markdown_msg_seq % 10000) + 1
