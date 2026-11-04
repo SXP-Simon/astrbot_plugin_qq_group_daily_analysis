@@ -77,13 +77,15 @@ export async function apiGet<T = unknown>(
   params?: Record<string, unknown>
 ): Promise<ApiResponse<T> | null> {
   const bridge = getBridge();
+  let response: ApiResponse<T> | null = null;
   if (bridge && typeof bridge.apiGet === "function") {
-    return await bridge.apiGet<T>(path, params);
+    response = await bridge.apiGet<T>(path, params);
+  } else if (import.meta.env.DEV) {
+    response = await devApiGet<T>(path, params);
   }
-  if (import.meta.env.DEV) {
-    return await devApiGet<T>(path, params);
-  }
-  return null;
+  if (!response) throw new Error("未收到接口响应，请检查连接后重试。");
+  extractData(response);
+  return response;
 }
 
 export async function apiPost<T = unknown>(
@@ -91,13 +93,15 @@ export async function apiPost<T = unknown>(
   body?: unknown
 ): Promise<ApiResponse<T> | null> {
   const bridge = getBridge();
+  let response: ApiResponse<T> | null = null;
   if (bridge && typeof bridge.apiPost === "function") {
-    return await bridge.apiPost<T>(path, body);
+    response = await bridge.apiPost<T>(path, body);
+  } else if (import.meta.env.DEV) {
+    response = await devApiPost<T>(path, body);
   }
-  if (import.meta.env.DEV) {
-    return await devApiPost<T>(path, body);
-  }
-  return null;
+  if (!response) throw new Error("未收到接口响应，请检查连接后重试。");
+  extractData(response);
+  return response;
 }
 
 export function subscribeSSE(handlers: {
@@ -138,28 +142,24 @@ export function subscribeSSE(handlers: {
 }
 
 /**
- * 健壮地解包 AstrBot 插件 Web API 返回的数据结构
- * 兼容 AstrBot 标准响应封装与嵌套 data 结构
+ * 仅解包响应信封，保留业务对象的 data，并拒绝任一层的错误回执。
  */
 export function extractData<T>(res: unknown): T | null {
   if (!res || typeof res !== "object") return null;
-  const anyRes = res as Record<string, unknown>;
-
-  // 1. 深度嵌套解包：res.data.data (标准 json_response 经由 AstrBot PageBridge 转发)
-  if (
-    anyRes.data &&
-    typeof anyRes.data === "object" &&
-    "data" in (anyRes.data as Record<string, unknown>)
-  ) {
-    return (anyRes.data as Record<string, unknown>).data as T;
+  let current: unknown = res;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) break;
+    const layer = current as Record<string, unknown>;
+    // 记录、快照等业务对象也有 data；存在业务字段时保留整个对象。
+    if (!Object.keys(layer).every(key => ["status", "code", "message", "error", "data", "status_code", "headers"].includes(key))) break;
+    if (layer.status === "error" || layer.error ||
+        (typeof layer.code === "number" && ![0, 200].includes(layer.code)) ||
+        (typeof layer.status_code === "number" && layer.status_code >= 400)) {
+      throw new Error(typeof layer.message === "string" && layer.message ? layer.message : "接口操作失败，请刷新后重试。");
+    }
+    if (layer.data === undefined) break;
+    current = layer.data;
   }
-
-  // 2. 单层解包：res.data
-  if (anyRes.data !== undefined) {
-    return anyRes.data as T;
-  }
-
-  // 3. 顶层对象
-  return anyRes as unknown as T;
+  return current as T | null;
 }
 
