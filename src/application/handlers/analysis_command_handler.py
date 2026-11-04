@@ -24,6 +24,7 @@ from astrbot.core.message.components import File
 from ...domain.repositories.platform_adapter_repository import (
     GroupAlbumSupportProtocol,
     GroupFileSupportProtocol,
+    MarkdownImageSupportProtocol,
     PlatformAdapterProtocol,
 )
 from ...domain.value_objects.task_event import TaskEvent
@@ -765,6 +766,9 @@ class AnalysisCommandHandler:
                             self.html_render, group_id, adapter.platform_id
                         ),
                         mention_style="qq",
+                        summary_image_uploader=adapter.upload_markdown_image
+                        if isinstance(adapter, MarkdownImageSupportProtocol)
+                        else None,
                     ),
                     stop_request,
                 )
