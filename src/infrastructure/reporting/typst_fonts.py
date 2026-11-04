@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 import aiohttp
@@ -122,6 +123,16 @@ class TypstFontStatus(TypedDict):
     groups: list[TypstFontGroup]
 
 
+class FontDownloadProgress(TypedDict):
+    """一个字体的实际网络来源、字节数和执行阶段。"""
+
+    name: str
+    url: str
+    received: int
+    total: int | None
+    phase: Literal["connecting", "downloading", "validating"]
+
+
 def typst_font_status(data_dir: Path) -> TypstFontStatus:
     """检查插件自己的字体目录，不扫描系统路径。
 
@@ -161,6 +172,8 @@ async def download_typst_fonts(
     theme: str | None = None,
     *,
     name: str | None = None,
+    source: Literal["cdn", "github"] = "cdn",
+    on_progress: Callable[[FontDownloadProgress], None] | None = None,
 ) -> TypstFontStatus:
     """将固定预设字体下载到插件目录，校验头部并原子替换。
 
@@ -169,16 +182,20 @@ async def download_typst_fonts(
         cdn_base_url: 当前配置的 CDN 根地址。
         theme: 仅补齐该内置主题的字体；空值下载完整预设。
         name: 可选的单个预设文件，用于逐文件展示真实下载进度。
+        source: CDN 优先或所有字体均使用 GitHub Raw，字体版本保持不变。
+        on_progress: 接收当前文件的来源、阶段和字节进度。
 
     Returns:
         下载后的字体状态；已存在的预设不会重复下载。
 
     Raises:
-        ValueError: 模板未知、CDN 返回的内容过大或不是字体。
-        aiohttp.ClientError: 下载失败，已经成功的文件仍可复用。
+        ValueError: 模板或来源未知、网络失败、响应过大或不是字体。
+        OSError: 字体目录无法写入，已经成功的文件仍可复用。
     """
     if theme is not None and theme not in THEME_FONTS:
         raise ValueError("未知 Typst 模板，请刷新字体列表后重试")
+    if source not in ("cdn", "github"):
+        raise ValueError("未知字体下载来源")
     required = THEME_FONTS[theme] if theme is not None else tuple(FONT_SOURCES)
     if name is not None:
         if name not in required:
@@ -190,21 +207,44 @@ async def download_typst_fonts(
     directory = data_dir / "typst" / "fonts"
     directory.mkdir(parents=True, exist_ok=True)
     async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=180), trust_env=True
+        timeout=aiohttp.ClientTimeout(total=180, connect=10, sock_read=20),
+        trust_env=True,
     ) as session:
         for name in missing:
-            source = FONT_SOURCES[name]
+            location = FONT_SOURCES[name]
+            if source == "github" and location.startswith("gh/"):
+                repository, path = location[3:].split("@", 1)
+                location = f"https://raw.githubusercontent.com/{repository}/{path}"
             url = (
-                source
-                if source.startswith("https://")
-                else f"{cdn_base_url.rstrip('/')}/{source}"
+                location
+                if location.startswith("https://")
+                else f"{cdn_base_url.rstrip('/')}/{location}"
             )
-            await _download_font(session, url, directory / name)
+            try:
+                await _download_font(session, url, directory / name, on_progress)
+            except aiohttp.ClientResponseError as exc:
+                raise ValueError(
+                    f"{name}：来源返回 HTTP {exc.status}（{url}）；"
+                    "403/429 可能是访问限制，404 表示上游文件不存在，请切换来源或上传同名字体"
+                ) from exc
+            except TimeoutError as exc:
+                raise ValueError(
+                    f"{name}：下载超时（连接上限 10 秒、连续无数据上限 20 秒、单文件总上限 180 秒）；"
+                    f"请检查插件服务器到 {url} 的网络或代理"
+                ) from exc
+            except aiohttp.ClientError as exc:
+                raise ValueError(
+                    f"{name}：连接或传输失败（{type(exc).__name__}: {exc}）；"
+                    f"来源 {url}，请检查插件服务器网络或代理，也可上传同名字体"
+                ) from exc
     return typst_font_status(data_dir)
 
 
 async def _download_font(
-    session: aiohttp.ClientSession, url: str, target: Path
+    session: aiohttp.ClientSession,
+    url: str,
+    target: Path,
+    on_progress: Callable[[FontDownloadProgress], None] | None = None,
 ) -> None:
     """校验并原子保存一个预设字体，失败时清理临时文件。
 
@@ -212,6 +252,7 @@ async def _download_font(
         session: 批次共用的下载会话。
         url: 由固定字体清单与已选 CDN 解析的来源。
         target: 插件受管理目录中的固定目标文件。
+        on_progress: 接收连接、读取和校验阶段的真实进度。
 
     Raises:
         ValueError: 响应过大或不是字体。
@@ -219,9 +260,23 @@ async def _download_font(
         OSError: 临时文件无法写入或替换。
     """
     temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.part")
+    progress: FontDownloadProgress = {
+        "name": target.name,
+        "url": url,
+        "received": 0,
+        "total": None,
+        "phase": "connecting",
+    }
+    if on_progress:
+        on_progress(progress.copy())
     try:
         async with session.get(url) as response:
             response.raise_for_status()
+            progress.update(total=response.content_length, phase="downloading")
+            if response.content_length and response.content_length > 32 * 1024 * 1024:
+                raise ValueError("字体响应超过 32 MiB，请检查下载来源")
+            if on_progress:
+                on_progress(progress.copy())
             size = 0
             header = bytearray()
             with temporary.open("wb") as output:
@@ -232,8 +287,14 @@ async def _download_font(
                     if len(header) < 4:
                         header.extend(chunk[: 4 - len(header)])
                     output.write(chunk)
+                    progress["received"] = size
+                    if on_progress:
+                        on_progress(progress.copy())
+        progress["phase"] = "validating"
+        if on_progress:
+            on_progress(progress.copy())
         if size < 1024 or bytes(header) not in (b"ttcf", b"OTTO", b"\x00\x01\x00\x00"):
-            raise ValueError("CDN 返回的内容不是有效字体")
+            raise ValueError(f"{target.name}：下载来源返回的内容不是有效字体（{url}）")
         temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)

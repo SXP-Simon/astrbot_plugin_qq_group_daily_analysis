@@ -19,7 +19,7 @@ from src.infrastructure.reporting import typst_fonts, typst_resources
 async def test_font_file_download_is_limited_to_the_selected_preset(tmp_path, monkeypatch, filename):
     calls = []
 
-    async def download(session, url, target):
+    async def download(session, url, target, on_progress=None):
         calls.append(target.name)
         target.write_bytes(b"\x00\x01\x00\x00" + bytes(1024))
 
@@ -31,6 +31,26 @@ async def test_font_file_download_is_limited_to_the_selected_preset(tmp_path, mo
         with pytest.raises(ValueError, match="字体"):
             await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test", "HatsuneMiku", name=name)
     assert calls == [filename]
+
+
+@pytest.mark.asyncio
+async def test_github_source_preserves_version_and_reports_http_and_timeout(tmp_path, monkeypatch):
+    calls = []
+
+    async def download(session, url, target, on_progress=None):
+        calls.append(url)
+        if len(calls) == 1:
+            raise aiohttp.ClientResponseError(MagicMock(), (), status=403)
+        raise TimeoutError()
+
+    monkeypatch.setattr(typst_fonts, "_download_font", download)
+    with pytest.raises(ValueError, match=r"Outfit.ttf.*HTTP 403"):
+        await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test", name="Outfit.ttf", source="github")
+    assert calls[0] == "https://raw.githubusercontent.com/google/fonts/main/ofl/outfit/Outfit[wght].ttf"
+    with pytest.raises(ValueError, match=r"LXGWWenKai-Medium.ttf.*20 秒"):
+        await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test", name="LXGWWenKai-Medium.ttf", source="github")
+    assert calls[1] == typst_fonts.FONT_SOURCES["LXGWWenKai-Medium.ttf"]
+    assert "/v1.522/" in calls[1]
 
 
 @pytest.mark.asyncio
