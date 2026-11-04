@@ -11,13 +11,13 @@ from ...shared.trace_context import SpanRecord, TraceContext
 from .render_diagnostics import summarize_render_error
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
 
 
 @asynccontextmanager
 async def render_span(
     stage: str, payload: dict[str, object] | None = None
-) -> AsyncIterator[SpanRecord | None]:
+) -> AsyncGenerator[SpanRecord | None, None]:
     """启用追踪时，将渲染步骤记录到当前尝试或明确指定的父阶段。
 
     Args:
