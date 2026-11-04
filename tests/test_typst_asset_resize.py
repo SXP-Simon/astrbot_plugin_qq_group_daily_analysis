@@ -29,10 +29,11 @@ def test_resize_keeps_legacy_rgba_pixels(tmp_path, mode, opacity):
     payload = BytesIO()
     image.save(payload, format="JPEG" if mode in ("JPEG", "CMYK") else "PNG", **options)
     data = payload.getvalue()
-    # 原版先转换 RGBA 再缩放，作为既有采样行为的参考。
+    # 旧版 RGBA 实际执行单次重采样；显式关闭整数预缩小，
+    # 避免 Pillow 13 开始传递 thumbnail 的默认 reducing_gap 后改变参考图。
     with Image.open(BytesIO(data)) as original:
         expected = original.convert("RGBA")
-        expected.thumbnail((1600, 1600))
+        expected.thumbnail((1600, 1600), reducing_gap=None)
         if opacity < 1:
             expected.putalpha(expected.getchannel("A").point(lambda a: int(a * opacity)))
     target, cached = tmp_path / "job.png", tmp_path / "cache.png"
