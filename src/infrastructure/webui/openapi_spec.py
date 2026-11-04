@@ -136,6 +136,56 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                 },
             },
+            "/config/downloads/cancel": {
+                "post": {
+                    "summary": "取消指定下载，保留已经完成的文件",
+                    "operationId": "cancelDownload",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["download_id"],
+                                    "properties": {
+                                        "download_id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                        }
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "取消已确认，网络连接及临时文件已清理",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["status", "data"],
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "type": "object",
+                                                "required": [
+                                                    "download_id",
+                                                    "cancelled",
+                                                ],
+                                                "properties": {
+                                                    "download_id": {"type": "string"},
+                                                    "cancelled": {"type": "boolean"},
+                                                },
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
             "/config/template-resources": {
                 "get": {
                     "summary": "查询内置主题的本地素材",
@@ -173,6 +223,10 @@ def generate_openapi_spec() -> dict[str, Any]:
                                     "type": "object",
                                     "required": ["name", "cdn_base_url"],
                                     "properties": {
+                                        "download_id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                        },
                                         "name": {"type": "string"},
                                         "cdn_base_url": {"type": "string"},
                                     },
@@ -239,6 +293,10 @@ def generate_openapi_spec() -> dict[str, Any]:
                                 "schema": {
                                     "type": "object",
                                     "properties": {
+                                        "download_id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                        },
                                         "name": {
                                             "type": "string",
                                             "maxLength": 128,

@@ -35,6 +35,7 @@ from ...reporting.html_renderer import bind_group_html_renderer
 from ...reporting.typst_fonts import FONT_SOURCES, THEME_FONTS
 from ...reporting.typst_renderer import render_typst_probe
 from ...reporting.typst_resources import download_typst_fonts, typst_font_status
+from ..download_control import DownloadCancelled, DownloadControl
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
@@ -229,12 +230,14 @@ class ConfigRoutes:
         report_dispatcher: ReportDispatcher | None = None,
         context: Context | None = None,
         auto_scheduler: AutoScheduler | None = None,
+        downloads: DownloadControl | None = None,
     ) -> None:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
         self.context = context
         self.auto_scheduler = auto_scheduler
         self._typst_font_lock = asyncio.Lock()
+        self.downloads = downloads or DownloadControl()
 
     async def api_typst_fonts(self) -> WebApiResponse:
         """读取插件 data 目录中可用的 Typst 字体状态。
@@ -277,7 +280,11 @@ class ConfigRoutes:
         if self._typst_font_lock.locked():
             return error_response("字体正在下载，请等待完成后刷新", status_code=409)
         try:
-            async with self._typst_font_lock, asyncio.timeout(180):
+            async with (
+                self.downloads.track(body.get("download_id")),
+                self._typst_font_lock,
+                asyncio.timeout(180),
+            ):
                 status = await download_typst_fonts(
                     Path(StarTools.get_data_dir(PLUGIN_NAME)),
                     cdn or DEFAULT_CDN_HOST,
@@ -285,6 +292,8 @@ class ConfigRoutes:
                     name=name,
                 )
             return json_response({"status": "ok", "data": status})
+        except DownloadCancelled:
+            return error_response("下载已取消，已完成的字体会保留", status_code=409)
         except Exception:
             logger.warning("Typst 字体下载未完成，已下载文件保留，可更换 CDN 后重试")
             return error_response(

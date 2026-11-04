@@ -19,11 +19,15 @@ from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
 from ...reporting.template_asset_catalog import RESOURCE_FILES
 from ...reporting.template_resources import TemplateResourceStore
+from ..download_control import DownloadCancelled, DownloadControl
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 
 class TemplateResourceRoutes:
     """素材状态无联网，下载目标严格由仓库清单控制。"""
+
+    def __init__(self, downloads: DownloadControl | None = None) -> None:
+        self.downloads = downloads or DownloadControl()
 
     async def api_get_resources(self) -> WebApiResponse:
         """查询各主题本地资源，以便关闭页面后继续补齐。
@@ -70,13 +74,18 @@ class TemplateResourceRoutes:
         base = f"{cdn}/gh/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}@{GITHUB_REPO_BRANCH}/assets"
         store = TemplateResourceStore(Path(StarTools.get_data_dir(PLUGIN_NAME)), base)
         try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=45), trust_env=True
-            ) as session:
+            async with (
+                self.downloads.track(body.get("download_id")),
+                aiohttp.ClientSession(
+                    timeout=aiohttp.ClientTimeout(total=45), trust_env=True
+                ) as session,
+            ):
                 await store.ensure(name, session)
             return json_response(
                 {"status": "ok", "data": {"name": name, "available": True}}
             )
+        except DownloadCancelled:
+            return error_response("下载已取消，已完成的素材会保留", status_code=409)
         except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as error:
             logger.warning(f"模板素材 {name} 下载未完成：{error}")
             return error_response(

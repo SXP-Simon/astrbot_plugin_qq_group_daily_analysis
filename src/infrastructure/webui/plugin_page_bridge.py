@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .download_control import DownloadControl
 from .openapi_spec import generate_openapi_spec
 from .routes import (
     ConfigRoutes,
@@ -98,7 +99,8 @@ class PluginPageWebUIBridge:
             report_dispatcher=self.report_dispatcher,
             report_output_dir=self.report_output_dir,
         )
-        self.template_resource_routes = TemplateResourceRoutes()
+        self.downloads = DownloadControl()
+        self.template_resource_routes = TemplateResourceRoutes(self.downloads)
         self.template_routes = TemplateRoutes(
             analysis_service=self.analysis_service,
             report_dispatcher=self.report_dispatcher,
@@ -111,6 +113,7 @@ class PluginPageWebUIBridge:
             report_dispatcher=self.report_dispatcher,
             context=self.context,
             auto_scheduler=self.auto_scheduler,
+            downloads=self.downloads,
         )
         self.data_management_routes = DataManagementRoutes(
             trace_store=self.trace_store,
@@ -291,6 +294,12 @@ class PluginPageWebUIBridge:
                 self.config_routes.api_test_t2i,
                 ["POST"],
                 "Test AstrBot or custom T2I with a fixed HTML page without saving configuration",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/downloads/cancel",
+                self.downloads.api_cancel,
+                ["POST"],
+                "取消指定字体或模板素材下载并清理临时文件",
             ),
             (
                 f"/{PLUGIN_NAME}/config/template-resources",
