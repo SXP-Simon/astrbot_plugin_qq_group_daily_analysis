@@ -94,6 +94,7 @@ function appendSteps(steps: Step[], traceId: string, started: number, spans: Tra
     spans.push(span);
     elapsed = step.children ? Math.max(start + (step.ms || 0), appendSteps(step.children, traceId, started, spans, id, elapsed)) : elapsed + (step.ms || 0);
     span.duration_ms = status === "running" ? null : elapsed - start;
+    span.payload = { ...span.payload, start_memory_mb: span.start_memory_mb, end_memory_mb: span.end_memory_mb, delta_memory_mb: span.delta_memory_mb };
   }
   return elapsed;
 }
