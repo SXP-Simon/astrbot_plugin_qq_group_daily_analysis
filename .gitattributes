@@ -13,7 +13,7 @@
 pages/** text eol=lf
 
 ### 模板素材 — 统一由仓库/CDN分发，运行时按需保存到插件data目录
-assets/                  export-ignore
+/assets/                 export-ignore
 
 ### 前端开发源码 — 运行时只需要已编译的 pages/ 单 Bundle 产物
 dashboard/                export-ignore
