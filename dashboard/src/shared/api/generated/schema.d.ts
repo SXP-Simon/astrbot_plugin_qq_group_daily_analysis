@@ -158,6 +158,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/config/downloads/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 取消指定下载，保留已经完成的文件 */
+        post: operations["cancelDownload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config/template-resources": {
         parameters: {
             query?: never;
@@ -1594,6 +1611,39 @@ export interface operations {
             };
         };
     };
+    cancelDownload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    download_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 取消已确认，网络连接及临时文件已清理 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: {
+                            download_id: string;
+                            cancelled: boolean;
+                        };
+                    };
+                };
+            };
+        };
+    };
     getTemplateResources: {
         parameters: {
             query?: never;
@@ -1628,6 +1678,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** Format: uuid */
+                    download_id?: string;
                     name: string;
                     cdn_base_url: string;
                 };
@@ -1696,6 +1748,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** Format: uuid */
+                    download_id?: string;
                     /** @description Optional preset filename for per-file progress; must belong to the selected theme */
                     name?: string;
                     cdn_base_url?: string;

@@ -17,12 +17,14 @@ export function TemplateResources({ cdnBaseUrl, onChanged, refreshVersion = 0 }:
     <Typography.Text type="secondary">这里的 CDN 用于本次下载；自动补图使用渲染方案中的 CDN。</Typography.Text>
     <Space>
       <Button loading={vm.running} disabled={vm.loading || !missing} onClick={() => void vm.download().then(() => onChanged?.())}>下载全部缺失素材</Button>
+      {vm.running && <Button loading={vm.cancelling} onClick={() => void vm.cancel()}>取消下载</Button>}
       <Button loading={vm.loading} disabled={vm.running} onClick={() => void vm.refresh()}>刷新素材状态</Button>
     </Space>
     {vm.progress.total > 0 && <>
-      <Progress percent={Math.round(vm.progress.done / vm.progress.total * 100)} status={vm.progress.failed.length ? "exception" : vm.running ? "active" : "success"} />
+      <Progress percent={Math.round(vm.progress.done / vm.progress.total * 100)} status={vm.cancelled ? "normal" : vm.progress.failed.length ? "exception" : vm.running ? "active" : "success"} />
       <Typography.Text>完成 {vm.progress.done}/{vm.progress.total}，成功 {vm.progress.done - vm.progress.failed.length}，失败 {vm.progress.failed.length}</Typography.Text>
-      {!vm.running && <Alert showIcon type={vm.progress.failed.length ? "warning" : "success"}
+      {!vm.running && vm.cancelled && <Alert showIcon type="info" message="下载已取消，已完成的素材会保留；再次下载仅补齐缺失文件。" />}
+      {!vm.running && !vm.cancelled && <Alert showIcon type={vm.progress.failed.length ? "warning" : "success"}
         message={vm.progress.failed.length ? "部分素材未下载成功，可更换 CDN 后重试；已有文件会跳过" : "本轮素材下载完成"} />}
     </>}
     {vm.error && <Alert type="error" showIcon message={vm.error} />}

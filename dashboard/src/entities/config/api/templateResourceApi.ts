@@ -9,10 +9,10 @@ export async function fetchTemplateResources() {
   return parsed.data;
 }
 
-export async function downloadTemplateResource(name: string, cdnBaseUrl: string) {
+export async function downloadTemplateResource(name: string, cdnBaseUrl: string, downloadId?: string) {
   const cdn = cdnBaseUrlSchema.safeParse(cdnBaseUrl);
   if (!cdn.success) throw new Error(cdn.error.issues[0].message);
-  const response = await apiPost<unknown>("config/template-resources/download", { name, cdn_base_url: cdn.data });
+  const response = await apiPost<unknown>("config/template-resources/download", { name, cdn_base_url: cdn.data, ...(downloadId ? { download_id: downloadId } : {}) });
   const parsed = templateResourceFileSchema.safeParse(extractData(response));
   if (!parsed.success || !parsed.data.available || parsed.data.name !== name) {
     const envelope = extractData<unknown>(response);

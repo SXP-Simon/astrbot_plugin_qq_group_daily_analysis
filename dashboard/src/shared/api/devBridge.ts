@@ -129,6 +129,10 @@ export async function devApiPost<T = unknown>(
 
   // 模拟异步网络延迟
   await new Promise((resolve) => setTimeout(resolve, 50));
+  // 下载保留可操作的等待窗口，让演示模式也能检查取消及部分完成状态。
+  if (["config/typst-fonts/download", "config/template-resources/download"].includes(path)) {
+    await new Promise(resolve => setTimeout(resolve, 800));
+  }
   const res = matchMockHandler("POST", path, undefined, body);
   return res as ApiResponse<T>;
 }

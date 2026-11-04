@@ -30,7 +30,15 @@ export interface MockHandlerResponse<T = unknown> {
   [key: string]: unknown;
 }
 
+const cancelledDownloads = new Set<string>();
+
 export const mockHandlers = {
+  "POST config/downloads/cancel": (body?: Record<string, unknown>) => {
+    if (typeof body?.download_id !== "string") return { status: "error", message: "下载标识无效" };
+    if (cancelledDownloads.size >= 1024) cancelledDownloads.clear();
+    cancelledDownloads.add(body.download_id);
+    return { status: "ok", data: { download_id: body.download_id, cancelled: true } };
+  },
   ...configMockHandlers,
   ...managedFileMockHandlers,
   ...managedRecordMockHandlers,
@@ -48,6 +56,9 @@ export const mockHandlers = {
     return { status: "ok", data: mockTemplateResources };
   },
   "POST config/template-resources/download": (body?: Record<string, unknown>) => {
+    if (typeof body?.download_id === "string" && cancelledDownloads.has(body.download_id)) {
+      return { status: "error", message: "下载已取消，已完成的文件会保留" };
+    }
     const file = mockTemplateResources.groups.flatMap((group) => group.files).find((item) => item.name === body?.name);
     if (!file) return { status: "error", message: "演示素材不在清单中" };
     if (file.name === "scrapbook/assistant.jpg" && String(body?.cdn_base_url).includes("jsdmirror")) {
@@ -66,6 +77,9 @@ export const mockHandlers = {
     return { status: "ok", data: mockTypstFonts };
   },
   "POST config/typst-fonts/download": (body?: Record<string, unknown>) => {
+    if (typeof body?.download_id === "string" && cancelledDownloads.has(body.download_id)) {
+      return { status: "error", message: "下载已取消，已完成的文件会保留" };
+    }
     const theme = body?.theme;
     const selected = mockTypstFonts.groups?.find(group => group.theme === theme);
     if (theme != null && !selected) return { status: "error", message: "未知 Typst 模板" };
