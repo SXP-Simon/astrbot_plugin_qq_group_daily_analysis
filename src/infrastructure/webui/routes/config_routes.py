@@ -646,12 +646,21 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 cfg_mgr.save_config()
 
             saved_revision = _config_revision(config_obj)
+            save_message = "配置已成功保存并持久化生效"
 
             if self.auto_scheduler is not None and self.context is not None:
-                self.auto_scheduler.schedule_jobs(self.context)
-                if self.auto_scheduler.incremental_trigger is not None:
-                    await (
-                        self.auto_scheduler.incremental_trigger.refresh_target_states()
+                try:
+                    self.auto_scheduler.schedule_jobs(self.context)
+                    if self.auto_scheduler.incremental_trigger is not None:
+                        # 配置已落盘，调度刷新不能无限占用保存请求或伪装成写盘失败。
+                        await asyncio.wait_for(
+                            self.auto_scheduler.incremental_trigger.refresh_target_states(),
+                            timeout=5,
+                        )
+                except Exception:
+                    logger.warning("配置已保存，但调度刷新未完成。", exc_info=True)
+                    save_message = (
+                        "配置已保存，但调度刷新未完成；请检查运行日志并重新加载插件。"
                     )
 
             logger.info("WebUI 配置中心已更新并保存插件配置。")
@@ -659,7 +668,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
             return json_response(
                 {
                     "status": "ok",
-                    "message": "配置已成功保存并持久化生效",
+                    "message": save_message,
                     "revision": saved_revision,
                 }
             )
