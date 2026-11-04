@@ -113,6 +113,15 @@ class TypstFontGroup(TypedDict):
     ready: bool
 
 
+class TypstFontPreset(TypedDict):
+    """手动获取字体时使用的固定版本来源及插件目标文件名。"""
+
+    name: str
+    download_url: str
+    upstream_url: str
+    cdn_path: str | None
+
+
 class TypstFontStatus(TypedDict):
     """WebUI 使用的受管理字体状态。"""
 
@@ -121,6 +130,7 @@ class TypstFontStatus(TypedDict):
     missing: list[str]
     ready: bool
     groups: list[TypstFontGroup]
+    presets: list[TypstFontPreset]
 
 
 class FontDownloadProgress(TypedDict):
@@ -149,11 +159,29 @@ def typst_font_status(data_dir: Path) -> TypstFontStatus:
         if p.suffix.lower() in {".ttf", ".otf", ".ttc"} and p.is_file()
     )
     missing = [name for name in FONT_SOURCES if name not in files]
+    presets: list[TypstFontPreset] = []
+    for name, location in FONT_SOURCES.items():
+        cdn_path = location if location.startswith("gh/") else None
+        if cdn_path:
+            repository, path = cdn_path[3:].split("@", 1)
+            location = f"https://raw.githubusercontent.com/{repository}/{path}"
+        owner, repository, reference, path = location.removeprefix(
+            "https://raw.githubusercontent.com/"
+        ).split("/", 3)
+        presets.append(
+            {
+                "name": name,
+                "download_url": location,
+                "upstream_url": f"https://github.com/{owner}/{repository}/blob/{reference}/{path}",
+                "cdn_path": cdn_path,
+            }
+        )
     return {
         "directory": str(directory),
         "files": files,
         "missing": missing,
         "ready": not missing,
+        "presets": presets,
         "groups": [
             {
                 "theme": theme,

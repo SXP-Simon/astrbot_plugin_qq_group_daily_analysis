@@ -27,6 +27,15 @@ async def test_font_file_download_is_limited_to_the_selected_preset(tmp_path, mo
     status = await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test", "HatsuneMiku", name=filename)
     assert calls == [filename]
     assert status["files"] == [filename]
+    presets = {item["name"]: item for item in status["presets"]}
+    assert set(presets) == set(typst_fonts.FONT_SOURCES)
+    assert presets["LXGWWenKai.ttf"] == {
+        "name": "LXGWWenKai.ttf",
+        "download_url": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.522/fonts/TTF/LXGWWenKai-Regular.ttf",
+        "upstream_url": "https://github.com/lxgw/LxgwWenKai/blob/v1.522/fonts/TTF/LXGWWenKai-Regular.ttf",
+        "cdn_path": None,
+    }
+    assert presets["Outfit.ttf"]["cdn_path"] == typst_fonts.FONT_SOURCES["Outfit.ttf"]
     for name in ("../outside.ttf", "Cinzel.ttf"):
         with pytest.raises(ValueError, match="字体"):
             await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test", "HatsuneMiku", name=name)
@@ -159,7 +168,7 @@ def test_cdn_cache_works_without_development_assets(tmp_path, monkeypatch):
 
 
 def test_bad_font_response_leaves_no_partial_files(tmp_path, monkeypatch):
-    monkeypatch.setattr(typst_fonts, "FONT_SOURCES", {"Noto.ttf": "font.ttf"})
+    monkeypatch.setattr(typst_fonts, "FONT_SOURCES", {"Noto.ttf": "gh/test/fonts@v1/font.ttf"})
 
     async def check():
         app = web.Application()
@@ -167,7 +176,7 @@ def test_bad_font_response_leaves_no_partial_files(tmp_path, monkeypatch):
         async def not_a_font(request):
             return web.Response(text="<html>CDN error</html>")
 
-        app.router.add_get("/font.ttf", not_a_font)
+        app.router.add_get("/gh/test/fonts@v1/font.ttf", not_a_font)
         runner = web.AppRunner(app)
         await runner.setup()
         await web.TCPSite(runner, "127.0.0.1", 0).start()
@@ -305,14 +314,14 @@ async def test_theme_font_download_skips_other_themes_and_reuses_shared_files(
         return web.Response(body=payload)
 
     app = web.Application()
-    app.router.add_get("/outfit.ttf", font)
+    app.router.add_get("/gh/test/fonts@v1/outfit.ttf", font)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "127.0.0.1", 0).start()
     monkeypatch.setattr(
         typst_fonts,
         "FONT_SOURCES",
-        {**typst_fonts.FONT_SOURCES, "Outfit.ttf": "outfit.ttf"},
+        {**typst_fonts.FONT_SOURCES, "Outfit.ttf": "gh/test/fonts@v1/outfit.ttf"},
     )
     try:
         cdn = f"http://127.0.0.1:{runner.addresses[0][1]}"
@@ -325,7 +334,7 @@ async def test_theme_font_download_skips_other_themes_and_reuses_shared_files(
         assert selected["ready"] and not selected["missing"]
         assert not status["ready"] and "Cinzel.ttf" in status["missing"]
         await typst_resources.download_typst_fonts(tmp_path, cdn, "HatsuneMiku")
-        assert calls == ["/outfit.ttf"]
+        assert calls == ["/gh/test/fonts@v1/outfit.ttf"]
         with pytest.raises(ValueError, match="未知"):
             await typst_resources.download_typst_fonts(tmp_path, cdn, "../../outside")
     finally:
