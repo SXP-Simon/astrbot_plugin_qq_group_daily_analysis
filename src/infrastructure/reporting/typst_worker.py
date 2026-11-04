@@ -26,6 +26,9 @@ class TypstWorkerMetrics(TypedDict, total=False):
     layout_ms: float
     raster_ms: float
     worker_peak_rss_mb: float
+    worker_start_rss_mb: float
+    worker_peak_delta_mb: float
+    worker_rss_source: str
 
 
 def _custom_page_size(svg: bytes | list[bytes] | None) -> tuple[float, float]:
@@ -109,6 +112,7 @@ def compile_report(
     Raises:
         RuntimeError: 缺少中文字体、依赖或报告超过像素预算。
     """
+    _collect_peak(metrics, baseline=True)
     try:
         import typst
     except ImportError as exc:
@@ -153,28 +157,54 @@ def compile_report(
         _collect_peak(metrics)
 
 
-def _collect_peak(metrics: TypstWorkerMetrics | None) -> None:
-    """Record peak worker RSS even when template compilation fails.
+def _collect_peak(
+    metrics: TypstWorkerMetrics | None, *, baseline: bool = False
+) -> None:
+    """记录隔离编译自身的 RSS 峰值，避免 Linux 启动前的继承统计污染。
 
     Args:
-        metrics: Optional telemetry destination, never mixed with host RSS.
+        metrics: 可选遥测目标，与宿主 RSS 分开保存。
+        baseline: 在加载编译器前记录启动 RSS，供计算峰值增长量。
     """
     if metrics is None:
         return
-    # Windows 使用进程峰值工作集，POSIX 使用内核记录的历史最大 RSS。
     try:
+        current: float | None = None
         if sys.platform == "win32":
             import psutil
 
-            peak = psutil.Process().memory_info()._asdict()["peak_wset"] / 1024**2
+            info = psutil.Process().memory_info()
+            peak = info._asdict()["peak_wset"] / 1024**2
+            current = info.rss / 1024**2
+            source = "windows_working_set"
+        elif sys.platform == "linux":
+            # ru_maxrss 跨 exec 保留，可能带入 AstrBot 的大内存；VmHWM 属于当前映像。
+            fields = dict(
+                line.split(":", 1)
+                for line in Path("/proc/self/status")
+                .read_text(encoding="ascii")
+                .splitlines()
+                if line.startswith(("VmHWM:", "VmRSS:"))
+            )
+            peak = float(fields["VmHWM"].split()[0]) / 1024
+            current = float(fields["VmRSS"].split()[0]) / 1024
+            source = "linux_proc_status"
         else:
             import resource
 
             peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (
                 1024**2 if sys.platform == "darwin" else 1024
             )
+            source = "posix_getrusage"
         metrics["worker_peak_rss_mb"] = round(peak, 2)
-    except (ImportError, OSError, KeyError):
+        metrics["worker_rss_source"] = source
+        if baseline and current is not None:
+            metrics["worker_start_rss_mb"] = round(current, 2)
+        if "worker_start_rss_mb" in metrics:
+            metrics["worker_peak_delta_mb"] = round(
+                max(0.0, peak - metrics["worker_start_rss_mb"]), 2
+            )
+    except (ImportError, OSError, KeyError, ValueError, IndexError):
         pass
 
 

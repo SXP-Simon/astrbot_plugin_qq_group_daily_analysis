@@ -375,7 +375,7 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
     with Image.open(BytesIO(base64.b64decode(image.removeprefix("base64://")))) as output:
         assert output.format == "PNG" and output.width == 940
         output.verify()
-    saved = list((generator.data_dir / "reports").glob(f"*_{trace.trace_id}.jpg"))
+    saved = list((generator.data_dir / "reports").glob(f"*_{trace.trace_id}.png"))
     assert len(saved) == 1
     assert saved[0].read_bytes() == base64.b64decode(image.removeprefix("base64://"))
     assert trace.metadata["typst_recovery"]["mode"] == "basic"
@@ -387,6 +387,11 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
     assert "error" not in spans["TYPST_COMPILE"]["payload"]
     assert spans["TYPST_RECOVERY"]["status"] == "success"
     assert spans["TYPST_RECOVERY"]["payload"]["worker_peak_rss_mb"] > 0
+    memory = spans["TYPST_RECOVERY"]["payload"]
+    assert memory["worker_rss_source"] in ("linux_proc_status", "windows_working_set", "posix_getrusage")
+    if memory["worker_rss_source"] != "posix_getrusage":
+        assert memory["worker_start_rss_mb"] > 0
+        assert abs(memory["worker_peak_delta_mb"] + memory["worker_start_rss_mb"] - memory["worker_peak_rss_mb"]) <= 0.02
     assert spans["TYPST_ENCODE"]["payload"]["image_bytes"] > 0
     trace.finish(TaskEvent.SUCCEED)
     assert trace.status == "warning"

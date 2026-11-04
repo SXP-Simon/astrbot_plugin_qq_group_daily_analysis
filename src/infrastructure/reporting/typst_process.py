@@ -162,7 +162,14 @@ def _parse_worker_metrics(stdout: bytes | None) -> TypstWorkerMetrics | None:
     if not isinstance(raw, dict):
         return None
     metrics: TypstWorkerMetrics = {}
-    for key in ("font_setup_ms", "layout_ms", "raster_ms", "worker_peak_rss_mb"):
+    for key in (
+        "font_setup_ms",
+        "layout_ms",
+        "raster_ms",
+        "worker_peak_rss_mb",
+        "worker_start_rss_mb",
+        "worker_peak_delta_mb",
+    ):
         value = raw.get(key)
         if (
             isinstance(value, (int, float))
@@ -171,4 +178,11 @@ def _parse_worker_metrics(stdout: bytes | None) -> TypstWorkerMetrics | None:
             and value >= 0
         ):
             metrics[key] = float(value)
+    source = raw.get("worker_rss_source")
+    if isinstance(source, str) and source in (
+        "linux_proc_status",
+        "windows_working_set",
+        "posix_getrusage",
+    ):
+        metrics["worker_rss_source"] = source
     return metrics
