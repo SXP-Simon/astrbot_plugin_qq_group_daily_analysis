@@ -319,7 +319,7 @@ class ConfigManager:
         return val if isinstance(val, list) else [val]
 
     def get_qq_official_t2i_summary_dashboard_enabled(self) -> bool:
-        """是否启用 QQ 官方 T2I 概览图。"""
+        """是否启用 QQ 官方群聊概览图。"""
         group = self._get_group("qq_official")
         if "enable_t2i_summary_dashboard" in group:
             return bool(group["enable_t2i_summary_dashboard"])

@@ -210,9 +210,9 @@
         "items": {
             "enable_t2i_activity_histogram": {
                 "type": "bool",
-                "description": "启用 T2I 群聊概览图",
+                "description": "启用群聊概览图",
                 "default": true,
-                "hint": "在 QQ 官方 Markdown 报告中嵌入透明背景的日期、基础统计与 24 小时直方图。渲染失败时自动回退为完整文字报告。"
+                "hint": "在 QQ 官方 Markdown 报告内嵌入透明背景的日期、基础统计与 24 小时直方图。首选渲染方案为 Typst 时，本地生成 PNG，上传 QQ 素材后与正文同条发送，无需公网图床；HTML/T2I 沿用公网图片 URL。生成、上传或转存失败时恢复完整文字报告。Typst 需先在数据管理中下载中文字体。"
             }
         }
     },
