@@ -60,6 +60,7 @@ class RenderingStrategyOptions(ScreenshotOptions, total=False):
     font_mode: FontMode
     strategy_name: str
     strategy_priority: int
+    raster_ppi: int
 
 
 RenderingTemplateMarker = TypedDict(
@@ -96,6 +97,7 @@ class RenderingStrategyConfig(RenderingResourceConfig, RenderingTemplateMarker):
     timeout: int
     request_timeout: NotRequired[int]
     font_mode: NotRequired[FontMode]
+    raster_ppi: NotRequired[int]
 
 
 def normalize_t2i_endpoint(value: str) -> str:
@@ -315,6 +317,13 @@ def parse_rendering_strategies(
                     f"第 {index} 个渲染方案的请求等待上限必须是 1000 到 300000 的整数"
                 )
             plan["request_timeout"] = request_timeout
+        if render_service == "typst":
+            raster_ppi = item.get("raster_ppi", 144)
+            if type(raster_ppi) is not int or raster_ppi not in (144, 180, 216):
+                raise ValueError(
+                    f"第 {index} 个 Typst 方案的导出密度请选择 144、180 或 216 PPI"
+                )
+            plan["raster_ppi"] = raster_ppi
         if render_service == "custom":
             font_mode = item.get("font_mode", "network")
             if font_mode not in ("network", "local"):

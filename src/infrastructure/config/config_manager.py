@@ -450,6 +450,7 @@ class ConfigManager:
                     viewport_height=max(1, int(group.get("t2i_viewport_height", 900))),
                 )
             else:
+                plan["raster_ppi"] = item.get("raster_ppi", 144)
                 for key in (
                     "service_endpoint",
                     "service_token",

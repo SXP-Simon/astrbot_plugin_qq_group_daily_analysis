@@ -758,7 +758,7 @@
                     "typst": {
                         "name": "Typst 本地排版",
                         "display_item": "name",
-                        "description": "独立生成固定 940px 宽度的静态长图，高度随内容延伸；不调用 AstrBot 或浏览器，字体和素材由插件数据目录管理。",
+                        "description": "独立生成固定 940px 版心的静态长图，可按清晰度导出至最高 1410px，高度随内容延伸；不调用 AstrBot 或浏览器，字体和素材由插件数据目录管理。",
                         "items": {
                             "name": {
                                 "type": "string",
@@ -780,6 +780,14 @@
                                     "png",
                                     "jpeg"
                                 ]
+                            },
+                            "raster_ppi": {
+                                "type": "int",
+                                "description": "导出清晰度（PPI）",
+                                "default": 144,
+                                "options": [144, 180, 216],
+                                "labels": ["标准 · 940px（144 PPI）", "清晰 · 1175px（180 PPI）", "高清 · 1410px（216 PPI）"],
+                                "hint": "只提高栅格密度，排版仍固定为 940px。最高输出 1410px；高密度增加编译时间、内存和文件体积，超长报告超出像素预算时自动降低密度。PNG 无损，不受 JPEG 质量影响。"
                             },
                             "quality": {
                                 "type": "int",

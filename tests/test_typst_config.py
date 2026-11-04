@@ -63,3 +63,22 @@ def test_native_runtime_never_reads_browser_layout(key, value):
     runtime = manager.get_t2i_rendering_strategies()[0]
     assert runtime["render_service"] == "typst"
     assert not {"full_page", "device_scale_factor_level", "viewport_width", "viewport_height", "request_timeout"}.intersection(runtime)
+
+
+@pytest.mark.parametrize("ppi", [144, 180, 216])
+def test_density_round_trips_into_native_runtime_only(ppi):
+    manager = object.__new__(ConfigManager)
+    manager.config = {"t2i_rendering": {"t2i_rendering_strategies": [
+        {"__template_key": "typst", "raster_ppi": ppi},
+        {"__template_key": "strategy", "raster_ppi": ppi},
+    ]}}
+    native, browser = manager.get_t2i_rendering_strategies()
+    assert native["raster_ppi"] == ppi
+    assert "raster_ppi" not in browser
+    assert "typst_width" not in native and "viewport_width" not in native
+
+
+@pytest.mark.parametrize("value", [72, 145, 217, 288, True, "216", None])
+def test_invalid_density_is_rejected_before_rendering(value):
+    with pytest.raises(ValueError, match="导出密度"):
+        parse_rendering_strategies([{"__template_key": "typst", "raster_ppi": value}])
