@@ -3,7 +3,8 @@
 AstrBot 的 /stop 是协作式取消：它给本会话的活跃事件打上 ``agent_stop_requested``
 标记。命令式插件需要主动读取标记，才能取消自己创建的工作任务。
 
-本模块只读宿主的公开事件状态（``event.get_extra``），把它翻译成一个可等待的停止请求。
+本模块读取宿主的公开事件状态（``event.get_extra``），并登记本插件的活跃监听器，
+使宿主未登记命令任务时仍能按同一会话接收 stop 请求。
 
 两点刻意的取舍：
 
@@ -18,12 +19,14 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, cast
+from weakref import WeakSet
 
 from ...application.services.stop_request import StopRequest
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from typing import ClassVar
 
     from astrbot.api.event import AstrMessageEvent
 
@@ -44,6 +47,8 @@ class FrontendStopWatcher:
         poll_interval: 后台轮询间隔，发送边界仍会显式即时读取。
     """
 
+    _active: ClassVar[WeakSet[FrontendStopWatcher]] = WeakSet()
+
     def __init__(
         self,
         event: AstrMessageEvent,
@@ -55,6 +60,47 @@ class FrontendStopWatcher:
         self._poll_task: asyncio.Task[None] | None = None
         self._stop_request = StopRequest(self._read_host_stop)
         self._read_error_logged = False
+        origin = getattr(event, "unified_msg_origin", "")
+        self._origin = origin if isinstance(origin, str) else ""
+
+    @classmethod
+    def request_stop_for(cls, event: AstrMessageEvent) -> int:
+        """请求停止同一宿主会话的插件任务，同时保留宿主 Agent 的停止语义。
+
+        Args:
+            event: 已通过宿主命令匹配的 stop 事件。
+
+        Returns:
+            匹配到的活跃插件监听器数量；零表示继续由宿主处理。
+        """
+        origin = getattr(event, "unified_msg_origin", "")
+        if not isinstance(origin, str) or not origin:
+            return 0
+        matches = [
+            watcher for watcher in tuple(cls._active) if watcher._origin == origin
+        ]
+        if not matches:
+            logger.debug(
+                "收到 stop，但当前会话没有手动群分析监听器: umo=%s，活跃监听数=%s",
+                origin,
+                len(cls._active),
+            )
+            return 0
+        for watcher in matches:
+            watcher.stop_request.request()
+        # 不注册或覆盖宿主回调，只复用宿主公开的同会话停止接口。
+        try:
+            from astrbot.core.utils.active_event_registry import active_event_registry
+
+            active_event_registry.request_agent_stop_all(origin, exclude=event)
+        except Exception as error:
+            logger.warning("插件任务已收到停止请求，宿主停止桥接未完成: %s", error)
+        logger.info(
+            "收到 stop 命令，中止同会话群分析任务: umo=%s，任务数=%s",
+            origin,
+            len(matches),
+        )
+        return len(matches)
 
     @property
     def stop_request(self) -> StopRequest:
@@ -81,6 +127,8 @@ class FrontendStopWatcher:
             )
             return
         self._poll_task = asyncio.create_task(self._poll_loop())
+        self._active.add(self)
+        logger.debug("已启动群分析停止监听: umo=%s", self._origin or "未知")
 
     async def stop(self) -> None:
         """停止监听，可重复调用。
@@ -89,6 +137,7 @@ class FrontendStopWatcher:
             None
         """
         task = self._poll_task
+        self._active.discard(self)
         self._poll_task = None
         if task is not None and not task.done():
             task.cancel()
@@ -101,6 +150,7 @@ class FrontendStopWatcher:
             None
         """
         task = self._poll_task
+        self._active.discard(self)
         self._poll_task = None
         if task is not None and not task.done():
             task.cancel()

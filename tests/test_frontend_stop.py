@@ -111,12 +111,15 @@ async def test_watcher_stop_is_safe_to_call_twice():
 
 
 @pytest.mark.asyncio
-async def test_handler_aborts_work_and_releases_group_lock():
+@pytest.mark.parametrize("origin", [None, "任意东西:GroupMessage:MEMBER_OPENID_GROUP_OPENID", "qq_webhook:GroupMessage:GROUP_OPENID"])
+async def test_handler_aborts_work_and_releases_group_lock(origin):
     guard = TaskGuard(2)
     service = StubAnalysisService(guard)
     manager = StubTaskManager()
     handler = make_handler(service, manager)
     event = HostEvent()
+    if origin:
+        event.unified_msg_origin = origin
     delivered: list[object] = []
 
     async def consume() -> None:
@@ -128,7 +131,13 @@ async def test_handler_aborts_work_and_releases_group_lock():
     assert guard.is_group_running("123456", "daily") is True
 
     stop_requested_at = time.monotonic()
-    event.set_extra(STOP_EXTRA_KEY, True)
+    if origin:
+        stop_event = HostEvent()
+        stop_event.unified_msg_origin = origin
+        assert FrontendStopWatcher.request_stop_for(stop_event) == 1
+        assert not event.get_extra(STOP_EXTRA_KEY)
+    else:
+        event.set_extra(STOP_EXTRA_KEY, True)
     await asyncio.wait_for(consumer, timeout=3)
     stop_latency = time.monotonic() - stop_requested_at
 

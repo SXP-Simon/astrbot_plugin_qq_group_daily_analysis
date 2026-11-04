@@ -1,4 +1,7 @@
 import asyncio
+import sys
+from types import ModuleType
+from unittest.mock import Mock
 
 import pytest
 
@@ -14,6 +17,33 @@ class HostStopEvent:
     def get_extra(self, key, default=None):
         self.read.set()
         return self.extras.get(key, default)
+
+
+@pytest.mark.asyncio
+async def test_command_stop_matches_exact_session_and_preserves_host_stop(monkeypatch):
+    host_registry = Mock()
+    module = ModuleType("astrbot.core.utils.active_event_registry")
+    module.active_event_registry = host_registry
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    owners = [HostStopEvent() for _ in range(3)]
+    origins = ["official:GroupMessage:member_group", "official:GroupMessage:other_group", "other_bot:GroupMessage:member_group"]
+    watchers = []
+    for owner, origin in zip(owners, origins):
+        owner.unified_msg_origin = origin
+        watcher = FrontendStopWatcher(owner)
+        await watcher.start()
+        watchers.append(watcher)
+    command = HostStopEvent()
+    command.unified_msg_origin = origins[0]
+    try:
+        assert FrontendStopWatcher.request_stop_for(command) == 1
+        assert [watcher.stop_request.requested for watcher in watchers] == [True, False, False]
+        host_registry.request_agent_stop_all.assert_called_once_with(origins[0], exclude=command)
+        await watchers[0].stop()
+        assert FrontendStopWatcher.request_stop_for(command) == 0
+    finally:
+        for watcher in watchers:
+            await watcher.stop()
 
 
 @pytest.mark.asyncio
