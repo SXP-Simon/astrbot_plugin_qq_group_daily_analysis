@@ -13,7 +13,7 @@ export function ManagedFileList({ vm, partition: activePartition, references }: 
   const fileAction = ["typst_assets", "preview_cache"].includes(activePartition.key) ? "清理" : "删除";
   return <Space direction="vertical" style={{ width: "100%" }}>
             <Space wrap>
-              <Input.Search aria-label="搜索文件" placeholder="搜索文件名或相对路径" allowClear onSearch={vm.searchFiles} style={{ width: 260 }} />
+              <Input.Search key={vm.search} aria-label="搜索文件" placeholder="搜索文件名或相对路径" defaultValue={vm.search} allowClear onSearch={vm.searchFiles} style={{ width: 260 }} />
               <Button icon={<ReloadOutlined />} loading={vm.loading} onClick={() => { vm.clearSelection(); void vm.load(); void vm.refresh(); void references.refresh(); }}>刷新列表</Button>
               {activePartition.writable && activePartition.key !== "config_files" && <Upload showUploadList={false} beforeUpload={file => { void vm.prepareUpload(file); return false; }}><Button icon={<UploadOutlined />} disabled={vm.busy}>上传文件</Button></Upload>}
               {activePartition.key === "custom_templates" && <Button onClick={() => vm.setEditor({ name: templatePrefix, text: "" })}>新建源码</Button>}

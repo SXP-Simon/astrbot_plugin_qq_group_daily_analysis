@@ -108,13 +108,20 @@ export function useManagedFiles() {
     const known = new Map([...selected, ...files].map(file => [file.name, file]));
     setSelected(keys.slice(0, 200).flatMap(key => known.get(String(key)) ? [known.get(String(key))!] : []));
   };
-  const prepareUpload = async (file: File, replacement = false) => {
+  const prepareUpload = async (file: File, replacement = false, targetName?: string) => {
     const sequence = detailSequence.current;
     try {
       const encoded = await readUploadFile(file);
       if (sequence !== detailSequence.current) return;
       if (replacement) setEditor(current => current && { ...current, encoded });
       else {
+        if (targetName && partition?.key === "template_resources") {
+          const result = await fetchManagedFiles(partition.key, targetName, 1);
+          if (sequence !== detailSequence.current) return;
+          const existing = result.items.find(item => item.name === targetName);
+          setEditor({ name: targetName, text: "", encoded, revision: existing?.revision });
+          return;
+        }
         const prefix = partition?.key === "custom_templates" && directory && directory !== "." ? `${directory}/` : "";
         setEditor({ name: prefix + file.name, text: "", encoded });
       }

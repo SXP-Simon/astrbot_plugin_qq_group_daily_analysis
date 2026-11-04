@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
+import { ResourceManagementContext } from "../../../features/manage-template-resources/model/ResourceManagementContext";
 import { Card, Space, Alert, Tabs } from "antd";
 import {
   FolderOpenOutlined,
@@ -17,6 +18,8 @@ import type { FontManagementRequest } from "../../../features/manage-typst-fonts
 export const PluginDataPage: React.FC<{ onNavigate?: (page: "reports" | "config" | "traces") => void; fontRequest?: FontManagementRequest | null; onFontRequestHandled?: () => void }> = ({ onNavigate, fontRequest, onFontRequestHandled }) => {
   const vm = usePluginDataViewModel();
   const [activeTab, setActiveTab] = useState<string>("partitions");
+  const resourceRequest = useContext(ResourceManagementContext)?.request;
+  useEffect(() => { if (resourceRequest) setActiveTab("partitions"); }, [resourceRequest]);
   useEffect(() => { if (fontRequest) setActiveTab("partitions"); }, [fontRequest]);
 
   useEffect(() => {

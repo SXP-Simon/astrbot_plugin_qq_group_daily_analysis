@@ -13,6 +13,17 @@ beforeEach(() => {
   vi.mocked(fetchManagedFiles).mockImplementation(async key => ({ items: [{ name: `${key}/report.typ`, revision: key, size_bytes: 1, modified_at: 1, media_type: "text/plain", editable: true, downloadable: true }], total: 1 }));
 });
 
+it("上传主题素材按固定清单命名，并读取现有文件修订号以安全替换", async () => {
+  const resource = { ...partitions[0], key: "template_resources" };
+  const name = "ATRI/paper.png";
+  vi.mocked(fetchManagedFiles).mockResolvedValue({ items: [{ name, revision: "existing", size_bytes: 10, modified_at: 1, media_type: "image/png", editable: false, downloadable: true }], total: 1 });
+  const { result } = renderHook(() => useManagedFiles());
+  act(() => result.current.select(resource));
+  await act(async () => { await result.current.prepareUpload(new File([new Uint8Array(20)], "upstream.png"), false, name); });
+  expect(result.current.editor).toMatchObject({ name, revision: "existing", encoded: expect.any(String) });
+  expect(fetchManagedFiles).toHaveBeenCalledWith("template_resources", name, 1);
+});
+
 it.each(["save", "delete"])("切换分区后忽略旧 %s 的列表和详情更新", async operation => {
   let finish!: () => void;
   const pending = new Promise<void>(resolve => { finish = resolve; });
