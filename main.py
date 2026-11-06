@@ -285,7 +285,6 @@ class GroupDailyAnalysis(Star):
             analysis_service=self.analysis_service,
             active_task_manager=self.active_task_manager,
             plugin_data_dir=plugin_data_dir,
-            plugin_instance=self,
         )
         self.analysis_command_handler = AnalysisCommandHandler(
             config_manager=self.config_manager,
@@ -298,7 +297,6 @@ class GroupDailyAnalysis(Star):
             message_sender=self.message_sender,
             comic_handler=self.comic_command_handler,
             plugin_data_dir=plugin_data_dir,
-            plugin_instance=self,
             stop_watcher_factory=FrontendStopWatcher,
         )
 
