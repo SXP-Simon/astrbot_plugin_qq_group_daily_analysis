@@ -31,7 +31,7 @@
 cd astrbot_plugin_qq_group_daily_analysis
 
 # 安装开发依赖与测试工具
-uv venv
+uv venv --python 3.12
 uv pip install -r requirements-dev.txt
 
 # 安装 git pre-commit 钩子 (务必同时安装 pre-commit 与 commit-msg 门禁)
@@ -84,6 +84,14 @@ ESLint 配置、依赖或构建配置变化时，请运行完整前端检查。�
 
 快速钩子只检查暂存路径对应的文件，不负责推断跨文件影响。手动完整检查没有自动“结果缓存”；选择 `--command` 时需确认省略步骤已有适用于当前代码的有效结果。
 
+### 检查工具与解释器
+
+Python 基线统一为 3.12。`requirements-tools.txt` 固定 Ruff 和 Pyright 的版本，Lefthook、pre-commit 和 CI 都通过 `scripts/check_python.py` 读取它，升级时只需修改这一处。工具通过 uv 的隔离缓存执行，不更新 AstrBot 的工具依赖；首次执行需要下载，后续复用缓存。
+
+Pyright 使用运行检查脚本的 Python 解释器查找依赖，不再混用硬编码的 `site-packages`。嵌入 AstrBot 开发时，`uv run python ...` 使用宿主环境；独立检出时，先安装开发依赖，再用 `.venv/bin/python scripts/check_python.py typecheck`（Windows 为 `.venv/Scripts/python.exe`）。IDE 也应选择同一解释器。`extraPaths` 仅保留插件及嵌入开发时的 AstrBot 源码目录，支持跳转到宿主源码。
+
+Ruff 保留现有测试目录豁免，并启用 `force-exclude`，目录扫描和暂存文件检查使用相同范围；这不影响 pytest 执行测试。旧枚举及泛型语法暂不强制改写，避免工具迁移改变运行时类型行为。引号由 formatter 管理，现代化语法检查统一交给 Ruff `UP`，不再重复运行 pyupgrade。
+
 ### 1.2 WebUI 控制台前端环境
 ```bash
 # 进入前端子工程
@@ -121,7 +129,7 @@ pnpm dev
      - **可选依赖与动态调度**：Telegram、Discord 等按需加载的可选依赖，统一使用 `if TYPE_CHECKING:` 导入静态类型；动态调用必须使用 `inspect.isawaitable` 或安全收窄守卫；
    * 提交前必须在插件根目录下运行 Pyright 检查，确保 **0 错误、0 警告**：
      ```bash
-     npx pyright
+     uv run python scripts/check_python.py typecheck
      ```
 6. **DDD 领域驱动设计与领域类型优先 (DDD & Domain Types First)**：
    * **领域层 (`src/domain/`)**：纯业务核心，不依赖具体外部框架与基础设施；
@@ -150,8 +158,8 @@ pnpm dev
 8. **一键格式化、自动修复 Lint 与单元测试**：
    * 强烈推荐使用一键格式化与自动修复指令（自动消除未使用的 import、调整 import 顺序及代码风格），准备后端 PR 时确认以下检查已通过；同一份代码已有通过结果时不要重复执行：
      ```bash
-     uv run ruff format . ; uv run ruff check . --fix
-     npx pyright
+     uv run python scripts/check_python.py format . ; uv run python scripts/check_python.py lint . --fix
+     uv run python scripts/check_python.py typecheck
      uv run pytest tests/
      ```
 
@@ -348,10 +356,10 @@ uv run scripts/debug_render.py -h
 3. 开发时执行定向检查，准备 PR 时补齐相关完整验证（已通过且未受后续改动影响的检查无需重跑）：
    ```bash
    # 1. 自动格式化并修复 Lint 问题
-   uv run ruff format . ; uv run ruff check . --fix
+   uv run python scripts/check_python.py format . ; uv run python scripts/check_python.py lint . --fix
 
    # 2. 静态类型检查
-   npx pyright
+   uv run python scripts/check_python.py typecheck
 
    # 3. 运行全量单元测试
    uv run pytest tests/

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from ...domain.repositories.avatar_repository import IAvatarRepository
@@ -90,9 +90,9 @@ class PlatformAdapter(
         Returns:
             int: 严格约束后的最远历史起始 Unix 时间戳。
         """
-        now_dt = now if now is not None else datetime.now(timezone.utc)
+        now_dt = now if now is not None else datetime.now(UTC)
         if now_dt.tzinfo is None:
-            now_dt = now_dt.replace(tzinfo=timezone.utc)
+            now_dt = now_dt.replace(tzinfo=UTC)
         days_start_ts = max(
             0, int((now_dt - timedelta(days=max(1, int(days)))).timestamp())
         )
@@ -104,7 +104,7 @@ class PlatformAdapter(
     def calculate_effective_cutoff_datetime(
         days: int = 1,
         since_ts: int | float | None = None,
-        tz: timezone | None = timezone.utc,
+        tz: timezone | None = UTC,
         now: datetime | None = None,
     ) -> datetime:
         """统一计算历史消息拉取的生效起始 datetime 对象。

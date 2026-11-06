@@ -39,9 +39,9 @@
 2. **静态检查与格式化**：
    - 按改动范围验证；准备 PR 或完成一组改动时，相关静态检查必须通过：
      ```bash
-     uv run ruff check .
-     uv run ruff format . --check
-     npx pyright src main.py
+     uv run python scripts/check_python.py lint .
+     uv run python scripts/check_python.py format . --check
+     uv run python scripts/check_python.py typecheck src main.py
      ```
    - 保持 **0 errors, 0 warnings**。
 3. **自动化测试**：

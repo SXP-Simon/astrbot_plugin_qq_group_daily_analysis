@@ -193,21 +193,16 @@ jobs:
 
       - name: Ruff Check & Format
         run: |
-          uvx ruff check .
-          uvx ruff format --check .
+          uv run --no-project python scripts/check_python.py lint .
+          uv run --no-project python scripts/check_python.py format --check .
 
       - name: Install Dependencies
         run: |
-          uv venv .venv
+          uv venv --python 3.12 .venv
           uv pip install -r requirements-dev.txt
 
-      - name: Set up Node.js for Pyright
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Pyright Type Check
-        run: npx pyright
+        run: .venv/bin/python scripts/check_python.py typecheck
 
       - name: Restore Typst Test Fonts
         uses: actions/cache@v4

@@ -137,7 +137,7 @@ async def _probe_resource(
                 )
             elif not result["success"]:
                 result["error"] = f"本次请求返回 HTTP {response.status}，可以稍后重试。"
-    except (TimeoutError, asyncio.TimeoutError):
+    except TimeoutError:
         result["error"] = f"等了 {PROBE_TIMEOUT_SECONDS} 秒仍未收到响应，可以稍后重试。"
     except aiohttp.ClientConnectorCertificateError:
         result["error"] = "这个地址的安全证书验证失败，请检查地址或换一个 CDN。"

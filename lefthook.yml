@@ -4,10 +4,10 @@ pre-commit:
   commands:
     ruff-format:
       glob: "*.{py,pyi}"
-      run: uv run ruff format --check {staged_files}
+      run: uv run python scripts/check_python.py format --check {staged_files}
     ruff-check:
       glob: "*.{py,pyi}"
-      run: uv run ruff check {staged_files}
+      run: uv run python scripts/check_python.py lint {staged_files}
     webui-lint:
       root: dashboard/
       glob: "dashboard/src/**.{ts,tsx,js,jsx}"
@@ -41,10 +41,10 @@ check-python:
   commands:
     lint:
       priority: 1
-      run: uv run ruff check . && uv run ruff format --check .
+      run: uv run python scripts/check_python.py lint . && uv run python scripts/check_python.py format --check .
     typecheck:
       priority: 2
-      run: npx pyright
+      run: uv run python scripts/check_python.py typecheck
     test:
       priority: 3
       run: uv run pytest tests/
