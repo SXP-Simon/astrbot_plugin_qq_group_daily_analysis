@@ -1,9 +1,6 @@
 import React from "react";
 import { Typography, Space, Button } from "antd";
-import {
-  ReloadOutlined,
-  PlayCircleOutlined,
-} from "@ant-design/icons";
+import { ReloadOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import logoImg from "../../shared/assets/logo.png";
 
 const { Title } = Typography;
@@ -58,19 +55,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </Space>
 
       <Space size="small">
-        <Button
-          size="small"
-          type="primary"
-          icon={<PlayCircleOutlined />}
-          onClick={onOpenTrigger}
-        >
+        <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={onOpenTrigger}>
           手动触发分析
         </Button>
-        <Button
-          size="small"
-          icon={<ReloadOutlined spin={loading} />}
-          onClick={onRefresh}
-        >
+        <Button size="small" icon={<ReloadOutlined spin={loading} />} onClick={onRefresh}>
           刷新
         </Button>
       </Space>

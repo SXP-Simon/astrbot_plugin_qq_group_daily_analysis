@@ -70,14 +70,17 @@ describe("condition 条件显示（官方键）", () => {
 
 describe("resolveDependencyValue", () => {
   it("优先按“分组.字段”取值", () => {
-    expect(resolveDependencyValue({ basic: { report_template: "ATRI" } }, "basic.report_template")).toBe(
-      "ATRI",
-    );
+    expect(
+      resolveDependencyValue({ basic: { report_template: "ATRI" } }, "basic.report_template"),
+    ).toBe("ATRI");
   });
 
   it("裸字段名跨分组查找", () => {
     expect(
-      resolveDependencyValue({ t2i_rendering: {}, basic: { report_template: "hack" } }, "report_template"),
+      resolveDependencyValue(
+        { t2i_rendering: {}, basic: { report_template: "hack" } },
+        "report_template",
+      ),
     ).toBe("hack");
   });
 

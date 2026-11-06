@@ -43,17 +43,23 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
   const [managedLocator, setManagedLocator] = useState<RecordLocator | null>(null);
   const [importing, setImporting] = useState(false);
   const { token } = theme.useToken();
-  const {
-    incrGroups,
-    selectedIncrGroup,
-    incrBatches,
-    incrCursor,
-    loadingIncremental,
-  } = vm;
+  const { incrGroups, selectedIncrGroup, incrBatches, incrCursor, loadingIncremental } = vm;
 
-  const selection = useRecordSelection(vm.incrBatches.map(item => ({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id })), () => { void vm.refreshIncrGroups(); void vm.loadIncrementalData(vm.selectedIncrGroup); });
+  const selection = useRecordSelection(
+    vm.incrBatches.map((item) => ({
+      kind: "batch",
+      group_id: item.group_id,
+      batch_id: item.batch_id,
+    })),
+    () => {
+      void vm.refreshIncrGroups();
+      void vm.loadIncrementalData(vm.selectedIncrGroup);
+    },
+  );
   const clearSelection = selection.clear;
-  useEffect(() => { clearSelection(); }, [vm.selectedIncrGroup, clearSelection]);
+  useEffect(() => {
+    clearSelection();
+  }, [vm.selectedIncrGroup, clearSelection]);
   const batchColumns = [
     {
       title: "批次 ID",
@@ -136,8 +142,8 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
                   (t.heat_score || 0) >= 80
                     ? "volcano"
                     : (t.heat_score || 0) >= 50
-                    ? "orange"
-                    : "geekblue"
+                      ? "orange"
+                      : "geekblue"
                 }
                 style={{
                   fontSize: 11,
@@ -160,11 +166,7 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
       width: 120,
       render: (_: unknown, item: IncrementalBatchItem) => {
         const total = item.token_usage?.total_tokens;
-        return (
-          <span style={SANS_NUM_STYLE}>
-            {total ? formatTokens(total) : "-"}
-          </span>
-        );
+        return <span style={SANS_NUM_STYLE}>{total ? formatTokens(total) : "-"}</span>;
       },
     },
     {
@@ -183,7 +185,15 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
           >
             详情
           </Button>
-          <Button size="small" type="link" onClick={() => setManagedLocator({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id })}>管理</Button>
+          <Button
+            size="small"
+            type="link"
+            onClick={() =>
+              setManagedLocator({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id })
+            }
+          >
+            管理
+          </Button>
           <Popconfirm
             title="确认删除该增量批次？"
             description="删除后该批次的话题与统计数据将不再参与汇总计算。"
@@ -191,9 +201,7 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
             cancelText="取消"
             okButtonProps={{ danger: true, size: "small" }}
             cancelButtonProps={{ size: "small" }}
-            onConfirm={() =>
-              vm.handleDeleteBatch(item.group_id, item.batch_id)
-            }
+            onConfirm={() => vm.handleDeleteBatch(item.group_id, item.batch_id)}
           >
             <Button
               size="small"
@@ -257,13 +265,7 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
                 cancelButtonProps={{ size: "small" }}
                 onConfirm={() => vm.handleResetIncrGroup(selectedIncrGroup)}
               >
-                <Button
-                  danger
-                  size="small"
-                  type="primary"
-                  ghost
-                  icon={<ClearOutlined />}
-                >
+                <Button danger size="small" type="primary" ghost icon={<ClearOutlined />}>
                   重置本群增量状态
                 </Button>
               </Popconfirm>
@@ -274,10 +276,7 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
 
       {/* 游标状态卡片 */}
       {selectedIncrGroup && incrCursor && (
-        <IncrementalCursorCards
-          cursor={incrCursor}
-          batchCount={incrBatches.length}
-        />
+        <IncrementalCursorCards cursor={incrCursor} batchCount={incrBatches.length} />
       )}
 
       {/* 批次明细表格 */}
@@ -287,9 +286,7 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
           <Space size={8}>
             <ThunderboltOutlined style={{ color: "#1677ff" }} />
             <span style={{ fontSize: 13, fontWeight: 600 }}>
-              {selectedIncrGroup
-                ? `群「${selectedIncrGroup}」暂存增量批次明细`
-                : "增量批次明细"}
+              {selectedIncrGroup ? `群「${selectedIncrGroup}」暂存增量批次明细` : "增量批次明细"}
             </span>
             {incrBatches.length > 0 && (
               <Tag color="blue" style={{ fontSize: 11 }}>
@@ -299,29 +296,51 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
           </Space>
         }
       >
-        <Button style={{ marginBottom: 12 }} onClick={() => setImporting(true)}>导入 / 新建增量批次</Button>
-      <ManagedRecordDialog locator={managedLocator} importKind={importing ? "batch" : undefined} onClose={() => { setManagedLocator(null); setImporting(false); }} onChanged={() => { void vm.refreshIncrGroups(); void vm.loadIncrementalData(vm.selectedIncrGroup); }} />
-        {selectedIncrGroup ? (<>
-          <Space direction="vertical" style={{ width: "100%", marginBottom: 12 }}>
-        <RecordSelectionActions vm={selection} label="增量批次" />
-      </Space>
-      <Table<IncrementalBatchItem>
-            rowKey={item => recordKey({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id })} rowSelection={{ selectedRowKeys: selection.keys, onChange: selection.select, preserveSelectedRowKeys: true, getCheckboxProps: () => ({ disabled: selection.busy }) }}
-            columns={batchColumns}
-            dataSource={incrBatches}
-            pagination={false}
-            size="small"
-            scroll={{ x: 1000 }}
-            loading={loadingIncremental}
-            locale={{
-              emptyText: (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="当前群暂无增量批次数据（已汇总为日报或尚未触发增量任务）"
-                />
-              ),
-            }}
-          />
+        <Button style={{ marginBottom: 12 }} onClick={() => setImporting(true)}>
+          导入 / 新建增量批次
+        </Button>
+        <ManagedRecordDialog
+          locator={managedLocator}
+          importKind={importing ? "batch" : undefined}
+          onClose={() => {
+            setManagedLocator(null);
+            setImporting(false);
+          }}
+          onChanged={() => {
+            void vm.refreshIncrGroups();
+            void vm.loadIncrementalData(vm.selectedIncrGroup);
+          }}
+        />
+        {selectedIncrGroup ? (
+          <>
+            <Space direction="vertical" style={{ width: "100%", marginBottom: 12 }}>
+              <RecordSelectionActions vm={selection} label="增量批次" />
+            </Space>
+            <Table<IncrementalBatchItem>
+              rowKey={(item) =>
+                recordKey({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id })
+              }
+              rowSelection={{
+                selectedRowKeys: selection.keys,
+                onChange: selection.select,
+                preserveSelectedRowKeys: true,
+                getCheckboxProps: () => ({ disabled: selection.busy }),
+              }}
+              columns={batchColumns}
+              dataSource={incrBatches}
+              pagination={false}
+              size="small"
+              scroll={{ x: 1000 }}
+              loading={loadingIncremental}
+              locale={{
+                emptyText: (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="当前群暂无增量批次数据（已汇总为日报或尚未触发增量任务）"
+                  />
+                ),
+              }}
+            />
           </>
         ) : (
           <Empty

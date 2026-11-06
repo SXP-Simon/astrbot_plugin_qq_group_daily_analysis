@@ -30,11 +30,19 @@ export const mockConnectedPlatforms: ConnectedPlatform[] = [
 ];
 
 export const mockActiveTasks: ActiveTask[] = [
-  ...mockTypstTraces.filter(trace => trace.status === "running").map(trace => ({
-    task_id: trace.trace_id, group_id: trace.group_id, group_name: trace.group_name || "",
-    platform: trace.platform, trigger_type: trace.trigger_type, current_stage: trace.current_stage || "TYPST_RESOURCES",
-    started_at: trace.started_at, duration_s: (trace.duration_ms || 0) / 1000, last_heartbeat: Date.now() / 1000,
-  })),
+  ...mockTypstTraces
+    .filter((trace) => trace.status === "running")
+    .map((trace) => ({
+      task_id: trace.trace_id,
+      group_id: trace.group_id,
+      group_name: trace.group_name || "",
+      platform: trace.platform,
+      trigger_type: trace.trigger_type,
+      current_stage: trace.current_stage || "TYPST_RESOURCES",
+      started_at: trace.started_at,
+      duration_s: (trace.duration_ms || 0) / 1000,
+      last_heartbeat: Date.now() / 1000,
+    })),
   {
     task_id: "task-live-demo-1",
     group_id: "123456789",

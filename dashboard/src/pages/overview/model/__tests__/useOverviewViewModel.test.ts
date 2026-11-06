@@ -8,10 +8,23 @@ import { useOverviewViewModel } from "../useOverviewViewModel";
 import { mockMetricsSummary } from "../../../../mocks/data/metrics";
 
 vi.mock("antd", () => ({ message: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("../../../../entities/task/api/taskApi", () => ({ fetchActiveTasks: vi.fn(), cancelActiveTask: vi.fn() }));
+vi.mock("../../../../entities/task/api/taskApi", () => ({
+  fetchActiveTasks: vi.fn(),
+  cancelActiveTask: vi.fn(),
+}));
 vi.mock("../../../../entities/metric/api/metricApi", () => ({ fetchMetricsSummary: vi.fn() }));
 
-const task: ActiveTask = { task_id: "WEB", group_id: "GROUP", group_name: "测试群", platform: "official", trigger_type: "web_ui", current_stage: "LLM_ANALYSIS", started_at: Date.now() / 1000, duration_s: 0, last_heartbeat: Date.now() / 1000 };
+const task: ActiveTask = {
+  task_id: "WEB",
+  group_id: "GROUP",
+  group_name: "测试群",
+  platform: "official",
+  trigger_type: "web_ui",
+  current_stage: "LLM_ANALYSIS",
+  started_at: Date.now() / 1000,
+  duration_s: 0,
+  last_heartbeat: Date.now() / 1000,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -20,7 +33,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-it.each([true, false])("中止回执 %s 提供明确反馈且失败时保留任务", async accepted => {
+it.each([true, false])("中止回执 %s 提供明确反馈且失败时保留任务", async (accepted) => {
   vi.mocked(cancelActiveTask).mockResolvedValue(accepted);
   const { result } = renderHook(useOverviewViewModel);
   await waitFor(() => expect(result.current.activeTasks).toHaveLength(1));
@@ -32,16 +45,28 @@ it.each([true, false])("中止回执 %s 提供明确反馈且失败时保留任�
   expect(accepted ? message.error : message.success).not.toHaveBeenCalled();
 });
 
-it.each(["task_canceled", "task_timed_out", "task_finished"])("其他页面的 %s 立即移除任务，陈旧响应不能恢复旧任务", async event => {
-  const { result } = renderHook(useOverviewViewModel);
-  await waitFor(() => expect(result.current.activeTasks).toHaveLength(1));
-  let resolveOld!: (tasks: ActiveTask[]) => void;
-  vi.mocked(fetchActiveTasks).mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
-  let oldRequest!: Promise<void>;
-  act(() => { oldRequest = result.current.refresh(); });
-  vi.mocked(fetchActiveTasks).mockResolvedValue([]);
-  act(() => result.current.handleSSEEvent({ event, data: { task_id: "WEB" } }));
-  expect(result.current.activeTasks).toEqual([]);
-  await act(async () => { resolveOld([task]); await oldRequest; });
-  expect(result.current.activeTasks).toEqual([]);
-});
+it.each(["task_canceled", "task_timed_out", "task_finished"])(
+  "其他页面的 %s 立即移除任务，陈旧响应不能恢复旧任务",
+  async (event) => {
+    const { result } = renderHook(useOverviewViewModel);
+    await waitFor(() => expect(result.current.activeTasks).toHaveLength(1));
+    let resolveOld!: (tasks: ActiveTask[]) => void;
+    vi.mocked(fetchActiveTasks).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+    );
+    let oldRequest!: Promise<void>;
+    act(() => {
+      oldRequest = result.current.refresh();
+    });
+    vi.mocked(fetchActiveTasks).mockResolvedValue([]);
+    act(() => result.current.handleSSEEvent({ event, data: { task_id: "WEB" } }));
+    expect(result.current.activeTasks).toEqual([]);
+    await act(async () => {
+      resolveOld([task]);
+      await oldRequest;
+    });
+    expect(result.current.activeTasks).toEqual([]);
+  },
+);

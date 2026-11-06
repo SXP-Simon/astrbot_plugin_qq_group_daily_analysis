@@ -13,11 +13,7 @@ import { ContextFunnelWidget } from "../../../widgets/context-funnel-widget/Cont
 import { TokenChartWidget } from "../../../widgets/token-chart-widget/TokenChartWidget";
 import { TraceFilterBar } from "../../../features/filter-traces/ui/TraceFilterBar";
 import { AnalysisTimelinePicker } from "../../../widgets/timeline-picker/AnalysisTimelinePicker";
-import {
-  formatSmartTokens,
-  formatPercent,
-  formatTimestamp,
-} from "../../../shared/lib/formatters";
+import { formatSmartTokens, formatPercent, formatTimestamp } from "../../../shared/lib/formatters";
 import { useContextInsightViewModel } from "../model/useContextInsightViewModel";
 
 const { Text } = Typography;
@@ -106,9 +102,7 @@ export const ContextInsightPage: React.FC<ContextInsightPageProps> = ({
             size="small"
             style={{ flex: 1, minWidth: 320 }}
             placeholder={
-              traces.length === 0
-                ? "暂无符合条件的分析记录"
-                : "请选择要查看统计与消耗的任务记录"
+              traces.length === 0 ? "暂无符合条件的分析记录" : "请选择要查看统计与消耗的任务记录"
             }
             value={selectedTrace?.trace_id}
             disabled={traces.length === 0}
@@ -136,7 +130,10 @@ export const ContextInsightPage: React.FC<ContextInsightPageProps> = ({
             })}
           />
           {selectedTrace && (
-            <Tag color={selectedTrace.status === "succeeded" ? "success" : "default"} style={{ margin: 0 }}>
+            <Tag
+              color={selectedTrace.status === "succeeded" ? "success" : "default"}
+              style={{ margin: 0 }}
+            >
               {selectedTrace.status === "succeeded" ? "已完成" : selectedTrace.status}
             </Tag>
           )}
@@ -154,7 +151,15 @@ export const ContextInsightPage: React.FC<ContextInsightPageProps> = ({
       )}
 
       {traces.length === 0 && !loading ? (
-        <Card size="small" style={{ minHeight: 360, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Card
+          size="small"
+          style={{
+            minHeight: 360,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description="暂无符合条件的分析记录，请调整筛选条件或触发新分析"

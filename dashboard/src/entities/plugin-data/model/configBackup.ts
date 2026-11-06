@@ -17,9 +17,7 @@ export const configBackupInfoSchema: z.ZodType<ConfigBackupInfo> = z.object({
 export const configBackupListSchema = z.object({
   items: z.array(configBackupInfoSchema),
 });
-export const configBackupDetailSchema: z.ZodType<ConfigBackupDetail> = z.object(
-  {
-    backup: configBackupInfoSchema,
-    content: z.json(),
-  },
-);
+export const configBackupDetailSchema: z.ZodType<ConfigBackupDetail> = z.object({
+  backup: configBackupInfoSchema,
+  content: z.json(),
+});

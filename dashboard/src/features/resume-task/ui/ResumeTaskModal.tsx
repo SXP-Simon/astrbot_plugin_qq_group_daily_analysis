@@ -20,7 +20,13 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
 }) => {
   const [providers, setProviders] = useState<LLMProviderItem[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
-  const { templates, loading: loadingTemplates, ready, error, refresh } = useReportTemplates("configured", open);
+  const {
+    templates,
+    loading: loadingTemplates,
+    ready,
+    error,
+    refresh,
+  } = useReportTemplates("configured", open);
   const [selectedProvider, setSelectedProvider] = useState("auto");
   const [selectedTemplate, setSelectedTemplate] = useState("auto");
 
@@ -33,15 +39,18 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
         .then((list) => setProviders(list))
         .catch(() => {})
         .finally(() => setLoadingProviders(false));
-
     }
   }, [open]);
 
   const handleOk = () => {
-    if (selectedTemplate !== "auto" && (!ready || !templates.some((item) => item.id === selectedTemplate))) return;
+    if (
+      selectedTemplate !== "auto" &&
+      (!ready || !templates.some((item) => item.id === selectedTemplate))
+    )
+      return;
     onConfirm(
       selectedProvider !== "auto" ? selectedProvider : undefined,
-      selectedTemplate !== "auto" ? selectedTemplate : undefined
+      selectedTemplate !== "auto" ? selectedTemplate : undefined,
     );
   };
 
@@ -59,7 +68,11 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
       onCancel={onCancel}
       onOk={handleOk}
       confirmLoading={loading}
-      okButtonProps={{ disabled: selectedTemplate !== "auto" && (!ready || !templates.some((item) => item.id === selectedTemplate)) }}
+      okButtonProps={{
+        disabled:
+          selectedTemplate !== "auto" &&
+          (!ready || !templates.some((item) => item.id === selectedTemplate)),
+      }}
       okText="立即续跑"
       cancelText="取消"
       destroyOnClose
@@ -74,7 +87,13 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
           style={{ marginBottom: 16 }}
         />
 
-        {error && <Alert type="warning" message={error} action={<a onClick={() => void refresh()}>重试</a>} />}
+        {error && (
+          <Alert
+            type="warning"
+            message={error}
+            action={<a onClick={() => void refresh()}>重试</a>}
+          />
+        )}
         <Form layout="vertical">
           <Form.Item
             label={

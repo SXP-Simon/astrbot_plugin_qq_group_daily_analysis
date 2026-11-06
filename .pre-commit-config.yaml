@@ -6,26 +6,20 @@ ci:
   autoupdate_schedule: weekly
   autoupdate_commit_msg: ":sparkles: pre-commit autoupdate"
 repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit 
-  # 与 AstrBot 开发环境中 uv 解析的 Ruff 版本保持一致。
-  rev: v0.15.22
-  hooks:
-    # 运行静态检查。
-    - id: ruff-check
-      types_or: [ python, pyi ]
-      args: [ --fix ]
-    # 运行格式化。
-    - id: ruff-format
-      types_or: [ python, pyi ]
-      
-- repo: https://github.com/asottile/pyupgrade 
-  rev: v3.21.0
-  hooks:
-    - id: pyupgrade
-      args: [--py310-plus]
-
 - repo: local
   hooks:
+    - id: ruff-check
+      name: Ruff lint
+      entry: uv run python scripts/check_python.py lint
+      language: system
+      types_or: [python, pyi]
+      stages: [pre-commit]
+    - id: ruff-format
+      name: Ruff format check
+      entry: uv run python scripts/check_python.py format --check
+      language: system
+      types_or: [python, pyi]
+      stages: [pre-commit]
     - id: verify-commit
       name: Verify Conventional Commit & STAR 3-point message
       entry: node scripts/verify-commit.js

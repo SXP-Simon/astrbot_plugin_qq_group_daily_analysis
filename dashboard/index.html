@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -8,14 +8,17 @@
     />
     <title>群日常分析控制台</title>
     <style>
-      html, body, #root {
+      html,
+      body,
+      #root {
         margin: 0;
         padding: 0;
         width: 100%;
         max-width: 100%;
         min-height: 100%;
         overflow-x: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         -webkit-text-size-adjust: 100%;
         -webkit-tap-highlight-color: transparent;
       }
@@ -25,7 +28,9 @@
       }
       /* 等宽字体类 (现代无衬线等宽) */
       .font-mono {
-        font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace !important;
+        font-family:
+          "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", monospace !important;
       }
       /* 全局与代码块精致微型滚动条美化 (Light & Dark) */
       * {
@@ -69,7 +74,7 @@
       }
     </style>
     <script>
-      (function() {
+      (function () {
         try {
           var params = new URLSearchParams(window.location.search);
           var themeVal = params.get("theme");
@@ -80,7 +85,10 @@
             isDark = false;
           } else {
             try {
-              if (typeof localStorage !== "undefined" && localStorage.getItem("astrbot_plugin_theme_is_dark") === "true") {
+              if (
+                typeof localStorage !== "undefined" &&
+                localStorage.getItem("astrbot_plugin_theme_is_dark") === "true"
+              ) {
                 isDark = true;
               }
             } catch (_) {}
@@ -92,7 +100,7 @@
             document.documentElement.style.background = "#f5f5f5";
             document.documentElement.style.color = "#000000";
           }
-        } catch(e) {}
+        } catch (e) {}
       })();
     </script>
   </head>

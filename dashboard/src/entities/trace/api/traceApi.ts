@@ -29,7 +29,7 @@ export function invalidateTraceCache(traceId?: string): void {
 }
 
 export async function fetchTraceList(
-  params: ListTracesParams
+  params: ListTracesParams,
 ): Promise<{ items: TraceRecord[]; total: number }> {
   const res = await apiGet<{ items: TraceRecord[]; total: number }>("traces", params);
   const data = extractData<{ items: TraceRecord[]; total: number }>(res);
@@ -44,7 +44,7 @@ export async function fetchTraceList(
 
 export async function fetchTraceDetail(
   traceId: string,
-  forceRefresh = false
+  forceRefresh = false,
 ): Promise<TraceRecord | null> {
   // 1. 检查缓存命中（仅在未强制刷新且已存在缓存时）
   if (!forceRefresh && traceDetailCache.has(traceId)) {
@@ -85,20 +85,23 @@ export async function fetchProviderList(): Promise<LLMProviderItem[]> {
 export async function resumeTraceTask(
   traceId: string,
   providerId?: string,
-  templateName?: string
+  templateName?: string,
 ): Promise<{ trace_id: string; message: string }> {
   const payload: Record<string, string> = {};
   if (providerId) payload.provider_id = providerId;
   if (templateName) payload.template_name = templateName;
   const res = await apiPost<{ trace_id: string; message: string }>(
     `tasks/${traceId}/resume`,
-    payload
+    payload,
   );
-  const parsed = z.object({
-    trace_id: z.string().trim().min(1), message: z.string().optional(), status: z.enum(["ok", "success"]).optional(),
-  }).safeParse(extractData<unknown>(res));
+  const parsed = z
+    .object({
+      trace_id: z.string().trim().min(1),
+      message: z.string().optional(),
+      status: z.enum(["ok", "success"]).optional(),
+    })
+    .safeParse(extractData<unknown>(res));
   if (!parsed.success) throw new Error("未收到有效的续跑回执，请刷新任务列表后确认。");
   invalidateTraceCache(traceId);
   return { trace_id: parsed.data.trace_id, message: parsed.data.message || "续跑任务已提交" };
 }
-

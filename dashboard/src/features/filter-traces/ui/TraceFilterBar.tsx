@@ -126,11 +126,7 @@ export const TraceFilterBar: React.FC<TraceFilterBarProps> = ({
         />
       </Space>
 
-      <Button
-        size="small"
-        icon={<ReloadOutlined spin={loading} />}
-        onClick={onRefresh}
-      >
+      <Button size="small" icon={<ReloadOutlined spin={loading} />} onClick={onRefresh}>
         刷新
       </Button>
     </Space>

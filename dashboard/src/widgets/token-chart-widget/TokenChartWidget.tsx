@@ -49,14 +49,9 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
         data: { promptTokens?: number; completionTokens?: number };
       }) => {
         const { name, value, percent, data, color } = params;
-        const prompt =
-          data?.promptTokens !== undefined
-            ? formatTokens(data.promptTokens)
-            : "-";
+        const prompt = data?.promptTokens !== undefined ? formatTokens(data.promptTokens) : "-";
         const completion =
-          data?.completionTokens !== undefined
-            ? formatTokens(data.completionTokens)
-            : "-";
+          data?.completionTokens !== undefined ? formatTokens(data.completionTokens) : "-";
         const total = formatTokens(value);
         return `
           <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">

@@ -30,10 +30,7 @@ export function useOverviewViewModel() {
       setLoading(true);
     }
     try {
-      const [tasks, summary] = await Promise.all([
-        fetchActiveTasks(),
-        fetchMetricsSummary(),
-      ]);
+      const [tasks, summary] = await Promise.all([fetchActiveTasks(), fetchMetricsSummary()]);
       // 忽略陈旧的过时异步响应，防止覆盖最新的 SSE 状态
       if (currentReqId !== reqIdRef.current) return;
       setActiveTasks(tasks);
@@ -70,32 +67,26 @@ export function useOverviewViewModel() {
         const updatedTask = evt.data as ActiveTask;
         if (updatedTask && updatedTask.task_id) {
           setActiveTasks((prev) =>
-            prev.map((t) =>
-              t.task_id === updatedTask.task_id
-                ? { ...t, ...updatedTask }
-                : t
-            )
+            prev.map((t) => (t.task_id === updatedTask.task_id ? { ...t, ...updatedTask } : t)),
           );
         }
       } else if (["task_finished", "task_canceled", "task_timed_out"].includes(evt.event)) {
         const finishData = evt.data as { task_id?: string } | undefined;
         if (finishData?.task_id) {
-          setActiveTasks((prev) =>
-            prev.filter((t) => t.task_id !== finishData.task_id)
-          );
+          setActiveTasks((prev) => prev.filter((t) => t.task_id !== finishData.task_id));
         }
         // 任务完成时使先前可能在途中的全量拉取失效，并静默刷新总览 KPI 指标
         loadData(true);
       }
     },
-    [loadData]
+    [loadData],
   );
 
   const handleCancelTask = async (taskId: string) => {
     const accepted = await cancelActiveTask(taskId);
     if (accepted) {
       ++reqIdRef.current;
-      setActiveTasks(prev => prev.filter(task => task.task_id !== taskId));
+      setActiveTasks((prev) => prev.filter((task) => task.task_id !== taskId));
       message.success("已请求中止分析任务，后台正在清理资源。");
     } else {
       message.error("中止请求未成功，任务可能已结束或连接异常，请刷新后确认。");
@@ -111,7 +102,7 @@ export function useOverviewViewModel() {
         prev.map((t) => ({
           ...t,
           duration_s: Math.round((Date.now() / 1000 - t.started_at) * 10) / 10,
-        }))
+        })),
       );
     }, 1000);
 

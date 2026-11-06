@@ -150,7 +150,7 @@ export function usePluginDataViewModel() {
       pageSize = checkpointsPageSize,
       group = ckptFilterGroup,
       date = ckptFilterDate,
-      stage = ckptFilterStage
+      stage = ckptFilterStage,
     ) => {
       setLoadingCheckpoints(true);
       try {
@@ -172,7 +172,7 @@ export function usePluginDataViewModel() {
         setLoadingCheckpoints(false);
       }
     },
-    [checkpointsPage, checkpointsPageSize, ckptFilterGroup, ckptFilterDate, ckptFilterStage]
+    [checkpointsPage, checkpointsPageSize, ckptFilterGroup, ckptFilterDate, ckptFilterStage],
   );
 
   // 查看 Checkpoint JSON 详情
@@ -195,15 +195,15 @@ export function usePluginDataViewModel() {
         item.group_id,
         item.date_str,
         item.stage_name,
-        item.trace_id
+        item.trace_id,
       );
       if (detail) {
         const payloadData =
           detail.checkpoint_data !== undefined
             ? detail.checkpoint_data
             : detail.data !== undefined
-            ? detail.data
-            : detail;
+              ? detail.data
+              : detail;
         setSelectedCkptDetail({
           checkpoint_id: detail.checkpoint_id || item.checkpoint_id,
           group_id: detail.group_id || item.group_id,
@@ -211,10 +211,8 @@ export function usePluginDataViewModel() {
           stage_name: detail.stage_name || item.stage_name,
           trace_id: detail.trace_id || item.trace_id,
           created_at: detail.created_at ?? item.created_at,
-          created_at_formatted:
-            detail.created_at_formatted || item.created_at_formatted,
-          data_size_bytes:
-            detail.data_size_bytes ?? detail.data_size ?? item.data_size_bytes,
+          created_at_formatted: detail.created_at_formatted || item.created_at_formatted,
+          data_size_bytes: detail.data_size_bytes ?? detail.data_size ?? item.data_size_bytes,
           data: payloadData,
         });
       } else {
@@ -237,7 +235,7 @@ export function usePluginDataViewModel() {
     groupId: string,
     dateStr: string,
     stageName?: string,
-    traceId?: string
+    traceId?: string,
   ) => {
     try {
       const ok = await deleteCheckpoint(groupId, dateStr, stageName, traceId);
@@ -245,7 +243,7 @@ export function usePluginDataViewModel() {
         message.success(
           stageName
             ? `已删除 ${groupId} (${dateStr}) 的阶段快照「${stageName}」`
-            : `已清空 ${groupId} (${dateStr}) 的所有阶段快照`
+            : `已清空 ${groupId} (${dateStr}) 的所有阶段快照`,
         );
         await loadCheckpoints();
         await refreshCheckpointGroups();
@@ -259,10 +257,7 @@ export function usePluginDataViewModel() {
 
   // 全局刷新
   const refreshAll = useCallback(async () => {
-    await Promise.all([
-      refreshIncrGroups(),
-      refreshCheckpointGroups(),
-    ]);
+    await Promise.all([refreshIncrGroups(), refreshCheckpointGroups()]);
   }, [refreshIncrGroups, refreshCheckpointGroups]);
 
   return {

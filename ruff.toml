@@ -1,5 +1,5 @@
 # 独立配置，避免插件被单独检出时与嵌套在 AstrBot 内时使用不同规则。
-exclude = [
+extend-exclude = [
   "tests",
   "_conf_schema.json",
   "docs",
@@ -8,7 +8,8 @@ exclude = [
   "*.md",
 ]
 line-length = 88
-target-version = "py310"
+target-version = "py312"
+force-exclude = true
 
 [lint]
 select = [
@@ -17,7 +18,6 @@ select = [
   "E",     # pycodestyle 错误
   "ASYNC", # flake8-async
   "C4",    # flake8-comprehensions
-  "Q",     # flake8-quotes
   "I",     # 导入顺序
   "UP",    # pyupgrade
   "B",     # flake8-bugbear (隐藏Bug与设计缺陷)
@@ -26,7 +26,7 @@ select = [
   "ERA",   # eradicate (废弃注释代码拦截)
   "RUF",   # Ruff 专属规则
   "FA",    # flake8-future-annotations (类型延后导入)
-  "TCH",   # flake8-type-checking (类型导入隔离)
+  "TC",   # flake8-type-checking (类型导入隔离)
   "PGH",   # pygrep-hooks (严格类型注解与规则指令)
   "RSE",   # flake8-raise (规范抛出异常写法)
   "YTT",   # flake8-2020 (系统与环境兼容性检查)
@@ -36,6 +36,10 @@ select = [
   "ARG",   # flake8-unused-arguments (未使用的函数/方法参数拦截)
 ]
 ignore = [
+  # Keep existing runtime types; syntax migrations are separate from tooling changes.
+  "UP040", "UP042", "UP046", "UP047",
+  "ASYNC109", # Existing timeout parameters remain part of public call contracts.
+  "W191", "E111", "E114", "E117", # Formatting belongs to Ruff formatter.
   "F403",
   "F405",
   "E501",

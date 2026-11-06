@@ -8,14 +8,30 @@ export type ManagedRecordMutation = components["schemas"]["ManagedRecordMutation
 export type ManagedRecordEntry = components["schemas"]["ManagedRecordEntry"];
 
 export const recordLocatorSchema: z.ZodType<RecordLocator> = z.object({
-  kind: z.enum(["history", "batch", "checkpoint", "avatar"]), key: z.string().optional(), group_id: z.string().optional(),
-  batch_id: z.string().optional(), date_str: z.string().optional(), stage_name: z.string().optional(), trace_id: z.string().optional(),
+  kind: z.enum(["history", "batch", "checkpoint", "avatar"]),
+  key: z.string().optional(),
+  group_id: z.string().optional(),
+  batch_id: z.string().optional(),
+  date_str: z.string().optional(),
+  stage_name: z.string().optional(),
+  trace_id: z.string().optional(),
 });
-export const managedRecordSchema: z.ZodType<ManagedRecord> = z.object({ locator: recordLocatorSchema, data: z.json(), revision: z.string() });
+export const managedRecordSchema: z.ZodType<ManagedRecord> = z.object({
+  locator: recordLocatorSchema,
+  data: z.json(),
+  revision: z.string(),
+});
 
 export async function fetchManagedRecords(kind: string, search: string, page: number) {
   const response = await apiGet("plugin-data/records", { kind, search, page });
-  return z.object({ items: z.array(z.object({ locator: recordLocatorSchema, name: z.string(), size_bytes: z.number() })), total: z.number() }).parse(extractData<unknown>(response));
+  return z
+    .object({
+      items: z.array(
+        z.object({ locator: recordLocatorSchema, name: z.string(), size_bytes: z.number() }),
+      ),
+      total: z.number(),
+    })
+    .parse(extractData<unknown>(response));
 }
 
 export async function fetchManagedRecord(locator: RecordLocator) {

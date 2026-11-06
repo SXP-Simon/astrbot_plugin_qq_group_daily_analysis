@@ -11,9 +11,7 @@ export interface LogFilterParams {
   search?: string;
 }
 
-export async function fetchPluginLogs(
-  params?: LogFilterParams
-): Promise<PluginLogResponse> {
+export async function fetchPluginLogs(params?: LogFilterParams): Promise<PluginLogResponse> {
   const query: Record<string, string | number> = {};
   if (params?.limit !== undefined) query.limit = params.limit;
   if (params?.offset !== undefined) query.offset = params.offset;
@@ -25,13 +23,13 @@ export async function fetchPluginLogs(
   const res = await apiGet<PluginLogResponse>("logs", query);
   const data = extractData<PluginLogResponse>(res);
   if (!data || !Array.isArray(data.items)) return { items: [], total: 0, available_tags: [] };
-  const tags = z.array(z.object({ key: z.string().min(1), label: z.string().min(1) })).safeParse(data.available_tags);
+  const tags = z
+    .array(z.object({ key: z.string().min(1), label: z.string().min(1) }))
+    .safeParse(data.available_tags);
   return { ...data, available_tags: tags.success ? tags.data : [] };
 }
 
-export async function fetchTraceLogs(
-  traceId: string
-): Promise<PluginLogItem[]> {
+export async function fetchTraceLogs(traceId: string): Promise<PluginLogItem[]> {
   const res = await apiGet<PluginLogItem[]>(`traces/${traceId}/logs`);
   const data = extractData<PluginLogItem[]>(res);
   return Array.isArray(data) ? data : [];

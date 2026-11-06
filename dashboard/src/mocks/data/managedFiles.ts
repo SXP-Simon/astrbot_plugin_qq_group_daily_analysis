@@ -1,4 +1,7 @@
-import type { ManagedFileContent, ManagedPartition } from "../../entities/plugin-data/api/managedFilesApi";
+import type {
+  ManagedFileContent,
+  ManagedPartition,
+} from "../../entities/plugin-data/api/managedFilesApi";
 import { mockConfigBackups } from "./configBackups";
 
 const definitions: [string, string, string, boolean, boolean][] = [
@@ -17,43 +20,106 @@ const definitions: [string, string, string, boolean, boolean][] = [
   ["state", "状态与数据库", "链路、快照、去重数据库及状态文件", false, false],
 ];
 
-const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#39c5bb"/><text x="15" y="55" fill="white">Miku report</text></svg>';
+const svg =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#39c5bb"/><text x="15" y="55" fill="white">Miku report</text></svg>';
 const impacts: Record<string, string> = {
-  reports: "删除后历史报告无法预览，分析存档仍保留。", custom_templates: "源码修改立即用于后续渲染，请先下载留存原版。",
-  config_files: "同名替换保留配置路径；重命名或删除会使原配置引用失效。", config_backups: "删除会失去对应版本的恢复依据，备份原件不可修改。",
-  typst_fonts: "移除字体可能改变后续报告排版。", template_resources: "删除本地素材后会回退至仓库素材或从 CDN 重新获取。",
-  typst_assets: "缓存清理后，下次渲染会自动重新生成。", typst_jobs: "工作目录由渲染器管理；仅提供只读诊断，避免影响正在编译的任务。",
-  preview_cache: "清理后打开模板画廊时按需重新生成。", hosted_reports: "删除后对应的分享链接将失效。",
-  legacy_history: "这里只管理旧版 JSON 文件；当前分析存档请通过 KV 管理入口维护。", avatar_storage: "按平台缓存键清理头像后会按需重新获取，不直接操作数据库文件。",
+  reports: "删除后历史报告无法预览，分析存档仍保留。",
+  custom_templates: "源码修改立即用于后续渲染，请先下载留存原版。",
+  config_files: "同名替换保留配置路径；重命名或删除会使原配置引用失效。",
+  config_backups: "删除会失去对应版本的恢复依据，备份原件不可修改。",
+  typst_fonts: "移除字体可能改变后续报告排版。",
+  template_resources: "删除本地素材后会回退至仓库素材或从 CDN 重新获取。",
+  typst_assets: "缓存清理后，下次渲染会自动重新生成。",
+  typst_jobs: "工作目录由渲染器管理；仅提供只读诊断，避免影响正在编译的任务。",
+  preview_cache: "清理后打开模板画廊时按需重新生成。",
+  hosted_reports: "删除后对应的分享链接将失效。",
+  legacy_history: "这里只管理旧版 JSON 文件；当前分析存档请通过 KV 管理入口维护。",
+  avatar_storage: "按平台缓存键清理头像后会按需重新获取，不直接操作数据库文件。",
   state: "只展示数据库与状态文件占用；分析存档、批次及快照通过对应业务入口管理。",
 };
 let revision = 0;
 export const managedMockFiles = new Map<string, Map<string, ManagedFileContent>>();
 
-export function putManagedMockFile(partition: string, name: string, text: string | null, encoded?: string) {
+export function putManagedMockFile(
+  partition: string,
+  name: string,
+  text: string | null,
+  encoded?: string,
+) {
   let files = managedMockFiles.get(partition);
-  if (!files) { files = new Map(); managedMockFiles.set(partition, files); }
+  if (!files) {
+    files = new Map();
+    managedMockFiles.set(partition, files);
+  }
   const content: ManagedFileContent = {
-    name, text, content_base64: encoded ?? btoa(Array.from(new TextEncoder().encode(text || ""), byte => String.fromCharCode(byte)).join("")),
+    name,
+    text,
+    content_base64:
+      encoded ??
+      btoa(
+        Array.from(new TextEncoder().encode(text || ""), (byte) => String.fromCharCode(byte)).join(
+          "",
+        ),
+      ),
     revision: String(++revision).padStart(64, "0"),
-    media_type: /\.(png|jpg|jpeg)$/.test(name) ? "image/" + (name.endsWith(".png") ? "png" : "jpeg") : name.endsWith(".svg") ? "image/svg+xml" : name.endsWith(".html") ? "text/html" : name.endsWith(".json") ? "application/json" : "text/plain",
+    media_type: /\.(png|jpg|jpeg)$/.test(name)
+      ? "image/" + (name.endsWith(".png") ? "png" : "jpeg")
+      : name.endsWith(".svg")
+        ? "image/svg+xml"
+        : name.endsWith(".html")
+          ? "text/html"
+          : name.endsWith(".json")
+            ? "application/json"
+            : "text/plain",
   };
   files.set(name, content);
   return content;
 }
 
-putManagedMockFile("custom_templates", "my_miku/report.typ", '#set text(size: 12pt)\n= 群聊日报\n你好，初音未来！');
+putManagedMockFile(
+  "custom_templates",
+  "my_miku/report.typ",
+  "#set text(size: 12pt)\n= 群聊日报\n你好，初音未来！",
+);
 putManagedMockFile("custom_templates", "my_miku/template.json", '{"name":"我的初音模板"}');
 putManagedMockFile("custom_templates", "my_miku/assets/character.svg", svg);
-putManagedMockFile("custom_templates", "my_maria/report.typ", '#set text(size: 12pt)\n= Maria 群聊日报');
+putManagedMockFile(
+  "custom_templates",
+  "my_maria/report.typ",
+  "#set text(size: 12pt)\n= Maria 群聊日报",
+);
 putManagedMockFile("custom_templates", "my_maria/template.json", '{"name":"我的 Maria 模板"}');
 putManagedMockFile("custom_templates", "draft_theme/template.json", '{"name":"尚未完成的模板"}');
-putManagedMockFile("reports", "123456789_2026-11-03.html", '<!doctype html><html><body style="font-family:sans-serif;color:#238b86"><h1>群聊日报</h1><p>今天共 384 条消息，12 位活跃成员。</p></body></html>');
-putManagedMockFile("reports", "123456789_2026-11-03_miku.png", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
-putManagedMockFile("reports", "987654321_2026-11-02_maria.jpg", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
-for (const backup of mockConfigBackups) putManagedMockFile("config_backups", backup.backup.filename, JSON.stringify(backup.content, null, 2));
+putManagedMockFile(
+  "reports",
+  "123456789_2026-11-03.html",
+  '<!doctype html><html><body style="font-family:sans-serif;color:#238b86"><h1>群聊日报</h1><p>今天共 384 条消息，12 位活跃成员。</p></body></html>',
+);
+putManagedMockFile(
+  "reports",
+  "123456789_2026-11-03_miku.png",
+  null,
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=",
+);
+putManagedMockFile(
+  "reports",
+  "987654321_2026-11-02_maria.jpg",
+  null,
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=",
+);
+for (const backup of mockConfigBackups)
+  putManagedMockFile(
+    "config_backups",
+    backup.backup.filename,
+    JSON.stringify(backup.content, null, 2),
+  );
 putManagedMockFile("template_resources", "hack/globe.svg", svg);
-putManagedMockFile("config_files", "daily_comic/comic_characters/templates/character/reference_images/character.png", null, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=");
+putManagedMockFile(
+  "config_files",
+  "daily_comic/comic_characters/templates/character/reference_images/character.png",
+  null,
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a27sAAAAASUVORK5CYII=",
+);
 putManagedMockFile("typst_fonts", "NotoSansSC.ttf", null, "AAEAAAAA");
 putManagedMockFile("typst_fonts", "NotoSansTC.ttf", null, "AAEAAAAA");
 putManagedMockFile("preview_cache", "miku.svg", svg);
@@ -62,9 +128,17 @@ putManagedMockFile("state", "traces.db", null, "AA==");
 export function managedMockPartitions(): ManagedPartition[] {
   return definitions.map(([key, name, description, writable, deletable]) => {
     const files = [...(managedMockFiles.get(key)?.values() || [])];
-    return { key, name, description, writable, deletable, directory: key === "typst_fonts" ? "demo/data/typst/fonts" : `demo/plugin_data/${key}/`,
+    return {
+      key,
+      name,
+      description,
+      writable,
+      deletable,
+      directory: key === "typst_fonts" ? "demo/data/typst/fonts" : `demo/plugin_data/${key}/`,
       impact: impacts[key],
-      count: files.length, size_bytes: files.reduce((sum, file) => sum + atob(file.content_base64).length, 0) };
+      count: files.length,
+      size_bytes: files.reduce((sum, file) => sum + atob(file.content_base64).length, 0),
+    };
   });
 }
 
@@ -72,18 +146,44 @@ export const managedFileMockHandlers = {
   "GET plugin-data/partitions": () => ({ status: "ok", data: { items: managedMockPartitions() } }),
   "GET plugin-data/files": (query?: Record<string, unknown>) => {
     const partition = String(query?.partition);
-    const extensions = String(query?.extensions || "").split(",").filter(Boolean);
+    const extensions = String(query?.extensions || "")
+      .split(",")
+      .filter(Boolean);
     const all = [...(managedMockFiles.get(partition)?.values() || [])];
     const groups = new Map<string, { directory: string; count: number; size_bytes: number }>();
-    if (partition === "custom_templates") for (const file of all) {
-      const directory = file.name.includes("/") ? file.name.split("/")[0] : ".";
-      const group = groups.get(directory) || { directory, count: 0, size_bytes: 0 };
-      group.count++; group.size_bytes += atob(file.content_base64).length; groups.set(directory, group);
-    }
+    if (partition === "custom_templates")
+      for (const file of all) {
+        const directory = file.name.includes("/") ? file.name.split("/")[0] : ".";
+        const group = groups.get(directory) || { directory, count: 0, size_bytes: 0 };
+        group.count++;
+        group.size_bytes += atob(file.content_base64).length;
+        groups.set(directory, group);
+      }
     const directory = String(query?.directory || "");
-    const items = all.filter(file => file.name.toLowerCase().includes(String(query?.search || "").toLowerCase()) && (!directory || (directory === "." ? !file.name.includes("/") : file.name.startsWith(directory + "/"))) && (!extensions.length || extensions.includes(file.name.split(".").pop()!.toLowerCase())));
+    const items = all.filter(
+      (file) =>
+        file.name.toLowerCase().includes(String(query?.search || "").toLowerCase()) &&
+        (!directory ||
+          (directory === "." ? !file.name.includes("/") : file.name.startsWith(directory + "/"))) &&
+        (!extensions.length || extensions.includes(file.name.split(".").pop()!.toLowerCase())),
+    );
     const start = (Number(query?.page || 1) - 1) * 20;
-    return { status: "ok", data: { items: items.slice(start, start + 20).map(file => ({ name: file.name, revision: file.revision, media_type: file.media_type, size_bytes: atob(file.content_base64).length, modified_at: 1793692800, editable: partition === "custom_templates" && file.text !== null, downloadable: !["state", "avatar_storage"].includes(partition) })), total: items.length, groups: [...groups.values()].sort((a, b) => a.directory.localeCompare(b.directory)) } };
+    return {
+      status: "ok",
+      data: {
+        items: items.slice(start, start + 20).map((file) => ({
+          name: file.name,
+          revision: file.revision,
+          media_type: file.media_type,
+          size_bytes: atob(file.content_base64).length,
+          modified_at: 1793692800,
+          editable: partition === "custom_templates" && file.text !== null,
+          downloadable: !["state", "avatar_storage"].includes(partition),
+        })),
+        total: items.length,
+        groups: [...groups.values()].sort((a, b) => a.directory.localeCompare(b.directory)),
+      },
+    };
   },
   "GET plugin-data/files/content": (query?: Record<string, unknown>) => {
     const file = managedMockFiles.get(String(query?.partition))?.get(String(query?.name));
@@ -91,30 +191,43 @@ export const managedFileMockHandlers = {
   },
   "POST plugin-data/files/delete-many": (body?: Record<string, unknown>) => {
     const files = managedMockFiles.get(String(body?.partition));
-    const deleted: string[] = [], failed: { name: string; message: string }[] = [];
+    const deleted: string[] = [],
+      failed: { name: string; message: string }[] = [];
     const selected = body?.files;
     if (!Array.isArray(selected)) return { status: "error", message: "请选择文件" };
     for (const item of selected) {
       const name = String(item.name);
-      if (files?.get(name)?.revision !== item.revision) failed.push({ name, message: "文件已变更，请刷新后重选" });
-      else { files?.delete(name); deleted.push(name); }
+      if (files?.get(name)?.revision !== item.revision)
+        failed.push({ name, message: "文件已变更，请刷新后重选" });
+      else {
+        files?.delete(name);
+        deleted.push(name);
+      }
     }
     return { status: "ok", data: { deleted, failed } };
   },
   "POST plugin-data/files/mutate": (body?: Record<string, unknown>) => {
-    const partition = String(body?.partition), name = String(body?.name), operation = body?.operation;
-    const part = managedMockPartitions().find(item => item.key === partition);
-    const files = managedMockFiles.get(partition), current = files?.get(name);
-    if (!part || (operation === "delete" ? !part.deletable : !part.writable)) return { status: "error", message: "此分区不支持该操作" };
-    if (operation === "create" ? !!current : !current || current.revision !== body?.revision) return { status: "error", message: "文件已变更或目标已存在，请刷新" };
+    const partition = String(body?.partition),
+      name = String(body?.name),
+      operation = body?.operation;
+    const part = managedMockPartitions().find((item) => item.key === partition);
+    const files = managedMockFiles.get(partition),
+      current = files?.get(name);
+    if (!part || (operation === "delete" ? !part.deletable : !part.writable))
+      return { status: "error", message: "此分区不支持该操作" };
+    if (operation === "create" ? !!current : !current || current.revision !== body?.revision)
+      return { status: "error", message: "文件已变更或目标已存在，请刷新" };
     if (operation === "delete") files?.delete(name);
     else if (operation === "rename") {
       const newName = String(body?.new_name);
       if (files?.has(newName)) return { status: "error", message: "同名目标已存在" };
-      putManagedMockFile(partition, newName, current?.text || null, current?.content_base64); files?.delete(name);
+      putManagedMockFile(partition, newName, current?.text || null, current?.content_base64);
+      files?.delete(name);
     } else {
       const encoded = String(body?.content_base64 || "");
-      const text = /\.(typ|html|css|json|svg|txt|md)$/.test(name) ? new TextDecoder().decode(Uint8Array.from(atob(encoded), char => char.charCodeAt(0))) : null;
+      const text = /\.(typ|html|css|json|svg|txt|md)$/.test(name)
+        ? new TextDecoder().decode(Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0)))
+        : null;
       putManagedMockFile(partition, name, text, encoded);
     }
     return { status: "ok", data: { success: true } };

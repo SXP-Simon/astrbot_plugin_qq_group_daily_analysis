@@ -11,11 +11,11 @@ export interface ListReportsParams {
 }
 
 export async function fetchReportHistory(
-  params?: ListReportsParams
+  params?: ListReportsParams,
 ): Promise<{ items: ReportItem[]; total: number }> {
   const res = await apiGet<{ items: ReportItem[]; total: number } | ReportItem[]>(
     "reports/history",
-    params as Record<string, unknown>
+    params as Record<string, unknown>,
   );
   const data = extractData<{ items: ReportItem[]; total: number } | ReportItem[]>(res);
   if (data && typeof data === "object" && "items" in data && Array.isArray(data.items)) {
@@ -39,17 +39,19 @@ export async function fetchReportContent(filename: string): Promise<ReportItem |
   return data || null;
 }
 
-export async function fetchReportTemplates(renderFormat: "all" | "configured" | "image" | "html" = "all"): Promise<ReportTemplateItem[]> {
-  const res = await apiGet<ReportTemplateItem[]>("reports/templates", { render_format: renderFormat });
+export async function fetchReportTemplates(
+  renderFormat: "all" | "configured" | "image" | "html" = "all",
+): Promise<ReportTemplateItem[]> {
+  const res = await apiGet<ReportTemplateItem[]>("reports/templates", {
+    render_format: renderFormat,
+  });
   const data = extractData<ReportTemplateItem[]>(res);
   if (Array.isArray(data)) return data;
   // 不再静默降级：失败交由调用方提示（避免自定义模板无声消失）
   throw new Error("模板列表获取失败");
 }
 
-export async function fetchTemplatePreview(
-  templateName: string
-): Promise<string | null> {
+export async function fetchTemplatePreview(templateName: string): Promise<string | null> {
   try {
     const res = await apiGet<{ data_url?: string }>("templates/preview", {
       template_name: templateName,
@@ -72,10 +74,12 @@ export async function rerenderReport(params: {
   platform_id?: string;
   trace_id?: string;
 }): Promise<{ success: boolean; filename: string; report_path: string; is_html: boolean } | null> {
-  const res = await apiPost<{ success: boolean; filename: string; report_path: string; is_html: boolean }>(
-    "reports/rerender",
-    params
-  );
+  const res = await apiPost<{
+    success: boolean;
+    filename: string;
+    report_path: string;
+    is_html: boolean;
+  }>("reports/rerender", params);
   return extractData(res) || null;
 }
 
@@ -89,10 +93,7 @@ export interface TemplateInstallResult {
   files: string[];
 }
 
-function unwrapDataOrThrow(
-  res: unknown,
-  fallback: string
-): Record<string, unknown> {
+function unwrapDataOrThrow(res: unknown, fallback: string): Record<string, unknown> {
   // extractData 会把顶层错误响应（如 {status:"error", message}）直接造型为结果，
   // 这里显式解包并校验：成功响应必须含 data.name，否则按失败处理并透传后端错误信息。
   if (!res || typeof res !== "object") {
@@ -121,9 +122,10 @@ function assertInstallResult(res: unknown, fallback: string): TemplateInstallRes
   if (typeof data.name === "string") {
     return data as unknown as TemplateInstallResult;
   }
-  const msg = typeof (res as Record<string, unknown>).message === "string"
-    ? ((res as Record<string, unknown>).message as string)
-    : fallback;
+  const msg =
+    typeof (res as Record<string, unknown>).message === "string"
+      ? ((res as Record<string, unknown>).message as string)
+      : fallback;
   throw new Error(msg);
 }
 
@@ -137,7 +139,7 @@ export async function installTemplateFromUrl(params: {
 
 export async function installTemplateFromFile(
   file: File,
-  name?: string
+  name?: string,
 ): Promise<TemplateInstallResult | null> {
   const base64Data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -150,11 +152,14 @@ export async function installTemplateFromFile(
     file_data: base64Data,
     name: name || undefined,
   });
-  return assertInstallResult(res, "安装失败，请确认压缩包内包含 report.typ、image_template.html 或 html_template.html 入口。");
+  return assertInstallResult(
+    res,
+    "安装失败，请确认压缩包内包含 report.typ、image_template.html 或 html_template.html 入口。",
+  );
 }
 
 export async function uninstallTemplate(
-  name: string
+  name: string,
 ): Promise<{ name: string; removed: boolean } | null> {
   const res = await apiPost<{ name: string; removed: boolean }>(`templates/uninstall`, {
     name,
@@ -165,4 +170,3 @@ export async function uninstallTemplate(
   }
   throw new Error("卸载失败，请查看服务器日志。");
 }
-

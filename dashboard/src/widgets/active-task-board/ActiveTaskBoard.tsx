@@ -27,10 +27,7 @@ export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
       key: "task_id",
       width: 170,
       render: (id: string) => (
-        <a
-          className="font-mono text-xs font-semibold"
-          onClick={() => onViewTrace(id)}
-        >
+        <a className="font-mono text-xs font-semibold" onClick={() => onViewTrace(id)}>
           {id}
         </a>
       ),

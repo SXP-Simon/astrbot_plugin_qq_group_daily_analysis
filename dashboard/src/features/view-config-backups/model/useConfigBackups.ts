@@ -33,8 +33,7 @@ export function useConfigBackups() {
       const backups = await fetchConfigBackups();
       if (request === listRequest.current) setItems(backups);
     } catch {
-      if (request === listRequest.current)
-        setError("备份列表暂时读不到，请稍后刷新重试。");
+      if (request === listRequest.current) setError("备份列表暂时读不到，请稍后刷新重试。");
     } finally {
       if (request === listRequest.current) setLoading(false);
     }
@@ -50,9 +49,7 @@ export function useConfigBackups() {
       if (request === detailRequest.current) setDetail(backup);
     } catch {
       if (request === detailRequest.current)
-        setDetailError(
-          "这份备份暂时无法打开，可能已被清理或内容损坏。请刷新列表后重试。",
-        );
+        setDetailError("这份备份暂时无法打开，可能已被清理或内容损坏。请刷新列表后重试。");
     } finally {
       if (request === detailRequest.current) setDetailLoading(false);
     }

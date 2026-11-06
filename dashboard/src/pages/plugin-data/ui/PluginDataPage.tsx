@@ -1,11 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { ResourceManagementContext } from "../../../features/manage-template-resources/model/ResourceManagementContext";
 import { Card, Space, Alert, Tabs } from "antd";
-import {
-  FolderOpenOutlined,
-  ThunderboltOutlined,
-  SaveOutlined,
-} from "@ant-design/icons";
+import { FolderOpenOutlined, ThunderboltOutlined, SaveOutlined } from "@ant-design/icons";
 import { usePluginDataViewModel } from "../model/usePluginDataViewModel";
 import { StoredRecordsTab } from "./StoredRecordsTab";
 import { ManagedFilesPanel } from "./partitions/ManagedFilesPanel";
@@ -15,12 +11,20 @@ import { CheckpointsTab } from "./checkpoints/CheckpointsTab";
 import { CheckpointDetailModal } from "./checkpoints/CheckpointDetailModal";
 import type { FontManagementRequest } from "../../../features/manage-typst-fonts/model/FontManagementContext";
 
-export const PluginDataPage: React.FC<{ onNavigate?: (page: "reports" | "config" | "traces") => void; fontRequest?: FontManagementRequest | null; onFontRequestHandled?: () => void }> = ({ onNavigate, fontRequest, onFontRequestHandled }) => {
+export const PluginDataPage: React.FC<{
+  onNavigate?: (page: "reports" | "config" | "traces") => void;
+  fontRequest?: FontManagementRequest | null;
+  onFontRequestHandled?: () => void;
+}> = ({ onNavigate, fontRequest, onFontRequestHandled }) => {
   const vm = usePluginDataViewModel();
   const [activeTab, setActiveTab] = useState<string>("partitions");
   const resourceRequest = useContext(ResourceManagementContext)?.request;
-  useEffect(() => { if (resourceRequest) setActiveTab("partitions"); }, [resourceRequest]);
-  useEffect(() => { if (fontRequest) setActiveTab("partitions"); }, [fontRequest]);
+  useEffect(() => {
+    if (resourceRequest) setActiveTab("partitions");
+  }, [resourceRequest]);
+  useEffect(() => {
+    if (fontRequest) setActiveTab("partitions");
+  }, [fontRequest]);
 
   useEffect(() => {
     vm.refreshAll();
@@ -59,7 +63,14 @@ export const PluginDataPage: React.FC<{ onNavigate?: (page: "reports" | "config"
                 </span>
               ),
             },
-            { key: "records", label: <span><SaveOutlined /> 分析存档与头像</span> },
+            {
+              key: "records",
+              label: (
+                <span>
+                  <SaveOutlined /> 分析存档与头像
+                </span>
+              ),
+            },
             {
               key: "incremental",
               label: (
@@ -81,7 +92,14 @@ export const PluginDataPage: React.FC<{ onNavigate?: (page: "reports" | "config"
       </Card>
 
       {/* 1. 存储空间全景 */}
-      {activeTab === "partitions" && <ManagedFilesPanel onNavigate={onNavigate} onOpenDataTab={setActiveTab} fontRequest={fontRequest} onFontRequestHandled={onFontRequestHandled} />}
+      {activeTab === "partitions" && (
+        <ManagedFilesPanel
+          onNavigate={onNavigate}
+          onOpenDataTab={setActiveTab}
+          fontRequest={fontRequest}
+          onFontRequestHandled={onFontRequestHandled}
+        />
+      )}
 
       {activeTab === "records" && <StoredRecordsTab />}
 

@@ -7,6 +7,11 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+# 同一 PR 的新提交替代旧运行；主干和手动运行各自使用唯一分组。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   detect-changes:
     name: Detect Changed Paths
@@ -48,6 +53,7 @@ jobs:
               - '.github/workflows/ci.yml'
               - 'scripts/verify-commit.js'
               - 'lefthook.yml'
+              - '.pre-commit-config.yaml'
 
       - name: Detect Conventional Commit with PR Number Suffix
         id: merge_commit
@@ -188,13 +194,16 @@ jobs:
 
       - name: Ruff Check & Format
         run: |
-          uvx ruff check .
-          uvx ruff format --check .
+          uv run --no-project python scripts/check_python.py lint .
+          uv run --no-project python scripts/check_python.py format --check .
 
       - name: Install Dependencies
         run: |
-          uv venv .venv
+          uv venv --python 3.12 .venv
           uv pip install -r requirements-dev.txt
+
+      - name: Pyright Type Check
+        run: .venv/bin/python scripts/check_python.py typecheck
 
       - name: Restore Typst Test Fonts
         uses: actions/cache@v4
@@ -214,14 +223,6 @@ jobs:
 
           asyncio.run(download_typst_fonts(Path(".cache/typst-tests"), "", source="github"))
           PY
-
-      - name: Set up Node.js for Pyright
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Pyright Type Check
-        run: npx pyright
 
       - name: Run Pytest Suite
         run: |
@@ -276,21 +277,21 @@ jobs:
             exit 1
           fi
 
-      - name: Unit & Integration Tests (Vitest)
+      - name: Oxfmt & Oxlint Check
         working-directory: ./dashboard
-        run: pnpm test
-
-      - name: ESLint Check
-        working-directory: ./dashboard
-        run: pnpm lint
+        run: pnpm format:check && pnpm lint
 
       - name: TypeScript Typecheck
         working-directory: ./dashboard
         run: pnpm typecheck
 
+      - name: Unit & Integration Tests (Vitest)
+        working-directory: ./dashboard
+        run: pnpm test
+
       - name: Build Single Bundle
         working-directory: ./dashboard
-        run: pnpm build
+        run: pnpm build:no-typecheck
 
       - name: Verify Bundle Outputs & Consistency
         run: |

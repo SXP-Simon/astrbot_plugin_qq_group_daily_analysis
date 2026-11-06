@@ -14,9 +14,7 @@ vi.mock("../../../../entities/plugin-data/api/pluginDataApi", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(fetchConfigBackups).mockResolvedValue(
-    mockConfigBackups.map((item) => item.backup),
-  );
+  vi.mocked(fetchConfigBackups).mockResolvedValue(mockConfigBackups.map((item) => item.backup));
   vi.mocked(fetchConfigBackup).mockResolvedValue(mockConfigBackups[0]);
 });
 
@@ -42,18 +40,12 @@ it("列出旧版本和缺失元数据，按原始结构展开对象、数组和�
   await expand("example_array");
   expect(screen.getByText("[2]", { exact: true })).toBeInTheDocument();
   expect(screen.getByText("false", { exact: true })).toBeInTheDocument();
-  expect(
-    screen.getByText("null", { exact: true, selector: "code" }),
-  ).toBeInTheDocument();
+  expect(screen.getByText("null", { exact: true, selector: "code" })).toBeInTheDocument();
   expect(screen.getByText("42", { exact: true })).toBeInTheDocument();
   await expand("prompts");
   await expand("topic_analysis");
-  expect(document.querySelector("pre")?.textContent).toContain(
-    "主要观点，并说明讨论的结果。\n",
-  );
-  expect(
-    screen.queryByRole("button", { name: /恢复|应用|保存配置/ }),
-  ).not.toBeInTheDocument();
+  expect(document.querySelector("pre")?.textContent).toContain("主要观点，并说明讨论的结果。\n");
+  expect(screen.queryByRole("button", { name: /恢复|应用|保存配置/ })).not.toBeInTheDocument();
 }, 15000);
 
 // 真实弹窗和表格涉及多次重渲染，与上面的交互用例使用相同时限。
@@ -68,7 +60,5 @@ it("列表失败可以刷新，备份被删除时给出读取失败说明", asyn
   vi.mocked(fetchConfigBackup).mockRejectedValueOnce(new Error("removed"));
   fireEvent.click(screen.getAllByRole("button", { name: "查看" })[0]);
   expect(await screen.findByText(/这份备份暂时无法打开/)).toBeInTheDocument();
-  expect(fetchConfigBackup).toHaveBeenCalledWith(
-    mockConfigBackups[0].backup.filename,
-  );
+  expect(fetchConfigBackup).toHaveBeenCalledWith(mockConfigBackups[0].backup.filename);
 }, 15000);

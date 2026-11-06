@@ -29,8 +29,14 @@ import { ConfigPage } from "../pages/config/ui/ConfigPage";
 import { useConfigViewModel } from "../pages/config/model/useConfigViewModel";
 import { PluginDataPage } from "../pages/plugin-data/ui/PluginDataPage";
 import { DevToolbar } from "../widgets/dev-bar/DevToolbar";
-import { FontManagementContext, type FontManagementRequest } from "../features/manage-typst-fonts/model/FontManagementContext";
-import { ResourceManagementContext, type ResourceManagementRequest } from "../features/manage-template-resources/model/ResourceManagementContext";
+import {
+  FontManagementContext,
+  type FontManagementRequest,
+} from "../features/manage-typst-fonts/model/FontManagementContext";
+import {
+  ResourceManagementContext,
+  type ResourceManagementRequest,
+} from "../features/manage-template-resources/model/ResourceManagementContext";
 
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
@@ -98,7 +104,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       const activeTabEl = document.querySelector<HTMLElement>(
-        `.ant-tabs-tab-active, [data-node-key="${activeTab}"]`
+        `.ant-tabs-tab-active, [data-node-key="${activeTab}"]`,
       );
       if (activeTabEl && typeof activeTabEl.scrollIntoView === "function") {
         activeTabEl.scrollIntoView({
@@ -197,12 +203,7 @@ export const App: React.FC = () => {
           <ApartmentOutlined /> 分析记录
         </span>
       ),
-      children: (
-        <TracesPage
-          viewModel={tracesVM}
-          onViewTrace={handleViewTrace}
-        />
-      ),
+      children: <TracesPage viewModel={tracesVM} onViewTrace={handleViewTrace} />,
     },
     {
       key: "context",
@@ -211,12 +212,7 @@ export const App: React.FC = () => {
           <ExperimentOutlined /> 统计与消耗
         </span>
       ),
-      children: (
-        <ContextInsightPage
-          viewModel={contextInsightVM}
-          onViewTrace={handleViewTrace}
-        />
-      ),
+      children: <ContextInsightPage viewModel={contextInsightVM} onViewTrace={handleViewTrace} />,
     },
     {
       key: "reports",
@@ -225,9 +221,7 @@ export const App: React.FC = () => {
           <FolderOpenOutlined /> 历史报告
         </span>
       ),
-      children: (
-        <ReportsPage viewModel={reportsVM} onViewTrace={handleViewTrace} />
-      ),
+      children: <ReportsPage viewModel={reportsVM} onViewTrace={handleViewTrace} />,
     },
     {
       key: "logs",
@@ -236,9 +230,7 @@ export const App: React.FC = () => {
           <FileTextOutlined /> 运行日志
         </span>
       ),
-      children: (
-        <LogsPage viewModel={logsVM} onViewTrace={handleViewTrace} />
-      ),
+      children: <LogsPage viewModel={logsVM} onViewTrace={handleViewTrace} />,
     },
     {
       key: "config",
@@ -256,7 +248,13 @@ export const App: React.FC = () => {
           <HddOutlined /> 数据管理
         </span>
       ),
-      children: <PluginDataPage onNavigate={handleTabChange} fontRequest={fontRequest} onFontRequestHandled={() => setFontRequest(null)} />,
+      children: (
+        <PluginDataPage
+          onNavigate={handleTabChange}
+          fontRequest={fontRequest}
+          onFontRequestHandled={() => setFontRequest(null)}
+        />
+      ),
     },
   ];
 
@@ -274,83 +272,96 @@ export const App: React.FC = () => {
         },
       }}
     >
-      <FontManagementContext.Provider value={{
-        open: selection => { setFontRequest({ ...selection, sequence: ++fontNavigationSequence.current }); handleTabChange("plugin-data"); },
-        changed: () => setFontVersion(value => value + 1), version: fontVersion,
-      }}>
-      <ResourceManagementContext.Provider value={{
-        open: selection => { setResourceRequest({ ...selection, sequence: ++resourceNavigationSequence.current }); handleTabChange("plugin-data"); },
-        request: resourceRequest, handled: () => setResourceRequest(null),
-        changed: () => setResourceVersion(value => value + 1), version: resourceVersion,
-      }}>
-      <div
-        style={{
-          minHeight: "100vh",
-          width: "100%",
-          maxWidth: "100vw",
-          overflowX: "hidden",
-          boxSizing: "border-box",
-          background: isDark ? "#000000" : "#f5f5f5",
-          padding: 12,
-          color: isDark ? "#ffffff" : "#000000",
-          fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
+      <FontManagementContext.Provider
+        value={{
+          open: (selection) => {
+            setFontRequest({ ...selection, sequence: ++fontNavigationSequence.current });
+            handleTabChange("plugin-data");
+          },
+          changed: () => setFontVersion((value) => value + 1),
+          version: fontVersion,
         }}
       >
-        {/* 顶部 HeaderBar 微件 */}
-        <HeaderBar
-          isDark={isDark}
-          onRefresh={handleRefreshAll}
-          onOpenTrigger={triggerVM.handleOpen}
-          loading={overviewVM.loading}
-        />
+        <ResourceManagementContext.Provider
+          value={{
+            open: (selection) => {
+              setResourceRequest({ ...selection, sequence: ++resourceNavigationSequence.current });
+              handleTabChange("plugin-data");
+            },
+            request: resourceRequest,
+            handled: () => setResourceRequest(null),
+            changed: () => setResourceVersion((value) => value + 1),
+            version: resourceVersion,
+          }}
+        >
+          <div
+            style={{
+              minHeight: "100vh",
+              width: "100%",
+              maxWidth: "100vw",
+              overflowX: "hidden",
+              boxSizing: "border-box",
+              background: isDark ? "#000000" : "#f5f5f5",
+              padding: 12,
+              color: isDark ? "#ffffff" : "#000000",
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
+            }}
+          >
+            {/* 顶部 HeaderBar 微件 */}
+            <HeaderBar
+              isDark={isDark}
+              onRefresh={handleRefreshAll}
+              onOpenTrigger={triggerVM.handleOpen}
+              loading={overviewVM.loading}
+            />
 
-        {/* 核心 Tab 导航与页面路由 */}
-        <Tabs
-          activeKey={activeTab}
-          onChange={handleTabChange}
-          items={tabItems}
-          type="card"
-          size="small"
-        />
+            {/* 核心 Tab 导航与页面路由 */}
+            <Tabs
+              activeKey={activeTab}
+              onChange={handleTabChange}
+              items={tabItems}
+              type="card"
+              size="small"
+            />
 
-        {/* 触发任务模态框 (Feature) */}
-        <TriggerTaskModal
-          open={triggerVM.open}
-          groupId={triggerVM.groupId}
-          groupName={triggerVM.groupName}
-          platform={triggerVM.platform}
-          providerId={triggerVM.providerId}
-          templateName={triggerVM.templateName}
-          submitting={triggerVM.submitting}
-          connectedPlatforms={triggerVM.connectedPlatforms}
-          loadingPlatforms={triggerVM.loadingPlatforms}
-          providers={triggerVM.providers}
-          loadingProviders={triggerVM.loadingProviders}
-          templates={triggerVM.templates}
-          loadingTemplates={triggerVM.loadingTemplates}
-          templatesError={triggerVM.templatesError}
-          onRefreshTemplates={() => void triggerVM.refreshTemplates()}
-          onGroupIdChange={triggerVM.setGroupId}
-          onGroupNameChange={triggerVM.setGroupName}
-          onPlatformChange={triggerVM.setPlatform}
-          onProviderChange={triggerVM.setProviderId}
-          onTemplateChange={triggerVM.setTemplateName}
-          onClose={triggerVM.handleClose}
-          onSubmit={triggerVM.handleSubmit}
-        />
+            {/* 触发任务模态框 (Feature) */}
+            <TriggerTaskModal
+              open={triggerVM.open}
+              groupId={triggerVM.groupId}
+              groupName={triggerVM.groupName}
+              platform={triggerVM.platform}
+              providerId={triggerVM.providerId}
+              templateName={triggerVM.templateName}
+              submitting={triggerVM.submitting}
+              connectedPlatforms={triggerVM.connectedPlatforms}
+              loadingPlatforms={triggerVM.loadingPlatforms}
+              providers={triggerVM.providers}
+              loadingProviders={triggerVM.loadingProviders}
+              templates={triggerVM.templates}
+              loadingTemplates={triggerVM.loadingTemplates}
+              templatesError={triggerVM.templatesError}
+              onRefreshTemplates={() => void triggerVM.refreshTemplates()}
+              onGroupIdChange={triggerVM.setGroupId}
+              onGroupNameChange={triggerVM.setGroupName}
+              onPlatformChange={triggerVM.setPlatform}
+              onProviderChange={triggerVM.setProviderId}
+              onTemplateChange={triggerVM.setTemplateName}
+              onClose={triggerVM.handleClose}
+              onSubmit={triggerVM.handleSubmit}
+            />
 
-        {/* 链路追溯抽屉 (Widget) */}
-        <TraceDrawer
-          traceId={selectedTraceId}
-          open={!!selectedTraceId}
-          onClose={() => setSelectedTraceId(null)}
-        />
+            {/* 链路追溯抽屉 (Widget) */}
+            <TraceDrawer
+              traceId={selectedTraceId}
+              open={!!selectedTraceId}
+              onClose={() => setSelectedTraceId(null)}
+            />
 
-        {/* 独立开发调试浮动工具栏 (Dev Only) */}
-        {import.meta.env.DEV && <DevToolbar />}
-      </div>
-      </ResourceManagementContext.Provider>
+            {/* 独立开发调试浮动工具栏 (Dev Only) */}
+            {import.meta.env.DEV && <DevToolbar />}
+          </div>
+        </ResourceManagementContext.Provider>
       </FontManagementContext.Provider>
     </ConfigProvider>
   );

@@ -88,7 +88,9 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     for (const [, stat] of stageStats) {
       if (stat.attempts.length > 1) {
         totalOverheadMs += stat.retryOverhead;
-        retriedStages.push(`${formatStageName(stat.attempts[0].stage_name)} (${stat.attempts.length}次)`);
+        retriedStages.push(
+          `${formatStageName(stat.attempts[0].stage_name)} (${stat.attempts.length}次)`,
+        );
       }
     }
     return {
@@ -115,7 +117,9 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
 
       const ordinal = (labels.get(span.stage_name) || 0) + 1;
       labels.set(span.stage_name, ordinal);
-      let displayName = baseFormatted + (typeof span.payload?.parent_span_id === "string" && ordinal > 1 ? ` #${ordinal}` : "");
+      let displayName =
+        baseFormatted +
+        (typeof span.payload?.parent_span_id === "string" && ordinal > 1 ? ` #${ordinal}` : "");
       if (totalAttempts > 1) {
         if (currentAttemptIdx === 1) {
           displayName = `${baseFormatted} #1 (初次${span.status === "failed" ? "·失败" : ""})`;
@@ -142,7 +146,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
   // 精简有效流水线（每个阶段仅展示最终有效 Span，并汇总前序重试耗时）
   const effectiveSpans: ProcessedSpanItem[] = useMemo(() => {
     const list: ProcessedSpanItem[] = [];
-    const byId = new Map(processedAllSpans.map(item => [item.rawSpan.span_id, item]));
+    const byId = new Map(processedAllSpans.map((item) => [item.rawSpan.span_id, item]));
 
     for (const [, stat] of stageStats) {
       const latestSpan = stat.attempts[stat.attempts.length - 1];
@@ -161,8 +165,8 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
       });
     }
 
-    const eligible = new Set(list.map(item => item.rawSpan.span_id));
-    const stack = buildSpanTree(spans).filter(node => eligible.has(node.span.span_id));
+    const eligible = new Set(list.map((item) => item.rawSpan.span_id));
+    const stack = buildSpanTree(spans).filter((node) => eligible.has(node.span.span_id));
     const visible = new Set<string>();
     while (stack.length) {
       const node = stack.pop()!;
@@ -170,7 +174,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
       visible.add(node.span.span_id);
       stack.push(...node.children);
     }
-    return list.filter(item => visible.has(item.rawSpan.span_id));
+    return list.filter((item) => visible.has(item.rawSpan.span_id));
   }, [stageStats, spans, processedAllSpans]);
 
   // 当前激活展示的 Span 列表
@@ -183,7 +187,9 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
 
   // 1. 阶段耗时瀑布 / 柱状图 Option
   const durationChartOption = useMemo(() => {
-    const stageNames = currentSpans.map((s) => `${typeof s.rawSpan.payload?.parent_span_id === "string" ? "↳ " : ""}${s.displayName}`);
+    const stageNames = currentSpans.map(
+      (s) => `${typeof s.rawSpan.payload?.parent_span_id === "string" ? "↳ " : ""}${s.displayName}`,
+    );
     const durations = currentSpans.map((s) => s.durationMs);
     const totalMs = trace.duration_ms || durations.reduce((acc, v) => acc + v, 0) || 1;
 
@@ -295,7 +301,12 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     const labels: string[] = ["起点 (Init)"];
     const memValues: number[] = [perf?.init_memory_mb || 0];
 
-    const sourceSpans = [...(pipelineMode === "effective" ? effectiveSpans : processedAllSpans)].sort((a, b) => (a.rawSpan.started_at * 1000 + a.durationMs) - (b.rawSpan.started_at * 1000 + b.durationMs));
+    const sourceSpans = [
+      ...(pipelineMode === "effective" ? effectiveSpans : processedAllSpans),
+    ].sort(
+      (a, b) =>
+        a.rawSpan.started_at * 1000 + a.durationMs - (b.rawSpan.started_at * 1000 + b.durationMs),
+    );
 
     sourceSpans.forEach((item) => {
       labels.push(item.displayName);
@@ -334,7 +345,8 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
           const curVal = memValues[idx];
           const prevVal = idx > 0 ? memValues[idx - 1] : curVal;
           const delta = (curVal - prevVal).toFixed(2);
-          const deltaColor = Number(delta) > 0 ? "#dc2626" : Number(delta) < 0 ? "#16a34a" : "#64748b";
+          const deltaColor =
+            Number(delta) > 0 ? "#dc2626" : Number(delta) < 0 ? "#16a34a" : "#64748b";
 
           return `
             <div style="font-weight: 600; font-size: 12px; margin-bottom: 4px; color: ${isDark ? "#ffffff" : "#0f172a"};">
@@ -537,9 +549,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
   }, [spans]);
 
   const hasMetrics =
-    spans.length > 0 ||
-    Boolean(perf?.peak_memory_mb) ||
-    Boolean(perf?.init_memory_mb);
+    spans.length > 0 || Boolean(perf?.peak_memory_mb) || Boolean(perf?.init_memory_mb);
 
   // 动态计算图表高度，保证条目较多时不拥挤
   const chartHeight = useMemo(() => {
@@ -578,7 +588,9 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
             全链路性能指标与运行期资源观测
           </Text>
           <Tooltip title="生命周期耗时、阶段边界的宿主 RSS 采样及传输体积。宿主采样不包含 Typst 子进程开销，隔离编译峰值请查看对应编译阶段。">
-            <InfoCircleOutlined style={{ color: isDark ? "#8b949e" : "#94a3b8", fontSize: 11, cursor: "pointer" }} />
+            <InfoCircleOutlined
+              style={{ color: isDark ? "#8b949e" : "#94a3b8", fontSize: 11, cursor: "pointer" }}
+            />
           </Tooltip>
         </Space>
 
@@ -642,29 +654,49 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
         }}
       >
         <span style={{ fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
-          有效耗时: <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>{trace.duration_ms ? formatDuration(trace.duration_ms) : "计算中"}</b>
+          有效耗时:{" "}
+          <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>
+            {trace.duration_ms ? formatDuration(trace.duration_ms) : "计算中"}
+          </b>
         </span>
         <span style={{ color: isDark ? "#30363d" : "#e2e8f0" }}>|</span>
         <span style={{ fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
-          宿主采样峰值: <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>{perf?.peak_memory_mb ? `${perf.peak_memory_mb.toFixed(1)} MiB` : "--"}</b>
+          宿主采样峰值:{" "}
+          <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>
+            {perf?.peak_memory_mb ? `${perf.peak_memory_mb.toFixed(1)} MiB` : "--"}
+          </b>
         </span>
         {perf?.delta_memory_mb !== undefined && (
           <Tag
             color={perf.delta_memory_mb > 15 ? "orange" : "default"}
             style={{ margin: 0, padding: "0 4px", fontSize: 10, lineHeight: "16px", height: 16 }}
           >
-            宿主净变化: {perf.delta_memory_mb > 0 ? `+${perf.delta_memory_mb.toFixed(1)}` : perf.delta_memory_mb.toFixed(1)} MiB
+            宿主净变化:{" "}
+            {perf.delta_memory_mb > 0
+              ? `+${perf.delta_memory_mb.toFixed(1)}`
+              : perf.delta_memory_mb.toFixed(1)}{" "}
+            MiB
           </Tag>
         )}
         {hasRetries && (
           <>
             <span style={{ color: isDark ? "#30363d" : "#e2e8f0" }}>|</span>
-            <Tooltip title={`检测到任务包含断点续跑或阶段重试 (${retrySummary.summaryText})，累计产生约 ${formatDuration(retrySummary.totalOverheadMs)} 前序重试开销`}>
+            <Tooltip
+              title={`检测到任务包含断点续跑或阶段重试 (${retrySummary.summaryText})，累计产生约 ${formatDuration(retrySummary.totalOverheadMs)} 前序重试开销`}
+            >
               <Tag
                 color="volcano"
-                style={{ margin: 0, padding: "0 6px", fontSize: 10, lineHeight: "16px", height: 16, cursor: "pointer" }}
+                style={{
+                  margin: 0,
+                  padding: "0 6px",
+                  fontSize: 10,
+                  lineHeight: "16px",
+                  height: 16,
+                  cursor: "pointer",
+                }}
               >
-                重试损耗: +{formatDuration(retrySummary.totalOverheadMs)} ({retrySummary.retriedStages.length}个阶段发生重试)
+                重试损耗: +{formatDuration(retrySummary.totalOverheadMs)} (
+                {retrySummary.retriedStages.length}个阶段发生重试)
               </Tag>
             </Tooltip>
           </>
@@ -718,4 +750,3 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     </Card>
   );
 };
-

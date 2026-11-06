@@ -1,18 +1,6 @@
 import React from "react";
-import {
-  Modal,
-  Button,
-  Space,
-  Descriptions,
-  Card,
-  Tag,
-  Typography,
-  theme,
-} from "antd";
-import {
-  ThunderboltOutlined,
-  CopyOutlined,
-} from "@ant-design/icons";
+import { Modal, Button, Space, Descriptions, Card, Tag, Typography, theme } from "antd";
+import { ThunderboltOutlined, CopyOutlined } from "@ant-design/icons";
 import {
   IncrementalBatchItem,
   IncrementalBatchTopic,
@@ -58,11 +46,7 @@ export const BatchDetailModal: React.FC<BatchDetailModalProps> = ({
       open={open}
       onCancel={onClose}
       footer={[
-        <Button
-          key="copy"
-          icon={<CopyOutlined />}
-          onClick={() => handleCopyJson(batchDetail)}
-        >
+        <Button key="copy" icon={<CopyOutlined />} onClick={() => handleCopyJson(batchDetail)}>
           复制完整 JSON
         </Button>,
         <Button key="close" type="primary" onClick={onClose}>
@@ -147,13 +131,8 @@ export const BatchDetailModal: React.FC<BatchDetailModalProps> = ({
                       </Text>
                     </span>
                     <Text type="secondary" style={{ fontSize: 11 }}>
-                      (Prompt:{" "}
-                      {formatTokens(batchDetail.token_usage.prompt_tokens || 0)} /
-                      Completion:{" "}
-                      {formatTokens(
-                        batchDetail.token_usage.completion_tokens || 0
-                      )}
-                      )
+                      (Prompt: {formatTokens(batchDetail.token_usage.prompt_tokens || 0)} /
+                      Completion: {formatTokens(batchDetail.token_usage.completion_tokens || 0)})
                     </Text>
                   </Space>
                 ) : (
@@ -171,8 +150,7 @@ export const BatchDetailModal: React.FC<BatchDetailModalProps> = ({
                 </Paragraph>
               ) : typeof batchDetail.chat_quality_review === "object" ? (
                 (() => {
-                  const review =
-                    batchDetail.chat_quality_review as ChatQualityReviewObject;
+                  const review = batchDetail.chat_quality_review as ChatQualityReviewObject;
                   return (
                     <Space direction="vertical" size={4} style={{ width: "100%" }}>
                       {review.title && (
@@ -188,17 +166,14 @@ export const BatchDetailModal: React.FC<BatchDetailModalProps> = ({
                         </Text>
                       )}
                       {Array.isArray(review.dimensions) ? (
-                        review.dimensions.map(
-                          (dim: ChatQualityDimension, idx: number) => (
-                            <div key={idx} style={{ fontSize: 12, marginTop: 4 }}>
-                              <Tag color="purple">
-                                {dim.name || `维度 ${idx + 1}`} (
-                                {dim.percentage || 0}%)
-                              </Tag>
-                              <Text type="secondary">{dim.comment}</Text>
-                            </div>
-                          )
-                        )
+                        review.dimensions.map((dim: ChatQualityDimension, idx: number) => (
+                          <div key={idx} style={{ fontSize: 12, marginTop: 4 }}>
+                            <Tag color="purple">
+                              {dim.name || `维度 ${idx + 1}`} ({dim.percentage || 0}%)
+                            </Tag>
+                            <Text type="secondary">{dim.comment}</Text>
+                          </div>
+                        ))
                       ) : (
                         <Paragraph style={{ margin: 0, fontSize: 12 }}>
                           {JSON.stringify(batchDetail.chat_quality_review)}
@@ -212,88 +187,71 @@ export const BatchDetailModal: React.FC<BatchDetailModalProps> = ({
           ) : null}
 
           {Array.isArray(batchDetail.topics) && batchDetail.topics.length > 0 && (
-            <Card
-              size="small"
-              title={`提炼话题 (${batchDetail.topics.length} 个)`}
-            >
+            <Card size="small" title={`提炼话题 (${batchDetail.topics.length} 个)`}>
               <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                {batchDetail.topics.map(
-                  (t: IncrementalBatchTopic, idx: number) => (
-                    <div
-                      key={idx}
-                      style={{
-                        fontSize: 12,
-                        paddingBottom: 6,
-                        borderBottom:
-                          idx < batchDetail.topics!.length - 1
-                            ? `1px dashed ${token.colorBorderSecondary}`
-                            : "none",
-                      }}
-                    >
-                      <Space size={6}>
-                        <Tag
-                          color={
-                            (t.heat_score || 0) >= 80
-                              ? "volcano"
-                              : (t.heat_score || 0) >= 50
+                {batchDetail.topics.map((t: IncrementalBatchTopic, idx: number) => (
+                  <div
+                    key={idx}
+                    style={{
+                      fontSize: 12,
+                      paddingBottom: 6,
+                      borderBottom:
+                        idx < batchDetail.topics!.length - 1
+                          ? `1px dashed ${token.colorBorderSecondary}`
+                          : "none",
+                    }}
+                  >
+                    <Space size={6}>
+                      <Tag
+                        color={
+                          (t.heat_score || 0) >= 80
+                            ? "volcano"
+                            : (t.heat_score || 0) >= 50
                               ? "orange"
                               : "geekblue"
-                          }
-                        >
-                          {t.title || "未命名话题"} ({t.heat_score || 0}℃)
-                        </Tag>
-                        {t.category ? <Tag>{String(t.category)}</Tag> : null}
-                      </Space>
-                      {t.description || t.summary ? (
-                        <div
-                          style={{
-                            marginTop: 4,
-                            color: token.colorTextSecondary,
-                          }}
-                        >
-                          {String(t.description || t.summary)}
-                        </div>
-                      ) : null}
-                    </div>
-                  )
-                )}
+                        }
+                      >
+                        {t.title || "未命名话题"} ({t.heat_score || 0}℃)
+                      </Tag>
+                      {t.category ? <Tag>{String(t.category)}</Tag> : null}
+                    </Space>
+                    {t.description || t.summary ? (
+                      <div
+                        style={{
+                          marginTop: 4,
+                          color: token.colorTextSecondary,
+                        }}
+                      >
+                        {String(t.description || t.summary)}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
               </Space>
             </Card>
           )}
 
-          {Array.isArray(batchDetail.golden_quotes) &&
-            batchDetail.golden_quotes.length > 0 && (
-              <Card
-                size="small"
-                title={`精彩金句 (${batchDetail.golden_quotes.length} 条)`}
-              >
-                <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                  {batchDetail.golden_quotes.map(
-                    (q: IncrementalBatchGoldenQuote, idx: number) => (
-                      <div key={idx} style={{ fontSize: 12 }}>
-                        <Text strong style={{ color: "#d48806" }}>
-                          “{String(q.content || q.text || JSON.stringify(q))}”
-                        </Text>
-                        {(q.sender_nickname || q.sender_name || q.author) && (
-                          <Text type="secondary" style={{ marginLeft: 8 }}>
-                            ——{" "}
-                            {String(
-                              q.sender_nickname || q.sender_name || q.author
-                            )}
-                          </Text>
-                        )}
-                      </div>
-                    )
-                  )}
-                </Space>
-              </Card>
-            )}
+          {Array.isArray(batchDetail.golden_quotes) && batchDetail.golden_quotes.length > 0 && (
+            <Card size="small" title={`精彩金句 (${batchDetail.golden_quotes.length} 条)`}>
+              <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                {batchDetail.golden_quotes.map((q: IncrementalBatchGoldenQuote, idx: number) => (
+                  <div key={idx} style={{ fontSize: 12 }}>
+                    <Text strong style={{ color: "#d48806" }}>
+                      “{String(q.content || q.text || JSON.stringify(q))}”
+                    </Text>
+                    {(q.sender_nickname || q.sender_name || q.author) && (
+                      <Text type="secondary" style={{ marginLeft: 8 }}>
+                        —— {String(q.sender_nickname || q.sender_name || q.author)}
+                      </Text>
+                    )}
+                  </div>
+                ))}
+              </Space>
+            </Card>
+          )}
 
           <div>
-            <Text
-              strong
-              style={{ fontSize: 12, marginBottom: 4, display: "block" }}
-            >
+            <Text strong style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
               底层完整批次数据 (JSON):
             </Text>
             <pre

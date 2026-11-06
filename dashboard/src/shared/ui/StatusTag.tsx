@@ -58,10 +58,6 @@ export const StatusTag: React.FC<StatusTagProps> = ({ status }) => {
         </Tag>
       );
     default:
-      return (
-        <Tag className="text-xs">
-          {String(status)}
-        </Tag>
-      );
+      return <Tag className="text-xs">{String(status)}</Tag>;
   }
 };

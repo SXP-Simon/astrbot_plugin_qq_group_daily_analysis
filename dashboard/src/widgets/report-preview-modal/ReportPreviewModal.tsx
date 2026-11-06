@@ -1,10 +1,6 @@
 import React from "react";
 import { Modal, Button, Space, Typography, Spin, Empty } from "antd";
-import {
-  FileImageOutlined,
-  FileTextOutlined,
-  DownloadOutlined,
-} from "@ant-design/icons";
+import { FileImageOutlined, FileTextOutlined, DownloadOutlined } from "@ant-design/icons";
 import { ReportItem } from "../../entities/report/model/types";
 
 const { Text } = Typography;
@@ -26,8 +22,8 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
 }) => {
   const isHtml = Boolean(
     report?.is_html ||
-      report?.filename.toLowerCase().endsWith(".html") ||
-      report?.filename.toLowerCase().endsWith(".htm")
+    report?.filename.toLowerCase().endsWith(".html") ||
+    report?.filename.toLowerCase().endsWith(".htm"),
   );
 
   return (

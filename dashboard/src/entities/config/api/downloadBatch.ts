@@ -12,27 +12,38 @@ export class DownloadBatch {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
     bytes[6] = (bytes[6] & 15) | 64;
     bytes[8] = (bytes[8] & 63) | 128;
-    const hex = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+    const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
     const id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
     this.active.add(id);
-    try { return await download(id); }
-    finally { this.active.delete(id); }
+    try {
+      return await download(id);
+    } finally {
+      this.active.delete(id);
+    }
   }
 
   async cancel(): Promise<void> {
     this.stopped = true;
-    const results = await Promise.allSettled([...this.active].map(async download_id => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      let response: unknown;
-      try {
-        response = await Promise.race([apiPost(this.cancelEndpoint, { download_id }), new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error("取消请求超过 10 秒未收到回执")), 10_000);
-        })]);
-      } finally { clearTimeout(timer); }
-      const data = extractData<{ download_id?: string; cancelled?: boolean }>(response);
-      if (data?.download_id !== download_id || data.cancelled !== true) throw new Error("未收到取消回执");
-    }));
-    if (results.some(result => result.status === "rejected")) {
+    const results = await Promise.allSettled(
+      [...this.active].map(async (download_id) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let response: unknown;
+        try {
+          response = await Promise.race([
+            apiPost(this.cancelEndpoint, { download_id }),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(new Error("取消请求超过 10 秒未收到回执")), 10_000);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+        const data = extractData<{ download_id?: string; cancelled?: boolean }>(response);
+        if (data?.download_id !== download_id || data.cancelled !== true)
+          throw new Error("未收到取消回执");
+      }),
+    );
+    if (results.some((result) => result.status === "rejected")) {
       throw new Error("已停止后续传输，但部分请求的取消尚未确认，请重试取消或等待当前请求结束。");
     }
   }

@@ -15,9 +15,7 @@ vi.mock("../../../../entities/plugin-data/api/pluginDataApi", () => ({
 
 it("切换备份和关闭窗口后，较早完成的请求不会覆盖当前内容", async () => {
   let finish: (value: ConfigBackupDetail) => void = () => {};
-  vi.mocked(fetchConfigBackups).mockResolvedValue(
-    mockConfigBackups.map((item) => item.backup),
-  );
+  vi.mocked(fetchConfigBackups).mockResolvedValue(mockConfigBackups.map((item) => item.backup));
   vi.mocked(fetchConfigBackup)
     .mockImplementationOnce(
       () =>
@@ -41,9 +39,7 @@ it("切换备份和关闭窗口后，较早完成的请求不会覆盖当前内�
     finish(mockConfigBackups[0]);
     await first;
   });
-  expect(result.current.detail?.backup.filename).toBe(
-    mockConfigBackups[1].backup.filename,
-  );
+  expect(result.current.detail?.backup.filename).toBe(mockConfigBackups[1].backup.filename);
   vi.mocked(fetchConfigBackup).mockImplementationOnce(
     () =>
       new Promise((resolve) => {

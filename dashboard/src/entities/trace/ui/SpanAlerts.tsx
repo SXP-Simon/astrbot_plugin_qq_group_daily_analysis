@@ -8,11 +8,7 @@ interface SpanAlertsProps {
   payload?: Record<string, unknown>;
 }
 
-export const SpanAlerts: React.FC<SpanAlertsProps> = ({
-  stageName,
-  status,
-  payload,
-}) => {
+export const SpanAlerts: React.FC<SpanAlertsProps> = ({ stageName, status, payload }) => {
   const { isDark } = useTheme();
 
   const outcome = resolveSpanOutcome(status, payload);
@@ -20,9 +16,19 @@ export const SpanAlerts: React.FC<SpanAlertsProps> = ({
 
   return (
     <>
-      {outcome === "cancelled" && <div style={{ color: isDark ? "#8b949e" : "#64748b", marginBottom: 8 }}>该阶段已取消，后续步骤已停止。</div>}
-      {typeof payload?.failure_reason === "string" && <div style={{ marginBottom: 8, overflowWrap: "anywhere" }}>原始失败原因：{payload.failure_reason}</div>}
-      {payload?.mode === "basic" && typeof payload.reason === "string" && <div style={{ marginBottom: 8, overflowWrap: "anywhere" }}>恢复原因：{payload.reason}</div>}
+      {outcome === "cancelled" && (
+        <div style={{ color: isDark ? "#8b949e" : "#64748b", marginBottom: 8 }}>
+          该阶段已取消，后续步骤已停止。
+        </div>
+      )}
+      {typeof payload?.failure_reason === "string" && (
+        <div style={{ marginBottom: 8, overflowWrap: "anywhere" }}>
+          原始失败原因：{payload.failure_reason}
+        </div>
+      )}
+      {payload?.mode === "basic" && typeof payload.reason === "string" && (
+        <div style={{ marginBottom: 8, overflowWrap: "anywhere" }}>恢复原因：{payload.reason}</div>
+      )}
       {/* 异常提示 */}
       {isFailed && (
         <div
@@ -75,9 +81,7 @@ export const SpanAlerts: React.FC<SpanAlertsProps> = ({
             lineHeight: 1.5,
           }}
         >
-          <div style={{ fontWeight: 600, marginBottom: 2 }}>
-            部分子任务调用异常：
-          </div>
+          <div style={{ fontWeight: 600, marginBottom: 2 }}>部分子任务调用异常：</div>
           {payload.subtask_errors.map((err: string, i: number) => (
             <div key={i} className="font-mono" style={{ fontSize: 10, marginTop: 1 }}>
               • {err}
@@ -104,14 +108,12 @@ export const SpanAlerts: React.FC<SpanAlertsProps> = ({
             }}
           >
             <span style={{ fontWeight: 600, marginRight: 6 }}>
-              {payload?.enabled_features &&
-              Object.values(payload.enabled_features).every((v) => !v)
+              {payload?.enabled_features && Object.values(payload.enabled_features).every((v) => !v)
                 ? "提示："
                 : "警告："}
             </span>
             <span>
-              {payload?.enabled_features &&
-              Object.values(payload.enabled_features).every((v) => !v)
+              {payload?.enabled_features && Object.values(payload.enabled_features).every((v) => !v)
                 ? "配置项中话题、群友画像、金句和质量锐评均未开启。"
                 : "模型未消耗 Token 或未能解析出任何话题/画像/金句，请检查大模型 Provider 连接与配置。"}
             </span>

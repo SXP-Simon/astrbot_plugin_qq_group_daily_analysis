@@ -30,9 +30,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       execCommand?: (commandId: string) => boolean;
     };
     const successful =
-      typeof legacyDoc.execCommand === "function"
-        ? legacyDoc.execCommand("copy")
-        : false;
+      typeof legacyDoc.execCommand === "function" ? legacyDoc.execCommand("copy") : false;
 
     document.body.removeChild(textArea);
     return successful;

@@ -7,9 +7,7 @@ interface CheckpointFilterBarProps {
   vm: ReturnType<typeof usePluginDataViewModel>;
 }
 
-export const CheckpointFilterBar: React.FC<CheckpointFilterBarProps> = ({
-  vm,
-}) => {
+export const CheckpointFilterBar: React.FC<CheckpointFilterBarProps> = ({ vm }) => {
   const {
     ckptGroups,
     ckptFilterGroup,
@@ -30,13 +28,7 @@ export const CheckpointFilterBar: React.FC<CheckpointFilterBarProps> = ({
             value={ckptFilterGroup}
             onChange={(val) => {
               vm.setCkptFilterGroup(val);
-              vm.loadCheckpoints(
-                1,
-                checkpointsPageSize,
-                val,
-                ckptFilterDate,
-                ckptFilterStage
-              );
+              vm.loadCheckpoints(1, checkpointsPageSize, val, ckptFilterDate, ckptFilterStage);
             }}
             options={ckptGroups.map((g) => ({ label: `群: ${g}`, value: g }))}
           />
@@ -47,16 +39,14 @@ export const CheckpointFilterBar: React.FC<CheckpointFilterBarProps> = ({
             allowClear
             placeholder="归属日期 (如 2026-09-10)"
             value={ckptFilterDate}
-            onChange={(e) =>
-              vm.setCkptFilterDate(e.target.value.trim() || undefined)
-            }
+            onChange={(e) => vm.setCkptFilterDate(e.target.value.trim() || undefined)}
             onPressEnter={() =>
               vm.loadCheckpoints(
                 1,
                 checkpointsPageSize,
                 ckptFilterGroup,
                 ckptFilterDate,
-                ckptFilterStage
+                ckptFilterStage,
               )
             }
           />
@@ -70,13 +60,7 @@ export const CheckpointFilterBar: React.FC<CheckpointFilterBarProps> = ({
             value={ckptFilterStage}
             onChange={(val) => {
               vm.setCkptFilterStage(val);
-              vm.loadCheckpoints(
-                1,
-                checkpointsPageSize,
-                ckptFilterGroup,
-                ckptFilterDate,
-                val
-              );
+              vm.loadCheckpoints(1, checkpointsPageSize, ckptFilterGroup, ckptFilterDate, val);
             }}
             options={[
               { label: "全部阶段", value: "" },
@@ -123,7 +107,7 @@ export const CheckpointFilterBar: React.FC<CheckpointFilterBarProps> = ({
                   checkpointsPageSize,
                   ckptFilterGroup,
                   ckptFilterDate,
-                  ckptFilterStage
+                  ckptFilterStage,
                 )
               }
               loading={loadingCheckpoints}

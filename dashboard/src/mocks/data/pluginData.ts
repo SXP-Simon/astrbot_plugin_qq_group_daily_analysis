@@ -31,8 +31,16 @@ export const mockIncrementalBatches: IncrementalBatchesResponse = {
       characters_count: 6850,
       topics_count: 3,
       topics: [
-        { title: "React 19 特性讨论", summary: "探讨了 Action 与 Server Component 在企业级开发中的应用", heat_score: 88 },
-        { title: "LLM Agent 状态机架构", summary: "探讨了断点续跑与快照恢复的设计模式", heat_score: 92 },
+        {
+          title: "React 19 特性讨论",
+          summary: "探讨了 Action 与 Server Component 在企业级开发中的应用",
+          heat_score: 88,
+        },
+        {
+          title: "LLM Agent 状态机架构",
+          summary: "探讨了断点续跑与快照恢复的设计模式",
+          heat_score: 92,
+        },
       ],
     },
     {
@@ -44,7 +52,11 @@ export const mockIncrementalBatches: IncrementalBatchesResponse = {
       characters_count: 11200,
       topics_count: 4,
       topics: [
-        { title: "TypeScript 5.8 新类型语法", summary: "深入分析了严格空安全与内联优化", heat_score: 80 },
+        {
+          title: "TypeScript 5.8 新类型语法",
+          summary: "深入分析了严格空安全与内联优化",
+          heat_score: 80,
+        },
         { title: "群友摸鱼技术交流", summary: "分享了开源键盘与显示器选购心得", heat_score: 75 },
       ],
     },

@@ -9,10 +9,7 @@ interface TracesPageProps {
   onViewTrace: (traceId: string) => void;
 }
 
-export const TracesPage: React.FC<TracesPageProps> = ({
-  viewModel,
-  onViewTrace,
-}) => {
+export const TracesPage: React.FC<TracesPageProps> = ({ viewModel, onViewTrace }) => {
   const {
     traces,
     total,

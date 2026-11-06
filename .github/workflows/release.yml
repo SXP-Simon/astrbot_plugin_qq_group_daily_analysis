@@ -176,7 +176,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm lint
           pnpm typecheck
-          pnpm build
+          pnpm build:no-typecheck
 
       - name: Verify WebUI Artifacts
         if: steps.vars.outputs.should_release == 'true'

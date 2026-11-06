@@ -1,17 +1,6 @@
 import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Select,
-  Button,
-  Modal,
-  Card,
-  Row,
-  Col,
-  Tag,
-  Typography,
-  Image,
-  Alert,
-} from "antd";
+import { Select, Button, Modal, Card, Row, Col, Tag, Typography, Image, Alert } from "antd";
 import {
   EyeOutlined,
   AppstoreOutlined,
@@ -24,7 +13,9 @@ import {
 import { useTheme } from "../../../shared/lib/useTheme";
 import {
   KNOWN_TEMPLATES,
-  supportsTemplate, templateCapabilities, type TemplateRequirements,
+  supportsTemplate,
+  templateCapabilities,
+  type TemplateRequirements,
   getTemplateCdnUrl,
 } from "../../../entities/report/model/templates";
 import { fetchTemplatePreview } from "../../../entities/report/api/reportApi";
@@ -93,58 +84,87 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
   const [previewVisible, setPreviewVisible] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
-  const { templates: remoteTemplates, loading, ready, error, refresh: refreshRemoteTemplates } = useReportTemplates();
+  const {
+    templates: remoteTemplates,
+    loading,
+    ready,
+    error,
+    refresh: refreshRemoteTemplates,
+  } = useReportTemplates();
 
   const currentTemplate =
     typeof value === "string" && value
       ? value
       : typeof defaultValue === "string" && defaultValue
-      ? defaultValue
-      : "HatsuneMiku";
+        ? defaultValue
+        : "HatsuneMiku";
 
   // 模板切换/卸载回退后重置预览弹层状态，避免预览残留叠加（如与画廊弹窗同开）
   useEffect(() => {
     setPreviewVisible(false);
   }, [currentTemplate]);
 
-  const availableTemplates = useMemo(() =>
-    remoteTemplates
-      .filter((item) => supportsTemplate(item, requirements)), [remoteTemplates, requirements]);
-  const templateOptions = useMemo(() => availableTemplates.map((item) => ({
-    label: `${item.display_name || item.label || item.id} [${templateCapabilities(item).join(" / ")}]`,
-    value: item.id,
-  })), [availableTemplates]);
-  const galleryItems = useMemo(() => availableTemplates.map((remote) => {
-    const known = KNOWN_TEMPLATES.find((item) => item.key === remote.id);
-    return {
-      key: remote.id, isCustom: Boolean(remote.is_custom),
-      name: remote.display_name || known?.name || remote.id,
-      desc: remote.desc || known?.desc || "",
-      tag: remote.tag || known?.tag || "", tagColor: remote.tag_color || known?.tagColor || "default",
-      capabilities: templateCapabilities(remote),
-    };
-  }), [availableTemplates]);
+  const availableTemplates = useMemo(
+    () => remoteTemplates.filter((item) => supportsTemplate(item, requirements)),
+    [remoteTemplates, requirements],
+  );
+  const templateOptions = useMemo(
+    () =>
+      availableTemplates.map((item) => ({
+        label: `${item.display_name || item.label || item.id} [${templateCapabilities(item).join(" / ")}]`,
+        value: item.id,
+      })),
+    [availableTemplates],
+  );
+  const galleryItems = useMemo(
+    () =>
+      availableTemplates.map((remote) => {
+        const known = KNOWN_TEMPLATES.find((item) => item.key === remote.id);
+        return {
+          key: remote.id,
+          isCustom: Boolean(remote.is_custom),
+          name: remote.display_name || known?.name || remote.id,
+          desc: remote.desc || known?.desc || "",
+          tag: remote.tag || known?.tag || "",
+          tagColor: remote.tag_color || known?.tagColor || "default",
+          capabilities: templateCapabilities(remote),
+        };
+      }),
+    [availableTemplates],
+  );
   const currentSupported = availableTemplates.some((item) => item.id === currentTemplate);
 
   // 当前选中模板的展示信息：与画廊/下拉同源的元信息合并（API 优先、KNOWN 兜底）
-  const currentMeta =
-    galleryItems.find((g) => g.key === currentTemplate) || {
-      key: currentTemplate,
-      isCustom: false,
-      name: currentTemplate,
-      desc: "自定义或外部模板",
-      tag: "模板",
-      tagColor: "blue",
-      capabilities: [],
-    };
+  const currentMeta = galleryItems.find((g) => g.key === currentTemplate) || {
+    key: currentTemplate,
+    isCustom: false,
+    name: currentTemplate,
+    desc: "自定义或外部模板",
+    tag: "模板",
+    tagColor: "blue",
+    capabilities: [],
+  };
 
   const currentCdnUrl = getTemplateCdnUrl(currentTemplate, cdnBaseUrl);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
-      {error && <Alert type="error" showIcon message={error} action={<Button onClick={() => void refreshRemoteTemplates()}>重试</Button>} />}
-      {ready && !remoteTemplates.length && <Text type="secondary">暂无可用模板，请安装模板或刷新列表。</Text>}
-      {ready && !currentSupported && <Text type="warning">当前主题不支持所选渲染引擎或输出格式，请选择兼容主题。切换不会自动覆盖你的配置。</Text>}
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          message={error}
+          action={<Button onClick={() => void refreshRemoteTemplates()}>重试</Button>}
+        />
+      )}
+      {ready && !remoteTemplates.length && (
+        <Text type="secondary">暂无可用模板，请安装模板或刷新列表。</Text>
+      )}
+      {ready && !currentSupported && (
+        <Text type="warning">
+          当前主题不支持所选渲染引擎或输出格式，请选择兼容主题。切换不会自动覆盖你的配置。
+        </Text>
+      )}
       {cdnBaseUrl === null && (
         <Text type="danger">CDN 地址没填对，请先到「图片渲染策略」改一下，再来看模板预览。</Text>
       )}
@@ -175,16 +195,10 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
         >
           浏览全部模板画廊
         </Button>
-        <Button
-          icon={<DownloadOutlined />}
-          onClick={() => setInstallOpen(true)}
-        >
+        <Button icon={<DownloadOutlined />} onClick={() => setInstallOpen(true)}>
           安装模板
         </Button>
-        <Button
-          icon={<DeleteOutlined />}
-          onClick={() => setUninstallOpen(true)}
-        >
+        <Button icon={<DeleteOutlined />} onClick={() => setUninstallOpen(true)}>
           卸载模板
         </Button>
       </div>
@@ -206,79 +220,75 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       />
 
       {/* 选定模板的实时缩略图与简介卡片 */}
-      {currentSupported && <div
-        style={{
-          display: "flex",
-          gap: 14,
-          padding: "10px 14px",
-          borderRadius: 6,
-          background: isDark ? "rgba(255, 255, 255, 0.03)" : "#f8fafc",
-          border: `1px solid ${isDark ? "#303030" : "#e2e8f0"}`,
-          alignItems: "center",
-        }}
-      >
+      {currentSupported && (
         <div
           style={{
-            width: 72,
-            height: 96,
-            borderRadius: 4,
-            overflow: "hidden",
-            border: `1px solid ${isDark ? "#434343" : "#d9d9d9"}`,
-            flexShrink: 0,
-            cursor: "pointer",
-            background: isDark ? "#000" : "#fff",
-            position: "relative",
+            display: "flex",
+            gap: 14,
+            padding: "10px 14px",
+            borderRadius: 6,
+            background: isDark ? "rgba(255, 255, 255, 0.03)" : "#f8fafc",
+            border: `1px solid ${isDark ? "#303030" : "#e2e8f0"}`,
+            alignItems: "center",
           }}
-          onClick={() => setPreviewVisible(true)}
         >
-          {currentMeta.isCustom ? (
-            <CustomPreviewImage
-              templateName={currentTemplate}
-              height={96}
-              visible={previewVisible}
-              onVisibleChange={setPreviewVisible}
-            />
-          ) : (
-            <Image
-              src={currentCdnUrl || GALLERY_FALLBACK}
-              alt={currentTemplate}
-              width={72}
-              height={96}
-              style={{ objectFit: "cover" }}
-              preview={{
-                visible: previewVisible,
-                onVisibleChange: setPreviewVisible,
-                src: currentCdnUrl,
-              }}
-              fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='96' viewBox='0 0 72 96'><rect width='72' height='96' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='10'>预览图</text></svg>"
-            />
-          )}
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <Text strong style={{ fontSize: 13 }}>
-              {currentMeta.name}
-            </Text>
-            <Tag color={currentMeta.tagColor} style={{ fontSize: 11 }}>
-              {currentMeta.tag}
-            </Tag>
+          <div
+            style={{
+              width: 72,
+              height: 96,
+              borderRadius: 4,
+              overflow: "hidden",
+              border: `1px solid ${isDark ? "#434343" : "#d9d9d9"}`,
+              flexShrink: 0,
+              cursor: "pointer",
+              background: isDark ? "#000" : "#fff",
+              position: "relative",
+            }}
+            onClick={() => setPreviewVisible(true)}
+          >
+            {currentMeta.isCustom ? (
+              <CustomPreviewImage
+                templateName={currentTemplate}
+                height={96}
+                visible={previewVisible}
+                onVisibleChange={setPreviewVisible}
+              />
+            ) : (
+              <Image
+                src={currentCdnUrl || GALLERY_FALLBACK}
+                alt={currentTemplate}
+                width={72}
+                height={96}
+                style={{ objectFit: "cover" }}
+                preview={{
+                  visible: previewVisible,
+                  onVisibleChange: setPreviewVisible,
+                  src: currentCdnUrl,
+                }}
+                fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='96' viewBox='0 0 72 96'><rect width='72' height='96' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='10'>预览图</text></svg>"
+              />
+            )}
           </div>
-          <Paragraph
-            type="secondary"
-            style={{ margin: 0, fontSize: 12, lineHeight: "1.4" }}
-          >
-            {currentMeta.desc}
-          </Paragraph>
-          <Text
-            type="secondary"
-            style={{ fontSize: 11, display: "block", marginTop: 4 }}
-          >
-            <BulbOutlined style={{ marginRight: 4, color: "#faad14" }} />
-            点击缩略图可全屏缩放预览完整长图，或点击上方「浏览全部模板画廊」进行对比选型。
-          </Text>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <Text strong style={{ fontSize: 13 }}>
+                {currentMeta.name}
+              </Text>
+              <Tag color={currentMeta.tagColor} style={{ fontSize: 11 }}>
+                {currentMeta.tag}
+              </Tag>
+            </div>
+            <Paragraph type="secondary" style={{ margin: 0, fontSize: 12, lineHeight: "1.4" }}>
+              {currentMeta.desc}
+            </Paragraph>
+            <Text type="secondary" style={{ fontSize: 11, display: "block", marginTop: 4 }}>
+              <BulbOutlined style={{ marginRight: 4, color: "#faad14" }} />
+              点击缩略图可全屏缩放预览完整长图，或点击上方「浏览全部模板画廊」进行对比选型。
+            </Text>
+          </div>
         </div>
-      </div>}
+      )}
 
       {/* 全部模板画廊弹窗 */}
       <Modal
@@ -338,11 +348,20 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
                     }
                   >
                     <div style={{ marginBottom: 6 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
                         <Text strong style={{ fontSize: 13 }}>
                           {tmpl.name}
                           {isCustom && (
-                            <Tag color="blue" style={{ fontSize: 10, marginLeft: 6, padding: "0 4px" }}>
+                            <Tag
+                              color="blue"
+                              style={{ fontSize: 10, marginLeft: 6, padding: "0 4px" }}
+                            >
                               自定义
                             </Tag>
                           )}
@@ -355,7 +374,11 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
                         type="secondary"
                         style={{ fontSize: 11, display: "block", marginTop: 4, minHeight: 32 }}
                       >
-                        <span>{tmpl.capabilities.map((capability) => <Tag key={capability}>{capability}</Tag>)}</span>
+                        <span>
+                          {tmpl.capabilities.map((capability) => (
+                            <Tag key={capability}>{capability}</Tag>
+                          ))}
+                        </span>
                         {tmpl.desc}
                       </Text>
                     </div>

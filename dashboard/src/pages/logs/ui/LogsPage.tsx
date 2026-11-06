@@ -11,10 +11,7 @@ interface LogsPageProps {
   onViewTrace: (traceId: string) => void;
 }
 
-export const LogsPage: React.FC<LogsPageProps> = ({
-  viewModel,
-  onViewTrace,
-}) => {
+export const LogsPage: React.FC<LogsPageProps> = ({ viewModel, onViewTrace }) => {
   const { isDark } = useTheme();
   const logBoxRef = useRef<HTMLDivElement>(null);
 
@@ -69,13 +66,29 @@ export const LogsPage: React.FC<LogsPageProps> = ({
     switch (lvl) {
       case "ERROR":
       case "CRITICAL":
-        return <Tag color="error" style={{ margin: 0, fontSize: 11 }}>{lvl}</Tag>;
+        return (
+          <Tag color="error" style={{ margin: 0, fontSize: 11 }}>
+            {lvl}
+          </Tag>
+        );
       case "WARNING":
-        return <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>WARN</Tag>;
+        return (
+          <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>
+            WARN
+          </Tag>
+        );
       case "DEBUG":
-        return <Tag style={{ margin: 0, fontSize: 11, color: isDark ? "#8c8c8c" : "#595959" }}>DEBUG</Tag>;
+        return (
+          <Tag style={{ margin: 0, fontSize: 11, color: isDark ? "#8c8c8c" : "#595959" }}>
+            DEBUG
+          </Tag>
+        );
       default:
-        return <Tag color="processing" style={{ margin: 0, fontSize: 11 }}>INFO</Tag>;
+        return (
+          <Tag color="processing" style={{ margin: 0, fontSize: 11 }}>
+            INFO
+          </Tag>
+        );
     }
   };
 
@@ -258,9 +271,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({
         <span>
           当前展示：{logs.length} 条记录（内存总缓冲：{total} 条）
         </span>
-        <span>
-          支持按 TraceID、大模型 (LLM)、协议 (OneBot/QQOfficial) 快速过滤
-        </span>
+        <span>支持按 TraceID、大模型 (LLM)、协议 (OneBot/QQOfficial) 快速过滤</span>
       </div>
     </Card>
   );

@@ -50,21 +50,13 @@ export const DevToolbar: React.FC = () => {
     {
       key: "mode-mock",
       icon: <CheckCircleOutlined />,
-      label: (
-        <span>
-          Mock 模式 {mode === "mock" && <Tag color="blue">当前</Tag>}
-        </span>
-      ),
+      label: <span>Mock 模式 {mode === "mock" && <Tag color="blue">当前</Tag>}</span>,
       onClick: () => handleModeChange("mock"),
     },
     {
       key: "mode-proxy",
       icon: <ApiOutlined />,
-      label: (
-        <span>
-          Proxy 直连后端 (:6185) {mode === "proxy" && <Tag color="blue">当前</Tag>}
-        </span>
-      ),
+      label: <span>Proxy 直连后端 (:6185) {mode === "proxy" && <Tag color="blue">当前</Tag>}</span>,
       onClick: () => handleModeChange("proxy"),
     },
     {

@@ -14,7 +14,9 @@ describe("API 通信网桥 (Shared API Bridge)", () => {
     });
     window.AstrBotPluginPage = { upload } as unknown as NonNullable<Window["AstrBotPluginPage"]>;
     const file = new File([new Uint8Array(20)], "font.ttf");
-    expect(await apiUpload("plugin-data/files/upload/uuid/0", file)).toMatchObject({ received: 20 });
+    expect(await apiUpload("plugin-data/files/upload/uuid/0", file)).toMatchObject({
+      received: 20,
+    });
     expect(upload).toHaveBeenCalledWith("plugin-data/files/upload/uuid/0", file);
   });
 
@@ -72,11 +74,19 @@ describe("API 通信网桥 (Shared API Bridge)", () => {
   });
 
   it.each([0, 1, 2])("解包 %i 层响应时保留记录的业务 data 和版本", (layers) => {
-    const record = { locator: { kind: "history", key: "report" }, revision: "current", data: { data: { topics: [] } } };
+    const record = {
+      locator: { kind: "history", key: "report" },
+      revision: "current",
+      data: { data: { topics: [] } },
+    };
     let response: unknown = record;
     for (let depth = 0; depth < layers; depth += 1) response = { status: "ok", data: response };
     expect(extractData(response)).toEqual(record);
-    const checkpoint = { stage_name: "LLM_ANALYSIS", status: "error", data: { error: "业务失败记录" } };
+    const checkpoint = {
+      stage_name: "LLM_ANALYSIS",
+      status: "error",
+      data: { error: "业务失败记录" },
+    };
     expect(extractData({ status: "ok", data: checkpoint })).toEqual(checkpoint);
   });
 
@@ -86,8 +96,11 @@ describe("API 通信网桥 (Shared API Bridge)", () => {
     { code: 500, message: "操作未完成", data: {} },
   ])("实际桥接和 Mock 的错误响应均不能被当成成功：%j", async (response) => {
     window.AstrBotPluginPage = {
-      ready: async () => ({}), apiGet: vi.fn().mockResolvedValue(response), apiPost: vi.fn().mockResolvedValue(response),
-      subscribeSSE: async () => "unused", unsubscribeSSE: () => {},
+      ready: async () => ({}),
+      apiGet: vi.fn().mockResolvedValue(response),
+      apiPost: vi.fn().mockResolvedValue(response),
+      subscribeSSE: async () => "unused",
+      unsubscribeSSE: () => {},
     };
     await expect(apiGet("test")).rejects.toThrow("操作未完成");
     await expect(apiPost("test")).rejects.toThrow("操作未完成");
@@ -95,8 +108,11 @@ describe("API 通信网桥 (Shared API Bridge)", () => {
 
   it("未收到桥接响应时明确报错", async () => {
     window.AstrBotPluginPage = {
-      ready: async () => ({}), apiGet: vi.fn().mockResolvedValue(null), apiPost: vi.fn().mockResolvedValue(null),
-      subscribeSSE: async () => "unused", unsubscribeSSE: () => {},
+      ready: async () => ({}),
+      apiGet: vi.fn().mockResolvedValue(null),
+      apiPost: vi.fn().mockResolvedValue(null),
+      subscribeSSE: async () => "unused",
+      unsubscribeSSE: () => {},
     };
     await expect(apiGet("test")).rejects.toThrow("未收到");
     await expect(apiPost("test")).rejects.toThrow("未收到");

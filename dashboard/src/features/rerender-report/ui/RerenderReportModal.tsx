@@ -25,10 +25,20 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
   const [form] = Form.useForm();
   const renderFormat = Form.useWatch<"image" | "html">("render_format", form) || "image";
   const [loading, setLoading] = useState(false);
-  const { templates, loading: loadingTemplates, ready, error, refresh } = useReportTemplates(renderFormat, open);
+  const {
+    templates,
+    loading: loadingTemplates,
+    ready,
+    error,
+    refresh,
+  } = useReportTemplates(renderFormat, open);
 
   useEffect(() => {
-    if (open && report) form.setFieldsValue({ template_name: "HatsuneMiku", render_format: report.is_html ? "html" : "image" });
+    if (open && report)
+      form.setFieldsValue({
+        template_name: "HatsuneMiku",
+        render_format: report.is_html ? "html" : "image",
+      });
   }, [open, report, form]);
 
   const handleSubmit = async () => {
@@ -36,7 +46,10 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
     try {
       const values = await form.validateFields();
       setLoading(true);
-      if (!templates.some((item) => item.id === values.template_name)) { message.warning("该主题不支持当前输出格式，请重新选择"); return; }
+      if (!templates.some((item) => item.id === values.template_name)) {
+        message.warning("该主题不支持当前输出格式，请重新选择");
+        return;
+      }
       const res = await rerenderReport({
         group_id: report.group_id || "",
         template_name: values.template_name,
@@ -84,7 +97,9 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
         description="直接复用该群先前的聊天统计、话题总结与群友画像数据，无需再次调用大模型，消耗 0 Token。"
         style={{ marginBottom: 16 }}
       />
-      {error && <Alert type="error" message={error} action={<a onClick={() => void refresh()}>重试</a>} />}
+      {error && (
+        <Alert type="error" message={error} action={<a onClick={() => void refresh()}>重试</a>} />
+      )}
       <Form form={form} layout="vertical">
         <Form.Item label="目标群聊">
           <Text strong>{report?.group_name || report?.group_id || "-"}</Text>
@@ -94,11 +109,7 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
           label="视觉主题模板"
           rules={[{ required: true, message: "请选择视觉主题模板" }]}
         >
-          <Select
-            disabled={!ready}
-            loading={loadingTemplates}
-            options={templateOptions}
-          />
+          <Select disabled={!ready} loading={loadingTemplates} options={templateOptions} />
         </Form.Item>
         <Form.Item
           name="render_format"

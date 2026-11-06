@@ -38,7 +38,7 @@ interface ConfigPageProps {
 export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
   const { isDark } = useTheme();
   const [isMobileScreen, setIsMobileScreen] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth < 768 : false
+    typeof window !== "undefined" ? window.innerWidth < 768 : false,
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -94,9 +94,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
           zIndex: 20,
           background: isDark ? "#141414" : "#ffffff",
           borderRadius: 6,
-          boxShadow: isDark
-            ? "0 4px 12px rgba(0, 0, 0, 0.45)"
-            : "0 4px 12px rgba(0, 0, 0, 0.06)",
+          boxShadow: isDark ? "0 4px 12px rgba(0, 0, 0, 0.45)" : "0 4px 12px rgba(0, 0, 0, 0.06)",
         }}
       >
         <div
@@ -120,11 +118,9 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                 </Tag>
               )}
             </div>
-            <Paragraph
-              type="secondary"
-              style={{ margin: "4px 0 0 0", fontSize: 12 }}
-            >
-              基于最新版 <code>_conf_schema.json</code> 动态生成，升级新增字段会自动显示。修改后请点击右上角保存。
+            <Paragraph type="secondary" style={{ margin: "4px 0 0 0", fontSize: 12 }}>
+              基于最新版 <code>_conf_schema.json</code>{" "}
+              动态生成，升级新增字段会自动显示。修改后请点击右上角保存。
             </Paragraph>
           </div>
 
@@ -163,8 +159,12 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
               xs={24}
               md={6}
               style={{
-                borderRight: !isMobileScreen ? `1px solid ${isDark ? "#303030" : "#f0f0f0"}` : undefined,
-                borderBottom: isMobileScreen ? `1px solid ${isDark ? "#303030" : "#f0f0f0"}` : undefined,
+                borderRight: !isMobileScreen
+                  ? `1px solid ${isDark ? "#303030" : "#f0f0f0"}`
+                  : undefined,
+                borderBottom: isMobileScreen
+                  ? `1px solid ${isDark ? "#303030" : "#f0f0f0"}`
+                  : undefined,
                 padding: isMobileScreen ? "12px 16px" : "16px 12px",
                 background: isDark ? "#141414" : "#fafafa",
                 position: isMobileScreen ? "static" : "sticky",
@@ -191,9 +191,19 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                     border: `1px solid ${isDark ? "#303030" : "#e4e7eb"}`,
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}
+                  >
                     <AppstoreOutlined style={{ color: "#1677ff", fontSize: 16, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       当前分组: {activeCategoryInfo?.label || activeCategory}
                     </span>
                     {activeCategoryInfo && (
@@ -233,8 +243,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     {categories.map((cat) => {
                       const isActive = activeCategory === cat.key;
-                      const isVisible =
-                        cat.matchCount === undefined || cat.matchCount > 0;
+                      const isVisible = cat.matchCount === undefined || cat.matchCount > 0;
                       const errCount = groupErrorCounts[cat.key] || 0;
 
                       if (!isVisible) return null;
@@ -262,15 +271,17 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                               : isDark
                                 ? "transparent"
                                 : "transparent",
-                            color: isActive
-                              ? "#ffffff"
-                              : isDark
-                                ? "#d9d9d9"
-                                : "#262626",
+                            color: isActive ? "#ffffff" : isDark ? "#d9d9d9" : "#262626",
                             transition: "all 0.15s ease",
                           }}
                         >
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             {cat.label}
                           </span>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -362,9 +373,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description={
-                    searchQuery
-                      ? "未找到匹配该关键词的配置项"
-                      : "该分组下暂无可配置字段"
+                    searchQuery ? "未找到匹配该关键词的配置项" : "该分组下暂无可配置字段"
                   }
                   style={{ margin: "60px 0" }}
                 />
@@ -387,11 +396,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                       (field.schema.hint && field.schema.hint.length > 38);
 
                     return (
-                      <Col
-                        key={field.key}
-                        xs={24}
-                        lg={isLongField ? 24 : 12}
-                      >
+                      <Col key={field.key} xs={24} lg={isLongField ? 24 : 12}>
                         <FieldRenderer
                           fieldKey={field.key}
                           fieldSchema={field.schema}

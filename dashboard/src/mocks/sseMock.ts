@@ -31,7 +31,7 @@ class MockSSEService {
     this.timer = window.setInterval(() => {
       this.tickCount++;
       const progress = (this.tickCount * 15) % 100;
-      
+
       const payload = {
         type: "TASK_UPDATE",
         event: "task_progress",
@@ -39,7 +39,8 @@ class MockSSEService {
           task_id: "task-live-demo-1",
           trace_id: "trace-20260926-active-01",
           group_id: "123456789",
-          stage: progress > 80 ? "report_rendering" : progress > 40 ? "llm_analysis" : "data_fetching",
+          stage:
+            progress > 80 ? "report_rendering" : progress > 40 ? "llm_analysis" : "data_fetching",
           progress,
           elapsed_seconds: 40 + this.tickCount * 2,
         },

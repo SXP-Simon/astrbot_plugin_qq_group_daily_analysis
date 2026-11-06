@@ -39,7 +39,7 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
         trace={denseTrace}
         onPreviewFile={dummyPreview}
         onDownloadFile={dummyDownload}
-      />
+      />,
     );
 
     // 验证超长群名与群号存在
@@ -63,7 +63,7 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
         trace={sparseTrace}
         onPreviewFile={dummyPreview}
         onDownloadFile={dummyDownload}
-      />
+      />,
     );
 
     expect(screen.getByText("测试群")).toBeInTheDocument();
@@ -73,17 +73,13 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
   });
 
   it("超时中断与抽屉异常渲染：多行 Python Traceback 堆栈与错误阶段应清晰展示", async () => {
-    render(
-      <TraceDrawer
-        open={true}
-        traceId="trace-20260926-004-timeout"
-        onClose={vi.fn()}
-      />
-    );
+    render(<TraceDrawer open={true} traceId="trace-20260926-004-timeout" onClose={vi.fn()} />);
 
     // 验证抽屉内异步加载后渲染的错误阶段与异常详情
     expect(await screen.findByText(/在【大模型分析】阶段发生异常/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Connection timeout to api\.openai\.com/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Connection timeout to api\.openai\.com/i).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByText(/查看异常堆栈/i)).toBeInTheDocument();
   });
 
@@ -97,7 +93,7 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
         trace={tgWarningTrace}
         onPreviewFile={dummyPreview}
         onDownloadFile={dummyDownload}
-      />
+      />,
     );
 
     expect(screen.getByText(/DevOps & SRE Infra Alert Channel/i)).toBeInTheDocument();
@@ -112,7 +108,7 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
         onCancelTask={vi.fn()}
         onOpenTrigger={vi.fn()}
         onViewTrace={vi.fn()}
-      />
+      />,
     );
 
     expect(screen.getByText(/task-live-demo-2-just-started/i)).toBeInTheDocument();
@@ -123,7 +119,9 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
   it("日志矩阵：包含系统启动、DEBUG、多行 ERROR 与 CRITICAL 熔断等多等级拟真日志", () => {
     expect(mockPluginLogs.some((l) => l.level === "DEBUG")).toBe(true);
     expect(mockPluginLogs.some((l) => l.level === "WARNING")).toBe(true);
-    expect(mockPluginLogs.some((l) => l.level === "ERROR" && l.message.includes("Traceback"))).toBe(true);
+    expect(mockPluginLogs.some((l) => l.level === "ERROR" && l.message.includes("Traceback"))).toBe(
+      true,
+    );
     expect(mockPluginLogs.some((l) => l.level === "CRITICAL")).toBe(true);
     // 包含无 trace_id 的系统启动日志
     expect(mockPluginLogs.some((l) => l.id.startsWith("log-sys-") && !l.trace_id)).toBe(true);

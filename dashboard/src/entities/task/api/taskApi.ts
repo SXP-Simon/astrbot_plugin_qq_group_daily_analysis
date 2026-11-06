@@ -15,10 +15,12 @@ export async function fetchActiveTasks(): Promise<ActiveTask[]> {
 export async function cancelActiveTask(taskId: string): Promise<boolean> {
   try {
     const res = await apiPost("tasks/cancel", { task_id: taskId });
-    return z.union([
-      z.object({ status: z.enum(["ok", "success"]) }),
-      z.object({ success: z.literal(true) }),
-    ]).safeParse(extractData<unknown>(res)).success;
+    return z
+      .union([
+        z.object({ status: z.enum(["ok", "success"]) }),
+        z.object({ success: z.literal(true) }),
+      ])
+      .safeParse(extractData<unknown>(res)).success;
   } catch {
     return false;
   }
@@ -26,9 +28,16 @@ export async function cancelActiveTask(taskId: string): Promise<boolean> {
 
 export async function fetchConnectedPlatforms(): Promise<ConnectedPlatform[]> {
   const res = await apiGet<unknown>("platforms");
-  const parsed = z.array(z.object({
-    id: z.string().min(1), type: z.string(), display_name: z.string(), label: z.string().min(1),
-  })).safeParse(extractData<unknown>(res));
+  const parsed = z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        type: z.string(),
+        display_name: z.string(),
+        label: z.string().min(1),
+      }),
+    )
+    .safeParse(extractData<unknown>(res));
   if (!parsed.success) throw new Error("平台列表格式不正确，请刷新页面后重试。");
   return parsed.data;
 }
@@ -45,7 +54,7 @@ export async function triggerNewTask(
   groupName: string = "",
   platform: string = "auto",
   providerId?: string,
-  templateName?: string
+  templateName?: string,
 ): Promise<TriggerTaskResult> {
   const payload: Record<string, unknown> = {
     group_id: groupId,
@@ -60,10 +69,14 @@ export async function triggerNewTask(
   }
   const res = await apiPost<{ trace_id?: string; message?: string }>("tasks/trigger", payload);
 
-
-  const result = z.object({
-    trace_id: z.string().trim().min(1), message: z.string().optional(), status: z.enum(["ok", "success"]).optional(),
-  }).passthrough().safeParse(extractData<unknown>(res));
+  const result = z
+    .object({
+      trace_id: z.string().trim().min(1),
+      message: z.string().optional(),
+      status: z.enum(["ok", "success"]).optional(),
+    })
+    .passthrough()
+    .safeParse(extractData<unknown>(res));
   if (!result.success) throw new Error("未收到有效的任务提交回执，请刷新任务列表后确认。");
   return {
     status: "ok",

@@ -7,10 +7,7 @@ interface CancelTaskButtonProps {
   onCancel: (taskId: string) => Promise<void> | void;
 }
 
-export const CancelTaskButton: React.FC<CancelTaskButtonProps> = ({
-  taskId,
-  onCancel,
-}) => {
+export const CancelTaskButton: React.FC<CancelTaskButtonProps> = ({ taskId, onCancel }) => {
   return (
     <Popconfirm
       title="确定要中止此分析任务吗？"
@@ -21,12 +18,7 @@ export const CancelTaskButton: React.FC<CancelTaskButtonProps> = ({
       okButtonProps={{ danger: true, size: "small" }}
       cancelButtonProps={{ size: "small" }}
     >
-      <Button
-        danger
-        size="small"
-        type="link"
-        icon={<StopOutlined />}
-      >
+      <Button danger size="small" type="link" icon={<StopOutlined />}>
         中止
       </Button>
     </Popconfirm>

@@ -35,7 +35,7 @@ export function useTracesViewModel() {
     currentSize = pageSize,
     currentSortField = sortField,
     currentSortOrder = sortOrder,
-    silent = false
+    silent = false,
   ) => {
     if (!silent) setLoading(true);
     try {
@@ -73,7 +73,7 @@ export function useTracesViewModel() {
   const handleTableChange = (
     pagination: TablePaginationConfig,
     _filters: Record<string, FilterValue | null>,
-    sorter: SorterResult<TraceRecord> | SorterResult<TraceRecord>[]
+    sorter: SorterResult<TraceRecord> | SorterResult<TraceRecord>[],
   ) => {
     let newSortField = "started_at";
     let newSortOrder = "desc";

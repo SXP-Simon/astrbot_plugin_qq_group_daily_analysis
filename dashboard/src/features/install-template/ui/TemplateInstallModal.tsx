@@ -1,16 +1,5 @@
 import React, { useState } from "react";
-import {
-  Modal,
-  Tabs,
-  Form,
-  Input,
-  Button,
-  Alert,
-  Upload,
-  Typography,
-  message,
-  Space,
-} from "antd";
+import { Modal, Tabs, Form, Input, Button, Alert, Upload, Typography, message, Space } from "antd";
 import {
   GithubOutlined,
   InboxOutlined,
@@ -42,13 +31,16 @@ const NAMING_GUIDE = (
     </Text>
     <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.6 }}>
       模板名建议使用小写英文蛇形并带命名空间前缀（如{" "}
-      <Text code style={{ fontSize: 12 }}>gda_miku_dream</Text>
+      <Text code style={{ fontSize: 12 }}>
+        gda_miku_dream
+      </Text>
       ）：建议只用小写字母、数字、下划线，长度不超过 50。避免空格与特殊字符，
-      以免报告文件名、预览图与 CDN 链接出错，并与内置模板（scrapbook 等）区分。
-      不填写时将从压缩包 / 仓库名自动推断（GitHub 归档的 -main 后缀会被自动去除）。
-      中文显示名可在模板根目录下放置可选的{" "}
-      <Text code style={{ fontSize: 12 }}>template.json</Text>{" "}
-      （如 {"{\"name\": \"初音梦境\"}"}），作为下拉框中的展示名称。可参考标准示例仓库{" "}
+      以免报告文件名、预览图与 CDN 链接出错，并与内置模板（scrapbook 等）区分。 不填写时将从压缩包 /
+      仓库名自动推断（GitHub 归档的 -main 后缀会被自动去除）。 中文显示名可在模板根目录下放置可选的{" "}
+      <Text code style={{ fontSize: 12 }}>
+        template.json
+      </Text>{" "}
+      （如 {'{"name": "初音梦境"}'}），作为下拉框中的展示名称。可参考标准示例仓库{" "}
       <Typography.Link
         href="https://github.com/lingyun14beta/daily-analysis-report-theme"
         target="_blank"
@@ -178,8 +170,10 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
                   rules={[
                     { required: true, message: "请填写 GitHub 仓库链接" },
                     {
-                      pattern: /^https:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/i,
-                      message: "仅支持 https://github.com 仓库链接（如 https://github.com/owner/repo）",
+                      pattern:
+                        /^https:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/i,
+                      message:
+                        "仅支持 https://github.com 仓库链接（如 https://github.com/owner/repo）",
                     },
                   ]}
                 >
@@ -231,7 +225,8 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
                     </p>
                     <p className="ant-upload-text">点击或拖拽 zip 到此处</p>
                     <p className="ant-upload-hint">
-                      单个文件，打包时请保留模板根目录（可包含 HTML 或 Typst 主文件、相对导入组件、资源与可选 template.json）
+                      单个文件，打包时请保留模板根目录（可包含 HTML 或 Typst
+                      主文件、相对导入组件、资源与可选 template.json）
                     </p>
                   </Dragger>
                 </Form.Item>
@@ -259,9 +254,11 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
       <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
         <BulbOutlined style={{ marginRight: 6, color: "#faad14" }} />
         模板根目录至少提供 report.typ（Typst）、image_template.html（HTML 长图）或
-        html_template.html（HTML 网页）中的一种入口，并保留相对导入的组件与资源。
-        template.json 可提供显示名和说明。内置模板参考目录：{" "}
-        <Text code style={{ fontSize: 12 }}>src/infrastructure/reporting/templates/scrapbook/</Text>
+        html_template.html（HTML 网页）中的一种入口，并保留相对导入的组件与资源。 template.json
+        可提供显示名和说明。内置模板参考目录：{" "}
+        <Text code style={{ fontSize: 12 }}>
+          src/infrastructure/reporting/templates/scrapbook/
+        </Text>
       </Paragraph>
     </Modal>
   );

@@ -11,10 +11,7 @@ import {
   message,
   theme,
 } from "antd";
-import {
-  ReloadOutlined,
-  SyncOutlined,
-} from "@ant-design/icons";
+import { ReloadOutlined, SyncOutlined } from "@ant-design/icons";
 import { fetchTraceDetail, resumeTraceTask } from "../../entities/trace/api/traceApi";
 import { fetchTraceLogs } from "../../entities/log/api/logApi";
 import { fetchReportContent } from "../../entities/report/api/reportApi";
@@ -38,16 +35,13 @@ interface TraceDrawerProps {
   onClose: () => void;
 }
 
-export const TraceDrawer: React.FC<TraceDrawerProps> = ({
-  traceId,
-  open,
-  onClose,
-}) => {
+export const TraceDrawer: React.FC<TraceDrawerProps> = ({ traceId, open, onClose }) => {
   const { token } = theme.useToken();
   const [storedTrace, setTrace] = useState<TraceRecord | null>(null);
-  const trace = storedTrace?.status === "running" && storedTrace.duration_ms == null
-    ? { ...storedTrace, duration_ms: Math.max(0, Date.now() - storedTrace.started_at * 1000) }
-    : storedTrace;
+  const trace =
+    storedTrace?.status === "running" && storedTrace.duration_ms == null
+      ? { ...storedTrace, duration_ms: Math.max(0, Date.now() - storedTrace.started_at * 1000) }
+      : storedTrace;
   const [logs, setLogs] = useState<PluginLogItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [resuming, setResuming] = useState(false);
@@ -148,7 +142,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
         if (!isManual) setLoading(false);
       }
     },
-    [traceId]
+    [traceId],
   );
 
   useEffect(() => {
@@ -203,7 +197,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
       s.status === "warning" ||
       s.payload?.success === false ||
       Boolean(s.payload?.warning) ||
-      (Array.isArray(s.payload?.subtask_errors) && s.payload.subtask_errors.length > 0)
+      (Array.isArray(s.payload?.subtask_errors) && s.payload.subtask_errors.length > 0),
   );
   const effectiveStatus =
     trace?.status === "warning" ||
@@ -288,7 +282,8 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                   ellipsis={{ rows: 2, expandable: true, symbol: "展开详情" }}
                   style={{ marginBottom: 0, fontSize: 13 }}
                 >
-                  {trace.error_message || "未达到分析触发阈值或未满足执行条件，本次调度已安全跳过，未消耗任何 Token。"}
+                  {trace.error_message ||
+                    "未达到分析触发阈值或未满足执行条件，本次调度已安全跳过，未消耗任何 Token。"}
                 </Paragraph>
               }
             />

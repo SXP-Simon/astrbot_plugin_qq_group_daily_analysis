@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { message } from "antd";
 import { subscribeSSE } from "../../../shared/api/bridge";
-import {
-  fetchPluginLogs,
-  clearPluginLogs as apiClearLogs,
-} from "../../../entities/log/api/logApi";
+import { fetchPluginLogs, clearPluginLogs as apiClearLogs } from "../../../entities/log/api/logApi";
 import { AvailableTag, PluginLogItem } from "../../../entities/log/model/types";
 
 export function useLogsViewModel() {

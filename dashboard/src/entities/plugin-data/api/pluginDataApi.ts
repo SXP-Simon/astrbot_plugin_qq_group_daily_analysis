@@ -76,7 +76,7 @@ export async function fetchIncrementalGroups(): Promise<string[]> {
 }
 
 export async function fetchIncrementalBatches(
-  groupId: string
+  groupId: string,
 ): Promise<IncrementalBatchesResponse | null> {
   if (!groupId) return null;
   const res = await apiGet<IncrementalBatchesResponse>("data/incremental/batches", {
@@ -87,7 +87,7 @@ export async function fetchIncrementalBatches(
 
 export async function fetchIncrementalBatchDetail(
   groupId: string,
-  batchId: string
+  batchId: string,
 ): Promise<IncrementalBatchItem | null> {
   if (!groupId || !batchId) return null;
   const res = await apiGet<IncrementalBatchItem>("data/incremental/batch/detail", {
@@ -97,10 +97,7 @@ export async function fetchIncrementalBatchDetail(
   return extractData<IncrementalBatchItem>(res);
 }
 
-export async function deleteIncrementalBatch(
-  groupId: string,
-  batchId: string
-): Promise<boolean> {
+export async function deleteIncrementalBatch(groupId: string, batchId: string): Promise<boolean> {
   const res = await apiPost<{ deleted: boolean }>("data/incremental/batch", {
     group_id: groupId,
     batch_id: batchId,
@@ -109,11 +106,11 @@ export async function deleteIncrementalBatch(
 }
 
 export async function resetIncrementalGroup(
-  groupId: string
+  groupId: string,
 ): Promise<{ deleted_batches: number; message: string }> {
   const res = await apiPost<{ deleted_batches: number; message: string }>(
     "data/incremental/reset",
-    { group_id: groupId }
+    { group_id: groupId },
   );
   return (
     extractData<{ deleted_batches: number; message: string }>(res) ?? {
@@ -150,7 +147,7 @@ export async function fetchCheckpointDetail(
   groupId: string,
   dateStr: string,
   stageName: string,
-  traceId?: string
+  traceId?: string,
 ): Promise<CheckpointDetail | null> {
   const res = await apiGet<CheckpointDetail | { detail?: CheckpointDetail }>(
     "data/checkpoint/detail",
@@ -159,12 +156,15 @@ export async function fetchCheckpointDetail(
       date_str: dateStr,
       stage_name: stageName,
       trace_id: traceId || "",
-    }
+    },
   );
   if (!res) return null;
   const data = extractData<CheckpointDetail | { detail?: CheckpointDetail }>(res);
   const detail = data && "detail" in data ? data.detail : data;
-  const parsed = z.object({ group_id: z.string(), date_str: z.string(), stage_name: z.string() }).passthrough().safeParse(detail);
+  const parsed = z
+    .object({ group_id: z.string(), date_str: z.string(), stage_name: z.string() })
+    .passthrough()
+    .safeParse(detail);
   if (!parsed.success) throw new Error("快照详情格式异常，请刷新后重试。");
   return parsed.data;
 }
@@ -173,7 +173,7 @@ export async function deleteCheckpoint(
   groupId: string,
   dateStr: string,
   stageName?: string,
-  traceId?: string
+  traceId?: string,
 ): Promise<boolean> {
   const res = await apiPost<{ deleted: boolean }>("data/checkpoint", {
     group_id: groupId,

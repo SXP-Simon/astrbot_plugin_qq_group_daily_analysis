@@ -18,7 +18,7 @@ interface TraceTableProps {
   onTableChange: (
     pagination: TablePaginationConfig,
     filters: Record<string, FilterValue | null>,
-    sorter: SorterResult<TraceRecord> | SorterResult<TraceRecord>[]
+    sorter: SorterResult<TraceRecord> | SorterResult<TraceRecord>[],
   ) => void;
 }
 
@@ -38,10 +38,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       key: "trace_id",
       width: 170,
       render: (id: string) => (
-        <a
-          className="font-mono text-xs font-semibold"
-          onClick={() => onViewTrace(id)}
-        >
+        <a className="font-mono text-xs font-semibold" onClick={() => onViewTrace(id)}>
           {id}
         </a>
       ),
@@ -52,7 +49,8 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       key: "group_id",
       width: 180,
       render: (gid: string, r: TraceRecord) => {
-        const p = !r.platform || r.platform === "auto" || r.platform === "default" ? "" : r.platform;
+        const p =
+          !r.platform || r.platform === "auto" || r.platform === "default" ? "" : r.platform;
         return (
           <Tooltip title={`群号: ${gid}${p ? ` | 平台: ${p}` : ""}`}>
             <span className="font-mono text-xs">
@@ -80,14 +78,18 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       render: (t: string, record: TraceRecord) => {
         const isFallback = Boolean(
           record.extra?.fallback_to_fresh_run ||
-            (record.extra as Record<string, unknown> | undefined)?.resumed_from === "fresh_run_fallback"
+          (record.extra as Record<string, unknown> | undefined)?.resumed_from ===
+            "fresh_run_fallback",
         );
         return (
           <Space size={2} wrap>
             <TriggerTypeTag triggerType={t} />
             {isFallback && (
               <Tooltip title="未检测到历史快照，已自动降级为全量重新拉取分析">
-                <Tag color="orange" style={{ margin: 0, fontSize: 10, padding: "0 4px", lineHeight: "16px" }}>
+                <Tag
+                  color="orange"
+                  style={{ margin: 0, fontSize: 10, padding: "0 4px", lineHeight: "16px" }}
+                >
                   降级全量
                 </Tag>
               </Tooltip>
@@ -107,7 +109,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
             s.status === "warning" ||
             s.payload?.success === false ||
             Boolean(s.payload?.warning) ||
-            (Array.isArray(s.payload?.subtask_errors) && s.payload.subtask_errors.length > 0)
+            (Array.isArray(s.payload?.subtask_errors) && s.payload.subtask_errors.length > 0),
         );
         const hasWarning =
           record.status === "warning" ||
@@ -136,11 +138,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       key: "total_tokens",
       width: 95,
       sorter: true,
-      render: (t?: number) => (
-        <span className="font-mono text-xs">
-          {formatTokens(t)}
-        </span>
-      ),
+      render: (t?: number) => <span className="font-mono text-xs">{formatTokens(t)}</span>,
     },
     {
       title: "消息留存率",
@@ -152,7 +150,9 @@ export const TraceTable: React.FC<TraceTableProps> = ({
         if (ratio === undefined || ratio === null) return <span className="text-xs">-</span>;
         const pct = Math.round(ratio * 100);
         return (
-          <Tooltip title={`读取: ${r.raw_message_count || 0}条 / 有效: ${r.cleaned_message_count || 0}条`}>
+          <Tooltip
+            title={`读取: ${r.raw_message_count || 0}条 / 有效: ${r.cleaned_message_count || 0}条`}
+          >
             <Progress percent={pct} size="small" style={{ width: 80 }} />
           </Tooltip>
         );
@@ -167,9 +167,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       defaultSortOrder: "descend" as const,
       render: (ts: number) => (
         <Tooltip title={`记录时间戳: ${ts}`}>
-          <span className="font-mono text-xs">
-            {formatTimestamp(ts)}
-          </span>
+          <span className="font-mono text-xs">{formatTimestamp(ts)}</span>
         </Tooltip>
       ),
     },

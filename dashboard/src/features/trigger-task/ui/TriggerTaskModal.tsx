@@ -2,7 +2,10 @@ import React from "react";
 import { Modal, Form, Input, Select, Alert, Button } from "antd";
 import { ConnectedPlatform } from "../../../entities/task/api/taskApi";
 import { LLMProviderItem } from "../../../entities/trace/api/traceApi";
-import { ReportTemplateItem, formatTemplateOptions } from "../../../entities/report/model/templates";
+import {
+  ReportTemplateItem,
+  formatTemplateOptions,
+} from "../../../entities/report/model/templates";
 
 interface TriggerTaskModalProps {
   open: boolean;
@@ -90,7 +93,13 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
       destroyOnClose
       width={460}
     >
-      {templatesError && <Alert type="warning" message={templatesError} action={<Button onClick={onRefreshTemplates}>重试</Button>} />}
+      {templatesError && (
+        <Alert
+          type="warning"
+          message={templatesError}
+          action={<Button onClick={onRefreshTemplates}>重试</Button>}
+        />
+      )}
       <Form layout="vertical" style={{ marginTop: 16 }}>
         <Form.Item label="群号 / 会话标识" required>
           <Input
@@ -152,4 +161,3 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
     </Modal>
   );
 };
-

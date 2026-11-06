@@ -1,10 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { Card, Tooltip, Typography, Button, Space } from "antd";
-import {
-  ClockCircleOutlined,
-  LeftOutlined,
-  RightOutlined,
-} from "@ant-design/icons";
+import { ClockCircleOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { TraceRecord } from "../../entities/trace/model/types";
 import { formatTimestamp, formatDuration, formatTokens } from "../../shared/lib/formatters";
 import { useTheme } from "../../shared/lib/useTheme";
@@ -40,28 +36,25 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
   const selectedIndex = traces.findIndex((t) => t.trace_id === selectedTraceId);
 
   // 绝对坐标精准居中算法：基于 node.offsetLeft 绝对内层偏移量，100% 确定性居中
-  const scrollToTraceIndex = useCallback(
-    (index: number, behavior: ScrollBehavior = "smooth") => {
-      const container = scrollContainerRef.current;
-      const node = nodeRefs.current[index];
-      if (!container || !node) return;
+  const scrollToTraceIndex = useCallback((index: number, behavior: ScrollBehavior = "smooth") => {
+    const container = scrollContainerRef.current;
+    const node = nodeRefs.current[index];
+    if (!container || !node) return;
 
-      const nodeLeft = node.offsetLeft;
-      const nodeWidth = node.offsetWidth;
-      const containerWidth = container.clientWidth;
+    const nodeLeft = node.offsetLeft;
+    const nodeWidth = node.offsetWidth;
+    const containerWidth = container.clientWidth;
 
-      // 目标位置：使节点中心精确位于可视窗口中心
-      const targetScrollLeft = nodeLeft + nodeWidth / 2 - containerWidth / 2;
-      const maxScrollLeft = Math.max(0, container.scrollWidth - containerWidth);
-      const clampedLeft = Math.max(0, Math.min(maxScrollLeft, targetScrollLeft));
+    // 目标位置：使节点中心精确位于可视窗口中心
+    const targetScrollLeft = nodeLeft + nodeWidth / 2 - containerWidth / 2;
+    const maxScrollLeft = Math.max(0, container.scrollWidth - containerWidth);
+    const clampedLeft = Math.max(0, Math.min(maxScrollLeft, targetScrollLeft));
 
-      container.scrollTo({
-        left: clampedLeft,
-        behavior,
-      });
-    },
-    []
-  );
+    container.scrollTo({
+      left: clampedLeft,
+      behavior,
+    });
+  }, []);
 
   // 当选中项发生变更时，确保在 DOM 挂载稳定后平滑居中聚焦
   useEffect(() => {
@@ -154,7 +147,10 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
       >
         <Space size={6} align="center">
           <ClockCircleOutlined style={{ color: isDark ? "#8b949e" : "#64748b", fontSize: 13 }} />
-          <Text strong style={{ fontSize: 13, letterSpacing: "-0.2px", color: isDark ? "#c9d1d9" : "#1e293b" }}>
+          <Text
+            strong
+            style={{ fontSize: 13, letterSpacing: "-0.2px", color: isDark ? "#c9d1d9" : "#1e293b" }}
+          >
             时间线
           </Text>
           {selectedIndex >= 0 && (
@@ -268,7 +264,8 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
 
             const itemData = isSelected && selectedTrace ? { ...trace, ...selectedTrace } : trace;
             const tokenTotal = itemData.total_tokens ?? itemData.token_usage?.total_tokens ?? 0;
-            const rawRatio = itemData.compression_ratio ?? itemData.context_metrics?.compression_ratio ?? 0;
+            const rawRatio =
+              itemData.compression_ratio ?? itemData.context_metrics?.compression_ratio ?? 0;
             const compRatio =
               rawRatio > 0
                 ? rawRatio <= 1
@@ -290,47 +287,84 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                 >
                   {trace.group_name || "未知群聊"} ({trace.group_id})
                 </div>
-                <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
+                <div
+                  style={{
+                    color: isDark ? "#cbd5e1" : "#475569",
+                    fontSize: 11,
+                    fontFamily: "monospace",
+                  }}
+                >
                   时间: {rawTime}
                 </div>
-                <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
+                <div
+                  style={{
+                    color: isDark ? "#cbd5e1" : "#475569",
+                    fontSize: 11,
+                    fontFamily: "monospace",
+                  }}
+                >
                   状态:{" "}
                   <span
                     style={{
                       color: isSucceeded
                         ? "#16a34a"
                         : isWarning
-                        ? "#d97706"
-                        : isFailed
-                        ? "#dc2626"
-                        : isSkipped
-                        ? "#0891b2"
-                        : "#2563eb",
+                          ? "#d97706"
+                          : isFailed
+                            ? "#dc2626"
+                            : isSkipped
+                              ? "#0891b2"
+                              : "#2563eb",
                       fontWeight: 600,
                     }}
                   >
                     {isSucceeded
                       ? "分析成功"
                       : isWarning
-                      ? "部分成功 (警告)"
-                      : isFailed
-                      ? "执行失败"
-                      : isSkipped
-                      ? "已安全跳过"
-                      : "分析中"}
+                        ? "部分成功 (警告)"
+                        : isFailed
+                          ? "执行失败"
+                          : isSkipped
+                            ? "已安全跳过"
+                            : "分析中"}
                   </span>
                 </div>
-                <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
-                  Token消耗: <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{formatTokens(tokenTotal)}</b>
+                <div
+                  style={{
+                    color: isDark ? "#cbd5e1" : "#475569",
+                    fontSize: 11,
+                    fontFamily: "monospace",
+                  }}
+                >
+                  Token消耗:{" "}
+                  <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>
+                    {formatTokens(tokenTotal)}
+                  </b>
                 </div>
                 {compRatio > 0 && (
-                  <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
-                    消息留存比: <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{compRatio}%</b>
+                  <div
+                    style={{
+                      color: isDark ? "#cbd5e1" : "#475569",
+                      fontSize: 11,
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    消息留存比:{" "}
+                    <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{compRatio}%</b>
                   </div>
                 )}
                 {Boolean(durationMs) && (
-                  <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
-                    耗时: <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{formatDuration(durationMs as number)}</b>
+                  <div
+                    style={{
+                      color: isDark ? "#cbd5e1" : "#475569",
+                      fontSize: 11,
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    耗时:{" "}
+                    <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>
+                      {formatDuration(durationMs as number)}
+                    </b>
                   </div>
                 )}
               </div>
@@ -438,8 +472,12 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                       alignItems: "center",
                       justifyContent: "center",
                       background: isSelected
-                        ? (isDark ? "#1e293b" : "#ffffff")
-                        : (isDark ? "#161b22" : "#ffffff"),
+                        ? isDark
+                          ? "#1e293b"
+                          : "#ffffff"
+                        : isDark
+                          ? "#161b22"
+                          : "#ffffff",
                       border: isSelected
                         ? `3px solid ${dotColor}`
                         : `2px solid ${isDark ? "#30363d" : "#ffffff"}`,
@@ -467,8 +505,12 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                       marginTop: 8,
                       fontSize: 11,
                       color: isSelected
-                        ? (isDark ? "#58a6ff" : "#2563eb")
-                        : (isDark ? "#8b949e" : "#64748b"),
+                        ? isDark
+                          ? "#58a6ff"
+                          : "#2563eb"
+                        : isDark
+                          ? "#8b949e"
+                          : "#64748b",
                       fontWeight: isSelected ? 600 : 400,
                       whiteSpace: "nowrap",
                       letterSpacing: "-0.3px",

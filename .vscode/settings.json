@@ -7,5 +7,9 @@
     "[json]": {
         "editor.wordWrap": "on",
         "editor.stopRenderingLineAfter": -1
+    },
+    "[javascript][javascriptreact][typescript][typescriptreact][css]": {
+        "editor.defaultFormatter": "oxc.oxc-vscode",
+        "editor.formatOnSave": true
     }
 }
