@@ -192,11 +192,10 @@ async def test_text_and_image_fallback_share_delivery(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stop_requested", [True, False])
-@pytest.mark.parametrize("upload_owner", ["handler", "host"])
 async def test_image_send_stop_skips_copy_upload(
-    stop_requested, upload_owner, monkeypatch
+    stop_requested, monkeypatch
 ):
-    """图片发送中停止时跳过副本上传，无停止时保留两种上传入口。"""
+    """图片发送中停止时跳过副本上传，无停止时仍调用上传入口。"""
     captured = _spy_trace(monkeypatch)
     adapter = SlowSendingAdapter()
     manager = StubTaskManager()
@@ -213,13 +212,7 @@ async def test_image_send_stop_skips_copy_upload(
         handler, "save_report_to_history", lambda *_args, **_kwargs: None
     )
     upload = AsyncMock()
-    if upload_owner == "host":
-        handler.plugin_instance = SimpleNamespace(
-            comic_command_handler=None,
-            try_upload_image=upload,
-        )
-    else:
-        monkeypatch.setattr(handler, "try_upload_image", upload)
+    monkeypatch.setattr(handler, "try_upload_image", upload)
 
     event = HostEvent()
     parent = asyncio.create_task(collect(handler, event))

@@ -8,8 +8,9 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, cast
 
+from ...domain.repositories.platform_adapter_repository import GroupAlbumSupportProtocol
 from ...domain.value_objects.analysis_results import SummaryTopic
 from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
@@ -27,23 +28,11 @@ if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
     from ...domain.value_objects import AnalysisResultPayload
-    from ...entrypoints.plugin_host import PluginHostProtocol
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.platform.bot_manager import BotManager
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
     from ..services.comic_application_service import ComicApplicationService
     from ..services.stop_request import StopRequest
-
-
-@runtime_checkable
-class LegacyTopic(Protocol):
-    """旧话题对象只读取标题和详情，值在使用时转换为文字。"""
-
-    @property
-    def topic(self) -> object: ...
-
-    @property
-    def detail(self) -> object: ...
 
 
 class ComicCommandHandler:
@@ -55,7 +44,6 @@ class ComicCommandHandler:
     analysis_service: AnalysisApplicationService
     active_task_manager: ActiveTaskManager | None
     plugin_data_dir: Path
-    plugin_instance: PluginHostProtocol | None
     terminating: bool
     _comic_semaphore: asyncio.Semaphore
     comic_group_tasks: dict[str, asyncio.Task[object]]
@@ -69,7 +57,6 @@ class ComicCommandHandler:
         analysis_service: AnalysisApplicationService,
         active_task_manager: ActiveTaskManager | None = None,
         plugin_data_dir: Path | None = None,
-        plugin_instance: PluginHostProtocol | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -79,12 +66,10 @@ class ComicCommandHandler:
         self.plugin_data_dir = (
             plugin_data_dir or Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME
         )
-        self.plugin_instance = plugin_instance
         self.terminating: bool = False
 
         try:
-            getter = getattr(self.config_manager, "get_t2i_max_concurrent", None)
-            raw_val = getter() if callable(getter) else 1
+            raw_val = self.config_manager.get_t2i_max_concurrent()
             max_concurrent = int(str(raw_val))
         except (TypeError, ValueError, AttributeError):
             max_concurrent = 1
@@ -362,31 +347,21 @@ class ComicCommandHandler:
             return "terminating"
         if stop_request is not None and stop_request.refresh():
             return "stopped"
-        enabled_getter = getattr(self.config_manager, "get_enable_daily_comic", None)
-        if callable(enabled_getter) and not enabled_getter():
+        if not self.config_manager.get_enable_daily_comic():
             return "disabled"
-        auto_getter = getattr(self.config_manager, "get_enable_auto_daily_comic", None)
-        auto_enabled = auto_getter() if callable(auto_getter) else True
+        auto_enabled = self.config_manager.get_enable_auto_daily_comic()
         if require_auto_enabled and not auto_enabled:
             return "auto_disabled"
 
         umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
         inherit_allowed = True if require_auto_enabled else None
-        allowed_checker = getattr(self.config_manager, "is_comic_group_allowed", None)
-        if callable(allowed_checker) and not allowed_checker(umo, inherit_allowed):
+        if not self.config_manager.is_comic_group_allowed(umo, inherit_allowed):
             logger.info(
                 f"群 {group_id} 未通过漫画名单判定，跳过漫画生成。platform={platform_id or 'default'}"
             )
             return "blocked"
 
         topics = analysis_result.get("topics", [])
-        statistics = analysis_result.get("statistics")
-        if not topics and statistics:
-            if is_string_mapping(statistics):
-                topics = statistics.get("topics", [])
-            else:
-                topics = getattr(statistics, "topics", [])
-
         comic_topics: list[dict[str, object]] = []
         for topic in topics if is_object_list(topics) else []:
             if isinstance(topic, SummaryTopic):
@@ -395,9 +370,6 @@ class ComicCommandHandler:
             elif is_string_mapping(topic):
                 title = str(topic.get("topic", ""))
                 detail = str(topic.get("detail", ""))
-            elif isinstance(topic, LegacyTopic):
-                title = str(topic.topic)
-                detail = str(topic.detail)
             else:
                 title = ""
                 detail = ""
@@ -527,32 +499,14 @@ class ComicCommandHandler:
                 )
                 if not adapter:
                     return
-                show_caption_fn = (
-                    getattr(self.config_manager, "get_show_report_caption", None)
-                    if self.config_manager
-                    else None
-                )
-                show_caption = show_caption_fn() if callable(show_caption_fn) else True
+                show_caption = self.config_manager.get_show_report_caption()
                 caption = TraceContext.make_report_caption() if show_caption else ""
                 sent = await adapter.send_image(
                     group_id, str(comic_file_path), caption=caption
                 )
                 if not sent:
                     return
-                upload_image = self.try_upload_image
-                if self.plugin_instance:
-                    inst_upload = getattr(
-                        self.plugin_instance, "try_upload_image", None
-                    )
-                    if inst_upload is not None and (
-                        hasattr(inst_upload, "assert_called")
-                        or hasattr(inst_upload, "assert_awaited")
-                        or hasattr(inst_upload, "_mock_name")
-                        or type(inst_upload).__name__
-                        in ("Mock", "MagicMock", "AsyncMock")
-                    ):
-                        upload_image = inst_upload
-                await upload_image(
+                await self.try_upload_image(
                     group_id, str(comic_file_path), platform_id, is_comic=True
                 )
             except Exception as e:
@@ -573,8 +527,7 @@ class ComicCommandHandler:
         adapter = (
             self.bot_manager.get_adapter(platform_id) if self.bot_manager else None
         )
-        upload_fn = getattr(adapter, "upload_group_album", None)
-        if not callable(upload_fn):
+        if not isinstance(adapter, GroupAlbumSupportProtocol):
             return
 
         album_name = self.config_manager.get_comic_album_name() or "daily_analysis"
@@ -585,14 +538,12 @@ class ComicCommandHandler:
                 if Path(image_url).exists()
                 else image_url
             )
-            res = upload_fn(
+            await adapter.upload_group_album(
                 group_id,
                 target_path,
                 album_id=None,
                 album_name=album_name,
                 strict_mode=strict_mode,
             )
-            if asyncio.iscoroutine(res):
-                await res
         except Exception as e:
             logger.warning(f"漫画群相册上传异常 (群 {group_id}): {e}")

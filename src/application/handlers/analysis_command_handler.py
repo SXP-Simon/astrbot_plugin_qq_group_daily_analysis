@@ -13,7 +13,6 @@ import tempfile
 import time
 from contextlib import nullcontext
 from datetime import datetime
-from inspect import isawaitable
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 from urllib.parse import quote
@@ -77,7 +76,6 @@ if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
     from ...domain.value_objects import AnalysisResultPayload
-    from ...entrypoints.plugin_host import PluginHostProtocol
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.messaging.message_sender import MessageSender
     from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
@@ -101,7 +99,6 @@ class AnalysisCommandHandler:
     message_sender: MessageSender | None
     comic_handler: ComicCommandHandler | None
     plugin_data_dir: Path
-    plugin_instance: PluginHostProtocol | None
     terminating: bool
 
     def __init__(
@@ -116,7 +113,6 @@ class AnalysisCommandHandler:
         message_sender: MessageSender | None = None,
         comic_handler: ComicCommandHandler | None = None,
         plugin_data_dir: Path | None = None,
-        plugin_instance: PluginHostProtocol | None = None,
         stop_watcher_factory: Callable[[AstrMessageEvent], StopWatcher] | None = None,
     ) -> None:
         self.config_manager = config_manager
@@ -131,7 +127,6 @@ class AnalysisCommandHandler:
         self.plugin_data_dir = (
             plugin_data_dir or Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME
         )
-        self.plugin_instance = plugin_instance
         self.stop_watcher_factory = stop_watcher_factory
         self.terminating: bool = False
 
@@ -512,9 +507,7 @@ class AnalysisCommandHandler:
             logger.warning(f"群 {group_id} 未找到对应的平台适配器，无法发送报告")
             return
 
-        comic_handler = self.comic_handler or (
-            self.plugin_instance.comic_command_handler if self.plugin_instance else None
-        )
+        comic_handler = self.comic_handler
         if comic_handler:
             if stop_request is None:
                 comic_handler.try_trigger_comic_generation(
@@ -548,10 +541,7 @@ class AnalysisCommandHandler:
 
         trace = TraceContext.current()
         override_theme = trace.metadata.get("override_template_name") if trace else None
-        tpl_getter = getattr(self.config_manager, "get_report_template", None)
-        raw_theme = override_theme or (
-            tpl_getter() if callable(tpl_getter) else "default"
-        )
+        raw_theme = override_theme or self.config_manager.get_report_template()
         template_theme = str(raw_theme) if raw_theme else "default"
 
         if output_format == "image":
@@ -587,24 +577,12 @@ class AnalysisCommandHandler:
                 raise AnalysisStoppedError
 
             if image_url:
-                save_history = getattr(
-                    self.plugin_instance, "save_report_to_history", None
+                await asyncio.to_thread(
+                    self.save_report_to_history,
+                    image_url,
+                    group_id,
+                    trace_id=trace.trace_id if trace else None,
                 )
-                cur_tid = trace.trace_id if trace else None
-                if callable(save_history):
-                    try:
-                        await asyncio.to_thread(
-                            save_history, image_url, group_id, trace_id=cur_tid
-                        )
-                    except TypeError:
-                        await asyncio.to_thread(save_history, image_url, group_id)
-                else:
-                    await asyncio.to_thread(
-                        self.save_report_to_history,
-                        image_url,
-                        group_id,
-                        trace_id=cur_tid,
-                    )
 
                 caption = (
                     TraceContext.make_report_caption()
@@ -615,13 +593,7 @@ class AnalysisCommandHandler:
                 if sent:
                     if stop_request is not None and stop_request.refresh():
                         raise AnalysisStoppedError
-                    upload_img = getattr(self.plugin_instance, "try_upload_image", None)
-                    if callable(upload_img):
-                        res = upload_img(group_id, image_url, platform_id)
-                        if isawaitable(res):
-                            await res
-                    else:
-                        await self.try_upload_image(group_id, image_url, platform_id)
+                    await self.try_upload_image(group_id, image_url, platform_id)
                     return
 
             logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
@@ -753,9 +725,7 @@ class AnalysisCommandHandler:
         try:
             if stop_request is not None and stop_request.refresh():
                 raise AnalysisStoppedError
-            if is_qq_official and hasattr(
-                self.report_generator, "generate_markdown_report"
-            ):
+            if is_qq_official:
                 (
                     text_report,
                     fallback_report,

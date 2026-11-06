@@ -118,6 +118,11 @@ def load_main_method(name: str):
                 bot_manager=getattr(plugin, "bot_manager", None),
                 context=getattr(plugin, "context", None),
             )
+        if not hasattr(plugin, "config_manager") or plugin.config_manager is None:
+            plugin.config_manager = _comic_config_manager()
+        for key, value in _comic_config_manager().__dict__.items():
+            if not hasattr(plugin.config_manager, key):
+                setattr(plugin.config_manager, key, value)
         if not hasattr(plugin, "comic_command_handler"):
             plugin.comic_command_handler = ComicCommandHandler(
                 config_manager=getattr(plugin, "config_manager", None),
@@ -126,8 +131,9 @@ def load_main_method(name: str):
                 analysis_service=getattr(plugin, "analysis_service", None),
                 active_task_manager=getattr(plugin, "active_task_manager", None),
                 plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
-                plugin_instance=plugin,
             )
+        if hasattr(plugin, "try_upload_image"):
+            plugin.comic_command_handler.try_upload_image = plugin.try_upload_image
         if not hasattr(plugin, "analysis_command_handler"):
             plugin.analysis_command_handler = AnalysisCommandHandler(
                 config_manager=getattr(plugin, "config_manager", None),
@@ -140,7 +146,6 @@ def load_main_method(name: str):
                 message_sender=getattr(plugin, "message_sender", None),
                 comic_handler=plugin.comic_command_handler,
                 plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
-                plugin_instance=plugin,
             )
 
     if inspect.iscoroutinefunction(target_func):
@@ -181,6 +186,10 @@ def load_comic_service_method(name: str):
     """
     from src.application.services.comic_application_service import ComicApplicationService
 
+    from src.infrastructure.drawing.external_drawing_adapter import ExternalDrawingAdapter
+    migrated = {"_generate_via_big_banana": "generate_big_banana", "_generate_via_general_plugin": "generate_general", "_import_big_banana_image_resource": "_import_big_banana_image_resource"}
+    if name in migrated:
+        return getattr(ExternalDrawingAdapter, migrated[name])
     return getattr(ComicApplicationService, name)
 
 
@@ -1071,6 +1080,11 @@ def _comic_config_manager(**overrides):
     """构造 generate_comic 所需的配置替身。"""
     defaults = {
         "get_enable_daily_comic": Mock(return_value=True),
+        "get_enable_auto_daily_comic": Mock(return_value=True),
+        "is_comic_group_allowed": Mock(return_value=True),
+        "get_report_template": Mock(return_value="default"),
+        "get_show_report_caption": Mock(return_value=True),
+        "get_t2i_max_concurrent": Mock(return_value=1),
         "get_selected_comic_character": Mock(return_value=None),
         "get_comic_character_persona_id": Mock(return_value=""),
         "get_comic_character_storyboard_prompt": Mock(return_value=""),
@@ -1099,6 +1113,7 @@ def _comic_service(config_manager, drawing_client, **methods):
         "_generate_via_general_plugin": AsyncMock(return_value=None),
     }
     service.update(methods)
+    service["external_drawing"] = SimpleNamespace(generate_big_banana=service.pop("_generate_via_big_banana"), generate_general=service.pop("_generate_via_general_plugin"))
     from src.application.services.comic_application_service import ComicApplicationService
 
     instance = object.__new__(ComicApplicationService)
@@ -1268,8 +1283,8 @@ def test_generate_comic_prefers_big_banana_backend():
 
         assert comic_bytes == b"comic-bytes"
         assert fallback_url is None
-        service._generate_via_big_banana.assert_awaited_once()
-        service._generate_via_general_plugin.assert_not_called()
+        service.external_drawing.generate_big_banana.assert_awaited_once()
+        service.external_drawing.generate_general.assert_not_called()
         drawing_client.generate_image.assert_not_called()
 
     asyncio.run(scenario())
@@ -1299,8 +1314,8 @@ def test_generate_comic_prefers_general_plugin_backend():
 
         assert comic_bytes == b"comic-bytes"
         assert fallback_url is None
-        service._generate_via_general_plugin.assert_awaited_once()
-        service._generate_via_big_banana.assert_not_called()
+        service.external_drawing.generate_general.assert_awaited_once()
+        service.external_drawing.generate_big_banana.assert_not_called()
         drawing_client.generate_image.assert_not_called()
 
     asyncio.run(scenario())
@@ -1478,6 +1493,8 @@ def test_comic_album_upload_sniffs_local_cached_image_extension(tmp_path):
     adapter = SimpleNamespace(
         get_group_info=AsyncMock(return_value=None),
         upload_group_album=AsyncMock(),
+        find_album_id=AsyncMock(),
+        get_group_album_list=AsyncMock(),
     )
     plugin = SimpleNamespace(
         config_manager=SimpleNamespace(
