@@ -25,11 +25,7 @@ from ...domain.value_objects.analysis_results import (
     UserActivityRanking,
     parse_user_activity,
 )
-from ...domain.value_objects.unified_message import (
-    MessageContent,
-    MessageContentType,
-    UnifiedMessage,
-)
+from ...infrastructure.persistence.unified_message_codec import restore_unified_messages
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
 from ...infrastructure.reporting.report_image import save_report_image
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
@@ -45,6 +41,7 @@ if TYPE_CHECKING:
     from ...domain.repositories.analysis_repository import IAnalysisProvider
     from ...domain.repositories.persistence_repository import ICheckpointStore
     from ...domain.repositories.report_repository import IReportGenerator
+    from ...domain.value_objects.unified_message import UnifiedMessage
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.history_manager import HistoryManager
     from ...infrastructure.platform.bot_manager import BotManager
@@ -509,63 +506,9 @@ class AnalysisRecoveryService:
             if is_object_list(top_users_raw)
             else None
         )
-        unified_messages_raw = clean_checkpoint.get("unified_messages")
-        unified_messages: list[UnifiedMessage] = []
-        if is_object_list(unified_messages_raw):
-            for message in unified_messages_raw:
-                if isinstance(message, UnifiedMessage):
-                    unified_messages.append(message)
-                elif is_string_mapping(message):
-                    # 恢复消息段及关系，确保续跑与首次分析读取相同的信息。
-                    contents: list[MessageContent] = []
-                    saved_contents = message.get("contents")
-                    if is_object_list(saved_contents):
-                        for part in saved_contents:
-                            if not is_string_mapping(part):
-                                continue
-                            try:
-                                content_type = MessageContentType(part.get("type"))
-                            except ValueError:
-                                content_type = MessageContentType.UNKNOWN
-                            contents.append(
-                                MessageContent(
-                                    type=content_type,
-                                    text=str(part.get("text") or ""),
-                                    url=str(part.get("url") or ""),
-                                    emoji_id=str(part.get("emoji_id") or ""),
-                                    emoji_name=str(part.get("emoji_name") or ""),
-                                    at_user_id=str(part.get("at_user_id") or ""),
-                                    raw_data=part.get("raw_data"),
-                                )
-                            )
-                    timestamp = message.get("timestamp", 0)
-                    try:
-                        restored_timestamp = (
-                            int(timestamp)
-                            if isinstance(timestamp, (int, float, str))
-                            else 0
-                        )
-                    except (ValueError, OverflowError):
-                        # 时间戳不参与文本续跑，旧值无效时保留消息正文并使用零值。
-                        restored_timestamp = 0
-                    unified_messages.append(
-                        UnifiedMessage(
-                            message_id=str(message.get("message_id", "")),
-                            sender_id=str(message.get("sender_id", "")),
-                            sender_name=str(message.get("sender_name", "")),
-                            group_id=str(message.get("group_id", group_id)),
-                            text_content=str(message.get("text_content", "")),
-                            timestamp=restored_timestamp,
-                            contents=tuple(contents),
-                            platform=str(message.get("platform") or "unknown"),
-                            reply_to_id=str(message["reply_to_id"])
-                            if message.get("reply_to_id")
-                            else None,
-                            sender_card=str(message["sender_card"])
-                            if message.get("sender_card")
-                            else None,
-                        )
-                    )
+        unified_messages = restore_unified_messages(
+            clean_checkpoint.get("unified_messages"), group_id
+        )
 
         return deserialized, unified_messages, top_users
 

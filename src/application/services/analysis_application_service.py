@@ -978,7 +978,7 @@ class AnalysisApplicationService:
                 "messages_count": len(unified_messages),
                 "adapter": adapter,
                 "group_id": group_id,
-                "platform_id": getattr(adapter, "platform_id", platform_id),
+                "platform_id": adapter.platform_id,
             }
 
     async def execute_incremental_analysis(

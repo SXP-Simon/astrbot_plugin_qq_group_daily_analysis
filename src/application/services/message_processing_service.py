@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import re
-from collections import Counter, OrderedDict
-from typing import TYPE_CHECKING, Protocol, TypedDict, cast
+from collections import OrderedDict
+from typing import TYPE_CHECKING
 
-from ...infrastructure.platform.qq_official_faces import extract_qq_face_features
-from ...shared.type_guards import (
-    is_object_collection,
-    is_string_mapping,
-)
+from ...infrastructure.persistence.astrbot_history_writer import AstrBotHistoryWriter
+from ...infrastructure.platform.astrbot_event_reader import AstrBotEventReader
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -24,58 +20,28 @@ if TYPE_CHECKING:
         PlatformGroupRegistry,
     )
 
-_QQ_OFFICIAL_PLATFORM_NAMES = frozenset({"qq_official", "qq_official_webhook"})
-_QQ_OFFICIAL_MENTION_PATTERN = re.compile(r"<@!?([A-Za-z0-9_-]+)>")
-_LOCAL_HISTORY_MAX_MESSAGES = 10000
-
-
-class HistoryInsertArguments(TypedDict):
-    """宿主消息历史写入的必填参数。"""
-
-    platform_id: str
-    user_id: str
-    content: dict[str, object]
-    sender_id: str
-    sender_name: str
-
-
-class HistoryWriter(Protocol):
-    """兼容宿主历史写入方法，旧版不支持的参数仍由原有分支回退。"""
-
-    async def insert(
-        self,
-        platform_id: str,
-        user_id: str,
-        content: dict[str, object],
-        sender_id: str | None = None,
-        sender_name: str | None = None,
-        max_messages: int | None = None,
-    ) -> object: ...
-
 
 class MessageProcessingService:
     """消息处理服务。
 
-    解析收到的群消息事件，提取内容与发送者信息，持久化历史记录，
+    委托接入层解析群消息事件并持久化历史记录，
     维护事件驱动平台（Telegram、Satori、QQ 官方等）的群组注册表，
     并提供跨平台两阶段预占锁与持久化缓存的事件幂等去重防线。
 
     职责：
-    1. 解析消息内容（文本、图片、@提及等）
-    2. 解析发送者展示名（跨平台兼容）
+    1. 调用事件接入器获取明确消息字段
+    2. 检查群聊持久化范围
     3. 存储消息历史（统一携带原生 message_id）
     4. 维护群组注册表，供调度器做群组发现（Telegram、QQ 官方等事件驱动平台）
     5. 多平台事件消息两阶段去重（按 platform_id:group_id:message_id 预占 + 确认机制 + 本地持久化预热）
     """
 
-    context: Context
     group_registry: PlatformGroupRegistry
     dedup_store: EventDeduplicationStore | None
     config_manager: ConfigManager | None
     _seen_event_ids: OrderedDict[str, None]
     _inflight_event_ids: set[str]
     _seen_event_ids_limit: int
-    _supports_history_max_messages: bool | None
 
     def __init__(
         self,
@@ -92,16 +58,14 @@ class MessageProcessingService:
             dedup_store: 可选的本地持久化事件去重仓储（用于重启记忆恢复）。
             config_manager: 可选的配置管理器（用于动态获取保留消息上限）。
         """
-        self.context = context
+        self.history_writer = AstrBotHistoryWriter(context, config_manager)
+        self.event_reader = AstrBotEventReader()
         self.group_registry = group_registry
         self.dedup_store = dedup_store
         self.config_manager = config_manager
         self._seen_event_ids = OrderedDict()
         self._inflight_event_ids = set()
         self._seen_event_ids_limit = 4096
-        # AstrBot 4.26.x 的消息历史接口尚未提供 max_messages 参数。
-        # 首次探测到旧签名后缓存结果，避免每条消息都触发一次失败调用。
-        self._supports_history_max_messages = None
         if self.dedup_store is not None:
             for key in self.dedup_store.load_recent_keys(self._seen_event_ids_limit):
                 self._seen_event_ids[key] = None
@@ -121,71 +85,21 @@ class MessageProcessingService:
             ValueError: 当群组 ID、发送者 ID 或平台 ID 无法获取时。
             RuntimeError: 当解析出的消息内容为空时。
         """
-        # 1. 获取群组 ID（必需）
-        group_id = self._get_group_id_from_event(event)
-        if not group_id:
-            raise ValueError("无法获取群组 ID，拒绝存储消息")
-
-        # 2. 获取发送者 ID（必需）
-        sender_id = event.get_sender_id()
-        if not sender_id:
-            raise ValueError(f"群 {group_id}: 无法获取发送者 ID，拒绝存储消息")
-        sender_id = str(sender_id)
-
-        # 3. 获取发送者名称（昵称优先，必要时回退）
-        sender_name = self._resolve_sender_name(event, sender_id)
-
-        # 4. 获取平台 ID（必需）
-        platform_id = event.get_platform_id()
-        if not platform_id:
-            raise ValueError(f"群 {group_id}: 无法获取平台 ID，拒绝存储消息")
-
-        # 检查是否开启“仅对已启用分析的群进行持久化”过滤
+        incoming = self.event_reader.read(event)
+        group_id, platform_id = incoming.group_id, incoming.platform_id
+        sender_id, sender_name = incoming.sender_id, incoming.sender_name
+        event_message_id, platform_name = incoming.message_id, incoming.platform_name
         if (
             self.config_manager is not None
             and self.config_manager.get_persist_only_allowed_groups()
+            and not self.config_manager.is_group_allowed(incoming.umo)
         ):
-            umo = (
-                event.unified_msg_origin
-                if hasattr(event, "unified_msg_origin") and event.unified_msg_origin
-                else f"{platform_id}:GroupMessage:{group_id}"
-            )
-            if not self.config_manager.is_group_allowed(umo):
-                logger.debug(
-                    "[%s] 群 %s 未通过群权限白名单校验且开启了严格持久化过滤，跳过消息存储",
-                    platform_id,
-                    group_id,
-                )
-                return False
-
-        # 5. 提取消息内容
-        platform_name = str(event.get_platform_name() or "").strip().lower()
-        face_features = (
-            extract_qq_face_features(event)
-            if platform_name in _QQ_OFFICIAL_PLATFORM_NAMES
-            else []
-        )
-        message_parts = self._extract_message_parts(event)
-        if not message_parts and face_features:
-            message_parts = [
-                {
-                    "type": "plain",
-                    "text": "".join(
-                        f"[表情:{face['name'] or face['face_id'] or '未知'}]"
-                        for face in face_features
-                    ),
-                }
-            ]
-        if not message_parts:
-            # 尝试记录一条警告但不中断流程（或者视为错误）
-            # 原逻辑是抛出 RuntimeError
+            logger.debug("[%s] 群 %s 未启用分析，跳过消息存储", platform_id, group_id)
+            return False
+        if not incoming.has_content:
             raise RuntimeError(
                 f"群 {group_id}: 消息内容为空 (sender={sender_name})，拒绝存储"
             )
-
-        # 6. 提取事件消息 ID 和事件时间
-        msg_obj = getattr(event, "message_obj", None)
-        event_message_id = str(getattr(msg_obj, "message_id", "") or "").strip()
 
         reserved_event_id = False
         dedup_key = ""
@@ -204,25 +118,12 @@ class MessageProcessingService:
                     event_message_id,
                 )
                 return False
-        history_content: dict[str, object] = {
-            "type": "user",
-            "message": message_parts,
-            "message_id": event_message_id,
-        }
-        if platform_name in _QQ_OFFICIAL_PLATFORM_NAMES:
-            event_timestamp = self._extract_event_timestamp(msg_obj)
-            history_content["_qq_official"] = {
-                "message_id": event_message_id,
-                "timestamp": event_timestamp,
-                "faces": face_features,
-            }
-
         # 7. 存储到数据库
         try:
-            await self._insert_message_history(
+            await self.history_writer.insert(
                 platform_id=platform_id,
                 group_id=group_id,
-                content=history_content,
+                content=incoming.content,
                 sender_id=sender_id,
                 sender_name=sender_name,
             )
@@ -253,363 +154,6 @@ class MessageProcessingService:
             f"[{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
         )
         return True
-
-    async def _insert_message_history(
-        self,
-        platform_id: str,
-        group_id: str,
-        content: dict[str, object],
-        sender_id: str,
-        sender_name: str,
-    ) -> None:
-        """兼容不同 AstrBot 版本的消息历史写入接口。
-
-        Args:
-            platform_id: AstrBot 平台实例 ID。
-            group_id: 当前群组 ID。
-            content: 待持久化的标准化消息内容。
-            sender_id: 发送者 ID。
-            sender_name: 发送者展示名称。
-
-        Raises:
-            Exception: 消息历史管理器写入失败时原样抛出。
-        """
-        insert = cast("HistoryWriter", self.context.message_history_manager).insert
-        insert_kwargs: HistoryInsertArguments = {
-            "platform_id": platform_id,
-            "user_id": group_id,
-            "content": content,
-            "sender_id": sender_id,
-            "sender_name": sender_name,
-        }
-        if self._supports_history_max_messages is False:
-            await insert(**insert_kwargs)
-            return
-
-        max_messages = (
-            self.config_manager.get_local_history_max_messages()
-            if self.config_manager is not None
-            else _LOCAL_HISTORY_MAX_MESSAGES
-        )
-
-        try:
-            await insert(**insert_kwargs, max_messages=max_messages)
-        except TypeError as exc:
-            if "unexpected keyword argument 'max_messages'" not in str(exc):
-                raise
-
-            self._supports_history_max_messages = False
-            logger.warning(
-                "[消息历史] 当前 AstrBot 核心不支持 max_messages 参数，"
-                "将使用兼容模式写入消息历史；建议升级核心以启用本地历史上限。"
-            )
-            await insert(**insert_kwargs)
-        else:
-            self._supports_history_max_messages = True
-
-    def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
-        """从消息事件中安全获取群组 ID"""
-        try:
-            group_id = event.get_group_id()
-            return group_id if group_id else None
-        except Exception:
-            return None
-
-    def _resolve_sender_name(self, event: AstrMessageEvent, sender_id: str) -> str:
-        """解析发送者展示名"""
-        platform_name = str(event.get_platform_name() or "").lower()
-        candidates: list[str | None] = []
-
-        msg_obj = getattr(event, "message_obj", None)
-        sender_obj = getattr(msg_obj, "sender", None)
-        raw_message = getattr(msg_obj, "raw_message", None)
-        raw_msg_obj = getattr(raw_message, "message", raw_message)
-        from_user = getattr(raw_msg_obj, "from_user", None)
-
-        if platform_name == "telegram":
-            if from_user is not None:
-                candidates.extend(
-                    [
-                        getattr(from_user, "full_name", None),
-                        getattr(from_user, "first_name", None),
-                    ]
-                )
-            candidates.append(event.get_sender_name())
-            if sender_obj is not None:
-                candidates.append(getattr(sender_obj, "nickname", None))
-            if from_user is not None:
-                candidates.append(getattr(from_user, "username", None))
-        else:
-            candidates.append(event.get_sender_name())
-            if sender_obj is not None:
-                candidates.append(getattr(sender_obj, "nickname", None))
-
-        if from_user is not None:
-            candidates.extend(
-                [
-                    getattr(from_user, "full_name", None),
-                    getattr(from_user, "first_name", None),
-                    getattr(from_user, "username", None),
-                ]
-            )
-
-        for candidate in candidates:
-            name = str(candidate or "").strip()
-            if not self._is_placeholder_sender_name(name, sender_id):
-                return name
-
-        return sender_id
-
-    def _extract_message_parts(self, event: AstrMessageEvent) -> list[dict[str, str]]:
-        """从事件中提取消息内容"""
-        message_parts: list[dict[str, str]] = []
-        message = event.message_obj
-        platform_name = str(event.get_platform_name() or "").strip().lower()
-        qq_mention_replacements = (
-            self._extract_qq_official_mention_replacements(event)
-            if platform_name in _QQ_OFFICIAL_PLATFORM_NAMES
-            else None
-        )
-
-        # 收集 @ 标记
-        pending_mentions: Counter[str] = Counter()
-        if message and hasattr(message, "message"):
-            for seg in message.message:
-                if not hasattr(seg, "type"):
-                    continue
-                if seg.type not in ("At", "at"):
-                    continue
-
-                target = getattr(seg, "target", None) or getattr(seg, "qq", None)
-                seg_data = getattr(seg, "data", None)
-                if target is None and is_string_mapping(seg_data):
-                    target = seg_data.get("qq") or seg_data.get("target")
-
-                target_str = str(target or "").strip()
-                if target_str:
-                    pending_mentions[target_str] += 1
-
-                display_name = str(getattr(seg, "name", "") or "").strip()
-                if display_name and display_name != target_str:
-                    pending_mentions[display_name] += 1
-
-        if message and hasattr(message, "message"):
-            for seg in message.message:
-                if not hasattr(seg, "type"):
-                    continue
-
-                seg_type = seg.type
-                seg_data = getattr(seg, "data", None)
-                if seg_type in ("Plain", "text"):
-                    text = getattr(seg, "text", None)
-                    if text is None and is_string_mapping(seg_data):
-                        text = seg_data.get("text")
-                    if text:
-                        text = self._strip_known_mentions(str(text), pending_mentions)
-                        if qq_mention_replacements is not None:
-                            text = self._sanitize_qq_official_mentions(
-                                text, qq_mention_replacements
-                            )
-                        message_parts.append({"type": "plain", "text": text})
-
-                elif seg_type in ("Image", "image"):
-                    # QQ 官方图片附件缺少可确认的表情标记，不能凭 URL、GIF 后缀或文件名推断表情包。
-                    url = getattr(seg, "url", None) or (
-                        seg_data.get("url") if is_string_mapping(seg_data) else None
-                    )
-                    if url:
-                        message_parts.append({"type": "image", "url": str(url)})
-
-                elif seg_type in ("At", "at"):
-                    target = getattr(seg, "target", None) or getattr(seg, "qq", None)
-                    if target is None and is_string_mapping(seg_data):
-                        target = seg_data.get("qq") or seg_data.get("target")
-                    if target:
-                        message_parts.append(
-                            {
-                                "type": "at",
-                                "target_id": str(target),
-                                "name": str(getattr(seg, "name", "") or ""),
-                            }
-                        )
-
-                elif seg_type in ("File", "file"):
-                    url = getattr(seg, "url", None) or getattr(seg, "file_", None)
-                    message_parts.append(
-                        {
-                            "type": "file",
-                            "url": str(url or ""),
-                            "name": str(getattr(seg, "name", "") or ""),
-                        }
-                    )
-
-                elif seg_type in ("Record", "record", "voice"):
-                    url = getattr(seg, "url", None) or getattr(seg, "file", None)
-                    message_parts.append({"type": "voice", "url": str(url or "")})
-
-                elif seg_type in ("Video", "video"):
-                    url = getattr(seg, "url", None) or getattr(seg, "file", None)
-                    message_parts.append({"type": "video", "url": str(url or "")})
-
-        if not message_parts and event.message_str:
-            fallback_text = str(event.message_str)
-            if qq_mention_replacements is not None:
-                fallback_text = self._sanitize_qq_official_mentions(
-                    fallback_text, qq_mention_replacements
-                )
-            message_parts.append({"type": "plain", "text": fallback_text})
-
-        # 清理空文本段并返回
-        return [
-            part
-            for part in message_parts
-            if not (
-                part.get("type") == "plain" and not str(part.get("text", "")).strip()
-            )
-        ]
-
-    @classmethod
-    def _extract_qq_official_mention_replacements(
-        cls, event: AstrMessageEvent
-    ) -> dict[str, str]:
-        message_obj = getattr(event, "message_obj", None)
-        raw_message = getattr(message_obj, "raw_message", None)
-        raw_candidates = [raw_message]
-        nested_message = cls._read_field(raw_message, "message")
-        if nested_message is not None and nested_message is not raw_message:
-            raw_candidates.insert(0, nested_message)
-
-        mentions = None
-        for candidate in raw_candidates:
-            mentions = cls._read_field(candidate, "mentions")
-            if mentions is not None:
-                break
-
-        replacements: dict[str, str] = {}
-        if not is_object_collection(mentions):
-            return replacements
-
-        for mention in mentions:
-            mention_id = str(
-                cls._read_field(
-                    mention,
-                    "id",
-                    "member_openid",
-                    "memberopenid",
-                    "user_openid",
-                    "useropenid",
-                )
-                or ""
-            ).strip()
-            if not mention_id:
-                continue
-
-            if cls._read_field(mention, "is_you") is True:
-                replacements[mention_id] = ""
-                continue
-
-            display_name = str(
-                cls._read_field(mention, "username", "name", "nickname") or ""
-            ).strip()
-            display_name = display_name.lstrip("@").strip()
-            if cls._is_placeholder_sender_name(display_name, mention_id):
-                display_name = "群友"
-            replacements[mention_id] = f"@{display_name}"
-
-        return replacements
-
-    @staticmethod
-    def _sanitize_qq_official_mentions(text: str, replacements: dict[str, str]) -> str:
-        def replace_mention(match: re.Match[str]) -> str:
-            mention_id = match.group(1)
-            if mention_id.lower() in {"all", "everyone"}:
-                return "@全体成员"
-            return replacements.get(mention_id, "@群友")
-
-        cleaned = _QQ_OFFICIAL_MENTION_PATTERN.sub(replace_mention, str(text))
-        return re.sub(r"[^\S\r\n]{2,}", " ", cleaned).strip(" \t")
-
-    @staticmethod
-    def _read_field(source: object, *names: str) -> object | None:
-        if is_string_mapping(source):
-            for name in names:
-                if name in source:
-                    return source[name]
-            return None
-
-        for name in names:
-            value = getattr(source, name, None)
-            if value is not None:
-                return value
-        return None
-
-    @staticmethod
-    def _strip_known_mentions(text: str, pending_mentions: Counter[str]) -> str:
-        """从文本中移除已识别的 @ 提及"""
-        cleaned = str(text)
-        if not cleaned or not pending_mentions:
-            return cleaned.strip()
-
-        for mention, remaining in list(pending_mentions.items()):
-            if not mention or remaining <= 0:
-                continue
-
-            pattern = re.compile(rf"(?<!\w)@{re.escape(mention)}(?!\w)")
-            removed = 0
-            while removed < remaining:
-                cleaned, subn = pattern.subn("", cleaned, count=1)
-                if subn == 0:
-                    break
-                removed += 1
-
-            if removed > 0:
-                pending_mentions[mention] -= removed
-                if pending_mentions[mention] <= 0:
-                    pending_mentions.pop(mention, None)
-
-        return re.sub(r"[^\S\r\n]{2,}", " ", cleaned).strip()
-
-    @staticmethod
-    def _is_placeholder_sender_name(name: str | None, sender_id: str) -> bool:
-        """判断 sender_name 是否为占位值"""
-        if not name:
-            return True
-        normalized = str(name).strip()
-        if not normalized:
-            return True
-        if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
-            return True
-        return normalized == str(sender_id).strip()
-
-    @staticmethod
-    def _extract_event_timestamp(message_obj: object) -> int:
-        """从消息对象中提取平台事件时间戳。"""
-        raw_message = getattr(message_obj, "raw_message", None)
-        if is_string_mapping(raw_message):
-            candidate = raw_message.get("timestamp")
-            if not candidate:
-                raw_data = raw_message.get("raw_data")
-                if is_string_mapping(raw_data):
-                    candidate = raw_data.get("timestamp")
-        else:
-            raw_data = getattr(raw_message, "raw_data", None)
-            candidate = getattr(raw_message, "timestamp", None)
-            if not candidate and is_string_mapping(raw_data):
-                candidate = raw_data.get("timestamp")
-        if isinstance(candidate, (int, float)):
-            return int(candidate)
-        if candidate:
-            try:
-                from datetime import datetime
-
-                return int(
-                    datetime.fromisoformat(
-                        str(candidate).replace("Z", "+00:00")
-                    ).timestamp()
-                )
-            except (TypeError, ValueError, OverflowError):
-                pass
-        return 0
 
     async def _reserve_event_id(self, dedup_key: str) -> bool:
         """预占事件消息 ID：在历史记录持久化期间防止重复入库。

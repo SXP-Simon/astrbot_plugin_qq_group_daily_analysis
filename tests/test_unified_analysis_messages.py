@@ -228,7 +228,9 @@ async def test_topic_and_quote_resolve_string_ids_after_analysis():
     ],
 )
 def test_emoji_totals_users_and_hourly_distribution_agree(raw, expected):
-    image = MessageContent(type=MessageContentType.IMAGE, raw_data=raw)
+    from src.infrastructure.platform.message_normalization import is_image_sticker
+
+    image = MessageContent(type=MessageContentType.IMAGE, is_sticker=is_image_sticker(raw))
     messages = [
         make_message(contents=(image,), text_content="", reply_to_id=None),
         make_message(
