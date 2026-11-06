@@ -26,7 +26,6 @@ from .platform_adapter_repository import (
     GroupFileSupportProtocol,
     PlatformAdapterProtocol,
 )
-from .plugin_host_repository import PluginHostProtocol
 from .report_repository import IReportGenerator
 from .task_lifecycle_repository import ITaskLifecycleRepository
 from .visualization_repository import IActivityVisualizer
@@ -52,7 +51,6 @@ __all__ = [
     "ITaskLifecycleRepository",
     "OneBotClientProtocol",
     "PlatformAdapterProtocol",
-    "PluginHostProtocol",
     "QQOfficialApiProtocol",
     "QQOfficialBotProtocol",
     "QQOfficialPlatformProtocol",
