@@ -4,6 +4,28 @@ import { SpanTimeline } from "../SpanTimeline";
 import type { TraceSpan } from "../../model/types";
 import { buildSpanTree } from "../../model/spanTree";
 
+it("实际记录为零的阶段与未记录耗时区分", () => {
+  render(
+    <SpanTimeline
+      spans={[
+        {
+          span_id: "zero",
+          trace_id: "zero",
+          stage_name: "FETCH_MESSAGES",
+          status: "success",
+          started_at: 1,
+          duration_ms: 0,
+          payload: {},
+        },
+      ]}
+      totalDurationMs={10}
+      taskStatus="succeeded"
+    />,
+  );
+  expect(screen.getByText("完成 (0ms)")).toBeVisible();
+  expect(screen.getByText("占总耗时 0%")).toBeVisible();
+});
+
 it("结束后缺失耗时不显示为零，未知父耗时不能作为占比分母", () => {
   const spans: TraceSpan[] = [
     {

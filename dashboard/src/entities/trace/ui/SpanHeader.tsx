@@ -44,7 +44,12 @@ export function SpanHeader({
   const ratio = getDurationRatio(timing.durationMs, totalDurationMs);
   const ratioLabel =
     ratio !== null && ratio > 0 && ratio < 0.1 ? "<0.1" : ratio?.toFixed(1).replace(/\.0$/, "");
-  const duration = timing.durationMs === null ? "耗时未记录" : formatDuration(timing.durationMs);
+  const duration =
+    timing.durationMs === null
+      ? "耗时未记录"
+      : timing.durationMs === 0
+        ? "0ms"
+        : formatDuration(timing.durationMs);
   const labels = {
     cancelled: "已取消",
     failed: "失败",

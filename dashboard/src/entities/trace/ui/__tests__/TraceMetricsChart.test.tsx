@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { TraceMetricsChart } from "../TraceMetricsChart";
 import { mockTypstTraces } from "../../../../mocks/data/typstTraces";
@@ -10,6 +10,54 @@ vi.mock("echarts-for-react", () => ({
   ),
 }));
 vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+
+it("保留三类图表与数据查看，未知耗时不成为零或累计总耗时", () => {
+  render(
+    <TraceMetricsChart
+      trace={{
+        trace_id: "missing",
+        group_id: "example",
+        group_name: "示例",
+        platform: "satori",
+        trigger_type: "manual",
+        status: "succeeded",
+        started_at: 1,
+        spans: [
+          {
+            trace_id: "missing",
+            span_id: "unknown",
+            stage_name: "FETCH_MESSAGES",
+            started_at: 1,
+            status: "success",
+            duration_ms: null,
+            payload: {},
+          },
+          {
+            trace_id: "missing",
+            span_id: "zero",
+            stage_name: "CLEAN_MESSAGES",
+            started_at: 1,
+            status: "success",
+            duration_ms: 0,
+            payload: {},
+          },
+        ],
+      }}
+    />,
+  );
+  expect(screen.getByText("记录总耗时：未记录")).toBeVisible();
+  fireEvent.click(screen.getByText("查看图表数据"));
+  const table = screen.getByRole("table", { name: "阶段耗时记录" });
+  expect(within(table).getByText("未记录")).toBeVisible();
+  expect(within(table).getByText("0 ms")).toBeVisible();
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "宿主 RSS 采样" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  expect(screen.getByText("没有对应的采样记录")).toBeVisible();
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "传输体积" }), { button: 0, ctrlKey: false });
+  expect(screen.getByText(/没有记录不代表未生成报告/)).toBeVisible();
+});
 
 it("不同引擎尝试在精简图中均保留，不被按同名阶段折叠或误计重试", () => {
   render(
