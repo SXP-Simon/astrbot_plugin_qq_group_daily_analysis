@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
+import typst
 from PIL import Image, ImageChops, ImageDraw, ImageStat
 from test_template_section_conditional_rendering import create_analysis_result
 from test_typst_resources import oversized_avatar_uri as oversized_avatar_uri
@@ -21,6 +22,7 @@ from src.infrastructure.reporting import typst_renderer
 from src.infrastructure.reporting.dispatcher import ReportDispatcher
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.typst_resources import TypstAssets
+from src.infrastructure.reporting.display_names import normalize_display_name
 from src.shared.trace_context import TraceContext
 
 
@@ -36,6 +38,39 @@ def managed_fonts(tmp_path_factory):
     data_dir = tmp_path_factory.mktemp("typst-compilation")
     shutil.copytree(source, data_dir / "typst/fonts")
     return data_dir
+
+
+def test_miku_control_character_nickname_matches_clean_single_line_layout(tmp_path, managed_fonts):
+    """真实编译截图中的昵称，发言人及行内头像均应与干净文本一致。"""
+    templates = Path(__file__).parents[1] / "src/infrastructure/reporting/templates"
+    shutil.copyfile(templates / "HatsuneMiku/miku.typ", tmp_path / "miku.typ")
+    shutil.copyfile(templates / "common.typ", tmp_path / "common.typ")
+    Image.new("RGB", (18, 18), "#39c5bb").save(tmp_path / "avatar.png")
+    (tmp_path / "main.typ").write_text(
+        '#import "miku.typ": copy, runs\n'
+        '#let t=(u:1pt,fonts:("Noto Sans SC",))\n'
+        '#set page(width:440pt,height:auto,margin:10pt)\n'
+        '#let name=json("name.json")\n'
+        '#copy(t,name,size:13.6)\n#parbreak()\n'
+        '#copy(t,runs(t,((text:"展现了令人绝倒的清奇脑回路，",avatar:""),'
+        '(text:name,avatar:"avatar.png"),(text:" 一本正经地回应。",avatar:""))),size:14.4)\n',
+        encoding="utf-8",
+    )
+    raw = "\n\x0e\x12本间心铃\n\t\n\x07纱A\x1a\x11\x10\x00"
+    outputs = []
+    for name in (raw, normalize_display_name(raw), "本间心铃 纱A"):
+        (tmp_path / "name.json").write_text(json.dumps(name), encoding="utf-8")
+        compiler = typst.Compiler(
+            str(tmp_path / "main.typ"), root=str(tmp_path),
+            font_paths=[str(managed_fonts / "typst/fonts")], ignore_system_fonts=True,
+        )
+        with Image.open(BytesIO(compiler.compile(format="png", ppi=144))) as image:
+            outputs.append(image.convert("RGB"))
+    for label, image in zip(("before", "after", "expected"), outputs):
+        image.save(tmp_path / f"nickname-{label}.png")
+    assert outputs[0].height > outputs[1].height
+    assert outputs[1].size == outputs[2].size
+    assert ImageChops.difference(outputs[1], outputs[2]).getbbox() is None
 
 
 @pytest_asyncio.fixture

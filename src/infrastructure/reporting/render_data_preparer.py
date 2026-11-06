@@ -27,6 +27,7 @@ from ...shared.report_language import (
     resolve_report_language,
 )
 from ...utils.logger import logger
+from .display_names import normalize_display_name
 from .profile_mappings import resolve_profile_info
 
 if TYPE_CHECKING:
@@ -499,7 +500,9 @@ class RenderDataPreparer:
                     avatar_reuse_aliases,
                 )
             else:
-                contributors = "、".join(topic.contributors)
+                contributors = "、".join(
+                    normalize_display_name(name) for name in topic.contributors
+                )
             topics_list.append(
                 {
                     "index": i,
@@ -563,7 +566,7 @@ class RenderDataPreparer:
                     allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                 )
             title_data = {
-                "name": "" if hide_user_names else title.name,
+                "name": "" if hide_user_names else normalize_display_name(title.name),
                 "title": title.title,
                 "mbti": title.mbti,
                 "reason": title_reason,
@@ -621,7 +624,9 @@ class RenderDataPreparer:
                     "content": self.sanitize_identity_text(
                         golden_quote.content, analysis_result, hide_user_names
                     ),
-                    "sender": "" if hide_user_names else golden_quote.sender,
+                    "sender": ""
+                    if hide_user_names
+                    else normalize_display_name(golden_quote.sender),
                     "reason": processed_reason,
                     "avatar_url": avatar_url,
                 }
@@ -813,13 +818,15 @@ class RenderDataPreparer:
             name = None
             if user_analysis and uid in user_analysis:
                 stats = user_analysis[uid]
-                name = stats.get("nickname") or stats.get("name")
+                name = normalize_display_name(
+                    str(stats.get("nickname") or stats.get("name") or "")
+                )
                 if self.is_placeholder_display_name(name, uid):
                     name = None
 
             if not name and nickname_getter:
                 try:
-                    name = await nickname_getter(uid)
+                    name = normalize_display_name(str(await nickname_getter(uid) or ""))
                     if self.is_placeholder_display_name(name, uid):
                         name = None
                 except Exception as e:

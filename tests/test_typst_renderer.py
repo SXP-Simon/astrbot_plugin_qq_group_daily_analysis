@@ -15,6 +15,8 @@ from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.typst_renderer import run_typst_worker
 from src.infrastructure.reporting.typst_resources import TypstAssets
+from src.infrastructure.reporting.display_names import normalize_display_name
+from src.infrastructure.reporting.typst_identity import TypstIdentityResolver
 from src.infrastructure.reporting.typst_process import TypstWorkerError, TypstWorkerTimeoutError
 from src.shared.trace_context import TraceContext
 
@@ -23,6 +25,69 @@ def png_bytes():
     stream = BytesIO()
     Image.new("RGB", (12, 12), "#39c5bb").save(stream, format="PNG")
     return stream.getvalue()
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("\n\x0e\x12本间心铃\n\t\n\x07纱A\x1a\x11\x10\x00", "本间心铃 纱A"),
+    ("甲\r\n乙\t丙\u2028丁\u2029戊\u0085己", "甲 乙 丙 丁 戊 己"),
+    ("\x00\x08\x1b\x7f\x80\x9f", ""),
+    ("小铃 👩‍💻 ❤️ ✨ é", "小铃 👩‍💻 ❤️ ✨ é"),
+    ('#read("file") <script> [123]', '#read("file") <script> [123]'),
+])
+def test_typst_display_name_removes_controls_without_damaging_unicode(name, expected):
+    assert normalize_display_name(name) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("hide_names", [False, True])
+async def test_typst_normalizes_all_display_names_without_changing_source(native, monkeypatch, hide_names):
+    directory = native.data_dir / "typst/fonts"
+    directory.mkdir(parents=True)
+    (directory / "test.ttf").write_bytes(b"font")
+    captured = {}
+
+    async def worker(job, fonts, timeout, raster_ppi=144):
+        captured.update(json.loads((job / "data.json").read_text(encoding="utf-8")))
+        (job / "report.png").write_bytes(png_bytes())
+
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
+    data = create_analysis_result()
+    name = "\n\x0e\x12本间心铃\n\t\n\x07纱A\x1a\x11\x10\x00"
+    data["user_analysis"] = {"123456": {"nickname": name}}
+    data["user_titles"][0].name = name
+    data["statistics"].golden_quotes[0].sender = name
+    data["statistics"].golden_quotes[0].reason = "第一行\n[123456] 的回应"
+    try:
+        image, _ = await native.generate_image_report(data, "test", None, hide_user_names=hide_names)
+        assert image
+        expected = "" if hide_names else "本间心铃 纱A"
+        assert captured["portraits"][0]["name"] == expected
+        assert captured["quotes"][0]["sender"] == expected
+        assert captured["quotes"][0]["reason"][1]["text"] == expected
+        assert captured["quotes"][0]["reason"][0]["text"] == "第一行\n"
+        assert data["user_analysis"]["123456"]["nickname"] == name
+        assert data["user_titles"][0].name == name
+        assert data["statistics"].golden_quotes[0].sender == name
+    finally:
+        await native.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("callback_name,expected", [("\x07铃\n音👩‍💻\x00", "铃 音👩‍💻"), ("\x00\x07", "123456")])
+async def test_typst_normalizes_callback_names_and_keeps_empty_name_fallback(native, callback_name, expected):
+    from src.infrastructure.reporting.typst_contracts import TypstIdentityOptions
+    from unittest.mock import MagicMock
+
+    data = create_analysis_result(empty=True)
+    nickname = AsyncMock(return_value=callback_name)
+    assets = MagicMock(network_deadline=asyncio.get_running_loop().time() + 10)
+    resolver = TypstIdentityResolver(native._avatar_service, assets, data, TypstIdentityOptions(nickname_getter=nickname))
+    try:
+        assert await resolver._user_name("123456") == expected
+        assert await resolver._user_name("123456") == expected
+        nickname.assert_awaited_once()
+    finally:
+        await native.close()
 
 
 @pytest.mark.asyncio

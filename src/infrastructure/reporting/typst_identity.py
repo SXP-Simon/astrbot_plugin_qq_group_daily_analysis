@@ -6,6 +6,7 @@ import asyncio
 import re
 from typing import TYPE_CHECKING
 
+from .display_names import normalize_display_name
 from .render_data_preparer import RenderDataPreparer
 
 if TYPE_CHECKING:
@@ -135,14 +136,18 @@ class TypstIdentityResolver:
             return self._name_cache[uid]
         stats = self.result["user_analysis"].get(uid)
         name = (
-            str(stats.get("nickname") or stats.get("name") or "")
+            normalize_display_name(
+                str(stats.get("nickname") or stats.get("name") or "")
+            )
             if isinstance(stats, dict)
             else ""
         )
         if not name and self.nickname_getter and not self.hide_names:
             try:
                 async with asyncio.timeout_at(self.assets.network_deadline):
-                    name = str(await self.nickname_getter(uid) or "")
+                    name = normalize_display_name(
+                        str(await self.nickname_getter(uid) or "")
+                    )
             except TimeoutError:
                 self.assets.network_budget_exhausted = True
             except Exception:

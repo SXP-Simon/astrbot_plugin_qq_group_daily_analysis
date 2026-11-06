@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ...shared.report_language import format_report_date, resolve_report_language
+from .display_names import normalize_display_name
 from .profile_mappings import resolve_profile_info
 from .typst_identity import TypstIdentityResolver
 
@@ -71,7 +72,9 @@ class TypstDataPreparer:
                     "title": self.identity.plain(topic.topic),
                     "detail": await self.identity.rich_text(topic.detail),
                     "contributors": await self.identity.rich_text(
-                        "、".join(topic.contributors)
+                        "、".join(
+                            normalize_display_name(name) for name in topic.contributors
+                        )
                     ),
                 }
             )
@@ -80,7 +83,9 @@ class TypstDataPreparer:
         for quote in stats.golden_quotes[: config.get_max_golden_quotes()]:
             quotes.append(
                 {
-                    "sender": "" if self.identity.hide_names else quote.sender,
+                    "sender": ""
+                    if self.identity.hide_names
+                    else normalize_display_name(quote.sender),
                     "content": await self.identity.rich_text(quote.content),
                     "reason": await self.identity.rich_text(quote.reason),
                     "avatar": await self.identity.avatar(str(quote.user_id or "")),
@@ -154,7 +159,9 @@ class TypstDataPreparer:
             )
             portraits.append(
                 {
-                    "name": "" if self.identity.hide_names else portrait.name,
+                    "name": ""
+                    if self.identity.hide_names
+                    else normalize_display_name(portrait.name),
                     "title": self.identity.plain(portrait.title),
                     "profile": self.identity.plain(str(profile["profile_display"])),
                     "mbti": self.identity.plain(portrait.mbti),
