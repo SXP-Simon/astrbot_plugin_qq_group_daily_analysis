@@ -57,8 +57,17 @@ it("提交期间阻止重复提交和误关，返回后保留选择", async () =
   fireEvent.keyDown(document.activeElement!, { key: "Escape" });
   expect(confirm).not.toHaveBeenCalled();
   expect(cancel).not.toHaveBeenCalled();
-  view.rerender(<ResumeTaskModal open loading={false} onConfirm={confirm} onCancel={cancel} />);
+  view.rerender(
+    <ResumeTaskModal
+      open
+      loading={false}
+      error="续跑未成功，请稍后重试。"
+      onConfirm={confirm}
+      onCancel={cancel}
+    />,
+  );
   expect(screen.getByLabelText("模型")).toHaveValue("example-model");
+  expect(screen.getByRole("alert")).toHaveTextContent("续跑未成功");
 });
 
 it("关闭再打开后，前次迟到的模型列表不能覆盖新列表", async () => {

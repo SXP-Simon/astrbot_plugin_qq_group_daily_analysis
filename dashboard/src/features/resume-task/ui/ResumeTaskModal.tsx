@@ -8,11 +8,18 @@ import { useResumeOptions } from "../model/useResumeOptions";
 interface ResumeTaskModalProps {
   open: boolean;
   loading: boolean;
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (selectedProvider?: string, selectedTemplate?: string) => void;
 }
 
-export function ResumeTaskModal({ open, loading, onCancel, onConfirm }: ResumeTaskModalProps) {
+export function ResumeTaskModal({
+  open,
+  loading,
+  error,
+  onCancel,
+  onConfirm,
+}: ResumeTaskModalProps) {
   const vm = useResumeOptions(open);
   const id = useId();
   return (
@@ -27,6 +34,11 @@ export function ResumeTaskModal({ open, loading, onCancel, onConfirm }: ResumeTa
         <DialogDescription>
           优先复用已保存的结果，补齐未完成的分析。快照缺失时会重新拉取消息，可能产生新的模型消耗。
         </DialogDescription>
+        {error && (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {error}
+          </p>
+        )}
         <form
           onSubmit={(event) => {
             event.preventDefault();
