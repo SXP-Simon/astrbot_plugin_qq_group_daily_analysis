@@ -287,17 +287,63 @@ export const mockHandlers = {
   "GET traces": (params?: Record<string, unknown>) => {
     let items = [...mockTraces];
     if (params?.status && typeof params.status === "string" && params.status !== "ALL") {
-      items = items.filter((t) => t.status === params.status);
+      const states =
+        params.status === "succeeded"
+          ? ["succeeded", "completed"]
+          : params.status === "aborted"
+            ? ["aborted", "cancelled"]
+            : [params.status];
+      items = items.filter((t) => states.includes(t.status));
     }
     if (params?.group_id && typeof params.group_id === "string") {
-      items = items.filter((t) => t.group_id.includes(params.group_id as string));
+      items = items.filter((t) => t.group_id === params.group_id);
     }
     if (params?.platform && typeof params.platform === "string" && params.platform !== "ALL") {
       items = items.filter((t) => t.platform === params.platform);
     }
+    if (typeof params?.trigger_type === "string" && params.trigger_type) {
+      items = items.filter((t) => t.trigger_type === params.trigger_type);
+    }
+    if (typeof params?.search === "string" && params.search.trim()) {
+      const search = params.search.trim().toLowerCase();
+      items = items.filter((t) =>
+        [t.trace_id, t.group_id, t.group_name].some((value) =>
+          value.toLowerCase().includes(search),
+        ),
+      );
+    }
+    if (params?.start_time !== undefined && Number.isFinite(Number(params.start_time))) {
+      items = items.filter((t) => t.started_at >= Number(params.start_time));
+    }
+    if (params?.end_time !== undefined && Number.isFinite(Number(params.end_time))) {
+      items = items.filter((t) => t.started_at <= Number(params.end_time));
+    }
+    const field =
+      params?.sort_by === "duration_ms" ||
+      params?.sort_by === "total_tokens" ||
+      params?.sort_by === "compression_ratio"
+        ? params.sort_by
+        : "started_at";
+    const direction = params?.sort_order === "asc" ? 1 : -1;
+    // 与 SQLite 一致：升序时缺失值在前，降序时在后，不把缺失值当作零。
+    items.sort((left, right) => {
+      const a = left[field],
+        b = right[field];
+      if (a == null && b == null) return 0;
+      if (a == null) return -direction;
+      if (b == null) return direction;
+      return (a - b) * direction;
+    });
+    const total = items.length;
+    const offset = Number.isFinite(Number(params?.offset))
+      ? Math.max(0, Math.floor(Number(params?.offset)))
+      : 0;
+    const limit = Number.isFinite(Number(params?.limit))
+      ? Math.max(1, Math.floor(Number(params?.limit)))
+      : 20;
     return {
       status: "ok",
-      data: { items, total: items.length },
+      data: { items: items.slice(offset, offset + limit), total },
     };
   },
   "GET traces/:traceId": (
