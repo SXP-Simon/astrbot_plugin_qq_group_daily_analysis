@@ -140,19 +140,30 @@ export function subscribeSSE(handlers: {
   const bridge = getBridge();
   if (bridge && typeof bridge.subscribeSSE === "function") {
     let subId: string | number | null = null;
+    let disposed = false;
     bridge
       .subscribeSSE("events/stream", {
         onMessage: (evt: SSEEventWrapper) => {
+          if (disposed) return;
           const payload = evt.parsed !== undefined ? evt.parsed : evt.raw;
           handlers.onMessage(payload);
         },
-        onError: handlers.onError,
+        onError: () => {
+          if (!disposed) handlers.onError?.();
+        },
       })
       .then((id) => {
-        subId = id;
+        // 宿主异步返回订阅编号时，页面可能已经离开，仍需撤销这次订阅。
+        if (disposed) bridge.unsubscribeSSE(id);
+        else subId = id;
+      })
+      .catch(() => {
+        if (!disposed) handlers.onError?.();
       });
 
     return () => {
+      if (disposed) return;
+      disposed = true;
       if (subId !== null && typeof bridge.unsubscribeSSE === "function") {
         bridge.unsubscribeSSE(subId);
       }
