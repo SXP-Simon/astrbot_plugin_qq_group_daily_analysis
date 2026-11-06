@@ -8,7 +8,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, TypedDict
 
-from ...shared.type_guards import is_string_mapping
 from ..value_objects.unified_message import MessageContentType, UnifiedMessage
 
 if TYPE_CHECKING:
@@ -78,41 +77,13 @@ class AnalysisDomainService:
                 if content.type == MessageContentType.TEXT:
                     stats["char_count"] += len(content.text or "")
 
-                elif content.type == MessageContentType.EMOJI:
+                elif content.is_emoji():
                     stats["emoji_count"] += 1
-
-                elif content.type == MessageContentType.IMAGE:
-                    # 与 GroupStatistics 口径保持一致
-                    if self._is_emoji_like_image(content.raw_data):
-                        stats["emoji_count"] += 1
 
                 elif content.type == MessageContentType.REPLY:
                     stats["reply_count"] += 1
 
         return user_stats
-
-    @staticmethod
-    def _is_emoji_like_image(raw_data: object) -> bool:
-        """判断 IMAGE 段是否应按表情计数。
-
-        Args:
-            raw_data: 消息段原始 payload。
-
-        Returns:
-            bool: 是否属于表情包形态图片。
-        """
-        if is_string_mapping(raw_data):
-            sub_type = raw_data.get("sub_type")
-            if sub_type is not None:
-                return str(sub_type) == "1"
-            summary = str(raw_data.get("summary", ""))
-            return "动画表情" in summary or "表情" in summary
-
-        if raw_data is None:
-            return False
-
-        text = str(raw_data)
-        return "动画表情" in text or "表情" in text
 
     def get_top_users(
         self, user_activity: dict[str, UserActivityStats], limit: int = 10

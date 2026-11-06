@@ -9,10 +9,8 @@ from collections import defaultdict
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ...shared.type_guards import is_string_mapping
 from ..value_objects import EmojiStatistics, GroupStatistics, TokenUsage
 from ..value_objects.unified_message import (
-    LegacyMessagePayload,
     MessageContentType,
     UnifiedMessage,
 )
@@ -74,7 +72,7 @@ class StatisticsService:
                     # 兼容识别“图片形态的表情”:
                     # 1) 优先使用 onebot sub_type=1 信号
                     # 2) 若无该字段，再回退到历史 summary 文本匹配
-                    if self._is_emoji_like_image(content.raw_data):
+                    if content.is_emoji():
                         emoji_statistics.mface_count += 1
                 elif content.type in (
                     MessageContentType.VOICE,
@@ -91,10 +89,9 @@ class StatisticsService:
             f"{most_active_hour:02d}:00-{(most_active_hour + 1) % 24:02d}:00"
         )
 
-        # 生成活跃度可视化数据（转换为兼容字典格式以适配图表引擎）
-        raw_msgs = self.convert_to_legacy_dict(messages)
+        # 图表直接使用统一消息，保留表情等结构化信息。
         activity_visualization = (
-            self.activity_visualizer.generate_activity_visualization(raw_msgs)
+            self.activity_visualizer.generate_activity_visualization(messages)
         )
 
         return GroupStatistics(
@@ -108,54 +105,3 @@ class StatisticsService:
             activity_visualization=activity_visualization,
             token_usage=TokenUsage(),
         )
-
-    @staticmethod
-    def _is_emoji_like_image(raw_data: object) -> bool:
-        """判断 IMAGE 段是否应按表情计数。
-
-        Args:
-            raw_data: 消息段原始 payload。
-
-        Returns:
-            bool: 是否属于表情包形态图片。
-        """
-        if is_string_mapping(raw_data):
-            sub_type = raw_data.get("sub_type")
-            if sub_type is not None:
-                return str(sub_type) == "1"
-            summary = str(raw_data.get("summary", ""))
-            return "动画表情" in summary or "表情" in summary
-
-        if raw_data is None:
-            return False
-
-        text = str(raw_data)
-        return "动画表情" in text or "表情" in text
-
-    def convert_to_legacy_dict(
-        self, messages: list[UnifiedMessage]
-    ) -> list[LegacyMessagePayload]:
-        """将 UnifiedMessage 转换为字典格式以兼容图表生成器。
-
-        Args:
-            messages: 统一消息对象列表。
-
-        Returns:
-            list[dict]: 兼容消息字典列表。
-        """
-        legacy_list: list[LegacyMessagePayload] = []
-        for msg in messages:
-            legacy_list.append(
-                {
-                    "time": msg.timestamp,
-                    "sender": {
-                        "user_id": msg.sender_id,
-                        "nickname": msg.sender_name,
-                        "card": msg.sender_card or "",
-                    },
-                    "message": [
-                        {"type": "text", "data": {"text": msg.text_content or ""}}
-                    ],
-                }
-            )
-        return legacy_list
