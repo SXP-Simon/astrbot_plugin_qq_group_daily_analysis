@@ -662,7 +662,9 @@ async def test_trigger_dispatch_failure_resilience(
     )
     assert "[分析任务已成功在后台启动]" in msg
     # 等待后台任务执行完成
-    await asyncio.sleep(0.05)
+    await asyncio.wait_for(
+        asyncio.gather(*trigger_service._background_tasks), timeout=5
+    )
     # 验证群排他锁已正常释放
     assert "123456" not in trigger_service._pending_groups
 
