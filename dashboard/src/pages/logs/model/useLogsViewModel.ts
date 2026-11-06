@@ -4,7 +4,7 @@ import { subscribeSSE } from "../../../shared/api/bridge";
 import { fetchPluginLogs, clearPluginLogs as apiClearLogs } from "../../../entities/log/api/logApi";
 import { AvailableTag, PluginLogItem } from "../../../entities/log/model/types";
 
-export function useLogsViewModel() {
+export function useLogsViewModel(active = true) {
   const [logs, setLogs] = useState<PluginLogItem[]>([]);
   const [total, setTotal] = useState(0);
   const [availableTags, setAvailableTags] = useState<AvailableTag[]>([]);
@@ -18,8 +18,13 @@ export function useLogsViewModel() {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const requestSequence = useRef(0);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   const loadLogs = async (silent = false) => {
+    if (!activeRef.current) return;
+    const request = ++requestSequence.current;
     if (!silent) setLoading(true);
     try {
       const res = await fetchPluginLogs({
@@ -29,6 +34,7 @@ export function useLogsViewModel() {
         tag: tag || undefined,
         trace_id: traceId || undefined,
       });
+      if (!activeRef.current || request !== requestSequence.current) return;
       setLogs(res.items || []);
       setTotal(res.total || 0);
       if (res.available_tags && res.available_tags.length > 0) {
@@ -37,13 +43,14 @@ export function useLogsViewModel() {
     } catch {
       // 忽略加载异常
     } finally {
-      if (!silent) setLoading(false);
+      if (request === requestSequence.current) setLoading(false);
     }
   };
 
   const handleClearLogs = async () => {
     try {
       await apiClearLogs();
+      ++requestSequence.current;
       setLogs([]);
       setTotal(0);
       message.success("日志缓冲已清空");
@@ -54,12 +61,18 @@ export function useLogsViewModel() {
 
   // 初始与条件变化加载
   useEffect(() => {
-    loadLogs();
+    const requests = requestSequence;
+    if (active) loadLogs();
+    else setLoading(false);
+    return () => {
+      ++requests.current;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, level, tag, traceId]);
+  }, [active, search, level, tag, traceId]);
 
   // SSE 实时推流：收到后端 log_entry 毫秒级直接上屏
   useEffect(() => {
+    if (!active || !autoRefresh) return;
     const unsubscribe = subscribeSSE({
       onMessage: (eventPayload: unknown) => {
         if (!autoRefresh) return;
@@ -99,7 +112,7 @@ export function useLogsViewModel() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [autoRefresh, level, tag, traceId, search]);
+  }, [active, autoRefresh, level, tag, traceId, search]);
 
   // 兜底轮询 (每 5 秒同步一次全量指标与未连接状态)
   useEffect(() => {
@@ -107,7 +120,7 @@ export function useLogsViewModel() {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-    if (autoRefresh) {
+    if (active && autoRefresh) {
       pollRef.current = setInterval(() => {
         loadLogs(true);
       }, 5000);
@@ -119,7 +132,7 @@ export function useLogsViewModel() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh, search, level, tag, traceId]);
+  }, [active, autoRefresh, search, level, tag, traceId]);
 
   return {
     logs,
