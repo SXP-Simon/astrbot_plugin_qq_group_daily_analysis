@@ -12,7 +12,7 @@ import html
 import re
 import time
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import aiohttp
 from diskcache import Cache
@@ -21,8 +21,10 @@ from PIL import Image, UnidentifiedImageError
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
     from pathlib import Path
+
+    from ..persistence.kv_contracts import CacheAccess
 
 MAX_CONCURRENT_DOWNLOADS = 4
 AVATAR_DOWNLOAD_RETRY_TIMES = 3
@@ -45,13 +47,13 @@ class AvatarService:
             data_dir: 插件数据主目录。
         """
         self.data_dir = data_dir
-        self._avatar_cache = Cache(str(self.data_dir / "avatar"))
-        self._avatar_session_concurrent_semaphore = asyncio.Semaphore(
+        self.avatar_cache = cast("CacheAccess", Cache(str(self.data_dir / "avatar")))
+        self.avatar_session_concurrent_semaphore = asyncio.Semaphore(
             MAX_CONCURRENT_DOWNLOADS
         )
-        self._avatar_session: aiohttp.ClientSession | None = None
-        self._avatar_session_lock = asyncio.Lock()
-        self._avatar_failure_cache: dict[str, float] = {}
+        self.avatar_session: aiohttp.ClientSession | None = None
+        self.avatar_session_lock = asyncio.Lock()
+        self.avatar_failure_cache: dict[str, float] = {}
 
     @staticmethod
     def get_avatar_cache_key(
@@ -72,7 +74,7 @@ class AvatarService:
     async def get_user_avatar(
         self,
         avatar_id: str,
-        avatar_url_getter: Callable | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
     ) -> str:
         """获取用户头像的 Base64 Data URI。
@@ -90,22 +92,22 @@ class AvatarService:
         cache_key = self.get_avatar_cache_key(avatar_id, avatar_cache_namespace)
 
         # 1. 检查磁盘缓存
-        if cache_key in self._avatar_cache:
-            data = self._avatar_cache[cache_key]
+        if cache_key in self.avatar_cache:
+            data = self.avatar_cache[cache_key]
             if isinstance(data, str):
                 return data
             return str(data)
 
-        failed_until = self._avatar_failure_cache.get(cache_key, 0)
+        failed_until = self.avatar_failure_cache.get(cache_key, 0)
         if failed_until > time.monotonic():
             return self.get_default_avatar_base64()
-        self._avatar_failure_cache.pop(cache_key, None)
+        self.avatar_failure_cache.pop(cache_key, None)
 
         # 2. 尝试拉取头像数据流
         avatar_bytes = await self.get_user_avatar_bytes(avatar_id, avatar_url_getter)
 
         if not avatar_bytes:
-            self._avatar_failure_cache[cache_key] = (
+            self.avatar_failure_cache[cache_key] = (
                 time.monotonic() + AVATAR_FAILURE_CACHE_EXPIRE_TIME
             )
             logger.debug(f"获取用户头像失败 {avatar_id}，本次将使用回退头像")
@@ -114,17 +116,19 @@ class AvatarService:
         # 3. 转换并缓存
         avatar = self.b64_with_mime(self.resize_avatar_bytes(avatar_bytes))
         if avatar:
-            self._avatar_cache.set(cache_key, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
-            self._avatar_failure_cache.pop(cache_key, None)
+            self.avatar_cache.set(cache_key, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
+            self.avatar_failure_cache.pop(cache_key, None)
             return avatar
 
-        self._avatar_failure_cache[cache_key] = (
+        self.avatar_failure_cache[cache_key] = (
             time.monotonic() + AVATAR_FAILURE_CACHE_EXPIRE_TIME
         )
         return self.get_default_avatar_base64()
 
     async def get_user_avatar_bytes(
-        self, user_id: str, avatar_url_getter: Callable | None = None
+        self,
+        user_id: str,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
     ) -> bytes | None:
         """从网络下载或通过回调获取头像的原始字节数据。
 
@@ -135,13 +139,13 @@ class AvatarService:
         Returns:
             头像字节数组，获取失败返回 None。
         """
-        async with self._avatar_session_lock:
-            if not self._avatar_session or self._avatar_session.closed:
-                self._avatar_session = aiohttp.ClientSession(
+        async with self.avatar_session_lock:
+            if not self.avatar_session or self.avatar_session.closed:
+                self.avatar_session = aiohttp.ClientSession(
                     trust_env=True, timeout=aiohttp.ClientTimeout(total=15)
                 )
 
-        async with self._avatar_session_concurrent_semaphore:
+        async with self.avatar_session_concurrent_semaphore:
             avatar_url = None
             if avatar_url_getter:
                 try:
@@ -179,7 +183,7 @@ class AvatarService:
             failure_reason = ""
             for attempt in range(1, AVATAR_DOWNLOAD_RETRY_TIMES + 1):
                 try:
-                    async with self._avatar_session.get(avatar_url) as response:
+                    async with self.avatar_session.get(avatar_url) as response:
                         if response.status == 200:
                             content = await response.read()
                             if not content:
@@ -485,13 +489,13 @@ class AvatarService:
 
     async def close(self) -> None:
         """释放网络会话与本地磁盘缓存资源。"""
-        if self._avatar_session:
-            await self._avatar_session.close()
-            self._avatar_session = None
+        if self.avatar_session:
+            await self.avatar_session.close()
+            self.avatar_session = None
 
         try:
-            if self._avatar_cache:
-                self._avatar_cache.close()
+            if self.avatar_cache:
+                self.avatar_cache.close()
                 logger.debug("头像缓存已关闭")
         except Exception as e:
             logger.warning(f"关闭头像缓存失败: {e}")

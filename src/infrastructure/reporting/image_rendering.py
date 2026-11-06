@@ -132,7 +132,7 @@ class ImageReportSession:
                 async with timeout:
                     image_data = await self._render(attempt, html)
                     valid, attempt.error, size, dimensions = await asyncio.to_thread(
-                        self.source._inspect_render_result, image_data, attempt.response
+                        self.source.inspect_render_result, image_data, attempt.response
                     )
                 if valid and isinstance(image_data, (bytes, str)):
                     attempt.status = "success"
@@ -194,7 +194,7 @@ class ImageReportSession:
                 attempt.font_mode,
             )
             attempt.options, attempt.viewport = (
-                self.source._resolve_t2i_viewport_options(content, attempt.options)
+                self.source.resolve_t2i_viewport_options(content, attempt.options)
             )
             if attempt.options.get("type") == "png":
                 attempt.options.pop("quality", None)

@@ -118,7 +118,7 @@ def render_setup(monkeypatch):
     ]
     generator.html_templates = MagicMock()
     generator.html_templates.render_template.return_value = "<html>report</html>"
-    generator._prepare_render_data = AsyncMock(return_value={})
+    generator.prepare_render_data = AsyncMock(return_value={})
     generator._render_semaphore = asyncio.Semaphore(1)
     log = MagicMock()
     monkeypatch.setattr(generators, "logger", log)

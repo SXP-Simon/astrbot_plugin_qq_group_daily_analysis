@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, ClassVar, TypedDict
 from jinja2 import ChoiceLoader, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
 
+from ...shared.type_guards import is_string_mapping
 from ...utils.logger import logger
 from .template_installer import (
     template_dir_has_symlink_entries,
@@ -97,7 +98,7 @@ class HTMLTemplates:
             Path(str(custom_template_res)) if custom_template_res else None
         )
 
-        loaders = []
+        loaders: list[FileSystemLoader] = []
         # 1. 官方内置模板：优先加载官方内置模板目录，绝不加载任何自定义覆盖，保持官方模板的纯净与最新
         if os.path.exists(template_dir):
             loaders.append(FileSystemLoader(template_dir))
@@ -128,8 +129,7 @@ class HTMLTemplates:
         # 将默认的 scrapbook 目录追加为最底层 Fallback，避免自定义模板缺少局部组件时渲染失败
         default_dir = os.path.join(self.base_dir, "scrapbook")
         if default_dir != template_dir and not any(
-            isinstance(ld, FileSystemLoader) and ld.searchpath == [default_dir]
-            for ld in loaders
+            ld.searchpath == [default_dir] for ld in loaders
         ):
             loaders.append(FileSystemLoader(default_dir))
 
@@ -163,7 +163,7 @@ class HTMLTemplates:
         if custom:
             custom = Path(custom)
             roots.append((custom if custom.is_dir() else custom.parent, True))
-        builtin_names = (
+        builtin_names: set[str] = (
             {path.name for path in builtin.iterdir() if path.is_dir()}
             if builtin.is_dir()
             else set()
@@ -228,7 +228,7 @@ class HTMLTemplates:
         except Exception:
             return {}
         meta: dict[str, str] = {}
-        if not isinstance(raw, dict):
+        if not is_string_mapping(raw):
             return meta
         for key in ("name", "desc", "tag", "tag_color"):
             value = raw.get(key)

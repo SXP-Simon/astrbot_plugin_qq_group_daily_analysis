@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
 
 from ...shared.constants import PLUGIN_NAME
+from ...shared.type_guards import is_string_mapping
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -310,7 +311,7 @@ def _read_template_meta(extract_dir: Path) -> dict[str, str]:
         return {}
     meta: dict[str, str] = {}
     for key in ("name", "desc"):
-        value = raw.get(key) if isinstance(raw, dict) else None
+        value = raw.get(key) if is_string_mapping(raw) else None
         if isinstance(value, str) and value.strip():
             meta[key] = value.strip()[:100]
     return meta

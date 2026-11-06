@@ -34,7 +34,7 @@ async def test_html_names_are_clean_but_not_treated_as_markup(tmp_path, name, ex
     data["statistics"].golden_quotes[0].sender = name
     data["statistics"].golden_quotes[0].reason = "第一行\n[123456] 的回应"
     try:
-        prepared = await generator._prepare_render_data(data)
+        prepared = await generator.prepare_render_data(data)
         for section in ("topics_html", "titles_html", "quotes_html"):
             assert expected in html.unescape(prepared[section])
             assert not any(char in prepared[section] for char in ("\x00", "\x07", "\x0e", "\x12"))

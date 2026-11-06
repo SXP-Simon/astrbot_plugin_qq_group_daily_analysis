@@ -140,7 +140,7 @@ def compile_report(
     """
     cpu_started = time.process_time()
     _collect_cpu_quota(metrics)
-    _collect_peak(metrics, baseline=True)
+    collect_peak(metrics, baseline=True)
     _publish_metrics(metrics, "font_setup")
     try:
         import typst
@@ -200,7 +200,7 @@ def compile_report(
             metrics["worker_cpu_ms"] = round(
                 (time.process_time() - cpu_started) * 1000, 2
             )
-        _collect_peak(metrics)
+        collect_peak(metrics)
 
 
 def _collect_cpu_quota(metrics: TypstWorkerMetrics | None) -> None:
@@ -237,7 +237,7 @@ def _collect_cpu_quota(metrics: TypstWorkerMetrics | None) -> None:
             continue
 
 
-def _collect_peak(
+def collect_peak(
     metrics: TypstWorkerMetrics | None,
     *,
     baseline: bool = False,
@@ -309,7 +309,7 @@ def _publish_metrics(metrics: TypstWorkerMetrics | None, phase: str) -> None:
     """
     if metrics is not None:
         metrics["worker_phase"] = phase
-        _collect_peak(metrics)
+        collect_peak(metrics)
         sys.stdout.write(json.dumps(metrics) + "\n")
         sys.stdout.flush()
 

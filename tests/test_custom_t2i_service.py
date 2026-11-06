@@ -654,7 +654,7 @@ async def test_cancelled_environment_preparation_records_current_attempt(
 ):
     _, generator, _ = rendering
     entered = asyncio.Event()
-    real_prepare = generator._prepare_render_data
+    real_prepare = generator.prepare_render_data
 
     async def prepare(*args, **kwargs):
         if kwargs.get("environment") == "Overseas":
@@ -662,7 +662,7 @@ async def test_cancelled_environment_preparation_records_current_attempt(
             await asyncio.Event().wait()
         return await real_prepare(*args, **kwargs)
 
-    monkeypatch.setattr(generator, "_prepare_render_data", prepare)
+    monkeypatch.setattr(generator, "prepare_render_data", prepare)
     trace = TraceContext(trace_id="cancel-prepare")
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
     callback = AsyncMock(return_value=None)

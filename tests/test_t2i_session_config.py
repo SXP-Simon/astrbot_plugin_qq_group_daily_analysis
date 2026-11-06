@@ -202,7 +202,7 @@ async def test_report_entry_points_forward_bound_renderer(entry, monkeypatch, tm
             config, manager, MagicMock(), generator, callback
         )
         if entry == "manual":
-            handler._send_text_reports = AsyncMock()
+            handler.send_text_reports = AsyncMock()
             result = {
                 "group_id": "123",
                 "platform_id": "bot-a",
@@ -213,7 +213,7 @@ async def test_report_entry_points_forward_bound_renderer(entry, monkeypatch, tm
                 pass
             bound = generator.generate_image_report.call_args.args[2]
         else:
-            await handler._send_text_reports("123", {}, True, adapter)
+            await handler.send_text_reports("123", {}, True, adapter)
             bound = generator.generate_markdown_report.call_args.args[1]
         assert handler.html_render is callback
     elif entry in ("scheduled", "scheduled_summary"):

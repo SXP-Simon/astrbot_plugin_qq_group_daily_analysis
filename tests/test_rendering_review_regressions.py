@@ -18,7 +18,7 @@ async def test_html_preparation_failure_can_fall_back_to_native(rendering, monke
         make_rendering_plan("Mainland", priority=1),
         {"__template_key": "typst", "priority": 2},
     ]
-    generator._prepare_render_data = AsyncMock(side_effect=ValueError("no HTML entry"))
+    generator.prepare_render_data = AsyncMock(side_effect=ValueError("no HTML entry"))
     native = MagicMock()
     native.render = AsyncMock(return_value=png)
     monkeypatch.setattr(generators, "TypstReportRenderer", MagicMock(return_value=native))
@@ -49,7 +49,7 @@ async def test_initial_html_preparation_is_bounded(rendering, monkeypatch):
         finally:
             cancelled.set()
 
-    generator._prepare_render_data = prepare
+    generator.prepare_render_data = prepare
     host = AsyncMock()
     assert await generator.generate_image_report(create_analysis_result(), "123", host) == (None, None)
     assert cancelled.is_set()
@@ -108,14 +108,14 @@ async def test_empty_switched_template_keeps_previous_valid_html(
     rendering, monkeypatch, succeeds
 ):
     _manager, generator, png = rendering
-    real_render = generator._render_prepared_html
+    real_render = generator.render_prepared_html
 
     def render_template(template_file, theme, payload):
         if payload["t2i_font_source"] == "Overseas":
             return ""
         return real_render(template_file, theme, payload)
 
-    monkeypatch.setattr(generator, "_render_prepared_html", render_template)
+    monkeypatch.setattr(generator, "render_prepared_html", render_template)
     render = AsyncMock(side_effect=[None, png if succeeds else None])
     image, html = await generator.generate_image_report(
         create_analysis_result(), "123", render
@@ -145,7 +145,7 @@ async def test_total_deadline_cancels_waits_and_releases_queue(
         finally:
             cancelled.set()
 
-    real_prepare = generator._prepare_render_data
+    real_prepare = generator.prepare_render_data
 
     async def prepare(*args, **kwargs):
         if kwargs.get("environment") == "Overseas":
@@ -158,7 +158,7 @@ async def test_total_deadline_cancels_waits_and_releases_queue(
         return
 
     if blocked_at == "fallback_preparation":
-        monkeypatch.setattr(generator, "_prepare_render_data", prepare)
+        monkeypatch.setattr(generator, "prepare_render_data", prepare)
     callback = AsyncMock(side_effect=render)
     with trace.span("RENDER_REPORT") as span:
         image, html = await asyncio.wait_for(

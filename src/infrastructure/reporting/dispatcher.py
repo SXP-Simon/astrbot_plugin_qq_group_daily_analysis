@@ -15,6 +15,7 @@ from ...domain.repositories.platform_adapter_repository import (
 )
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 from .html_renderer import bind_group_html_renderer
 from .report_image import save_report_image
@@ -247,8 +248,8 @@ class ReportDispatcher:
                     # 关联到 TraceContext 并在数据库中更新元数据
                     if trace_ctx:
                         rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                        if isinstance(rfiles, list) and not any(
-                            isinstance(rf, dict) and rf.get("filename") == dest.name
+                        if is_object_list(rfiles) and not any(
+                            is_string_mapping(rf) and rf.get("filename") == dest.name
                             for rf in rfiles
                         ):
                             rfiles.append(
@@ -305,7 +306,7 @@ class ReportDispatcher:
 
                 # 5. 尝试上传到群文件/群相册（静默处理）
                 try:
-                    await self._try_upload_image(group_id, image_url, platform_id)
+                    await self.try_upload_image(group_id, image_url, platform_id)
                 except Exception as e:
                     logger.warning(
                         f"[{trace_id}] 图片报告备份失败，不影响发送状态: {e}"
@@ -435,8 +436,8 @@ class ReportDispatcher:
                     html_filename = html_file.name
                     if trace_ctx:
                         rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                        if isinstance(rfiles, list) and not any(
-                            isinstance(rf, dict)
+                        if is_object_list(rfiles) and not any(
+                            is_string_mapping(rf)
                             and rf.get("filename") == html_file.name
                             for rf in rfiles
                         ):
@@ -627,7 +628,7 @@ class ReportDispatcher:
     # 图片报告上传到群文件 / 群相册（仅 QQ 平台 image 格式）
     # ================================================================
 
-    async def _try_upload_image(
+    async def try_upload_image(
         self,
         group_id: str,
         image_url: str,

@@ -6,6 +6,7 @@ import asyncio
 import re
 from typing import TYPE_CHECKING
 
+from ...shared.type_guards import is_string_mapping
 from .display_names import normalize_display_name
 from .render_data_preparer import RenderDataPreparer
 
@@ -139,7 +140,7 @@ class TypstIdentityResolver:
             normalize_display_name(
                 str(stats.get("nickname") or stats.get("name") or "")
             )
-            if isinstance(stats, dict)
+            if is_string_mapping(stats)
             else ""
         )
         if not name and self.nickname_getter and not self.hide_names:

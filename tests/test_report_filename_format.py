@@ -52,7 +52,7 @@ def build_generator(output_dir, filename_format, html=NO_HEAD_HTML):
     async def fake_prepare_render_data(*args, **kwargs):
         return {}
 
-    generator._prepare_render_data = fake_prepare_render_data
+    generator.prepare_render_data = fake_prepare_render_data
     return generator
 
 

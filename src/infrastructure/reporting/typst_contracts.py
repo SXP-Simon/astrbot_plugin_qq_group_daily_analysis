@@ -89,7 +89,7 @@ class TypstIdentityOptions:
         extended_ids: 是否允许字母数字身份编号。
     """
 
-    avatar_getter: Callable[[str, int | None], Awaitable[str | None]] | None = None
+    avatar_getter: Callable[[str], Awaitable[str | None]] | None = None
     nickname_getter: Callable[[str], Awaitable[str | None]] | None = None
     namespace: str | None = None
     hide_names: bool = False

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -69,7 +70,7 @@ DEFAULT_PROFILE_MAPPING = {
 }
 
 
-def load_profile_asset_manifest() -> dict[str, dict]:
+def load_profile_asset_manifest() -> dict[str, dict[str, dict[str, object]]]:
     """从磁盘加载人格静态资源清单文件。
 
     Returns:
@@ -91,20 +92,24 @@ def load_profile_asset_manifest() -> dict[str, dict]:
         logger.warning(f"加载人格资源清单失败: {e}")
         return {"sbti": {}, "acgti": {}}
 
-    manifest: dict[str, dict] = {"sbti": {}, "acgti": {}}
-    for item in raw.get("sbti", []):
-        code = str(item.get("code", "")).strip()
-        if code:
-            manifest["sbti"][code] = item
-    for item in raw.get("acgti", []):
-        code = str(item.get("code", "")).strip()
-        if code:
-            manifest["acgti"][code] = item
+    manifest: dict[str, dict[str, dict[str, object]]] = {"sbti": {}, "acgti": {}}
+    if not is_string_mapping(raw):
+        return manifest
+    for mode in ("sbti", "acgti"):
+        entries = raw.get(mode)
+        for item in entries if is_object_list(entries) else []:
+            if not is_string_mapping(item):
+                continue
+            code = str(item.get("code", "")).strip()
+            if code:
+                manifest[mode][code] = item
     return manifest
 
 
 def build_profile_image_from_manifest_pattern(
-    manifest: dict[str, dict], profile_mode: str, asset_code: str
+    manifest: dict[str, dict[str, dict[str, object]]],
+    profile_mode: str,
+    asset_code: str,
 ) -> str:
     """当 manifest 缺少具体 code 时，根据已有资源路径模式推导图片地址。
 
@@ -118,7 +123,7 @@ def build_profile_image_from_manifest_pattern(
     """
     system_manifest = manifest.get(profile_mode, {})
     for item in system_manifest.values():
-        if not isinstance(item, dict):
+        if not is_string_mapping(item):
             continue
         sample_code = str(item.get("code", "")).strip()
         sample_file = str(item.get("file", "")).strip()
@@ -132,8 +137,8 @@ def build_profile_image_from_manifest_pattern(
 
 
 def get_manifest_profile_item_by_mbti(
-    manifest: dict[str, dict], profile_mode: str, mbti: str
-) -> dict | None:
+    manifest: dict[str, dict[str, dict[str, object]]], profile_mode: str, mbti: str
+) -> dict[str, object] | None:
     """按 MBTI 从 manifest 中寻找可用的人格资源项。
 
     Args:
@@ -147,7 +152,7 @@ def get_manifest_profile_item_by_mbti(
     normalized_mbti = str(mbti or "").strip().upper()
     system_manifest = manifest.get(profile_mode, {})
     for item in system_manifest.values():
-        if not isinstance(item, dict):
+        if not is_string_mapping(item):
             continue
         item_mbti = str(item.get("mbti", "")).strip().upper()
         if item_mbti == normalized_mbti:
@@ -158,8 +163,8 @@ def get_manifest_profile_item_by_mbti(
 def resolve_profile_info(
     mbti: str,
     profile_mode: str,
-    overrides: dict[str, dict],
-    manifest: dict[str, dict],
+    overrides: dict[str, dict[str, dict[str, object]]],
+    manifest: dict[str, dict[str, dict[str, object]]],
     config_manager: ConfigManager,
     cdn_base_url: str | None = None,
 ) -> dict[str, str | float]:
@@ -180,11 +185,11 @@ def resolve_profile_info(
 
     # 1. 基础信息获取：从默认映射或用户覆盖中获取核心属性
     profile_defaults = DEFAULT_PROFILE_MAPPING.get(profile_mode, {})
-    base_info = dict(profile_defaults.get(normalized_mbti, {}))
+    base_info: dict[str, object] = dict(profile_defaults.get(normalized_mbti, {}))
 
     # 用户覆盖优先级最高
     user_override = overrides.get(profile_mode, {}).get(normalized_mbti, {})
-    if isinstance(user_override, dict):
+    if is_string_mapping(user_override):
         base_info.update(user_override)
 
     code = str(base_info.get("code", normalized_mbti)).strip() or normalized_mbti
@@ -194,7 +199,7 @@ def resolve_profile_info(
     system_manifest = manifest.get(profile_mode, {})
     asset_item = system_manifest.get(asset_code)
     manifest_image = (
-        str(asset_item.get("file", "")).strip() if isinstance(asset_item, dict) else ""
+        str(asset_item.get("file", "")).strip() if is_string_mapping(asset_item) else ""
     )
     # 旧配置会填入默认图片地址；只有与清单相同的地址才视为内置图片。
     builtin_image = not image or image == manifest_image
@@ -202,7 +207,7 @@ def resolve_profile_info(
     # 2. 图片与属性补全 (基于 manifest.json 可信源)
     if not image:
         # A. 优先按 asset_code 索引
-        if isinstance(asset_item, dict):
+        if is_string_mapping(asset_item):
             image = manifest_image
             if not name_zh:
                 name_zh = str(asset_item.get("name", "")).strip()
@@ -218,7 +223,7 @@ def resolve_profile_info(
             fallback_item = get_manifest_profile_item_by_mbti(
                 manifest, profile_mode, normalized_mbti
             )
-            if isinstance(fallback_item, dict):
+            if is_string_mapping(fallback_item):
                 image = str(fallback_item.get("file", "")).strip()
                 if not name_zh:
                     name_zh = str(fallback_item.get("name", "")).strip()
