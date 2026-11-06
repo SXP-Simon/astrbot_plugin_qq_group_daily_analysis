@@ -50,7 +50,7 @@ def test_traditional_analysis_is_failed_when_report_delivery_fails():
             comic_command_handler=mock_comic_handler
         )
 
-        result = await scheduler._perform_auto_analysis_for_group(
+        result = await scheduler.perform_auto_analysis_for_group(
             "123456", "onebot-main"
         )
 
@@ -69,7 +69,7 @@ def test_traditional_analysis_is_failed_when_report_delivery_fails():
         }
         scheduler.report_dispatcher.dispatch.side_effect = None
         scheduler.report_dispatcher.dispatch.return_value = True
-        result = await scheduler._perform_auto_analysis_for_group(
+        result = await scheduler.perform_auto_analysis_for_group(
             "123456", "onebot-main"
         )
 

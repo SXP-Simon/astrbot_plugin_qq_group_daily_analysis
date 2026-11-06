@@ -452,7 +452,7 @@ class IncrementalAnalysisService:
         golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
         chat_quality_enabled = self.config_manager.get_chat_quality_analysis_enabled()
 
-        legacy_messages = self.statistics_service._convert_to_legacy_dict(
+        legacy_messages = self.statistics_service.convert_to_legacy_dict(
             unified_messages
         )
         unified_msg_origin = (

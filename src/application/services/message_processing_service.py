@@ -3,9 +3,13 @@ from __future__ import annotations
 import asyncio
 import re
 from collections import Counter, OrderedDict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 from ...infrastructure.platform.qq_official_faces import extract_qq_face_features
+from ...shared.type_guards import (
+    is_object_collection,
+    is_string_mapping,
+)
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -23,6 +27,30 @@ if TYPE_CHECKING:
 _QQ_OFFICIAL_PLATFORM_NAMES = frozenset({"qq_official", "qq_official_webhook"})
 _QQ_OFFICIAL_MENTION_PATTERN = re.compile(r"<@!?([A-Za-z0-9_-]+)>")
 _LOCAL_HISTORY_MAX_MESSAGES = 10000
+
+
+class HistoryInsertArguments(TypedDict):
+    """宿主消息历史写入的必填参数。"""
+
+    platform_id: str
+    user_id: str
+    content: dict[str, object]
+    sender_id: str
+    sender_name: str
+
+
+class HistoryWriter(Protocol):
+    """兼容宿主历史写入方法，旧版不支持的参数仍由原有分支回退。"""
+
+    async def insert(
+        self,
+        platform_id: str,
+        user_id: str,
+        content: dict[str, object],
+        sender_id: str | None = None,
+        sender_name: str | None = None,
+        max_messages: int | None = None,
+    ) -> object: ...
 
 
 class MessageProcessingService:
@@ -230,7 +258,7 @@ class MessageProcessingService:
         self,
         platform_id: str,
         group_id: str,
-        content: dict,
+        content: dict[str, object],
         sender_id: str,
         sender_name: str,
     ) -> None:
@@ -246,8 +274,8 @@ class MessageProcessingService:
         Raises:
             Exception: 消息历史管理器写入失败时原样抛出。
         """
-        insert = self.context.message_history_manager.insert
-        insert_kwargs = {
+        insert = cast("HistoryWriter", self.context.message_history_manager).insert
+        insert_kwargs: HistoryInsertArguments = {
             "platform_id": platform_id,
             "user_id": group_id,
             "content": content,
@@ -332,9 +360,9 @@ class MessageProcessingService:
 
         return sender_id
 
-    def _extract_message_parts(self, event: AstrMessageEvent) -> list[dict]:
+    def _extract_message_parts(self, event: AstrMessageEvent) -> list[dict[str, str]]:
         """从事件中提取消息内容"""
-        message_parts = []
+        message_parts: list[dict[str, str]] = []
         message = event.message_obj
         platform_name = str(event.get_platform_name() or "").strip().lower()
         qq_mention_replacements = (
@@ -354,7 +382,7 @@ class MessageProcessingService:
 
                 target = getattr(seg, "target", None) or getattr(seg, "qq", None)
                 seg_data = getattr(seg, "data", None)
-                if target is None and isinstance(seg_data, dict):
+                if target is None and is_string_mapping(seg_data):
                     target = seg_data.get("qq") or seg_data.get("target")
 
                 target_str = str(target or "").strip()
@@ -374,10 +402,10 @@ class MessageProcessingService:
                 seg_data = getattr(seg, "data", None)
                 if seg_type in ("Plain", "text"):
                     text = getattr(seg, "text", None)
-                    if text is None and isinstance(seg_data, dict):
+                    if text is None and is_string_mapping(seg_data):
                         text = seg_data.get("text")
                     if text:
-                        text = self._strip_known_mentions(text, pending_mentions)
+                        text = self._strip_known_mentions(str(text), pending_mentions)
                         if qq_mention_replacements is not None:
                             text = self._sanitize_qq_official_mentions(
                                 text, qq_mention_replacements
@@ -387,14 +415,14 @@ class MessageProcessingService:
                 elif seg_type in ("Image", "image"):
                     # QQ 官方图片附件缺少可确认的表情标记，不能凭 URL、GIF 后缀或文件名推断表情包。
                     url = getattr(seg, "url", None) or (
-                        seg_data.get("url") if isinstance(seg_data, dict) else None
+                        seg_data.get("url") if is_string_mapping(seg_data) else None
                     )
                     if url:
-                        message_parts.append({"type": "image", "url": url})
+                        message_parts.append({"type": "image", "url": str(url)})
 
                 elif seg_type in ("At", "at"):
                     target = getattr(seg, "target", None) or getattr(seg, "qq", None)
-                    if target is None and isinstance(seg_data, dict):
+                    if target is None and is_string_mapping(seg_data):
                         target = seg_data.get("qq") or seg_data.get("target")
                     if target:
                         message_parts.append(
@@ -458,7 +486,7 @@ class MessageProcessingService:
                 break
 
         replacements: dict[str, str] = {}
-        if not isinstance(mentions, (list, tuple)):
+        if not is_object_collection(mentions):
             return replacements
 
         for mention in mentions:
@@ -503,7 +531,7 @@ class MessageProcessingService:
 
     @staticmethod
     def _read_field(source: object, *names: str) -> object | None:
-        if isinstance(source, dict):
+        if is_string_mapping(source):
             for name in names:
                 if name in source:
                     return source[name]
@@ -557,16 +585,16 @@ class MessageProcessingService:
     def _extract_event_timestamp(message_obj: object) -> int:
         """从消息对象中提取平台事件时间戳。"""
         raw_message = getattr(message_obj, "raw_message", None)
-        if isinstance(raw_message, dict):
+        if is_string_mapping(raw_message):
             candidate = raw_message.get("timestamp")
             if not candidate:
                 raw_data = raw_message.get("raw_data")
-                if isinstance(raw_data, dict):
+                if is_string_mapping(raw_data):
                     candidate = raw_data.get("timestamp")
         else:
             raw_data = getattr(raw_message, "raw_data", None)
             candidate = getattr(raw_message, "timestamp", None)
-            if not candidate and isinstance(raw_data, dict):
+            if not candidate and is_string_mapping(raw_data):
                 candidate = raw_data.get("timestamp")
         if isinstance(candidate, (int, float)):
             return int(candidate)

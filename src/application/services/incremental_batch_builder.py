@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from ...domain.services.analysis_domain_service import UserActivityStats
+    from ...domain.value_objects.analysis_results import UserActivityPayload
     from ...domain.value_objects.unified_message import UnifiedMessage
 
 
@@ -41,7 +42,7 @@ def compute_hourly_counts(
 def convert_user_activity_for_merge(
     user_activity: Mapping[str, UserActivityStats],
     messages: list[UnifiedMessage],
-) -> dict[str, dict]:
+) -> dict[str, UserActivityPayload]:
     """将领域用户活跃度数据转换为 IncrementalBatch 所需的 user_stats 字典格式。
 
     Args:
@@ -57,7 +58,7 @@ def convert_user_activity_for_merge(
         if msg.timestamp > current:
             user_last_time[msg.sender_id] = msg.timestamp
 
-    result: dict[str, dict] = {}
+    result: dict[str, UserActivityPayload] = {}
     for user_id, stats in user_activity.items():
         result[user_id] = {
             "nickname": stats.get("nickname", user_id),

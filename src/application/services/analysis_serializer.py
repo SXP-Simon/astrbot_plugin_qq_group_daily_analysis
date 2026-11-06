@@ -17,6 +17,12 @@ from ...domain.value_objects import (
     SummaryTopic,
     UserTitle,
 )
+from ...shared.type_guards import (
+    is_object_collection,
+    is_object_list,
+    is_object_mapping,
+    is_string_mapping,
+)
 
 
 class AnalysisResultSerializer:
@@ -40,11 +46,11 @@ class AnalysisResultSerializer:
             return obj.isoformat()
         if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
             return AnalysisResultSerializer.to_json_friendly(dataclasses.asdict(obj))
-        if isinstance(obj, (set, tuple)):
+        if is_object_collection(obj):
             return [AnalysisResultSerializer.to_json_friendly(item) for item in obj]
-        if isinstance(obj, list):
+        if is_object_list(obj):
             return [AnalysisResultSerializer.to_json_friendly(item) for item in obj]
-        if isinstance(obj, dict):
+        if is_object_mapping(obj):
             return {
                 str(k): AnalysisResultSerializer.to_json_friendly(v)
                 for k, v in obj.items()
@@ -92,7 +98,7 @@ class AnalysisResultSerializer:
         stats_raw = data.get("statistics", {})
         stats = (
             GroupStatistics.from_dict(stats_raw)
-            if isinstance(stats_raw, dict)
+            if is_string_mapping(stats_raw)
             else (
                 stats_raw
                 if isinstance(stats_raw, GroupStatistics)
@@ -103,7 +109,7 @@ class AnalysisResultSerializer:
         quality_raw = data.get("chat_quality_review")
         quality_review = (
             QualityReview.from_dict(quality_raw)
-            if isinstance(quality_raw, dict)
+            if is_string_mapping(quality_raw)
             else (
                 quality_raw
                 if isinstance(quality_raw, QualityReview)
@@ -115,25 +121,25 @@ class AnalysisResultSerializer:
 
         raw_topics = data.get("topics")
         topics: list[SummaryTopic] = []
-        if isinstance(raw_topics, list):
+        if is_object_list(raw_topics):
             for t in raw_topics:
-                if isinstance(t, dict):
+                if is_string_mapping(t):
                     topics.append(SummaryTopic.from_dict(t))
                 elif isinstance(t, SummaryTopic):
                     topics.append(t)
 
         raw_user_titles = data.get("user_titles")
         user_titles: list[UserTitle] = []
-        if isinstance(raw_user_titles, list):
+        if is_object_list(raw_user_titles):
             for t in raw_user_titles:
-                if isinstance(t, dict):
+                if is_string_mapping(t):
                     user_titles.append(UserTitle.from_dict(t))
                 elif isinstance(t, UserTitle):
                     user_titles.append(t)
 
         raw_user_analysis = data.get("user_analysis")
         user_analysis: dict[str, object] = (
-            raw_user_analysis if isinstance(raw_user_analysis, dict) else {}
+            raw_user_analysis if is_string_mapping(raw_user_analysis) else {}
         )
 
         return {

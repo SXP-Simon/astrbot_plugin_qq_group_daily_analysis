@@ -30,10 +30,22 @@ class TaskGuard:
         Args:
             max_concurrent: 最大允许的 LLM 全局并发任务数。
         """
-        self._locks = weakref.WeakValueDictionary()
+        self._locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
         self._active_tasks: set[str] = set()
         self._max_concurrent = max(1, int(max_concurrent))
         self.llm_semaphore = asyncio.Semaphore(self._max_concurrent)
+
+    @property
+    def active_tasks(self) -> set[str]:
+        """提供应用服务兼容入口使用的运行任务集合。"""
+        return self._active_tasks
+
+    @property
+    def locks(self) -> weakref.WeakValueDictionary[str, asyncio.Lock]:
+        """提供应用服务兼容入口使用的弱引用锁表。"""
+        return self._locks
 
     def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
         """检查指定群的特定任务是否正在运行中。

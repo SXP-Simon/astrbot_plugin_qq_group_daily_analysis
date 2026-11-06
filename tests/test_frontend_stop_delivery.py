@@ -150,7 +150,7 @@ async def test_text_and_image_fallback_share_delivery(
     host_text = AsyncMock(side_effect=AssertionError("不应回调插件私有文字发送方法"))
     handler.plugin_instance = SimpleNamespace(
         comic_command_handler=None,
-        _send_text_reports=host_text,
+        send_text_reports=host_text,
     )
     result = {
         "group_id": "123456",
@@ -210,16 +210,16 @@ async def test_image_send_stop_skips_copy_upload(
         event, poll_interval=60
     )
     monkeypatch.setattr(
-        handler, "_save_report_to_history", lambda *_args, **_kwargs: None
+        handler, "save_report_to_history", lambda *_args, **_kwargs: None
     )
     upload = AsyncMock()
     if upload_owner == "host":
         handler.plugin_instance = SimpleNamespace(
             comic_command_handler=None,
-            _try_upload_image=upload,
+            try_upload_image=upload,
         )
     else:
-        monkeypatch.setattr(handler, "_try_upload_image", upload)
+        monkeypatch.setattr(handler, "try_upload_image", upload)
 
     event = HostEvent()
     parent = asyncio.create_task(collect(handler, event))
@@ -372,7 +372,7 @@ async def test_stop_only_cancels_this_manual_reports_comic(
         await asyncio.wait_for(
             asyncio.gather(started.wait(), renderer.started.wait()), timeout=1
         )
-        comic_task = comic._comic_group_tasks["aiocqhttp_1:123456"]
+        comic_task = comic.comic_group_tasks["aiocqhttp_1:123456"]
         event.set_extra("agent_stop_requested", True)
         await asyncio.wait_for(parent, timeout=2)
         assert renderer.cancelled

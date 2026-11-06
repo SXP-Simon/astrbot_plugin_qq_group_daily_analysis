@@ -14,6 +14,7 @@ from ...domain.repositories.platform_adapter_repository import PlatformAdapterPr
 from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_list
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -337,10 +338,12 @@ class AnalysisTriggerService:
 
         # 2. 插件配置白名单
         sender_id = str(getattr(event, "get_sender_id", lambda: "")() or "").strip()
-        admin_users = [
-            str(u).strip()
-            for u in self.config_manager._get_group("basic").get("admin_users", [])
-        ]
+        raw_admin_users = self.config_manager.get_group("basic").get("admin_users", [])
+        admin_users = (
+            [str(u).strip() for u in raw_admin_users]
+            if is_object_list(raw_admin_users)
+            else []
+        )
         return bool(sender_id and sender_id in admin_users)
 
     def _resolve_effective_sections(
@@ -354,7 +357,7 @@ class AnalysisTriggerService:
             requested = all_modules
         else:
             tokens = re.split(r"[,，、| +]+", raw)
-            requested = []
+            requested: list[str] = []
             for tok in tokens:
                 t = tok.strip()
                 if not t:
@@ -378,8 +381,8 @@ class AnalysisTriggerService:
             if not requested:
                 requested = all_modules
 
-        effective = set()
-        skipped = []
+        effective: set[str] = set()
+        skipped: list[str] = []
 
         cfg = self.config_manager
         for m in requested:

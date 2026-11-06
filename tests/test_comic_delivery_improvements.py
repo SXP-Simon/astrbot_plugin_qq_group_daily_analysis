@@ -483,7 +483,7 @@ def test_drawing_proxy_prefers_provider_and_is_reused_for_image_download(monkeyp
         {"data": [{"url": "https://image.example.com/comic.png"}]},
         "socks5://provider-proxy:1080",
     )
-    assert drawing_client._get_request_proxy({}) == "http://global-proxy:7890"
+    assert drawing_client.get_request_proxy({}) == "http://global-proxy:7890"
 
 
 def test_openai_images_request_applies_advanced_controls_and_reference_limit(

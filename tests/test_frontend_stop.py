@@ -338,7 +338,7 @@ async def test_stop_signal_passes_through_text_send_fallback():
         report_generator=TextReportGenerator(),
     )
     with pytest.raises(AnalysisStoppedError):
-        await handler._send_text_reports(  # type: ignore[arg-type]
+        await handler.send_text_reports(  # type: ignore[arg-type]
             "123456", {}, False, BoomAdapter()
         )
 
@@ -367,12 +367,12 @@ async def test_stop_during_upload_keeps_send_but_finalizes_cleanly(monkeypatch):
         config=CaptionConfig(),
         stop_watcher_factory=capture_watcher,
     )
-    monkeypatch.setattr(handler, "_save_report_to_history", lambda *_a, **_k: None)
+    monkeypatch.setattr(handler, "save_report_to_history", lambda *_a, **_k: None)
 
     async def noop_upload(*_args: object, **_kwargs: object) -> None:
         return None
 
-    monkeypatch.setattr(handler, "_try_upload_image", noop_upload)
+    monkeypatch.setattr(handler, "try_upload_image", noop_upload)
 
     event = HostEvent()
     delivered: list[object] = []

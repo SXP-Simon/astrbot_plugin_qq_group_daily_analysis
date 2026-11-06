@@ -40,7 +40,7 @@ class PipelineStep:
 
     stage_name: str
     span_record: SpanRecord
-    payload: dict[str, object] = field(default_factory=dict)
+    payload: dict[str, object] = field(default_factory=dict[str, object])
     output: object = None
     status: str = "running"
 
@@ -237,7 +237,7 @@ class PipelineContext:
         if self.trace is None:
             return
         stage_name = stage.value if isinstance(stage, enum.Enum) else str(stage)
-        combined_payload = {"stage": stage_name, "restored": True}
+        combined_payload: dict[str, object] = {"stage": stage_name, "restored": True}
         if payload:
             combined_payload.update(payload)
         with self.trace.span(AnalysisStage.CHECKPOINT_RESTORE.value, combined_payload):

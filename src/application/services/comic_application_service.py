@@ -13,6 +13,7 @@ from ...infrastructure.drawing.drawing_client import (
 )
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -98,7 +99,7 @@ class ComicApplicationService:
         logger.debug(f"[Comic] 漫画 Prompt 已生成，长度: {len(scene_prompt)}")
 
         # 3. 加载当前角色方案配置的全部参考图。
-        images_data = []
+        images_data: list[tuple[bytes, str]] = []
         reference_image_paths = self.config_manager.get_drawing_reference_images()
         for reference_image_path in reference_image_paths:
             reference_image = await self._fetch_reference_image(reference_image_path)
@@ -277,7 +278,7 @@ class ComicApplicationService:
             if sb_rec:
                 sb_prompts: dict[str, object] = {}
                 llm_prompts = trace.metadata.get("llm_prompts") if trace else None
-                if isinstance(llm_prompts, dict):
+                if is_string_mapping(llm_prompts):
                     for k, p in llm_prompts.items():
                         if "comic" in str(k) or str(k) == "comic_storyboards":
                             sb_prompts[str(k)] = p
@@ -524,15 +525,16 @@ class ComicApplicationService:
             return None
 
         ImageResource = self._import_big_banana_image_resource(plugin)
-        if ImageResource is None:
+        from_bytes = getattr(ImageResource, "from_bytes", None)
+        if not callable(from_bytes):
             logger.warning("[Comic] 无法导入「大香蕉」图片资源类型，回退内置绘图后端。")
             return None
 
-        image_list = None
+        image_list: list[object] | None = None
         if images_data:
             image_list = []
             for img_bytes, _mime in images_data:
-                resource = ImageResource.from_bytes(img_bytes)
+                resource: object = from_bytes(img_bytes)
                 if resource:
                     image_list.append(resource)
             if not image_list:
@@ -560,22 +562,24 @@ class ComicApplicationService:
             logger.warning(f"[Comic] 「大香蕉」生成失败: {result.error_message}")
             return None
 
-        images = getattr(result, "images", None) or []
+        images: object = getattr(result, "images", None)
+        if not is_object_list(images):
+            images = []
         if not images:
             logger.warning("[Comic] 「大香蕉」未返回图片。")
             return None
         try:
-            image_bytes = images[0].bytes
+            image_bytes: object = getattr(images[0], "bytes", None)
         except Exception as exc:
             logger.warning(f"[Comic] 读取「大香蕉」生成结果失败: {exc}")
             return None
-        if not image_bytes:
+        if not isinstance(image_bytes, bytes) or not image_bytes:
             logger.warning("[Comic] 「大香蕉」返回的图片为空。")
             return None
         return image_bytes
 
     @staticmethod
-    def _import_big_banana_image_resource(plugin: object) -> type | None:
+    def _import_big_banana_image_resource(plugin: object) -> object | None:
         """导入「大香蕉」插件的 ImageResource 类型。
 
         AstrBot 以 ``data.plugins.<插件名>.main`` 形式加载插件，模块名并非
@@ -591,7 +595,7 @@ class ComicApplicationService:
         import importlib
 
         module_name = getattr(type(plugin), "__module__", "") or ""
-        candidate_modules = []
+        candidate_modules: list[str] = []
         if module_name and "." in module_name:
             candidate_modules.append(module_name.rsplit(".", 1)[0] + ".core.schemas")
         candidate_modules.append("astrbot_plugin_big_banana.core.schemas")
