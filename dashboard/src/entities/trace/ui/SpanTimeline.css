@@ -91,12 +91,46 @@
   margin: 0 0 16px;
   font-size: 16px;
   font-weight: 500;
+  scroll-margin-top: 16px;
+}
+.stage-evidence h3:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+.stage-return {
+  display: none;
 }
 .stage-missing {
   color: var(--muted-foreground);
   font-size: 14px;
 }
+.stage-metrics-grid,
+.stage-attempt-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(128px, 100%), 1fr));
+  gap: 12px 20px;
+  width: 100%;
+}
+.stage-metrics-grid {
+  margin-bottom: 16px;
+}
+.stage-attempt-metrics {
+  gap: 6px 16px;
+}
+.stage-metrics-grid > .stage-metrics-grid {
+  grid-column: 1 / -1;
+}
 @container (max-width: 700px) {
+  .stage-tree {
+    max-height: 360px;
+    overflow: auto;
+    padding: 4px;
+    scrollbar-width: thin;
+  }
+  .stage-return {
+    display: inline-flex;
+    margin-bottom: 16px;
+  }
   .stage-diagnostics {
     grid-template-columns: minmax(0, 1fr);
     gap: 20px;

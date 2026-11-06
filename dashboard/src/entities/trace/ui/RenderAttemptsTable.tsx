@@ -82,7 +82,7 @@ export function RenderAttemptsTable({ attempts }: { attempts: Record<string, unk
                 </span>
               </div>
               {details.length > 0 && (
-                <ul className="mb-0 mt-2 grid list-none grid-cols-1 gap-x-4 gap-y-1 p-0 text-xs text-muted-foreground sm:grid-cols-2">
+                <ul className="stage-attempt-metrics mb-0 mt-2 list-none p-0 text-xs text-muted-foreground">
                   {details.map((value) => (
                     <li key={value}>{value}</li>
                   ))}

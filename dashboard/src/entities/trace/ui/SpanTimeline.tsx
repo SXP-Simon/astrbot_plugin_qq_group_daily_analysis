@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { IconArrowLeft } from "@tabler/icons-react";
+import { Button } from "../../../shared/ui/button";
 import type { TraceSpan } from "../model/types";
 import { resolveSpanOutcome } from "../model/spanOutcome";
 import { buildSpanTree, type SpanTreeNode } from "../model/spanTree";
 import { getSpanTiming } from "../model/spanTiming";
+import { getRenderAttemptDiagnostic } from "../model/renderAttempts";
 import { formatStageName } from "../../../shared/lib/formatters";
 import { StageMetricsBadges } from "./StageMetricsBadges";
 import { PromptsInspector } from "./PromptsInspector";
@@ -44,6 +47,19 @@ export function SpanTimeline({
     expanded: Set<string>;
   } | null>(null);
   const [now, setNow] = useState(Date.now);
+  const inspectionRef = useRef<HTMLDivElement>(null);
+  const evidenceHeadingRef = useRef<HTMLHeadingElement>(null);
+  const treeRef = useRef<HTMLElement>(null);
+  const moveFocusToEvidence = useRef(false);
+  useLayoutEffect(() => {
+    if (!moveFocusToEvidence.current) return;
+    moveFocusToEvidence.current = false;
+    const width = inspectionRef.current?.clientWidth ?? 0;
+    if (width > 0 && width <= 700) {
+      evidenceHeadingRef.current?.focus({ preventScroll: true });
+      evidenceHeadingRef.current?.scrollIntoView({ block: "start" });
+    }
+  });
   const hasLive = spans.some((span) => getSpanTiming(span, taskStatus).live);
   useEffect(() => {
     if (!hasLive) return;
@@ -61,6 +77,7 @@ export function SpanTimeline({
       .find(({ node }) =>
         ["failed", "warning"].includes(resolveSpanOutcome(node.span.status, node.span.payload)),
       ) ??
+    [...flat].reverse().find(({ node }) => getRenderAttemptDiagnostic(node.span.payload)) ??
     flat[0];
   const initialExpanded = new Set<string>();
   let parent = preferred?.parent;
@@ -114,6 +131,7 @@ export function SpanTimeline({
                 const next = new Set(active.expanded);
                 if (expanded) next.delete(span.span_id);
                 else next.add(span.span_id);
+                moveFocusToEvidence.current = true;
                 setSelection({ traceId, spanId: span.span_id, expanded: next });
               }}
             />
@@ -125,7 +143,7 @@ export function SpanTimeline({
   );
 
   return (
-    <div className="stage-inspection">
+    <div className="stage-inspection" ref={inspectionRef}>
       {taskStatus === "running" &&
         currentStage &&
         !spans.some((span) => span.stage_name.toUpperCase() === currentStage.toUpperCase()) && (
@@ -139,11 +157,27 @@ export function SpanTimeline({
         </p>
       ) : (
         <div className="stage-diagnostics">
-          <nav aria-label="执行阶段" className="stage-tree">
+          <nav aria-label="执行阶段" className="stage-tree" ref={treeRef}>
             {renderBranch(roots)}
           </nav>
           <section className="stage-evidence" aria-label="阶段详情">
-            <h3>阶段详情</h3>
+            <h3 ref={evidenceHeadingRef} tabIndex={-1}>
+              阶段详情{selected ? ` · ${formatStageName(selected.span.stage_name)}` : ""}
+            </h3>
+            <Button
+              className="stage-return"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const button =
+                  treeRef.current?.querySelector<HTMLButtonElement>('[aria-current="true"]');
+                button?.focus({ preventScroll: true });
+                button?.scrollIntoView({ block: "nearest" });
+              }}
+            >
+              <IconArrowLeft aria-hidden="true" />
+              返回阶段列表
+            </Button>
             {selected && (
               <>
                 <SpanAlerts

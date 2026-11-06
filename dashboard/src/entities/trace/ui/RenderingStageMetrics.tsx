@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { MetricPill } from "../../../shared/ui/MetricPill";
-import { useTheme } from "../../../shared/lib/useTheme";
+import { StageMetric } from "./StageMetric";
 
 export function RenderingStageMetrics({
   payload,
@@ -9,7 +8,6 @@ export function RenderingStageMetrics({
   payload: Record<string, unknown>;
   children?: ReactNode;
 }) {
-  const { isDark } = useTheme();
   const ownProcessRss = ["linux_proc_status", "windows_working_set"].includes(
     String(payload.worker_rss_source),
   );
@@ -73,7 +71,7 @@ export function RenderingStageMetrics({
     ["image_bytes", "图片字节", "B"],
   ] as const;
   return (
-    <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+    <div className="stage-metrics-grid">
       {metrics.map(([key, label, unit]) => {
         if (native && key === "resource_environment") return null;
         const value = payload[key];
@@ -95,8 +93,7 @@ export function RenderingStageMetrics({
             : metricHints[key];
         return (
           <span key={key} title={hint}>
-            <MetricPill
-              isDark={isDark}
+            <StageMetric
               label={metricLabel}
               value={`${typeof value === "number" ? value.toLocaleString() : String(value)} ${unit}`}
               status={
@@ -109,33 +106,19 @@ export function RenderingStageMetrics({
         );
       })}
       {payload.network_budget_exhausted === true && (
-        <MetricPill
-          isDark={isDark}
-          label="网络预算"
-          value="已耗尽，保留正文"
-          status="warning"
-          isMono={false}
-        />
+        <StageMetric label="网络预算" value="已耗尽，保留正文" status="warning" isMono={false} />
       )}
-      {payload.mode === "basic" && (
-        <MetricPill isDark={isDark} label="恢复方案" value="基础排版" isMono={false} />
-      )}
+      {payload.mode === "basic" && <StageMetric label="恢复方案" value="基础排版" isMono={false} />}
       {workerPhase && (
-        <MetricPill
-          isDark={isDark}
-          label="最后阶段"
-          value={workerPhase}
-          status="warning"
-          isMono={false}
-        />
+        <StageMetric label="最后阶段" value={workerPhase} status="warning" isMono={false} />
       )}
       {payload.worker_metrics_partial === true && (
-        <span style={{ flexBasis: "100%", fontSize: 11 }}>
+        <span className="col-span-full text-xs text-muted-foreground">
           指标为进程终止前的采样，未完成的阶段不显示完整耗时。
         </span>
       )}
       {payload.typst_metrics_partial === true && (
-        <span style={{ flexBasis: "100%", fontSize: 11 }}>
+        <span className="col-span-full text-xs text-muted-foreground">
           Typst 汇总包含中断前的采样；各次串行编译取最大值，不相加。
         </span>
       )}
@@ -143,14 +126,14 @@ export function RenderingStageMetrics({
         typeof payload.original_raster_ppi === "number" &&
         typeof payload.requested_raster_ppi === "number" &&
         payload.original_raster_ppi > payload.requested_raster_ppi && (
-          <span style={{ flexBasis: "100%", fontSize: 11 }}>
+          <span className="col-span-full text-xs text-muted-foreground">
             基础恢复使用标准密度 {payload.requested_raster_ppi} PPI。
           </span>
         )}
       {typeof payload.raster_ppi === "number" &&
         typeof payload.requested_raster_ppi === "number" &&
         payload.raster_ppi < payload.requested_raster_ppi && (
-          <span style={{ flexBasis: "100%", fontSize: 11 }}>
+          <span className="col-span-full text-xs text-muted-foreground">
             长图像素预算已限制导出密度，排版与内容保持不变。
           </span>
         )}
@@ -158,7 +141,7 @@ export function RenderingStageMetrics({
       {typeof payload.worker_peak_rss_mb === "number" &&
         Number.isFinite(payload.worker_peak_rss_mb) &&
         payload.worker_peak_rss_mb >= 0 && (
-          <span style={{ flexBasis: "100%", fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
+          <span className="col-span-full text-xs text-muted-foreground">
             {ownProcessRss
               ? "宿主净变化不含隔离编译开销；子进程结束后释放内存。"
               : "历史采集口径可能包含启动时继承的内存，不能直接作为本次编译占用。"}

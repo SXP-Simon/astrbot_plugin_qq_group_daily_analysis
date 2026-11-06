@@ -1,5 +1,6 @@
 import { IconChevronDown, IconChevronRight, IconLoader2 } from "@tabler/icons-react";
 import { resolveSpanOutcome } from "../model/spanOutcome";
+import { getRenderAttemptDiagnostic } from "../model/renderAttempts";
 import { getSpanTiming, getDurationRatio } from "../model/spanTiming";
 import { getStageSlaThreshold } from "../model/sla";
 import { formatDuration, formatStageName } from "../../../shared/lib/formatters";
@@ -36,6 +37,7 @@ export function SpanHeader({
   now,
 }: SpanHeaderProps) {
   const outcome = resolveSpanOutcome(status, payload);
+  const renderDiagnostic = getRenderAttemptDiagnostic(payload);
   const timing = getSpanTiming(
     { duration_ms: durationMs, started_at: startedAt, status },
     taskStatus,
@@ -124,6 +126,7 @@ export function SpanHeader({
           耗时超出参考值
         </small>
       )}
+      {renderDiagnostic && <small className="stage-slow">{renderDiagnostic.label}</small>}
     </button>
   );
 }

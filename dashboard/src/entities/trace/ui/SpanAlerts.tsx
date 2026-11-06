@@ -1,4 +1,5 @@
 import { resolveSpanOutcome } from "../model/spanOutcome";
+import { getRenderAttemptDiagnostic } from "../model/renderAttempts";
 
 interface SpanAlertsProps {
   stageName: string;
@@ -9,6 +10,12 @@ interface SpanAlertsProps {
 export function SpanAlerts({ stageName, status, payload }: SpanAlertsProps) {
   const outcome = resolveSpanOutcome(status, payload);
   const messages: { label: string; value: unknown; danger?: boolean }[] = [];
+  const renderDiagnostic = getRenderAttemptDiagnostic(payload);
+  if (renderDiagnostic)
+    messages.push({
+      label: renderDiagnostic.label,
+      value: `此前失败原因：${renderDiagnostic.reason}`,
+    });
   if (outcome === "cancelled") messages.push({ label: "已停止", value: "该阶段已停止。" });
   if (payload?.failure_reason)
     messages.push({ label: "原始失败原因", value: payload.failure_reason });
