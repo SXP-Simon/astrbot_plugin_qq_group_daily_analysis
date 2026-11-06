@@ -5,25 +5,22 @@
 
 from __future__ import annotations
 
-import re
-from datetime import datetime
-
 from ....domain.value_objects import SummaryTopic, TokenUsage
 from ....domain.value_objects.unified_message import (
     AnalysisTextMessage,
-    LegacyMessagePayload,
+    UnifiedMessage,
 )
 from ....shared.type_guards import is_object_list
 from ....utils.logger import logger
 from ....utils.template_utils import render_template
-from ..utils import InfoUtils
+from ..utils.analysis_messages import extract_analysis_messages
 from ..utils.json_utils import extract_topics_with_regex
 from ..utils.response_validation import validate_topic_items
 from ..utils.structured_output_schema import JSONObject, build_topics_schema
 from .base_analyzer import BaseAnalyzer
 
 
-class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[LegacyMessagePayload]]):
+class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[AnalysisTextMessage]]):
     """
     话题分析器
     专门处理群聊话题的提取和分析
@@ -49,12 +46,12 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[LegacyMessagePayload]]):
     def get_response_schema(self) -> JSONObject:
         return build_topics_schema(self.get_max_count())
 
-    def build_prompt(self, data: list[LegacyMessagePayload]) -> str:
+    def build_prompt(self, data: list[AnalysisTextMessage]) -> str:
         """
         构建话题分析提示词
 
         Args:
-            messages: 群聊消息列表
+            data: 已提取的模型输入消息。
 
         Returns:
             提示词字符串
@@ -64,90 +61,10 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[LegacyMessagePayload]]):
             logger.warning("build_prompt 收到空消息列表")
             return ""
 
-        # 提取文本消息
-        text_messages: list[AnalysisTextMessage] = []
-        for i, msg in enumerate(data):
-            try:
-                sender = msg.get("sender", {})
-                # 确保sender是字典类型，避免'str' object has no attribute 'get'错误
-
-                # 获取发送者ID并过滤机器人消息
-                user_id = str(sender.get("user_id", ""))
-                bot_self_ids = self.config_manager.get_bot_self_ids()
-
-                # 跳过机器人自己的消息
-                if bot_self_ids and user_id in [str(uid) for uid in bot_self_ids]:
-                    continue
-
-                nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
-                msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
-
-                message_list = msg.get("message", [])
-
-                # 提取文本内容，可能分布在多个 content 中
-                text_parts: list[str] = []
-                for _j, content in enumerate(message_list):
-                    content_type = content.get("type", "")
-
-                    if content_type == "text":
-                        text = content.get("data", {}).get("text", "").strip()
-                        if text:
-                            text_parts.append(text)
-                    elif content_type == "at":
-                        # 处理 @ 消息，转换为文本
-                        at_data = content.get("data", {})
-                        # 兼容不同平台的 ID 字段
-                        at_id = at_data.get("id") or at_data.get("user_id")
-                        if at_id:
-                            at_text = f"@{at_id}"
-                            text_parts.append(at_text)
-                    elif content_type == "reply":
-                        # 处理回复消息，添加标记
-                        reply_id = content.get("data", {}).get("id", "")
-                        if reply_id:
-                            reply_text = f"[回复:{reply_id}]"
-                            text_parts.append(reply_text)
-
-                # 合并所有文本部分
-                combined_text = "".join(text_parts).strip()
-
-                if (
-                    combined_text
-                    and len(combined_text) > 2
-                    and not combined_text.startswith("/")
-                ):
-                    # 清理消息内容
-                    cleaned_text = combined_text.replace("“", '"').replace("”", '"')
-                    cleaned_text = cleaned_text.replace("‘", "'").replace("’", "'")
-                    cleaned_text = cleaned_text.replace("\n", " ").replace("\r", " ")
-                    cleaned_text = cleaned_text.replace("\t", " ")
-                    cleaned_text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", cleaned_text)
-
-                    text_messages.append(
-                        {
-                            "sender": nickname,
-                            "time": msg_time,
-                            "content": cleaned_text,
-                            "user_id": str(user_id),
-                        }
-                    )
-            except Exception as e:
-                logger.error(
-                    f"build_prompt 处理第 {i + 1} 条消息时出错: {e}", exc_info=True
-                )
-                continue
-
-        if not text_messages:
-            logger.warning("build_prompt 没有提取到有效的文本消息，返回空prompt")
-            return ""
-
         # 构建消息文本
         # 使用用户提供的 ID-Only 格式: [HH:MM] [用户ID]: 消息内容
         messages_text = "\n".join(
-            [
-                f"[{msg['time']}] [{msg['user_id']}]: {msg['content']}"
-                for msg in text_messages
-            ]
+            [f"[{msg['time']}] [{msg['user_id']}]: {msg['content']}" for msg in data]
         )
 
         max_topics = self.get_max_count()
@@ -259,47 +176,35 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[LegacyMessagePayload]]):
         return validate_topic_items(data_list)
 
     def extract_text_messages(
-        self, messages: list[LegacyMessagePayload]
+        self, messages: list[UnifiedMessage]
     ) -> list[AnalysisTextMessage]:
         """
         从已清理的消息中提取文本消息用于话题分析。
 
         Args:
-            messages: 已由 MessageCleaner 处理过的 legacy 消息列表
+            messages: 已由 MessageCleaner 处理过的统一消息列表
 
         Returns:
             提取的文本消息列表
         """
-        text_messages: list[AnalysisTextMessage] = []
-
-        for msg in messages:
-            # 获取发送者显示名
-            sender = msg.get("sender", {})
-            nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
-            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
-
-            for content in msg.get("message", []):
-                if content.get("type") == "text":
-                    text = content.get("data", {}).get("text", "").strip()
-                    # 已经在 MessageCleaner 中处理过基本的垃圾内容
-                    if text:
-                        # 简单的额外清理
-                        cleaned_text = text.replace("\n", " ").replace("\r", " ")
-                        cleaned_text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", cleaned_text)
-
-                        text_messages.append(
-                            {
-                                "sender": nickname,
-                                "time": msg_time,
-                                "content": cleaned_text.strip(),
-                                "user_id": str(sender.get("user_id", "")),
-                            }
-                        )
-        return text_messages
+        text_messages = extract_analysis_messages(
+            messages,
+            use_card=self.config_manager.get_enable_user_card(),
+            bot_self_ids=self.config_manager.get_bot_self_ids(),
+        )
+        for message in text_messages:
+            message["content"] = (
+                message["content"]
+                .replace("“", '"')
+                .replace("”", '"')
+                .replace("‘", "'")
+                .replace("’", "'")
+            )
+        return [message for message in text_messages if len(message["content"]) > 2]
 
     async def analyze_topics(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """分析群聊话题
@@ -344,8 +249,8 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[LegacyMessagePayload]]):
                 if sender and user_id:
                     id_to_nickname[user_id] = sender
 
-            # 直接传入原始消息，让 build_prompt 方法处理
-            topics, usage = await self.analyze(messages, umo)
+            # 提取一次，同时用于提示词构建和参与者身份回填。
+            topics, usage = await self.analyze(text_messages, umo)
 
             # 后处理：contributors 此时包含的是 ID，需要映射回昵称
             for topic in topics:

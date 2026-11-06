@@ -39,7 +39,7 @@ if TYPE_CHECKING:
         UserActivityRanking,
         UserActivityStats,
     )
-    from ...domain.value_objects.unified_message import LegacyMessagePayload
+    from ...domain.value_objects.unified_message import UnifiedMessage
     from ..config.config_manager import ConfigManager
 
 
@@ -99,7 +99,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_topics(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """使用LLM分析话题
@@ -120,7 +120,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_user_titles(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         user_activity: Mapping[str, UserActivityStats | UserActivityPayload],
         umo: str | None = None,
         top_users: list[UserActivityRanking] | None = None,
@@ -147,7 +147,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_golden_quotes(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """使用LLM分析群聊金句
@@ -219,7 +219,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_all_concurrent(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         user_activity: Mapping[str, UserActivityStats | UserActivityPayload],
         umo: str | None = None,
         top_users: list[UserActivityRanking] | None = None,
@@ -445,7 +445,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_incremental_concurrent(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
         topics_per_batch: int = 2,
         quotes_per_batch: int = 1,

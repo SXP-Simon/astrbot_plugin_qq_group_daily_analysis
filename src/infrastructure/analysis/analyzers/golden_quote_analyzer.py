@@ -5,16 +5,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from ....domain.value_objects import GoldenQuote, TokenUsage
 from ....domain.value_objects.unified_message import (
     AnalysisTextMessage,
-    LegacyMessagePayload,
+    UnifiedMessage,
 )
 from ....utils.logger import logger
 from ....utils.template_utils import render_template
-from ..utils import InfoUtils
+from ..utils.analysis_messages import extract_analysis_messages
 from ..utils.json_utils import extract_golden_quotes_with_regex
 from ..utils.response_validation import validate_golden_quote_items
 from ..utils.structured_output_schema import JSONObject, build_golden_quotes_schema
@@ -144,7 +142,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[AnalysisTextMessage]]):
 
     async def analyze_golden_quotes(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """分析群聊金句
@@ -195,37 +193,22 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[AnalysisTextMessage]]):
             raise
 
     def extract_interesting_messages(
-        self, messages: list[LegacyMessagePayload]
+        self, messages: list[UnifiedMessage]
     ) -> list[AnalysisTextMessage]:
         """
         根据清理后的消息提取可能有意义的消息片段用于金句分析。
 
         Args:
-            messages: 已由 MessageCleaner 处理过的 legacy 消息列表
+            messages: 已由 MessageCleaner 处理过的统一消息列表
 
         Returns:
             提取的文本消息列表
         """
-        interesting_messages: list[AnalysisTextMessage] = []
-
-        for msg in messages:
-            # 获取发送者显示名
-            sender = msg.get("sender", {})
-            nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
-            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
-
-            for content in msg.get("message", []):
-                if content.get("type") == "text":
-                    text = content.get("data", {}).get("text", "").strip()
-                    # 过滤掉过短或过长的噪音（已经在 cleaner 处理过一遍基本垃圾）
-                    if 2 <= len(text) <= 500:
-                        interesting_messages.append(
-                            {
-                                "sender": nickname,
-                                "time": msg_time,
-                                "content": text,
-                                "user_id": str(sender.get("user_id", "")),
-                            }
-                        )
-
-        return interesting_messages
+        messages_text = extract_analysis_messages(
+            messages,
+            use_card=self.config_manager.get_enable_user_card(),
+            bot_self_ids=self.config_manager.get_bot_self_ids(),
+        )
+        return [
+            message for message in messages_text if 2 <= len(message["content"]) <= 500
+        ]

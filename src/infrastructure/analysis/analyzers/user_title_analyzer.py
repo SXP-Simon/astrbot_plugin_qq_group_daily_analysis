@@ -23,7 +23,7 @@ if TYPE_CHECKING:
         UserActivityRanking,
         UserActivityStats,
     )
-    from ....domain.value_objects.unified_message import LegacyMessagePayload
+    from ....domain.value_objects.unified_message import UnifiedMessage
 
 
 class UserSummary(TypedDict):
@@ -182,7 +182,7 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, UserTitleInput]):
 
     def prepare_user_data(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         user_analysis: Mapping[str, UserActivityStats | UserActivityPayload],
         top_users: list[UserActivityRanking] | None = None,
     ) -> UserTitleInput:
@@ -276,7 +276,7 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, UserTitleInput]):
 
     async def analyze_user_titles(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         user_activity: Mapping[str, UserActivityStats | UserActivityPayload],
         umo: str | None = None,
         top_users: list[UserActivityRanking] | None = None,

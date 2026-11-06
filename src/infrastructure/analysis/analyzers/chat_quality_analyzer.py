@@ -5,10 +5,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ....domain.value_objects.unified_message import LegacyMessagePayload
+from ....domain.value_objects.unified_message import UnifiedMessage
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -18,7 +17,7 @@ from ....shared.trace_context import TraceContext
 from ....shared.type_guards import is_object_list, is_string_mapping
 from ....utils.logger import logger
 from ....utils.template_utils import render_template
-from ..utils import InfoUtils
+from ..utils.analysis_messages import extract_analysis_messages
 from ..utils.json_utils import extract_quality_with_regex, parse_json_object_response
 from ..utils.llm_utils import (
     call_provider_with_retry,
@@ -31,7 +30,7 @@ from ..utils.structured_output_schema import JSONObject, build_chat_quality_sche
 from .base_analyzer import BaseAnalyzer
 
 
-class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[LegacyMessagePayload]]):
+class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[UnifiedMessage]]):
     """
     聊天质量分析器
     专门处理群聊质量的锐评和多维度分析
@@ -59,38 +58,24 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[LegacyMessagePayload]
     def get_response_schema(self) -> JSONObject:
         return build_chat_quality_schema(self.get_max_count())
 
-    def build_prompt(self, data: list[LegacyMessagePayload]) -> str:
+    def build_prompt(self, data: list[UnifiedMessage]) -> str:
         """
         构建聊天质量分析提示词
         """
         if not data:
             return ""
 
-        # 提取文本消息
-        text_messages: list[str] = []
-        for msg in data:
-            sender = msg.get("sender", {})
-            user_id = str(sender.get("user_id", ""))
-            bot_self_ids = self.config_manager.get_bot_self_ids()
-            if bot_self_ids and user_id in [str(uid) for uid in bot_self_ids]:
-                continue
-
-            nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
-            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
-            message_list = msg.get("message", [])
-
-            text_parts: list[str] = []
-            for content in message_list:
-                if content.get("type") == "text":
-                    text = content.get("data", {}).get("text", "").strip()
-                    if text:
-                        text_parts.append(text)
-
-            combined_text = "".join(text_parts).strip()
-            if combined_text and not combined_text.startswith("/"):
-                text_messages.append(f"[{msg_time}] [{nickname}]: {combined_text}")
-
-        messages_text = "\n".join(text_messages[:1000])
+        text_messages = extract_analysis_messages(
+            data,
+            use_card=self.config_manager.get_enable_user_card(),
+            bot_self_ids=self.config_manager.get_bot_self_ids(),
+        )
+        if not text_messages:
+            return ""
+        messages_text = "\n".join(
+            f"[{message['time']}] [{message['sender']}]: {message['content']}"
+            for message in text_messages[:1000]
+        )
 
         prompt_template = self.config_manager.get_quality_analysis_prompt()
 
@@ -475,7 +460,7 @@ ${messages_text}
 
     async def analyze_quality(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
         persona_id: str | None = None,
         prompt_override: str | None = None,
@@ -629,7 +614,7 @@ ${messages_text}
     # Override analyze to bridge the base class interface
     async def analyze(
         self,
-        data: list[LegacyMessagePayload],
+        data: list[UnifiedMessage],
         umo: str | None = None,
         persona_id: str | None = None,
         prompt_override: str | None = None,
