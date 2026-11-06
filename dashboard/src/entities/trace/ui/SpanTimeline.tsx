@@ -5,7 +5,7 @@ import { buildSpanTree, type SpanTreeNode } from "../model/spanTree";
 import { getSpanTiming } from "../model/spanTiming";
 import { formatStageName } from "../../../shared/lib/formatters";
 import { StageMetricsBadges } from "./StageMetricsBadges";
-import { PromptsInspector, type PromptDetail } from "./PromptsInspector";
+import { PromptsInspector } from "./PromptsInspector";
 import { SpanPayloadViewer } from "./SpanPayloadViewer";
 import { SpanHeader } from "./SpanHeader";
 import { SpanAlerts } from "./SpanAlerts";
@@ -159,9 +159,7 @@ export function SpanTimeline({
                 <RenderAttemptsTable attempts={renderAttempts} />
                 {(selected.span.stage_name.toUpperCase() === "LLM_ANALYSIS" ||
                   Boolean(payload?.prompts)) && (
-                  <PromptsInspector
-                    prompts={payload?.prompts as Record<string, PromptDetail | string> | undefined}
-                  />
+                  <PromptsInspector key={selected.span.span_id} prompts={payload?.prompts} />
                 )}
                 <SpanPayloadViewer payload={payload} />
                 {(!payload || Object.keys(payload).length === 0) && (
