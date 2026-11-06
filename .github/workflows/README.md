@@ -1,6 +1,15 @@
 # GitHub Actions 工作流说明
 
-## 自动发布工作流 (auto-release.yml)
+## CI 与本地检查分工
+
+- `ci.yml` 独立运行完整验证，不调用 Lefthook，也不依赖开发者本地的测试结果。
+- 同一 PR 连续推送时，新运行取消该 PR 的旧运行；主干 push 和手动触发使用独立分组，不取消其他主干或手动运行。
+- Python 在准备测试字体和运行 pytest 之前完成 Ruff、Pyright；前端在 Vitest 和构建之前完成 ESLint、TypeScript，尽早反馈错误。
+- 前端完成类型检查后使用 `build:no-typecheck` 构建，避免再次执行 tsc；契约和产物一致性检查仍保留。
+- 本地 commit 只检查暂存源码；完整测试按功能批次执行一次，通过后不因原子提交重复运行。可用 `lefthook run check-python` / `check-frontend` 手动完整验证，或通过 `--command` 补齐尚未完成的步骤。
+- 发布仍从发布代码构建产物，不直接复用未经核对的本地文件。本轮不改动发布触发与发布权限。
+
+## 自动发布工作流 (release.yml)
 
 ### 功能概述
 
