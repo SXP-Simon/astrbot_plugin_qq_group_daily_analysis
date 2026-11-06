@@ -17,7 +17,7 @@ async def post_json_for_image(
     payload: dict[str, object],
     timeout: int | float,
     provider_name: str,
-    provider: dict,
+    provider: dict[str, object],
 ) -> bytes | None:
     """发送 JSON 图片生成请求，并从响应中提取图片。"""
     headers["Content-Type"] = "application/json"

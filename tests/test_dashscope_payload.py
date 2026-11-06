@@ -14,7 +14,7 @@ from src.infrastructure.drawing.api_requests.dashscope import build_dashscope_pa
 )
 def test_dashscope_preserves_model_capabilities(model, sequential, limit):
     context = DrawingRequestContext(
-        SimpleNamespace(_get_provider_value=lambda key, provider: provider.get(key)), None, None
+        SimpleNamespace(get_provider_value=lambda key, provider: provider.get(key)), None, None
     )
     payload = build_dashscope_payload(context, "提示词", ["reference"], {
         "model": model, "image_size": "2K", "aspect_ratio": "1:1", "n": 20,

@@ -15,7 +15,7 @@ async def call_grok_api(
     context: DrawingRequestContext,
     prompt: str,
     images_data: list[tuple[bytes, str]] | None = None,
-    provider: dict | None = None,
+    provider: dict[str, object] | None = None,
 ) -> bytes | None:
     """调用 xAI Grok Imagine 官方图片接口。
 

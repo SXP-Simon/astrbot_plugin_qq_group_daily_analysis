@@ -22,7 +22,7 @@ async def call_images_api(
     context: DrawingRequestContext,
     prompt: str,
     images_data: list[tuple[bytes, str]] | None = None,
-    provider: dict | None = None,
+    provider: dict[str, object] | None = None,
 ) -> bytes | None:
     """调用 OpenAI Images 兼容接口。
 
@@ -92,7 +92,10 @@ async def call_images_api(
     if response_format:
         payload["response_format"] = response_format
     try:
-        output_compression = int(provider.get("output_compression", 0))
+        raw_number = provider.get("output_compression", 0)
+        if not isinstance(raw_number, (str, int, float)):
+            raise TypeError("配置值必须是数字")
+        output_compression = int(raw_number)
     except (TypeError, ValueError):
         output_compression = 0
     if is_gpt_image and output_compression > 0 and output_format in {"jpeg", "webp"}:
@@ -114,7 +117,10 @@ async def call_images_api(
     # 设置为 0 会自然退回到文生图；无效输入则使用模板默认值 6。
     if images_data:
         try:
-            max_references = max(0, int(provider.get("max_reference_images", 6)))
+            raw_number = provider.get("max_reference_images", 6)
+            if not isinstance(raw_number, (str, int, float)):
+                raise TypeError("配置值必须是数字")
+            max_references = max(0, int(raw_number))
         except (TypeError, ValueError):
             max_references = 6
         if len(images_data) > max_references:
@@ -155,7 +161,7 @@ async def call_images_api(
         if is_gpt_image and moderation:
             multipart_data["moderation"] = moderation
 
-        files = []
+        files: list[tuple[str, tuple[str, bytes, str]]] = []
         for index, (img_bytes, mime) in enumerate(images_data, start=1):
             ext = mime.split("/")[-1] if "/" in mime else "png"
             files.append(("image[]", (f"image_{index}.{ext}", img_bytes, mime)))

@@ -11,7 +11,7 @@ from src.infrastructure.drawing.api_requests.doubao import build_doubao_payload
 @pytest.mark.parametrize("pro,limit", [(False, 14), (True, 10)])
 def test_doubao_model_limits_and_sequential_capability(pro, limit):
     context = DrawingRequestContext(
-        SimpleNamespace(_get_provider_value=lambda key, provider: provider.get(key)),
+        SimpleNamespace(get_provider_value=lambda key, provider: provider.get(key)),
         None,
         None,
     )
@@ -32,7 +32,7 @@ def test_doubao_model_limits_and_sequential_capability(pro, limit):
 
 def test_doubao_single_reference_and_endpoint_model_override():
     context = DrawingRequestContext(
-        SimpleNamespace(_get_provider_value=lambda key, provider: provider.get(key)),
+        SimpleNamespace(get_provider_value=lambda key, provider: provider.get(key)),
         None,
         None,
     )

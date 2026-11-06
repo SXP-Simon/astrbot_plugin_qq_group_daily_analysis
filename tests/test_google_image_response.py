@@ -129,8 +129,8 @@ async def test_google_request_keeps_injected_transport_and_shared_parser(
     factory = MagicMock(return_value=client)
     monkeypatch.setattr(common.httpx, "AsyncClient", factory)
     hooks = MagicMock()
-    hooks._get_provider_value.side_effect = lambda name, provider: provider.get(name)
-    hooks._get_request_proxy.return_value = "http://configured-proxy:8080"
+    hooks.get_provider_value.side_effect = lambda name, provider: provider.get(name)
+    hooks.get_request_proxy.return_value = "http://configured-proxy:8080"
     context = DrawingRequestContext(
         hooks, AsyncMock(), response_service.extract_image_from_response
     )

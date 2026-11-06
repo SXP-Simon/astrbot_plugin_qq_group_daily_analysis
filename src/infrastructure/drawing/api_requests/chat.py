@@ -16,7 +16,7 @@ async def call_chat_api(
     context: DrawingRequestContext,
     prompt: str,
     images_data: list[tuple[bytes, str]] | None = None,
-    provider: dict | None = None,
+    provider: dict[str, object] | None = None,
 ) -> bytes | None:
     provider = provider or {}
     raw_url = str(context.get_provider_value("api_url", provider) or "")
@@ -56,7 +56,7 @@ async def call_chat_api(
         orientation = "Square Orientation"
     full_prompt = f"{prompt}\n\n[Image Layout & Spec Requirements: Aspect Ratio {effective_aspect_ratio}, Resolution {resolved_size}, {orientation}]"
 
-    content = []
+    content: list[dict[str, object]] = []
     for img_bytes, mime in images_data or []:
         b64 = base64.b64encode(img_bytes).decode("utf-8")
         content.append(
