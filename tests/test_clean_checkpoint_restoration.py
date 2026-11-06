@@ -22,7 +22,7 @@ def test_clean_checkpoint_restores_domain_data_without_mutating_snapshot(seriali
     result, messages, top_users = AnalysisRecoveryService._restore_clean_checkpoint(checkpoint, "123")
     assert result["statistics"].message_count == 1
     assert result["user_analysis"] == {"u": {"message_count": 1}}
-    assert top_users == [{"user_id": "u"}]
+    assert top_users == [{"user_id": "u", "message_count": 0}]
     assert len(messages) == 1
     assert messages[0].text_content == "恢复正文"
     assert messages[0].group_id == "123"

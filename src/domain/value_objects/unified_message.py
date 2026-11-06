@@ -9,6 +9,52 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import TypedDict
+
+
+class LegacySenderPayload(TypedDict, total=False):
+    """已有分析器使用的发送者字段，由统一消息转换得到。"""
+
+    user_id: str | int
+    nickname: str
+    card: str
+
+
+class LegacySegmentData(TypedDict, total=False):
+    """已有分析器读取的消息段字段。"""
+
+    text: str
+    id: str | int
+    user_id: str | int
+    qq: str | int
+    summary: str
+
+
+class LegacySegmentPayload(TypedDict, total=False):
+    """已有分析器使用的消息段结构。"""
+
+    type: str
+    data: LegacySegmentData
+
+
+class LegacyMessagePayload(TypedDict, total=False):
+    """统一消息到旧分析接口的明确转换契约，不代表未校验的平台响应。"""
+
+    time: int
+    sender: LegacySenderPayload
+    message: list[LegacySegmentPayload]
+    user_id: str | int
+    group_id: str | int
+    message_id: str | int
+
+
+class AnalysisTextMessage(TypedDict):
+    """交给提示词构建器的文本消息。"""
+
+    time: str
+    sender: str
+    content: str
+    user_id: str
 
 
 class MessageContentType(Enum):
