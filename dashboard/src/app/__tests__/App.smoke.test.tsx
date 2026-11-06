@@ -2,6 +2,7 @@ import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { App } from "../App";
+import { toast } from "sonner";
 import * as devBridge from "../../shared/api/devBridge";
 import * as traceApi from "../../entities/trace/api/traceApi";
 
@@ -47,6 +48,12 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
         await Promise.allSettled(pending);
       });
       expect(screen.getByText("142")).toBeInTheDocument();
+      act(() => {
+        toast.success("示例：任务已提交", { duration: Infinity });
+      });
+      expect(await screen.findByText("示例：任务已提交")).toBeVisible();
+      expect(screen.getByLabelText("操作通知（Alt+T）")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "关闭提示" }));
       for (const event of ["task_canceled", "task_timed_out", "task_finished"]) {
         cacheSpy.mockClear();
         act(() => receiveEvent?.({ parsed: { event, data: { task_id: "WEBUI-CANCEL" } } }));
@@ -77,6 +84,7 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
       });
       expect(activeQueries()).toBe(beforeHiddenEvent + 1);
     } finally {
+      toast.dismiss();
       view.unmount();
       // 等待初始化引出的详情请求收尾，避免回调落到已销毁的测试环境。
       await act(async () => {

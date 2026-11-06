@@ -10,6 +10,7 @@ import {
   IconTerminal2,
 } from "@tabler/icons-react";
 import { AppShell } from "./ui/AppShell";
+import { Toaster } from "../shared/ui/sonner";
 import { usePageNavigation } from "./model/usePageNavigation";
 import { subscribeSSE } from "../shared/api/bridge";
 import { useTheme } from "../shared/lib/useTheme";
@@ -259,6 +260,7 @@ export const App: React.FC = () => {
           }}
         >
           <div>
+            <Toaster />
             <AppShell
               activePage={activeTab}
               visited={visited}
