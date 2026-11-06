@@ -17,6 +17,40 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TypedDict
+
+from ...shared.type_guards import is_object_list, is_string_mapping
+from ..value_objects.analysis_results import (
+    GoldenQuote,
+    GoldenQuotePayload,
+    MergedUserActivity,
+    QualityReview,
+    QualityReviewPayload,
+    SummaryTopic,
+    SummaryTopicPayload,
+    TokenUsage,
+    UserActivityPayload,
+    UserActivityRanking,
+    parse_user_activity,
+)
+
+
+class IncrementalBatchPayload(TypedDict, total=False):
+    group_id: str
+    batch_id: str
+    timestamp: float
+    messages_count: int
+    characters_count: int
+    hourly_msg_counts: dict[str, int]
+    hourly_char_counts: dict[str, int]
+    user_stats: dict[str, UserActivityPayload]
+    emoji_stats: dict[str, int | dict[str, int]]
+    topics: list[SummaryTopicPayload]
+    golden_quotes: list[GoldenQuotePayload]
+    token_usage: dict[str, int]
+    chat_quality_review: QualityReviewPayload | None
+    last_message_timestamp: int
+    participant_ids: list[str]
 
 
 @dataclass
@@ -52,21 +86,27 @@ class IncrementalBatch:
     # 统计数据
     messages_count: int = 0
     characters_count: int = 0
-    hourly_msg_counts: dict[str, int] = field(default_factory=dict)
-    hourly_char_counts: dict[str, int] = field(default_factory=dict)
+    hourly_msg_counts: dict[str, int] = field(default_factory=dict[str, int])
+    hourly_char_counts: dict[str, int] = field(default_factory=dict[str, int])
 
     # 用户活跃数据
-    user_stats: dict[str, dict] = field(default_factory=dict)
+    user_stats: dict[str, UserActivityPayload] = field(
+        default_factory=dict[str, UserActivityPayload]
+    )
 
     # 表情统计
-    emoji_stats: dict[str, object] = field(default_factory=dict)
+    emoji_stats: dict[str, int | dict[str, int]] = field(
+        default_factory=dict[str, int | dict[str, int]]
+    )
 
     # LLM 分析结果
-    topics: list[dict] = field(default_factory=list)
-    golden_quotes: list[dict] = field(default_factory=list)
+    topics: list[SummaryTopicPayload] = field(default_factory=list[SummaryTopicPayload])
+    golden_quotes: list[GoldenQuotePayload] = field(
+        default_factory=list[GoldenQuotePayload]
+    )
 
     # Token 消耗
-    token_usage: dict = field(
+    token_usage: dict[str, int] = field(
         default_factory=lambda: {
             "prompt_tokens": 0,
             "completion_tokens": 0,
@@ -75,11 +115,11 @@ class IncrementalBatch:
     )
 
     # 增量追踪
-    chat_quality_review: dict[str, object] | None = None
+    chat_quality_review: QualityReviewPayload | None = None
     last_message_timestamp: int = 0
-    participant_ids: list[str] = field(default_factory=list)
+    participant_ids: list[str] = field(default_factory=list[str])
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> IncrementalBatchPayload:
         """序列化为字典，用于 KV 存储"""
         return {
             "group_id": self.group_id,
@@ -100,34 +140,120 @@ class IncrementalBatch:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> IncrementalBatch:
+    def from_dict(cls, data: object) -> IncrementalBatch:
         """从字典反序列化"""
-        return cls(
-            group_id=data.get("group_id", ""),
-            batch_id=data.get("batch_id", ""),
-            timestamp=data.get("timestamp", 0.0),
-            messages_count=data.get("messages_count", 0),
-            characters_count=data.get("characters_count", 0),
-            hourly_msg_counts=data.get("hourly_msg_counts", {}),
-            hourly_char_counts=data.get("hourly_char_counts", {}),
-            user_stats=data.get("user_stats", {}),
-            emoji_stats=data.get("emoji_stats", {}),
-            topics=data.get("topics", []),
-            golden_quotes=data.get("golden_quotes", []),
-            token_usage=data.get(
-                "token_usage",
-                {
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                },
-            ),
-            chat_quality_review=data.get("chat_quality_review"),
-            last_message_timestamp=data.get("last_message_timestamp", 0),
-            participant_ids=data.get("participant_ids", []),
+        if not is_string_mapping(data):
+            raise ValueError("增量批次必须是字段名称为字符串的字典")
+
+        user_stats = parse_user_activity(data.get("user_stats", {}))
+
+        emoji_stats: dict[str, int | dict[str, int]] = {}
+        raw_emoji = data.get("emoji_stats", {})
+        if is_string_mapping(raw_emoji):
+            for key, value in raw_emoji.items():
+                if isinstance(value, int):
+                    emoji_stats[key] = value
+                elif is_string_mapping(value):
+                    emoji_stats[key] = {
+                        name: count
+                        for name, count in value.items()
+                        if isinstance(count, int)
+                    }
+
+        raw_topics = data.get("topics", [])
+        topics = (
+            [
+                SummaryTopic.from_dict(item).to_dict()
+                for item in raw_topics
+                if is_string_mapping(item)
+            ]
+            if is_object_list(raw_topics)
+            else []
+        )
+        raw_quotes = data.get("golden_quotes", [])
+        quotes = (
+            [
+                GoldenQuote.from_dict(item).to_dict()
+                for item in raw_quotes
+                if is_string_mapping(item)
+            ]
+            if is_object_list(raw_quotes)
+            else []
+        )
+        raw_tokens = data.get("token_usage", {})
+        tokens = (
+            TokenUsage.from_dict(raw_tokens)
+            if is_string_mapping(raw_tokens)
+            else TokenUsage()
+        )
+        raw_quality = data.get("chat_quality_review")
+        quality = (
+            QualityReview.from_dict(raw_quality).to_dict()
+            if is_string_mapping(raw_quality)
+            else None
+        )
+        raw_participants = data.get("participant_ids", [])
+        participant_ids = (
+            [item for item in raw_participants if isinstance(item, str)]
+            if is_object_list(raw_participants)
+            else []
         )
 
-    def get_summary(self) -> dict:
+        # 批次身份和游标无法解释时拒绝加载，避免把错误数据推进分析游标。
+        group_id = data.get("group_id", "")
+        batch_id = data.get("batch_id", "")
+        timestamp = data.get("timestamp", 0.0)
+        last_timestamp = data.get("last_message_timestamp", 0)
+        messages_count = data.get("messages_count", 0)
+        characters_count = data.get("characters_count", 0)
+        if (
+            not isinstance(group_id, str)
+            or not isinstance(batch_id, str)
+            or not isinstance(timestamp, (int, float))
+            or not isinstance(last_timestamp, int)
+            or not isinstance(messages_count, int)
+            or not isinstance(characters_count, int)
+        ):
+            raise ValueError("增量批次的标识、时间戳或计数格式无效")
+        raw_hourly_messages = data.get("hourly_msg_counts", {})
+        hourly_messages = (
+            {
+                key: value
+                for key, value in raw_hourly_messages.items()
+                if isinstance(value, int)
+            }
+            if is_string_mapping(raw_hourly_messages)
+            else {}
+        )
+        raw_hourly_characters = data.get("hourly_char_counts", {})
+        hourly_characters = (
+            {
+                key: value
+                for key, value in raw_hourly_characters.items()
+                if isinstance(value, int)
+            }
+            if is_string_mapping(raw_hourly_characters)
+            else {}
+        )
+        return cls(
+            group_id=group_id,
+            batch_id=batch_id,
+            timestamp=timestamp,
+            messages_count=messages_count,
+            characters_count=characters_count,
+            hourly_msg_counts=hourly_messages,
+            hourly_char_counts=hourly_characters,
+            user_stats=user_stats,
+            emoji_stats=emoji_stats,
+            topics=topics,
+            golden_quotes=quotes,
+            token_usage=tokens.to_dict(),
+            chat_quality_review=quality,
+            last_message_timestamp=last_timestamp,
+            participant_ids=participant_ids,
+        )
+
+    def get_summary(self) -> dict[str, object]:
         """获取批次摘要信息"""
         return {
             "batch_id": self.batch_id[:8],
@@ -173,28 +299,34 @@ class IncrementalState:
     window_end: float = 0.0
 
     # 合并后的 LLM 分析结果
-    topics: list[dict] = field(default_factory=list)
-    golden_quotes: list[dict] = field(default_factory=list)
-    chat_quality_review: dict[str, object] | None = None
-    all_quality_reviews: list[dict] = field(
-        default_factory=list
+    topics: list[SummaryTopicPayload] = field(default_factory=list[SummaryTopicPayload])
+    golden_quotes: list[GoldenQuotePayload] = field(
+        default_factory=list[GoldenQuotePayload]
+    )
+    chat_quality_review: QualityReviewPayload | None = None
+    all_quality_reviews: list[QualityReviewPayload] = field(
+        default_factory=list[QualityReviewPayload]
     )  # 存储所有批次的质量锐评，用于最终报告时的汇总分析
 
     # 合并后的统计数据（按小时）
-    hourly_message_counts: dict[str, int] = field(default_factory=dict)
-    hourly_character_counts: dict[str, int] = field(default_factory=dict)
+    hourly_message_counts: dict[str, int] = field(default_factory=dict[str, int])
+    hourly_character_counts: dict[str, int] = field(default_factory=dict[str, int])
 
     # 用户活跃数据
-    user_activities: dict[str, dict] = field(default_factory=dict)
+    user_activities: dict[str, MergedUserActivity] = field(
+        default_factory=dict[str, MergedUserActivity]
+    )
 
     # 表情统计
-    emoji_counts: dict[str, object] = field(default_factory=dict)
+    emoji_counts: dict[str, int | dict[str, int]] = field(
+        default_factory=dict[str, int | dict[str, int]]
+    )
 
     # 汇总统计
     total_message_count: int = 0
     total_character_count: int = 0
     total_analysis_count: int = 0
-    total_token_usage: dict = field(
+    total_token_usage: dict[str, int] = field(
         default_factory=lambda: {
             "prompt_tokens": 0,
             "completion_tokens": 0,
@@ -204,7 +336,7 @@ class IncrementalState:
 
     # 增量跟踪
     last_analyzed_message_timestamp: int = 0
-    all_participant_ids: set[str] = field(default_factory=set)
+    all_participant_ids: set[str] = field(default_factory=set[str])
 
     # 元数据
     created_at: float = field(default_factory=time.time)
@@ -242,7 +374,7 @@ class IncrementalState:
         hour = peak[0]
         return f"{hour:02d}:00-{hour + 1:02d}:00"
 
-    def get_user_activity_ranking(self, top_n: int = 10) -> list[dict]:
+    def get_user_activity_ranking(self, top_n: int = 10) -> list[UserActivityRanking]:
         """
         获取用户活跃度排名。
 
@@ -252,12 +384,12 @@ class IncrementalState:
         Returns:
             list[dict]: 按消息数降序排列的用户列表
         """
-        users = []
+        users: list[UserActivityRanking] = []
         for user_id, data in self.user_activities.items():
             users.append(
                 {
                     "user_id": user_id,
-                    "name": data.get("nickname", data.get("name", user_id)),
+                    "name": data.get("nickname", user_id),
                     "message_count": data.get("message_count", 0),
                     "char_count": data.get("char_count", 0),
                 }
@@ -282,7 +414,7 @@ class IncrementalState:
             return end_date
         return f"{start_date} ~ {end_date}"
 
-    def get_summary(self) -> dict:
+    def get_summary(self) -> dict[str, object]:
         """
         获取当前增量状态的摘要信息，用于状态查询命令。
 
@@ -309,7 +441,9 @@ class IncrementalState:
 
     @staticmethod
     def is_duplicate_topic(
-        new_topic: dict, existing_topics: list[dict], threshold: float = 0.6
+        new_topic: SummaryTopicPayload,
+        existing_topics: list[SummaryTopicPayload],
+        threshold: float = 0.6,
     ) -> bool:
         """
         检测话题是否与已有话题重复。
@@ -342,7 +476,9 @@ class IncrementalState:
 
     @staticmethod
     def is_duplicate_quote(
-        new_quote: dict, existing_quotes: list[dict], threshold: float = 0.7
+        new_quote: GoldenQuotePayload,
+        existing_quotes: list[GoldenQuotePayload],
+        threshold: float = 0.7,
     ) -> bool:
         """
         检测金句是否与已有金句重复。
