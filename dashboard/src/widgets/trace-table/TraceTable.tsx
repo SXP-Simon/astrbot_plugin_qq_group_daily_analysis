@@ -1,11 +1,10 @@
-import React from "react";
-import { Table, Tag, Tooltip, Progress, Button, Skeleton, Empty, Space } from "antd";
-import type { TablePaginationConfig } from "antd/es/table";
-import type { FilterValue, SorterResult } from "antd/es/table/interface";
-import { EyeOutlined } from "@ant-design/icons";
-import { TraceRecord } from "../../entities/trace/model/types";
+import { IconArrowDown, IconArrowUp, IconArrowsSort, IconEye } from "@tabler/icons-react";
+import type { TraceRecord } from "../../entities/trace/model/types";
+import type { TraceSortField, TraceSortOrder } from "../../entities/trace/model/traceQuery";
 import { StatusTag } from "../../shared/ui/StatusTag";
 import { TriggerTypeTag } from "../../shared/ui/TriggerTypeTag";
+import { Button } from "../../shared/ui/button";
+import { Pagination } from "../../shared/ui/pagination";
 import { formatDuration, formatTokens, formatTimestamp } from "../../shared/lib/formatters";
 
 interface TraceTableProps {
@@ -14,221 +13,197 @@ interface TraceTableProps {
   loading: boolean;
   page: number;
   pageSize: number;
+  sortField: TraceSortField;
+  sortOrder: TraceSortOrder;
   onViewTrace: (traceId: string) => void;
-  onTableChange: (
-    pagination: TablePaginationConfig,
-    filters: Record<string, FilterValue | null>,
-    sorter: SorterResult<TraceRecord> | SorterResult<TraceRecord>[],
-  ) => void;
+  onPageChange: (page: number, pageSize: number) => void;
+  onSortChange: (field: TraceSortField) => void;
 }
 
-export const TraceTable: React.FC<TraceTableProps> = ({
+const sortedColumns: { label: string; field: TraceSortField }[] = [
+  { label: "耗时", field: "duration_ms" },
+  { label: "模型消耗", field: "total_tokens" },
+  { label: "消息留存率", field: "compression_ratio" },
+  { label: "开始时间", field: "started_at" },
+];
+
+export function TraceTable({
   traces,
   total,
   loading,
   page,
   pageSize,
+  sortField,
+  sortOrder,
   onViewTrace,
-  onTableChange,
-}) => {
-  const columns = [
-    {
-      title: "任务编号",
-      dataIndex: "trace_id",
-      key: "trace_id",
-      width: 170,
-      render: (id: string) => (
-        <a className="font-mono text-xs font-semibold" onClick={() => onViewTrace(id)}>
-          {id}
-        </a>
-      ),
-    },
-    {
-      title: "群聊",
-      dataIndex: "group_id",
-      key: "group_id",
-      width: 180,
-      render: (gid: string, r: TraceRecord) => {
-        const p =
-          !r.platform || r.platform === "auto" || r.platform === "default" ? "" : r.platform;
-        return (
-          <Tooltip title={`群号: ${gid}${p ? ` | 平台: ${p}` : ""}`}>
-            <span className="font-mono text-xs">
-              {r.group_name || "未知群"} ({gid})
-            </span>
-          </Tooltip>
-        );
-      },
-    },
-    {
-      title: "平台",
-      dataIndex: "platform",
-      key: "platform",
-      width: 80,
-      render: (p: string) => {
-        const displayP = !p || p === "auto" || p === "default" ? "-" : p;
-        return <Tag>{displayP}</Tag>;
-      },
-    },
-    {
-      title: "触发方式",
-      dataIndex: "trigger_type",
-      key: "trigger_type",
-      width: 120,
-      render: (t: string, record: TraceRecord) => {
-        const isFallback = Boolean(
-          record.extra?.fallback_to_fresh_run ||
-          (record.extra as Record<string, unknown> | undefined)?.resumed_from ===
-            "fresh_run_fallback",
-        );
-        return (
-          <Space size={2} wrap>
-            <TriggerTypeTag triggerType={t} />
-            {isFallback && (
-              <Tooltip title="未检测到历史快照，已自动降级为全量重新拉取分析">
-                <Tag
-                  color="orange"
-                  style={{ margin: 0, fontSize: 10, padding: "0 4px", lineHeight: "16px" }}
-                >
-                  降级全量
-                </Tag>
-              </Tooltip>
-            )}
-          </Space>
-        );
-      },
-    },
-    {
-      title: "状态",
-      dataIndex: "status",
-      key: "status",
-      width: 105,
-      render: (_: string, record: TraceRecord) => {
-        const hasWarningSpan = record.spans?.some(
-          (s) =>
-            s.status === "warning" ||
-            s.payload?.success === false ||
-            Boolean(s.payload?.warning) ||
-            (Array.isArray(s.payload?.subtask_errors) && s.payload.subtask_errors.length > 0),
-        );
-        const hasWarning =
-          record.status === "warning" ||
-          Boolean(record.extra?.has_warnings) ||
-          (record.status === "succeeded" && hasWarningSpan);
-
-        const effectiveStatus = hasWarning ? "warning" : record.status;
-        return <StatusTag status={effectiveStatus} />;
-      },
-    },
-    {
-      title: "耗时",
-      dataIndex: "duration_ms",
-      key: "duration_ms",
-      width: 95,
-      sorter: true,
-      render: (dur?: number) => (
-        <span className="font-mono text-xs font-semibold" style={{ color: "#1677ff" }}>
-          {formatDuration(dur)}
-        </span>
-      ),
-    },
-    {
-      title: "模型消耗",
-      dataIndex: "total_tokens",
-      key: "total_tokens",
-      width: 95,
-      sorter: true,
-      render: (t?: number) => <span className="font-mono text-xs">{formatTokens(t)}</span>,
-    },
-    {
-      title: "消息留存率",
-      dataIndex: "compression_ratio",
-      key: "compression_ratio",
-      width: 120,
-      sorter: true,
-      render: (ratio: number | undefined, r: TraceRecord) => {
-        if (ratio === undefined || ratio === null) return <span className="text-xs">-</span>;
-        const pct = Math.round(ratio * 100);
-        return (
-          <Tooltip
-            title={`读取: ${r.raw_message_count || 0}条 / 有效: ${r.cleaned_message_count || 0}条`}
-          >
-            <Progress percent={pct} size="small" style={{ width: 80 }} />
-          </Tooltip>
-        );
-      },
-    },
-    {
-      title: "开始时间",
-      dataIndex: "started_at",
-      key: "started_at",
-      width: 165,
-      sorter: true,
-      defaultSortOrder: "descend" as const,
-      render: (ts: number) => (
-        <Tooltip title={`记录时间戳: ${ts}`}>
-          <span className="font-mono text-xs">{formatTimestamp(ts)}</span>
-        </Tooltip>
-      ),
-    },
-    {
-      title: "操作",
-      key: "action",
-      width: 80,
-      render: (_value: unknown, r: TraceRecord) => (
-        <Button
-          size="small"
-          type="link"
-          icon={<EyeOutlined />}
-          onClick={() => onViewTrace(r.trace_id)}
-        >
-          详情
-        </Button>
-      ),
-    },
-  ];
-
-  if (loading && traces.length === 0) {
-    return (
-      <div style={{ padding: "24px 12px", minHeight: 460 }}>
-        <Skeleton
-          active
-          paragraph={{
-            rows: 8,
-            width: ["100%", "95%", "90%", "100%", "92%", "96%", "85%", "70%"],
-          }}
-        />
-      </div>
-    );
-  }
-
+  onPageChange,
+  onSortChange,
+}: TraceTableProps) {
   return (
-    <div style={{ minHeight: 460 }}>
-      {traces.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="暂无符合条件的分析记录"
-          style={{ margin: "64px 0" }}
-        />
-      ) : (
-        <Table
-          size="small"
-          columns={columns}
-          dataSource={traces}
-          rowKey="trace_id"
-          loading={loading}
-          scroll={{ x: 1200 }}
-          onChange={onTableChange}
-          pagination={{
-            current: page,
-            pageSize: pageSize,
-            total: total,
-            showSizeChanger: true,
-            pageSizeOptions: ["10", "15", "20", "50", "100"],
-            showTotal: (t) => `共 ${t} 条记录`,
-          }}
-        />
+    <div aria-busy={loading}>
+      {loading && (
+        <p role="status" className="text-sm text-muted-foreground">
+          正在更新分析记录…
+        </p>
       )}
+      <div
+        className="overflow-x-auto rounded-xl border border-solid border-border bg-card focus-visible:outline-2 focus-visible:outline-ring"
+        role="region"
+        aria-label="分析记录列表"
+        tabIndex={0}
+      >
+        <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+          <caption className="sr-only">
+            分析记录，可按耗时、模型消耗、消息留存率或开始时间排序
+          </caption>
+          <thead className="bg-muted text-muted-foreground">
+            <tr>
+              {["群聊 / 平台", "任务编号", "触发方式", "状态"].map((title) => (
+                <th key={title} scope="col" className="px-4 py-3 font-medium">
+                  {title}
+                </th>
+              ))}
+              {sortedColumns.map(({ label, field }) => {
+                const Icon =
+                  sortField === field
+                    ? sortOrder === "desc"
+                      ? IconArrowDown
+                      : IconArrowUp
+                    : IconArrowsSort;
+                return (
+                  <th
+                    scope="col"
+                    key={field}
+                    aria-sort={
+                      sortField === field
+                        ? sortOrder === "desc"
+                          ? "descending"
+                          : "ascending"
+                        : "none"
+                    }
+                    className="px-2 py-2 font-medium"
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`按${label}排序`}
+                      onClick={() => onSortChange(field)}
+                    >
+                      {label}
+                      <Icon aria-hidden="true" />
+                    </Button>
+                  </th>
+                );
+              })}
+              <th scope="col" className="sticky right-0 bg-muted px-4 py-3 font-medium">
+                操作
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {traces.map((trace) => {
+              const hasWarning =
+                Boolean(trace.extra?.has_warnings) ||
+                trace.spans?.some(
+                  (span) =>
+                    span.status === "warning" ||
+                    span.payload?.success === false ||
+                    Boolean(span.payload?.warning) ||
+                    (Array.isArray(span.payload?.subtask_errors) &&
+                      span.payload.subtask_errors.length > 0),
+                );
+              const status =
+                ["succeeded", "completed"].includes(trace.status) && hasWarning
+                  ? "warning"
+                  : trace.status;
+              const fallback =
+                trace.extra?.fallback_to_fresh_run === true ||
+                trace.extra?.resumed_from === "fresh_run_fallback";
+              const ratio = trace.compression_ratio;
+              const retention =
+                typeof ratio === "number" && Number.isFinite(ratio) && ratio >= 0
+                  ? `${Math.round(ratio * 100)}%`
+                  : "未记录";
+              return (
+                <tr
+                  key={trace.trace_id}
+                  className="border-0 border-t border-solid border-border hover:bg-accent/50"
+                >
+                  <td className="max-w-60 px-4 py-4">
+                    <div className="break-words font-medium">{trace.group_name || "未知群"}</div>
+                    <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                      {trace.platform && !["auto", "default"].includes(trace.platform)
+                        ? `${trace.platform} · `
+                        : ""}
+                      {trace.group_id}
+                    </div>
+                  </td>
+                  <td className="max-w-52 px-4 py-4">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto whitespace-normal break-all p-0 text-left font-mono text-xs"
+                      onClick={() => onViewTrace(trace.trace_id)}
+                    >
+                      {trace.trace_id}
+                    </Button>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4">
+                    <TriggerTypeTag triggerType={trace.trigger_type} />
+                    {fallback && (
+                      <details className="mt-1 text-xs text-muted-foreground">
+                        <summary className="cursor-pointer">已重新全量分析</summary>
+                        未找到历史快照，本次重新拉取消息进行分析。
+                      </details>
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    <StatusTag status={status} />
+                  </td>
+                  <td className="px-4 py-4 font-mono text-xs">
+                    {typeof trace.duration_ms === "number" &&
+                    Number.isFinite(trace.duration_ms) &&
+                    trace.duration_ms >= 0
+                      ? trace.duration_ms === 0
+                        ? "0ms"
+                        : formatDuration(trace.duration_ms)
+                      : "未记录"}
+                  </td>
+                  <td className="px-4 py-4 font-mono text-xs">
+                    {formatTokens(trace.total_tokens ?? undefined)}
+                  </td>
+                  <td className="px-4 py-4 font-mono text-xs">
+                    <div>{retention}</div>
+                    <div className="mt-1 whitespace-nowrap text-muted-foreground">
+                      有效 {trace.cleaned_message_count ?? "未记录"} / 拉取{" "}
+                      {trace.raw_message_count ?? "未记录"}
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 font-mono text-xs">
+                    {formatTimestamp(trace.started_at)}
+                  </td>
+                  <td className="sticky right-0 bg-card px-3 py-4">
+                    <Button variant="outline" size="sm" onClick={() => onViewTrace(trace.trace_id)}>
+                      <IconEye aria-hidden="true" />
+                      详情
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {!loading && traces.length === 0 && (
+          <p className="py-12 text-center text-muted-foreground">暂无符合条件的分析记录</p>
+        )}
+      </div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        disabled={loading}
+        onChange={onPageChange}
+      />
     </div>
   );
-};
+}

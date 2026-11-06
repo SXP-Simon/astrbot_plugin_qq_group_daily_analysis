@@ -1,5 +1,4 @@
 import React from "react";
-import { Card } from "antd";
 import { TraceFilterBar } from "../../../features/filter-traces/ui/TraceFilterBar";
 import { TraceTable } from "../../../widgets/trace-table/TraceTable";
 import { useTracesViewModel } from "../model/useTracesViewModel";
@@ -26,12 +25,19 @@ export const TracesPage: React.FC<TracesPageProps> = ({ viewModel, onViewTrace }
     setSelectedGroup,
     setDateRange,
     groups,
-    handleTableChange,
+    dateRange,
+    sortField,
+    sortOrder,
+    changePage,
+    changeSort,
+    resetFilters,
+    error,
+    groupsError,
     refresh,
   } = viewModel;
 
   return (
-    <Card size="small">
+    <section className="space-y-5" aria-label="分析记录">
       {/* 过滤筛选工具栏 (Feature Molecule) */}
       <TraceFilterBar
         search={search}
@@ -39,14 +45,27 @@ export const TracesPage: React.FC<TracesPageProps> = ({ viewModel, onViewTrace }
         statusFilter={statusFilter}
         triggerTypeFilter={triggerTypeFilter}
         groups={groups}
+        dateRange={dateRange}
         loading={loading}
         onSearchChange={setSearch}
         onGroupChange={setSelectedGroup}
         onStatusChange={setStatusFilter}
         onTriggerTypeChange={setTriggerTypeFilter}
         onDateRangeChange={setDateRange}
-        onRefresh={refresh}
+        onReset={resetFilters}
+        onRefresh={() => refresh(false)}
       />
+      {groupsError && (
+        <p role="alert" className="text-sm text-destructive">
+          {groupsError}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+          {traces.length > 0 && " 下方保留上一次加载的记录。"}
+        </p>
+      )}
 
       {/* 紧凑数据表格 (Widget Organism) */}
       <TraceTable
@@ -56,8 +75,11 @@ export const TracesPage: React.FC<TracesPageProps> = ({ viewModel, onViewTrace }
         page={page}
         pageSize={pageSize}
         onViewTrace={onViewTrace}
-        onTableChange={handleTableChange}
+        sortField={sortField}
+        sortOrder={sortOrder}
+        onPageChange={changePage}
+        onSortChange={changeSort}
       />
-    </Card>
+    </section>
   );
 };
