@@ -9,6 +9,8 @@ import inspect
 import sys
 from typing import TYPE_CHECKING, Protocol, TypeAlias, runtime_checkable
 
+from ...shared.type_guards import is_string_mapping
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
@@ -132,8 +134,8 @@ class _RequestProxy:
             return {}
         res = getattr(target, "query", None)
         if res is not None:
-            if isinstance(res, dict):
-                return dict(res)
+            if is_string_mapping(res):
+                return {k: str(v) for k, v in res.items()}
             if hasattr(res, "items"):
                 return {str(k): str(v) for k, v in res.items()}
             if hasattr(res, "_pairs"):
@@ -145,8 +147,8 @@ class _RequestProxy:
                 pass
         res_params = getattr(target, "query_params", None)
         if res_params is not None:
-            if isinstance(res_params, dict):
-                return dict(res_params)
+            if is_string_mapping(res_params):
+                return {k: str(v) for k, v in res_params.items()}
             if hasattr(res_params, "items"):
                 return {str(k): str(v) for k, v in res_params.items()}
             try:
@@ -168,8 +170,8 @@ class _RequestProxy:
             return {}
         res = getattr(target, "headers", None)
         if res is not None:
-            if isinstance(res, dict):
-                return dict(res)
+            if is_string_mapping(res):
+                return {k: str(v) for k, v in res.items()}
             if hasattr(res, "items"):
                 return {str(k): str(v) for k, v in res.items()}
             try:
@@ -193,7 +195,7 @@ class _RequestProxy:
         if inspect.isawaitable(res):
             res = await res
         if res is not None:
-            if isinstance(res, dict):
+            if is_string_mapping(res):
                 return dict(res)
             if isinstance(res, UploadedFileMapping):
                 return dict(res.items())
@@ -212,7 +214,7 @@ class _RequestProxy:
                 res = fn()
                 if inspect.isawaitable(res):
                     res = await res
-                if isinstance(res, dict):
+                if is_string_mapping(res):
                     return dict(res)
             except Exception:
                 pass
@@ -232,7 +234,7 @@ class _RequestProxy:
                     b = b.decode("utf-8", errors="replace")
                 if isinstance(b, str) and b.strip():
                     parsed = json.loads(b)
-                    if isinstance(parsed, dict):
+                    if is_string_mapping(parsed):
                         return parsed
             except Exception:
                 pass

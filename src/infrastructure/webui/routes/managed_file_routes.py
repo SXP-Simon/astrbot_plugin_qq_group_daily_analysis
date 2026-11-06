@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, TypedDict
 from astrbot.api.star import StarTools
 
 from ....shared.constants import PLUGIN_NAME
+from ....shared.type_guards import is_object_list, is_string_mapping
 from ...persistence.managed_files import MAX_FILE_BYTES, ManagedFiles
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
@@ -177,20 +178,20 @@ class ManagedFileRoutes:
             partition, files = body.get("partition"), body.get("files")
             if (
                 not isinstance(partition, str)
-                or not isinstance(files, list)
+                or not is_object_list(files)
                 or not 1 <= len(files) <= 200
             ):
                 raise ValueError("请选择 1 到 200 个文件")
             selected: list[tuple[str, str]] = []
             for item in files:
                 if (
-                    not isinstance(item, dict)
+                    not is_string_mapping(item)
                     or not isinstance(item.get("name"), str)
                     or not isinstance(item.get("revision"), str)
                     or not item["revision"]
                 ):
                     raise ValueError("每个文件都需要名称和选中时的修订号")
-                selected.append((item["name"], item["revision"]))
+                selected.append((str(item["name"]), str(item["revision"])))
             if len({name for name, _ in selected}) != len(selected):
                 raise ValueError("所选文件存在重复项")
             store = self.store()

@@ -20,8 +20,8 @@ from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.active_task
 )
 from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.plugin_page_bridge import (
     PluginPageWebUIBridge,
-    _config_key_to_folder,
-    _sanitize_path_segment,
+    config_key_to_folder,
+    sanitize_path_segment,
 )
 from astrbot_plugin_qq_group_daily_analysis.src.shared.constants import AnalysisStage
 
@@ -69,9 +69,9 @@ def test_custom_t2i_probe_is_registered_on_plugin_bridge(bridge_setup):
 
 
 def test_path_sanitization_helpers():
-    assert _sanitize_path_segment("basic.enable_reply") == "basic_enable_reply"
-    assert _sanitize_path_segment("abc-123_XYZ") == "abc-123_XYZ"
-    assert _config_key_to_folder("basic.daily_comic.path") == "basic/daily_comic/path"
+    assert sanitize_path_segment("basic.enable_reply") == "basic_enable_reply"
+    assert sanitize_path_segment("abc-123_XYZ") == "abc-123_XYZ"
+    assert config_key_to_folder("basic.daily_comic.path") == "basic/daily_comic/path"
 
 
 @pytest.mark.asyncio

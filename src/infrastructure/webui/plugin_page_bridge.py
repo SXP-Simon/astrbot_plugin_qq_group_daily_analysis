@@ -22,7 +22,7 @@ from .routes import (
     TemplateRoutes,
     TraceRoutes,
 )
-from .routes.config_routes import _config_key_to_folder, _sanitize_path_segment
+from .routes.config_routes import config_key_to_folder, sanitize_path_segment
 from .routes.managed_file_routes import ManagedFileRoutes
 from .routes.managed_record_routes import ManagedRecordRoutes
 from .routes.managed_upload_routes import ManagedUploadRoutes
@@ -50,11 +50,11 @@ if TYPE_CHECKING:
 
 __all__ = [
     "PluginPageWebUIBridge",
-    "_config_key_to_folder",
-    "_sanitize_path_segment",
+    "config_key_to_folder",
     "error_response",
     "json_response",
     "request",
+    "sanitize_path_segment",
     "stream_response",
 ]
 

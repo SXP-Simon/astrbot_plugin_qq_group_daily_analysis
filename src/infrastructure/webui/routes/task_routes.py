@@ -15,6 +15,7 @@ from ....domain.value_objects.task_event import TaskEvent
 from ....domain.value_objects.task_status import TaskStatus
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
+from ....shared.type_guards import is_string_mapping
 from ....utils.logger import logger
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
@@ -253,7 +254,7 @@ class TaskRoutes:
                     or ""
                 )
                 trace_ctx.platform = str(dispatch_platform_id)
-                if self.report_dispatcher and isinstance(analysis_result, dict):
+                if self.report_dispatcher and is_string_mapping(analysis_result):
                     try:
                         async with trace_ctx.span_async(
                             AnalysisStage.DISPATCH_REPORT,
@@ -324,7 +325,7 @@ class TaskRoutes:
             # 归档日随源任务保留，避免历史续跑或跨日再次续跑误查当天快照。
             extra = trace_record.get("extra")
             archived_date = (
-                extra.get("analysis_date") if isinstance(extra, dict) else None
+                extra.get("analysis_date") if is_string_mapping(extra) else None
             )
             date_str: str | None = None
             if isinstance(archived_date, str):
@@ -507,7 +508,7 @@ class TaskRoutes:
                     or ""
                 )
                 trace_ctx.platform = str(dispatch_platform_id)
-                if self.report_dispatcher and isinstance(analysis_result, dict):
+                if self.report_dispatcher and is_string_mapping(analysis_result):
                     try:
                         async with trace_ctx.span_async(
                             AnalysisStage.DISPATCH_REPORT,

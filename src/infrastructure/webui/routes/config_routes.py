@@ -12,13 +12,17 @@ import json
 import re
 import time
 import uuid
-from collections.abc import Iterable
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING
 
 from astrbot.api.star import StarTools
 
 from ....shared.constants import DEFAULT_CDN_HOST, PLUGIN_NAME
+from ....shared.type_guards import (
+    is_object_list,
+    is_string_key_mapping,
+    is_string_mapping,
+)
 from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
 from ...config.config_migrator import LEGACY_RENDERING_RESOURCE_KEYS
@@ -55,8 +59,8 @@ if TYPE_CHECKING:
     from ...scheduler.auto_scheduler import AutoScheduler
 
 
-def _sanitize_path_segment(segment: str) -> str:
-    cleaned = []
+def sanitize_path_segment(segment: str) -> str:
+    cleaned: list[str] = []
     for ch in segment:
         if ("a" <= ch <= "z") or ("A" <= ch <= "Z") or ch.isdigit() or ch in {"-", "_"}:
             cleaned.append(ch)
@@ -66,9 +70,9 @@ def _sanitize_path_segment(segment: str) -> str:
     return result or "_"
 
 
-def _config_key_to_folder(key_path: str) -> str:
+def config_key_to_folder(key_path: str) -> str:
     """与 AstrBot 官方核心完全一致的 config_key 到存储目录转换规则（以 / 分隔）"""
-    parts = [_sanitize_path_segment(part) for part in key_path.split(".") if part]
+    parts = [sanitize_path_segment(part) for part in key_path.split(".") if part]
     return "/".join(parts) if parts else "_"
 
 
@@ -102,17 +106,19 @@ def _normalize_rendering_config_for_save(new_config: dict[str, object]) -> None:
     if "t2i_rendering" not in new_config:
         return
     rendering_config = new_config["t2i_rendering"]
-    if not isinstance(rendering_config, dict):
+    if not is_string_mapping(rendering_config):
         raise ValueError("t2i_rendering 必须是配置对象")
     if "t2i_rendering_strategies" in rendering_config:
         strategies = rendering_config["t2i_rendering_strategies"]
         if strategies == []:
             strategies = [dict(item) for item in DEFAULT_RENDERING_STRATEGY_PRESETS]
             rendering_config["t2i_rendering_strategies"] = strategies
-        if not isinstance(strategies, list):
+        if not is_object_list(strategies):
             raise ValueError("渲染方案必须是列表")
         priorities: list[int] = []
         for strategy in strategies:
+            if not is_string_mapping(strategy):
+                raise ValueError("渲染方案必须是配置对象")
             normalized = parse_rendering_strategies([strategy])[0]
             priorities.append(normalized["priority"])
             for key in ("cdn_base_url", "google_fonts", "gstatic"):
@@ -160,21 +166,21 @@ def _normalize_comic_references_for_save(
         OSError: 无法创建目录或保存迁移后的参考图。
     """
     comic = new_config.get("daily_comic")
-    if not isinstance(comic, dict):
+    if not is_string_mapping(comic):
         return
     characters = comic.get("comic_characters")
-    if not isinstance(characters, list):
+    if not is_object_list(characters):
         return
-    folder = _config_key_to_folder(
+    folder = config_key_to_folder(
         "daily_comic.comic_characters.templates.character.reference_images"
     )
     for character in characters:
-        if not isinstance(character, dict):
+        if not is_string_mapping(character):
             continue
         if not character.get("__template_key"):
             character["__template_key"] = "character"
         references = character.get("reference_images")
-        if not isinstance(references, list):
+        if not is_object_list(references):
             continue
         cleaned: list[object] = []
         for item in references:
@@ -326,23 +332,27 @@ class ConfigRoutes:
                     else None
                 )
             )
-            config_dict = {}
+            config_dict: dict[str, object] = {}
             revision = _config_revision(config_dict)
             if cfg_mgr:
                 cfg_mgr.refresh_rendering_schema_options()
-                config_dict = {str(k): v for k, v in cfg_mgr.config.items()}
+                config_dict = (
+                    dict(cfg_mgr.config) if is_string_mapping(cfg_mgr.config) else {}
+                )
                 revision = _config_revision(config_dict)
                 rendering = config_dict.get("t2i_rendering")
-                if isinstance(rendering, dict):
+                if is_string_mapping(rendering):
                     raw = rendering.get("t2i_rendering_strategies") or list(
                         DEFAULT_RENDERING_STRATEGY_PRESETS
                     )
                     try:
                         # 只补齐编辑视图，不写盘；保留顺序和扩展字段，迁移服务条目类型。
-                        projected = []
-                        if not isinstance(raw, list):
+                        projected: list[dict[str, object]] = []
+                        if not is_object_list(raw):
                             raise ValueError("渲染方案必须是列表")
                         for item in raw:
+                            if not is_string_mapping(item):
+                                raise ValueError("渲染方案必须是配置对象")
                             normalized = parse_rendering_strategies([item])[0]
                             projected_item = {**item, **normalized}
                             if normalized["render_service"] != "custom":
@@ -583,7 +593,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
             except Exception:
                 body = {}
             new_config = body.get("config")
-            if not isinstance(new_config, dict):
+            if not is_string_mapping(new_config):
                 return error_response("缺少有效的 config 配置数据", status_code=400)
 
             save_dto: ConfigSaveDTO = {"config": new_config}
@@ -625,17 +635,17 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 return error_response(str(exc), status_code=400)
 
             daily_comic_config = new_config.get("daily_comic")
-            if isinstance(daily_comic_config, dict):
+            if is_string_mapping(daily_comic_config):
                 daily_comic_config.pop("drawing_reference_image", None)
 
             auto_analysis_config = new_config.get("auto_analysis")
-            if isinstance(auto_analysis_config, dict) and (
+            if is_string_mapping(auto_analysis_config) and (
                 "auto_analysis_time" in auto_analysis_config
             ):
                 configured_times = auto_analysis_config["auto_analysis_time"]
                 if isinstance(configured_times, str):
                     configured_times = [configured_times]
-                if not isinstance(configured_times, list):
+                if not is_object_list(configured_times):
                     return error_response(
                         "自动分析时间必须是 HH:MM 格式的字符串列表",
                         status_code=400,
@@ -719,7 +729,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                     "daily_comic.comic_characters.templates.character.reference_images"
                 )
 
-            folder = _config_key_to_folder(config_key)
+            folder = config_key_to_folder(config_key)
 
             target_dirs: list[Path] = []
             try:
@@ -762,10 +772,10 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                         uploaded_files = req_files
 
                     getlist_fn = getattr(uploaded_files, "getlist", None)
-                    if callable(getlist_fn) and isinstance(uploaded_files, Iterable):
+                    if callable(getlist_fn) and is_string_key_mapping(uploaded_files):
                         for key in uploaded_files:
                             file_items = getlist_fn(key)
-                            if not isinstance(file_items, list):
+                            if not is_object_list(file_items):
                                 continue
                             for f in file_items:
                                 orig_name = (
