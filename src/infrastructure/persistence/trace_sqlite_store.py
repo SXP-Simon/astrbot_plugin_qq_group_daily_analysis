@@ -1086,7 +1086,10 @@ class TraceSQLiteStore:
             query = """
                 WITH ranked_traces AS (
                     SELECT group_id, group_name, platform, started_at,
-                           ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY started_at DESC) AS rn
+                           ROW_NUMBER() OVER (
+                               PARTITION BY group_id, COALESCE(platform, '')
+                               ORDER BY started_at DESC
+                           ) AS rn
                     FROM analysis_traces
                     WHERE group_id != ''
                       AND group_name LIKE ?
