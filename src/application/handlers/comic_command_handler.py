@@ -8,12 +8,13 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
 from ...domain.value_objects.analysis_results import SummaryTopic
 from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 from ..services.analysis_application_service import (
     AnalysisApplicationService,
@@ -25,13 +26,24 @@ if TYPE_CHECKING:
 
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
-    from ...domain.repositories.plugin_host_repository import PluginHostProtocol
     from ...domain.value_objects import AnalysisResultPayload
+    from ...entrypoints.plugin_host import PluginHostProtocol
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.platform.bot_manager import BotManager
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
     from ..services.comic_application_service import ComicApplicationService
     from ..services.stop_request import StopRequest
+
+
+@runtime_checkable
+class LegacyTopic(Protocol):
+    """旧话题对象只读取标题和详情，值在使用时转换为文字。"""
+
+    @property
+    def topic(self) -> object: ...
+
+    @property
+    def detail(self) -> object: ...
 
 
 class ComicCommandHandler:
@@ -46,7 +58,7 @@ class ComicCommandHandler:
     plugin_instance: PluginHostProtocol | None
     terminating: bool
     _comic_semaphore: asyncio.Semaphore
-    _comic_group_tasks: dict[str, asyncio.Task[object]]
+    comic_group_tasks: dict[str, asyncio.Task[object]]
     _background_tasks: set[asyncio.Task[object]]
 
     def __init__(
@@ -77,7 +89,7 @@ class ComicCommandHandler:
         except (TypeError, ValueError, AttributeError):
             max_concurrent = 1
         self._comic_semaphore = asyncio.Semaphore(max(1, max_concurrent))
-        self._comic_group_tasks: dict[str, asyncio.Task[object]] = {}
+        self.comic_group_tasks: dict[str, asyncio.Task[object]] = {}
         self._background_tasks: set[asyncio.Task[object]] = set()
 
     def set_terminating(self, terminating: bool) -> None:
@@ -173,7 +185,7 @@ class ComicCommandHandler:
                 return
 
             task_key = f"{platform_id or 'default'}:{group_id}"
-            existing_task = self._comic_group_tasks.get(task_key)
+            existing_task = self.comic_group_tasks.get(task_key)
             if existing_task and not existing_task.done():
                 yield event.plain_result("🎨 该群已有漫画任务正在执行，请稍后再试哦~")
                 return
@@ -370,20 +382,20 @@ class ComicCommandHandler:
         topics = analysis_result.get("topics", [])
         statistics = analysis_result.get("statistics")
         if not topics and statistics:
-            if isinstance(statistics, dict):
+            if is_string_mapping(statistics):
                 topics = statistics.get("topics", [])
             else:
                 topics = getattr(statistics, "topics", [])
 
-        comic_topics = []
-        for topic in topics if isinstance(topics, list) else []:
+        comic_topics: list[dict[str, object]] = []
+        for topic in topics if is_object_list(topics) else []:
             if isinstance(topic, SummaryTopic):
                 title = topic.topic
                 detail = topic.detail
-            elif isinstance(topic, dict):
+            elif is_string_mapping(topic):
                 title = str(topic.get("topic", ""))
                 detail = str(topic.get("detail", ""))
-            elif hasattr(topic, "topic") and hasattr(topic, "detail"):
+            elif isinstance(topic, LegacyTopic):
                 title = str(topic.topic)
                 detail = str(topic.detail)
             else:
@@ -398,13 +410,13 @@ class ComicCommandHandler:
             return "no_topics"
 
         task_key = f"{platform_id or 'default'}:{group_id}"
-        existing_task = self._comic_group_tasks.get(task_key)
+        existing_task = self.comic_group_tasks.get(task_key)
         if existing_task and not existing_task.done():
             logger.info(f"群 {group_id} 已有漫画任务等待或执行，跳过重复任务。")
             return "duplicate"
 
         task = asyncio.create_task(
-            self._trigger_comic_generation(
+            self.trigger_comic_generation(
                 comic_topics,
                 group_id,
                 platform_id,
@@ -413,13 +425,13 @@ class ComicCommandHandler:
                 stop_request=stop_request,
             )
         )
-        self._comic_group_tasks[task_key] = task
+        self.comic_group_tasks[task_key] = task
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
         task.add_done_callback(
             lambda completed_task: (
-                self._comic_group_tasks.pop(task_key, None)
-                if self._comic_group_tasks.get(task_key) is completed_task
+                self.comic_group_tasks.pop(task_key, None)
+                if self.comic_group_tasks.get(task_key) is completed_task
                 else None
             )
         )
@@ -427,7 +439,7 @@ class ComicCommandHandler:
             stop_request.cancel_on_stop(task)
         return "started"
 
-    async def _trigger_comic_generation(
+    async def trigger_comic_generation(
         self,
         topics: list[dict[str, object]],
         group_id: str,
@@ -454,9 +466,7 @@ class ComicCommandHandler:
         """
         cur_trace = trace or TraceContext.current()
         if cur_trace:
-            from ...shared.trace_context import _current_trace
-
-            _current_trace.set(cur_trace)
+            TraceContext.bind_current(cur_trace)
 
         async with self._comic_semaphore:
             if self.terminating or (
@@ -500,7 +510,7 @@ class ComicCommandHandler:
 
                 if cur_trace:
                     rfiles = cur_trace.metadata.setdefault("report_files", [])
-                    if isinstance(rfiles, list):
+                    if is_object_list(rfiles):
                         rfiles.append(
                             {
                                 "filename": filename,
@@ -529,10 +539,10 @@ class ComicCommandHandler:
                 )
                 if not sent:
                     return
-                upload_image = self._try_upload_image
+                upload_image = self.try_upload_image
                 if self.plugin_instance:
                     inst_upload = getattr(
-                        self.plugin_instance, "_try_upload_image", None
+                        self.plugin_instance, "try_upload_image", None
                     )
                     if inst_upload is not None and (
                         hasattr(inst_upload, "assert_called")
@@ -548,7 +558,7 @@ class ComicCommandHandler:
             except Exception as e:
                 logger.error(f"群 {group_id} 后台漫画生成执行异常: {e}", exc_info=True)
 
-    async def _try_upload_image(
+    async def try_upload_image(
         self,
         group_id: str,
         image_url: str,
