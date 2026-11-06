@@ -44,7 +44,7 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg
 
 ### 本地提交与完整检查分工
 
-Lefthook 的 `pre-commit` 只检查暂存的 Python 文件（Ruff 格式与 lint）和 `dashboard/src/` 下的 JS/TS 文件（带缓存的 ESLint）。检查不自动修改或暂存文件；提交信息检查仍然保留。文档、配置、依赖和构建产物不触发全量前端流水线。
+Lefthook 的 `pre-commit` 只检查暂存的 Python 文件（Ruff 格式与 lint）和 `dashboard/src/` 下的 JS/TS 文件（Oxlint 与 Oxfmt）。检查不自动修改或暂存文件；提交信息检查仍然保留。前端样式、配置和文档也做暂存文件格式检查；生成类型、锁文件、构建产物不交给格式化器。不会在提交时运行全量前端流水线。
 
 每次原子提交无需重新跑全量测试和构建。开发时按影响范围运行定向测试；准备 PR 或完成一组功能修改时，在插件根目录执行相关的完整检查：
 
@@ -54,7 +54,7 @@ npx lefthook run check-python   # Ruff、Pyright 和完整 Python 测试
 npx lefthook run check-contract # OpenAPI 一致性与生成类型检查（会更新类型文件）
 ```
 
-这些任务是手动入口，不绑定 `pre-push`，也不是 CI 调用入口。CI 独立执行完整验证，不使用本地 ESLint 缓存。修改 API 后显式导出 OpenAPI 并生成类型；修改正式前端后，在 PR 前构建并提交 `pages/` 产物。CI 仍检查契约及构建产物与源码的一致性。
+这些任务是手动入口，不绑定 `pre-push`，也不是 CI 调用入口。CI 独立执行完整验证，不使用本地检查缓存。修改 API 后显式导出 OpenAPI 并生成类型；修改正式前端后，在 PR 前构建并提交 `pages/` 产物。CI 仍检查契约及构建产物与源码的一致性。
 
 同一份代码已验证通过后，`git add`、拆分原子提交、修改提交说明或纯文档调整不要求重跑 pytest / Vitest。记录运行过的命令和覆盖范围；代码、测试、依赖、检查配置或运行环境发生相关变化后，重新运行受影响的检查。定向测试通过不代表全量测试通过，CI 不使用本地结果跳过验证。
 
@@ -71,7 +71,7 @@ npx lefthook run check-frontend --command lint --command typecheck --command bui
 
 开发中直接运行 `uv run pytest tests/test_xxx.py` 等受影响用例；排查失败可用 `uv run pytest --lf tests/`，但这不是完整回归的替代。全量测试只需在相关改动完成后通过一次，不要在同一工作树上依次执行全量 pytest 和包含它的完整检查入口。
 
-ESLint 配置、依赖或构建配置变化时，请运行完整前端检查。只改 CSS 等样式也需要在浏览器检查并重新构建。Lefthook 与 Python 的 pre-commit 框架选择一种安装，避免重复挂钩；使用后者时仍按同样要求执行完整检查。
+Oxlint / Oxfmt 配置、依赖或构建配置变化时，请运行完整前端检查。只改 CSS 等样式也需要在浏览器检查并重新构建。Lefthook 与 Python 的 pre-commit 框架选择一种安装，避免重复挂钩；使用后者时仍按同样要求执行完整检查。
 
 | 日常场景 | 补充验证 |
 | --- | --- |
@@ -91,6 +91,12 @@ Python 基线统一为 3.12。`requirements-tools.txt` 固定 Ruff 和 Pyright �
 Pyright 使用运行检查脚本的 Python 解释器查找依赖，不再混用硬编码的 `site-packages`。嵌入 AstrBot 开发时，`uv run python ...` 使用宿主环境；独立检出时，先安装开发依赖，再用 `.venv/bin/python scripts/check_python.py typecheck`（Windows 为 `.venv/Scripts/python.exe`）。IDE 也应选择同一解释器。`extraPaths` 仅保留插件及嵌入开发时的 AstrBot 源码目录，支持跳转到宿主源码。
 
 Ruff 保留现有测试目录豁免，并启用 `force-exclude`，目录扫描和暂存文件检查使用相同范围；这不影响 pytest 执行测试。旧枚举及泛型语法暂不强制改写，避免工具迁移改变运行时类型行为。引号由 formatter 管理，现代化语法检查统一交给 Ruff `UP`，不再重复运行 pyupgrade。
+
+前端使用 Node.js 20.19+（20.x）或 22.12+，Oxlint 与 Oxfmt 固定版本并提交 pnpm 锁文件。`pnpm lint` 检查代码，`pnpm lint:fix` 修复可自动修复的问题；`pnpm format` 统一格式，`pnpm format:check` 只读检查。类型检查仍使用 `tsc`，行为测试仍使用 Vitest。已有 ESLint 推荐规则按职责映射到 Oxlint，语法和类型检查交给 TypeScript、格式交给 Oxfmt，不自动启用新一代 React Compiler 规则。
+
+VS Code 可安装 `oxc.oxc-vscode` 扩展；仓库已为 JS/TS/React/CSS 配置保存时格式化，JSON 的自动换行设置保持不变。编辑器选择的 Python 环境也应安装 `requirements-tools.txt` 中固定的版本。
+
+首次格式化与业务改动分开审阅；生成的 API 类型和构建产物由各自生成器维护。未合入的 `design-preview/` 原型暂不参与正式前端门禁。开发 mock 源码仍参与 lint、格式、类型及测试检查。
 
 ### 1.2 WebUI 控制台前端环境
 ```bash
@@ -201,7 +207,7 @@ dashboard/src/
    * **ViewModel (`use*ViewModel.ts`)**：集中封装网络请求、防抖、排序、衍生计算及缓存失效；
    * **View (`*Page.tsx`)**：仅作为纯声明式 UI，禁止在 JSX 组件中内联 API 请求或复杂业务算法。
 2. **零 `any` 策略 (Zero `any` Policy)**：
-   * 全量开启 `@typescript-eslint/no-explicit-any: 'error'`；
+   * 全量开启 `typescript/no-explicit-any: 'error'`；
    * 外部未定型数据一律使用 `unknown` 并配合类型守卫；
    * 宿主 Bridge 通信在 `shared/api/bridge.ts` 中维护强类型定义。
 3. **冷数据缓存与精准失效**：
@@ -365,7 +371,7 @@ uv run scripts/debug_render.py -h
    uv run pytest tests/
 
    # 4. WebUI 前端静态检查与打包（若改动了 dashboard/ 源码）
-   cd dashboard && pnpm lint && pnpm typecheck && pnpm test && pnpm build:no-typecheck
+   cd dashboard && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build:no-typecheck
    ```
 4. 提交清晰规范的 Commit 并推送到你的 Remote 分支；
 5. 在 GitHub 上发起 Pull Request，在 Description 中简要说明改动意图及测试验证结论；

@@ -8,10 +8,14 @@ pre-commit:
     ruff-check:
       glob: "*.{py,pyi}"
       run: uv run python scripts/check_python.py lint {staged_files}
+    webui-format:
+      root: dashboard/
+      glob: "dashboard/**.{ts,tsx,js,jsx,mjs,cjs,json,css,html,md,yml,yaml}"
+      run: pnpm exec oxfmt --check --no-error-on-unmatched-pattern {staged_files}
     webui-lint:
       root: dashboard/
-      glob: "dashboard/src/**.{ts,tsx,js,jsx}"
-      run: node node_modules/eslint/bin/eslint.js --cache --cache-strategy content --cache-location node_modules/.cache/eslint/ --max-warnings 0 {staged_files}
+      glob: "dashboard/**.{ts,tsx,js,jsx,mjs,cjs}"
+      run: pnpm exec oxlint --deny-warnings --report-unused-disable-directives --no-error-on-unmatched-pattern {staged_files}
 
 commit-msg:
   commands:
@@ -24,7 +28,7 @@ check-frontend:
   commands:
     lint:
       priority: 1
-      run: pnpm --dir dashboard lint
+      run: pnpm --dir dashboard format:check && pnpm --dir dashboard lint
     typecheck:
       priority: 2
       run: pnpm --dir dashboard typecheck

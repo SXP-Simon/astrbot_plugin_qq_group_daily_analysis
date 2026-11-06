@@ -53,6 +53,7 @@ jobs:
               - '.github/workflows/ci.yml'
               - 'scripts/verify-commit.js'
               - 'lefthook.yml'
+              - '.pre-commit-config.yaml'
 
       - name: Detect Conventional Commit with PR Number Suffix
         id: merge_commit
@@ -276,9 +277,9 @@ jobs:
             exit 1
           fi
 
-      - name: ESLint Check
+      - name: Oxfmt & Oxlint Check
         working-directory: ./dashboard
-        run: pnpm lint
+        run: pnpm format:check && pnpm lint
 
       - name: TypeScript Typecheck
         working-directory: ./dashboard
