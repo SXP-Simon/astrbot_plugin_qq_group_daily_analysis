@@ -40,7 +40,6 @@ def recovery(tmp_path, monkeypatch, analysis):
         generator,
         MagicMock(),
         MagicMock(),
-        MagicMock(),
     )
     return service, generator
 

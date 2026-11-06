@@ -534,8 +534,10 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
             group_id="group_999",
             timestamp=one_hour_ago_ts,
             text_content="周三今天的话题消息",
+            reply_to_id="thread-before",
             contents=(
                 MessageContent(type=MessageContentType.TEXT, text="周三今天的话题消息"),
+                MessageContent(type=MessageContentType.AT, at_user_id="member-openid"),
             ),
         ),
     ]
@@ -573,12 +575,6 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
             emoji_count=0,
         )
     )
-    mock_stat_service.convert_to_legacy_dict = MagicMock(
-        side_effect=lambda msgs: [
-            {"id": m.message_id, "text": m.text_content} for m in msgs
-        ]
-    )
-
     mock_domain_service = MagicMock()
     mock_domain_service.analyze_user_activity = MagicMock(return_value={})
 
@@ -608,11 +604,13 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
     assert fetch_call_args is not None
     assert fetch_call_args.kwargs["since_ts"] >= now_ts - 86400 - 5  # 允许 5s 运行误差
 
-    # 验证传入统计与转换的消息只有周三的消息 (msg_wed)，周一与周二的消息被严格过滤
-    legacy_msgs_passed = mock_stat_service.convert_to_legacy_dict.call_args[0][0]
-    assert len(legacy_msgs_passed) == 1
-    assert legacy_msgs_passed[0].message_id == "msg_wed"
-    assert legacy_msgs_passed[0].text_content == "周三今天的话题消息"
+    # 模型直接收到统一消息，且只保留分析时间窗口内的消息。
+    unified_msgs_passed = mock_llm_analyzer.analyze_incremental_concurrent.call_args[0][0]
+    assert len(unified_msgs_passed) == 1
+    assert unified_msgs_passed[0].message_id == "msg_wed"
+    assert unified_msgs_passed[0].text_content == "周三今天的话题消息"
+    assert unified_msgs_passed[0].reply_to_id == "thread-before"
+    assert unified_msgs_passed[0].contents[1].at_user_id == "member-openid"
 
 
 @pytest.mark.asyncio

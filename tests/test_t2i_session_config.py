@@ -254,7 +254,6 @@ async def test_report_entry_points_forward_bound_renderer(entry, monkeypatch, tm
             generator,
             MagicMock(),
             MagicMock(),
-            MagicMock(),
             html_render=callback,
         )
         await service.rerender_report(

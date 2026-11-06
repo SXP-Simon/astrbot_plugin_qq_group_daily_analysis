@@ -59,7 +59,6 @@ if TYPE_CHECKING:
         UserTitle,
     )
     from ...domain.value_objects.unified_message import (
-        LegacyMessagePayload,
         UnifiedMessage,
     )
     from ...infrastructure.config.config_manager import ConfigManager
@@ -183,7 +182,6 @@ class AnalysisApplicationService:
             history_manager=self.history_manager,
             report_generator=self.report_generator,
             llm_analyzer=self.llm_analyzer,
-            statistics_service=self.statistics_service,
             task_guard=self._task_guard,
             checkpoint_store=self.checkpoint_store,
             html_render=self.html_render,
@@ -420,10 +418,6 @@ class AnalysisApplicationService:
 
             sections = self._resolve_daily_analysis_sections(analysis_sections)
 
-            legacy_messages = self.statistics_service.convert_to_legacy_dict(
-                unified_messages
-            )
-
             unified_msg_origin = (
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
@@ -433,7 +427,7 @@ class AnalysisApplicationService:
                 pipeline,
                 group_id,
                 analysis_stage,
-                legacy_messages,
+                unified_messages,
                 user_activity,
                 top_users,
                 unified_msg_origin,
@@ -754,7 +748,7 @@ class AnalysisApplicationService:
         pipeline: PipelineContext,
         group_id: str,
         analysis_stage: str,
-        legacy_messages: list[LegacyMessagePayload],
+        unified_messages: list[UnifiedMessage],
         user_activity: dict[str, UserActivityStats],
         top_users: list[UserActivityRanking],
         unified_msg_origin: str,
@@ -767,7 +761,7 @@ class AnalysisApplicationService:
             pipeline: 当前分析的阶段与快照上下文。
             group_id: 目标群组 ID。
             analysis_stage: LLM 并发槽位使用的任务类型。
-            legacy_messages: 转换后的兼容消息结构。
+            unified_messages: 保留消息段与提及、回复关系的清洗结果。
             user_activity: Stats 阶段产出的用户活跃数据。
             top_users: 限定人数后的活跃用户列表。
             unified_msg_origin: LLM 分析所使用的平台消息源标识。
@@ -807,7 +801,7 @@ class AnalysisApplicationService:
                     result.token_usage,
                     result.chat_quality_review,
                 ) = await self.llm_analyzer.analyze_all_concurrent(
-                    legacy_messages,
+                    unified_messages,
                     user_activity,
                     umo=unified_msg_origin,
                     top_users=top_users,
@@ -965,16 +959,13 @@ class AnalysisApplicationService:
             if not unified_messages:
                 return {"success": False, "reason": "no_messages"}
 
-            legacy_messages = self.statistics_service.convert_to_legacy_dict(
-                unified_messages
-            )
             unified_msg_origin = (
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
 
             async with self._llm_slot(group_id, "comic_manual"):
                 topics, token_usage = await self.llm_analyzer.analyze_topics(
-                    legacy_messages, unified_msg_origin
+                    unified_messages, unified_msg_origin
                 )
 
             if not topics:

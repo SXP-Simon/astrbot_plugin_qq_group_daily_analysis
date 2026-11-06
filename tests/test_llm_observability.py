@@ -175,9 +175,6 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
                 emoji_count=0,
             )
 
-        def convert_to_legacy_dict(self, messages):
-            return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
-
     class FakeDomainService:
         def analyze_user_activity(self, messages, bot_self_ids):
             return {}
@@ -187,6 +184,7 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
 
     class FakeAnalyzer:
         async def analyze_all_concurrent(self, *args, **kwargs):
+            assert all(isinstance(message, UnifiedMessage) for message in args[0])
             return (
                 [
                     SimpleNamespace(
@@ -435,9 +433,6 @@ def test_daily_analysis_aborts_when_all_enabled_llm_tasks_fail():
                 emoji_count=0,
             )
 
-        def convert_to_legacy_dict(self, messages):
-            return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
-
     class FakeDomainService:
         def analyze_user_activity(self, messages, bot_self_ids):
             return {}
@@ -559,9 +554,6 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
                 golden_quotes=[],
                 emoji_count=0,
             )
-
-        def convert_to_legacy_dict(self, messages):
-            return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
 
     class FakeDomainService:
         def analyze_user_activity(self, messages, bot_self_ids):
@@ -696,9 +688,6 @@ def test_daily_analysis_succeeds_when_all_llm_disabled():
                 emoji_count=0,
             )
 
-        def convert_to_legacy_dict(self, messages):
-            return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
-
     class FakeDomainService:
         def analyze_user_activity(self, messages, bot_self_ids):
             return {}
@@ -832,9 +821,8 @@ def test_schema_retry_prompt_and_completion_updated_in_trace(monkeypatch):
         with TraceContext(trace_id="test-retry-trace") as trace:
             messages = [
                 {
-                    "sender": {"user_id": "123", "nickname": "Alice", "card": ""},
-                    "time": 1787671466,
-                    "message": [{"type": "text", "data": {"text": "高考完打算去哪"}}],
+                    "sender": "Alice", "user_id": "123", "time": "10:00",
+                    "content": "高考完打算去哪",
                 }
             ]
             data_objects, usage = await analyzer.analyze(messages)

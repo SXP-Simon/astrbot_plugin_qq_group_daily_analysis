@@ -25,7 +25,11 @@ from ...domain.value_objects.analysis_results import (
     UserActivityRanking,
     parse_user_activity,
 )
-from ...domain.value_objects.unified_message import UnifiedMessage
+from ...domain.value_objects.unified_message import (
+    MessageContent,
+    MessageContentType,
+    UnifiedMessage,
+)
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
 from ...infrastructure.reporting.report_image import save_report_image
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
@@ -41,7 +45,6 @@ if TYPE_CHECKING:
     from ...domain.repositories.analysis_repository import IAnalysisProvider
     from ...domain.repositories.persistence_repository import ICheckpointStore
     from ...domain.repositories.report_repository import IReportGenerator
-    from ...domain.services.statistics_service import StatisticsService
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.history_manager import HistoryManager
     from ...infrastructure.platform.bot_manager import BotManager
@@ -56,7 +59,6 @@ class AnalysisRecoveryService:
     history_manager: HistoryManager
     report_generator: IReportGenerator
     llm_analyzer: IAnalysisProvider
-    statistics_service: StatisticsService
     task_guard: TaskGuard
     checkpoint_store: ICheckpointStore | None
     html_render: Callable[..., Awaitable[str | bytes | None]] | None
@@ -69,7 +71,6 @@ class AnalysisRecoveryService:
         history_manager: HistoryManager,
         report_generator: IReportGenerator,
         llm_analyzer: IAnalysisProvider,
-        statistics_service: StatisticsService,
         task_guard: TaskGuard,
         checkpoint_store: ICheckpointStore | None = None,
         html_render: Callable[..., Awaitable[str | bytes | None]] | None = None,
@@ -82,7 +83,6 @@ class AnalysisRecoveryService:
             history_manager: 历史持久化管理器。
             report_generator: 报表生成器。
             llm_analyzer: LLM 分析器。
-            statistics_service: 统计领域服务。
             task_guard: 任务排他锁守卫。
             checkpoint_store: 检查点持久化仓储。
             html_render: HTML 渲染回调。
@@ -92,7 +92,6 @@ class AnalysisRecoveryService:
         self.history_manager = history_manager
         self.report_generator = report_generator
         self.llm_analyzer = llm_analyzer
-        self.statistics_service = statistics_service
         self.task_guard = task_guard
         self.checkpoint_store = checkpoint_store
         self.html_render = html_render
@@ -517,7 +516,28 @@ class AnalysisRecoveryService:
                 if isinstance(message, UnifiedMessage):
                     unified_messages.append(message)
                 elif is_string_mapping(message):
-                    # 续跑 LLM 只读取已清洗文本和发送者信息，无须恢复原始附件。
+                    # 恢复消息段及关系，确保续跑与首次分析读取相同的信息。
+                    contents: list[MessageContent] = []
+                    saved_contents = message.get("contents")
+                    if is_object_list(saved_contents):
+                        for part in saved_contents:
+                            if not is_string_mapping(part):
+                                continue
+                            try:
+                                content_type = MessageContentType(part.get("type"))
+                            except ValueError:
+                                content_type = MessageContentType.UNKNOWN
+                            contents.append(
+                                MessageContent(
+                                    type=content_type,
+                                    text=str(part.get("text") or ""),
+                                    url=str(part.get("url") or ""),
+                                    emoji_id=str(part.get("emoji_id") or ""),
+                                    emoji_name=str(part.get("emoji_name") or ""),
+                                    at_user_id=str(part.get("at_user_id") or ""),
+                                    raw_data=part.get("raw_data"),
+                                )
+                            )
                     timestamp = message.get("timestamp", 0)
                     try:
                         restored_timestamp = (
@@ -536,6 +556,11 @@ class AnalysisRecoveryService:
                             group_id=str(message.get("group_id", group_id)),
                             text_content=str(message.get("text_content", "")),
                             timestamp=restored_timestamp,
+                            contents=tuple(contents),
+                            platform=str(message.get("platform") or "unknown"),
+                            reply_to_id=str(message["reply_to_id"])
+                            if message.get("reply_to_id")
+                            else None,
                             sender_card=str(message["sender_card"])
                             if message.get("sender_card")
                             else None,
@@ -623,9 +648,6 @@ class AnalysisRecoveryService:
         run_golden_quote = golden_quote_enabled and not bool(golden_quotes)
         run_chat_quality = chat_quality_enabled and not bool(chat_quality_review)
 
-        legacy_messages = self.statistics_service.convert_to_legacy_dict(
-            unified_messages
-        )
         unified_msg_origin = (
             f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
         )
@@ -640,7 +662,7 @@ class AnalysisRecoveryService:
                         new_tokens,
                         new_chat_quality,
                     ) = await self.llm_analyzer.analyze_all_concurrent(
-                        legacy_messages,
+                        unified_messages,
                         user_activity,
                         umo=unified_msg_origin,
                         top_users=top_users,

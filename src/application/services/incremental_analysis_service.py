@@ -452,9 +452,6 @@ class IncrementalAnalysisService:
         golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
         chat_quality_enabled = self.config_manager.get_chat_quality_analysis_enabled()
 
-        legacy_messages = self.statistics_service.convert_to_legacy_dict(
-            unified_messages
-        )
         unified_msg_origin = (
             f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
         )
@@ -474,7 +471,7 @@ class IncrementalAnalysisService:
                         token_usage,
                         chat_quality_review,
                     ) = await self.llm_analyzer.analyze_incremental_concurrent(
-                        legacy_messages,
+                        unified_messages,
                         umo=unified_msg_origin,
                         topics_per_batch=topics_per_batch,
                         quotes_per_batch=quotes_per_batch,
