@@ -52,7 +52,13 @@ function getInitialTheme(): boolean {
 let globalIsDark: boolean = getInitialTheme();
 const listeners = new Set<(val: boolean) => void>();
 
+function applyDocumentTheme(isDark: boolean) {
+  document.documentElement.classList.toggle("dark", isDark);
+  document.documentElement.dataset.theme = isDark ? "dark" : "light";
+}
+
 function updateGlobalTheme(newVal: boolean) {
+  applyDocumentTheme(newVal);
   if (globalIsDark !== newVal) {
     globalIsDark = newVal;
     try {
@@ -66,16 +72,24 @@ function updateGlobalTheme(newVal: boolean) {
 
 // 统一由全局通信单例监听 AstrBot Host 事件
 if (typeof window !== "undefined") {
-  fetchContext().then((ctx) => {
-    if (ctx?.isDark !== undefined) {
-      updateGlobalTheme(!!ctx.isDark);
-    }
-  });
+  applyDocumentTheme(globalIsDark);
+  let receivedTheme = false;
+  fetchContext()
+    .then((ctx) => {
+      // 宿主新通知优先于尚未返回的初始化结果。
+      if (!receivedTheme && ctx?.isDark !== undefined) {
+        updateGlobalTheme(!!ctx.isDark);
+      }
+    })
+    .catch(() => {
+      // 初始通信失败时继续使用 URL 或本地缓存主题。
+    });
 
   const bridge = window.AstrBotPluginPage;
   if (bridge && typeof bridge.onContext === "function") {
     bridge.onContext((ctx: AstrBotContext) => {
       if (ctx?.isDark !== undefined) {
+        receivedTheme = true;
         updateGlobalTheme(!!ctx.isDark);
       }
     });

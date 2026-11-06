@@ -86,7 +86,7 @@ function matchMockHandler(
 
 export async function devFetchContext(): Promise<AstrBotContext> {
   return {
-    isDark: false,
+    // 独立页面沿用 URL 或缓存主题，不模拟一条强制亮色的宿主通知。
     pluginName: "astrbot_plugin_qq_group_daily_analysis",
     version: "v5.6.4",
   };

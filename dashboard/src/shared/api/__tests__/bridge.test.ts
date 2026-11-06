@@ -24,6 +24,7 @@ describe("API 通信网桥 (Shared API Bridge)", () => {
     const ctx = await fetchContext();
     expect(ctx).toBeDefined();
     expect(ctx.pluginName).toBe("astrbot_plugin_qq_group_daily_analysis");
+    expect(ctx.isDark).toBeUndefined();
   });
 
   it("在开发环境下能够通过 devBridge 正确获取大盘指标概览", async () => {
