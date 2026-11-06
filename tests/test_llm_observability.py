@@ -175,7 +175,7 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
                 emoji_count=0,
             )
 
-        def _convert_to_legacy_dict(self, messages):
+        def convert_to_legacy_dict(self, messages):
             return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
 
     class FakeDomainService:
@@ -435,7 +435,7 @@ def test_daily_analysis_aborts_when_all_enabled_llm_tasks_fail():
                 emoji_count=0,
             )
 
-        def _convert_to_legacy_dict(self, messages):
+        def convert_to_legacy_dict(self, messages):
             return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
 
     class FakeDomainService:
@@ -560,7 +560,7 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
                 emoji_count=0,
             )
 
-        def _convert_to_legacy_dict(self, messages):
+        def convert_to_legacy_dict(self, messages):
             return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
 
     class FakeDomainService:
@@ -696,7 +696,7 @@ def test_daily_analysis_succeeds_when_all_llm_disabled():
                 emoji_count=0,
             )
 
-        def _convert_to_legacy_dict(self, messages):
+        def convert_to_legacy_dict(self, messages):
             return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
 
     class FakeDomainService:

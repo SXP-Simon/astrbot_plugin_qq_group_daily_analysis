@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 
+from ....shared.type_guards import is_object_list, is_string_mapping
 from ....utils.logger import logger
 
 
@@ -108,8 +109,8 @@ def _parse_json_with_pattern(
 
         # 3. 尝试直接解析
         try:
-            data = json.loads(json_text)
-            count_info = f"，包含 {len(data)} 条数据" if isinstance(data, list) else ""
+            data: object = json.loads(json_text)
+            count_info = f"，包含 {len(data)} 条数据" if is_object_list(data) else ""
             logger.debug(f"{data_type}直接解析成功{count_info}")
             return True, data, None
         except json.JSONDecodeError:
@@ -123,7 +124,7 @@ def _parse_json_with_pattern(
             try:
                 data = json.loads(fixed_match.group())
                 count_info = (
-                    f"，包含 {len(data)} 条数据" if isinstance(data, list) else ""
+                    f"，包含 {len(data)} 条数据" if is_object_list(data) else ""
                 )
                 logger.debug(f"{data_type}修复后解析成功{count_info}")
                 return True, data, None
@@ -150,8 +151,13 @@ def parse_json_response(
     success, data, err = _parse_json_with_pattern(
         result_text, r"\[.*\]", data_type, expected_type_name="数组"
     )
-    if success and isinstance(data, list):
-        return True, data, None
+    if success and is_object_list(data):
+        items: list[dict[str, object]] = []
+        for item in data:
+            if not is_string_mapping(item):
+                return False, None, f"{data_type}响应数组中包含非对象条目"
+            items.append(item)
+        return True, items, None
     return False, None, err
 
 
@@ -164,7 +170,7 @@ def parse_json_object_response(
     success, data, err = _parse_json_with_pattern(
         result_text, r"\{.*\}", data_type, expected_type_name="对象"
     )
-    if success and isinstance(data, dict):
+    if success and is_string_mapping(data):
         return True, data, None
     return False, None, err
 
@@ -176,7 +182,9 @@ def _clean_json_string(text: str) -> str:
     return text.replace('\\"', '"').replace("\\n", " ").replace("\\t", " ")
 
 
-def extract_topics_with_regex(result_text: str, max_topics: int) -> list[dict]:
+def extract_topics_with_regex(
+    result_text: str, max_topics: int
+) -> list[dict[str, object]]:
     """
     使用正则表达式提取话题信息
 
@@ -198,7 +206,7 @@ def extract_topics_with_regex(result_text: str, max_topics: int) -> list[dict]:
             topic_pattern = r'"topic":\s*"([^"]*(?:\\.[^"]*)*)"[^}]*"contributors":\s*\[(.*?)\][^}]*"detail":\s*"([^"]*(?:\\.[^"]*)*)"'
             matches = re.findall(topic_pattern, result_text, re.DOTALL)
 
-        topics = []
+        topics: list[dict[str, object]] = []
         for match in matches[:max_topics]:
             topic_name = match[0].strip()
             contributors_str = match[1].strip()
@@ -226,7 +234,9 @@ def extract_topics_with_regex(result_text: str, max_topics: int) -> list[dict]:
         return []
 
 
-def extract_user_titles_with_regex(result_text: str, max_count: int) -> list[dict]:
+def extract_user_titles_with_regex(
+    result_text: str, max_count: int
+) -> list[dict[str, object]]:
     """
     使用正则表达式提取用户称号信息
 
@@ -238,7 +248,7 @@ def extract_user_titles_with_regex(result_text: str, max_count: int) -> list[dic
         用户称号数据列表
     """
     try:
-        titles = []
+        titles: list[dict[str, object]] = []
 
         # 正则模式：匹配完整的用户称号对象
         pattern = r'\{\s*"name":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"user_id":\s*"([^"]+)"\s*,\s*"title":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"mbti":\s*"([^"]+)"\s*,\s*"reason":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
@@ -274,7 +284,9 @@ def extract_user_titles_with_regex(result_text: str, max_count: int) -> list[dic
         return []
 
 
-def extract_golden_quotes_with_regex(result_text: str, max_count: int) -> list[dict]:
+def extract_golden_quotes_with_regex(
+    result_text: str, max_count: int
+) -> list[dict[str, object]]:
     """
     使用正则表达式提取金句信息
 
@@ -286,7 +298,7 @@ def extract_golden_quotes_with_regex(result_text: str, max_count: int) -> list[d
         金句数据列表
     """
     try:
-        quotes = []
+        quotes: list[dict[str, object]] = []
 
         # 正则模式：匹配完整的金句对象
         pattern = r'\{\s*"content":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"sender":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"reason":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
@@ -312,7 +324,7 @@ def extract_golden_quotes_with_regex(result_text: str, max_count: int) -> list[d
         return []
 
 
-def extract_quality_with_regex(result_text: str) -> dict | None:
+def extract_quality_with_regex(result_text: str) -> dict[str, object] | None:
     """
     使用正则表达式提取聊天质量分析数据
 
@@ -331,7 +343,7 @@ def extract_quality_with_regex(result_text: str) -> dict | None:
 
         # Extract dimensions array
         dims_match = re.search(r'"dimensions"\s*:\s*\[(.*)\]', result_text, re.DOTALL)
-        dims = []
+        dims: list[dict[str, object]] = []
         if dims_match:
             dim_objects = re.findall(
                 r'\{[^}]*"name"\s*:\s*"([^"]*)"[^}]*'
@@ -352,7 +364,7 @@ def extract_quality_with_regex(result_text: str) -> dict | None:
             logger.warning("聊天质量正则提取未找到有效维度数据")
             return None
 
-        data = {
+        data: dict[str, object] = {
             "title": title_m.group(1) if title_m else "聊天质量锐评",
             "subtitle": subtitle_m.group(1) if subtitle_m else "今天的群里发生了什么？",
             "dimensions": dims,

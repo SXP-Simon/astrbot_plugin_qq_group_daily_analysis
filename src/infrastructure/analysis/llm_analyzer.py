@@ -6,7 +6,7 @@ LLM分析器模块
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.value_objects import (
@@ -29,12 +29,33 @@ from .utils.json_utils import fix_json
 from .utils.llm_utils import call_provider_with_retry
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from astrbot.api.provider import LLMResponse
     from astrbot.api.star import Context
 
+    from ...domain.value_objects.analysis_results import (
+        UserActivityPayload,
+        UserActivityRanking,
+        UserActivityStats,
+    )
+    from ...domain.value_objects.unified_message import LegacyMessagePayload
     from ..config.config_manager import ConfigManager
+
+
+_AnalysisValue = TypeVar("_AnalysisValue")
+
+
+async def _skipped_analysis(value: _AnalysisValue) -> tuple[_AnalysisValue, TokenUsage]:
+    """为关闭的分析模块提供对应类型的空结果，不调用模型。
+
+    Args:
+        value: 该模块的空产物。
+
+    Returns:
+        空产物与零 Token 消耗。
+    """
+    return value, TokenUsage()
 
 
 class LLMAnalyzer(IAnalysisProvider):
@@ -78,7 +99,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_topics(
         self,
-        messages: list[dict],
+        messages: list[LegacyMessagePayload],
         umo: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """使用LLM分析话题
@@ -99,10 +120,10 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_user_titles(
         self,
-        messages: list[dict],
-        user_activity: dict,
+        messages: list[LegacyMessagePayload],
+        user_activity: Mapping[str, UserActivityStats | UserActivityPayload],
         umo: str | None = None,
-        top_users: list[dict] | None = None,
+        top_users: list[UserActivityRanking] | None = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
         """使用LLM分析用户称号
 
@@ -126,7 +147,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_golden_quotes(
         self,
-        messages: list[dict],
+        messages: list[LegacyMessagePayload],
         umo: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """使用LLM分析群聊金句
@@ -188,7 +209,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def summarize_quality_reviews(
         self,
-        batch_reviews: Sequence[QualityReview] | Sequence[dict[str, object]],
+        batch_reviews: Sequence[QualityReview | Mapping[str, object]],
         umo: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """汇总多个质量分析报告（增量模式使用）"""
@@ -198,10 +219,10 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_all_concurrent(
         self,
-        messages: list[dict],
-        user_activity: dict,
+        messages: list[LegacyMessagePayload],
+        user_activity: Mapping[str, UserActivityStats | UserActivityPayload],
         umo: str | None = None,
-        top_users: list[dict] | None = None,
+        top_users: list[UserActivityRanking] | None = None,
         topic_enabled: bool = True,
         user_title_enabled: bool = True,
         golden_quote_enabled: bool = True,
@@ -233,62 +254,65 @@ class LLMAnalyzer(IAnalysisProvider):
                 f"开始并发执行分析任务 (话题:{topic_enabled}, 称号:{user_title_enabled}, 金句:{golden_quote_enabled}, 质量:{chat_quality_enabled})"
             )
 
-            # 构建并发任务列表
-            tasks = []
-            task_names = []
-
-            if topic_enabled:
-                tasks.append(self.topic_analyzer.analyze_topics(messages, umo))
-                task_names.append("topic")
-
-            if user_title_enabled:
-                tasks.append(
-                    self.user_title_analyzer.analyze_user_titles(
-                        messages, user_activity, umo, top_users
-                    )
-                )
-                task_names.append("user_title")
-
-            if golden_quote_enabled:
-                tasks.append(
-                    self.golden_quote_analyzer.analyze_golden_quotes(messages, umo)
-                )
-                task_names.append("golden_quote")
-
-            if chat_quality_enabled:
-                tasks.append(self.chat_quality_analyzer.analyze_quality(messages, umo))
-                task_names.append("chat_quality")
-
-            if not tasks:
+            if not (
+                topic_enabled
+                or user_title_enabled
+                or golden_quote_enabled
+                or chat_quality_enabled
+            ):
                 return [], [], [], TokenUsage(), None
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # 固定对应关系保留各模块返回类型，避免靠名称重新解释混合结果。
+            (
+                topic_result,
+                user_title_result,
+                golden_quote_result,
+                chat_quality_result,
+            ) = await asyncio.gather(
+                self.topic_analyzer.analyze_topics(messages, umo)
+                if topic_enabled
+                else _skipped_analysis(list[SummaryTopic]()),
+                self.user_title_analyzer.analyze_user_titles(
+                    messages, user_activity, umo, top_users
+                )
+                if user_title_enabled
+                else _skipped_analysis(list[UserTitle]()),
+                self.golden_quote_analyzer.analyze_golden_quotes(messages, umo)
+                if golden_quote_enabled
+                else _skipped_analysis(list[GoldenQuote]()),
+                self.chat_quality_analyzer.analyze_quality(messages, umo)
+                if chat_quality_enabled
+                else _skipped_analysis(None),
+                return_exceptions=True,
+            )
 
-            # 处理结果
-            topics, topic_usage = [], TokenUsage()
-            user_titles, title_usage = [], TokenUsage()
-            golden_quotes, quote_usage = [], TokenUsage()
-            chat_quality_review = None
-            quality_usage = TokenUsage()  # Initialize here
             subtask_errors: list[str] = []
-
-            for i, result in enumerate(results):
-                name = task_names[i]
-                if isinstance(result, Exception):
+            for name, result in (
+                ("topic", topic_result),
+                ("user_title", user_title_result),
+                ("golden_quote", golden_quote_result),
+                ("chat_quality", chat_quality_result),
+            ):
+                if isinstance(result, BaseException):
                     logger.error(f"分析任务 {name} 失败: {result}")
                     subtask_errors.append(f"{name}: {result!s}")
-                    continue
 
-                if name == "topic" and isinstance(result, tuple):
-                    topics, topic_usage = result
-                elif name == "user_title" and isinstance(result, tuple):
-                    user_titles, title_usage = result
-                elif name == "golden_quote" and isinstance(result, tuple):
-                    golden_quotes, quote_usage = result
-                elif name == "chat_quality" and isinstance(result, tuple):
-                    chat_quality_review, quality_usage = result
-                    if not isinstance(quality_usage, TokenUsage):
-                        quality_usage = TokenUsage()
+            topics: list[SummaryTopic] = []
+            topic_usage = TokenUsage()
+            if not isinstance(topic_result, BaseException):
+                topics, topic_usage = topic_result
+            user_titles: list[UserTitle] = []
+            title_usage = TokenUsage()
+            if not isinstance(user_title_result, BaseException):
+                user_titles, title_usage = user_title_result
+            golden_quotes: list[GoldenQuote] = []
+            quote_usage = TokenUsage()
+            if not isinstance(golden_quote_result, BaseException):
+                golden_quotes, quote_usage = golden_quote_result
+            chat_quality_review: QualityReview | None = None
+            quality_usage = TokenUsage()
+            if not isinstance(chat_quality_result, BaseException):
+                chat_quality_review, quality_usage = chat_quality_result
 
             # 合并Token使用统计
             total_usage = TokenUsage(
@@ -368,7 +392,7 @@ class LLMAnalyzer(IAnalysisProvider):
                         analyzer_name="chat_quality",
                     )
                 # 丰富 LLM_ANALYSIS span payload 便于 WebUI 详情精准诊断
-                for s in reversed(trace._spans):
+                for s in reversed(trace.spans):
                     if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         s.setdefault("payload", {}).update(
                             {
@@ -408,7 +432,7 @@ class LLMAnalyzer(IAnalysisProvider):
             logger.error(f"并发分析失败: {e}")
             trace = TraceContext.current()
             if trace:
-                for s in reversed(trace._spans):
+                for s in reversed(trace.spans):
                     if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         s.setdefault("payload", {}).update(
                             {
@@ -421,7 +445,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_incremental_concurrent(
         self,
-        messages: list[dict],
+        messages: list[LegacyMessagePayload],
         umo: str | None = None,
         topics_per_batch: int = 2,
         quotes_per_batch: int = 1,
@@ -452,57 +476,53 @@ class LLMAnalyzer(IAnalysisProvider):
             )
 
             # 设置增量模式的模型最大数量覆盖值
-            self.topic_analyzer._incremental_max_count = topics_per_batch
-            self.golden_quote_analyzer._incremental_max_count = quotes_per_batch
+            self.topic_analyzer.incremental_max_count = topics_per_batch
+            self.golden_quote_analyzer.incremental_max_count = quotes_per_batch
 
             try:
-                # 构建并发任务列表（仅话题和金句，不包含用户称号）
-                tasks = []
-                task_names = []
-
-                if topic_enabled:
-                    tasks.append(self.topic_analyzer.analyze_topics(messages, umo))
-                    task_names.append("topic")
-
-                if golden_quote_enabled:
-                    tasks.append(
-                        self.golden_quote_analyzer.analyze_golden_quotes(messages, umo)
-                    )
-                    task_names.append("golden_quote")
-
-                if chat_quality_enabled:
-                    tasks.append(
-                        self.chat_quality_analyzer.analyze_quality(messages, umo)
-                    )
-                    task_names.append("chat_quality")
-
-                if not tasks:
+                if not (topic_enabled or golden_quote_enabled or chat_quality_enabled):
                     return [], [], TokenUsage(), None
 
-                results = await asyncio.gather(*tasks, return_exceptions=True)
+                # 固定对应关系保留各模块返回类型，避免靠名称重新解释混合结果。
+                (
+                    topic_result,
+                    golden_quote_result,
+                    chat_quality_result,
+                ) = await asyncio.gather(
+                    self.topic_analyzer.analyze_topics(messages, umo)
+                    if topic_enabled
+                    else _skipped_analysis(list[SummaryTopic]()),
+                    self.golden_quote_analyzer.analyze_golden_quotes(messages, umo)
+                    if golden_quote_enabled
+                    else _skipped_analysis(list[GoldenQuote]()),
+                    self.chat_quality_analyzer.analyze_quality(messages, umo)
+                    if chat_quality_enabled
+                    else _skipped_analysis(None),
+                    return_exceptions=True,
+                )
 
-                # 处理结果
-                topics, topic_usage = [], TokenUsage()
-                golden_quotes, quote_usage = [], TokenUsage()
-                chat_quality_review = None
-                quality_usage = TokenUsage()
                 subtask_errors: list[str] = []
-
-                for i, result in enumerate(results):
-                    name = task_names[i]
-                    if isinstance(result, Exception):
-                        logger.error(f"增量{name}分析失败: {result}")
+                for name, result in (
+                    ("topic", topic_result),
+                    ("golden_quote", golden_quote_result),
+                    ("chat_quality", chat_quality_result),
+                ):
+                    if isinstance(result, BaseException):
+                        logger.error(f"分析任务 {name} 失败: {result}")
                         subtask_errors.append(f"{name}: {result!s}")
-                        continue
 
-                    if name == "topic" and isinstance(result, tuple):
-                        topics, topic_usage = result
-                    elif name == "golden_quote" and isinstance(result, tuple):
-                        golden_quotes, quote_usage = result
-                    elif name == "chat_quality" and isinstance(result, tuple):
-                        chat_quality_review, quality_usage = result
-                        if not isinstance(quality_usage, TokenUsage):
-                            quality_usage = TokenUsage()
+                topics: list[SummaryTopic] = []
+                topic_usage = TokenUsage()
+                if not isinstance(topic_result, BaseException):
+                    topics, topic_usage = topic_result
+                golden_quotes: list[GoldenQuote] = []
+                quote_usage = TokenUsage()
+                if not isinstance(golden_quote_result, BaseException):
+                    golden_quotes, quote_usage = golden_quote_result
+                chat_quality_review: QualityReview | None = None
+                quality_usage = TokenUsage()
+                if not isinstance(chat_quality_result, BaseException):
+                    chat_quality_review, quality_usage = chat_quality_result
 
                 # 校验并补全增量子任务未产出说明
                 if (
@@ -564,7 +584,7 @@ class LLMAnalyzer(IAnalysisProvider):
                             quality_usage.completion_tokens,
                             analyzer_name="chat_quality",
                         )
-                    for s in reversed(trace._spans):
+                    for s in reversed(trace.spans):
                         if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                             s.setdefault("payload", {}).update(
                                 {
@@ -598,14 +618,14 @@ class LLMAnalyzer(IAnalysisProvider):
 
             finally:
                 # 无论成功或失败，都要恢复原始的最大数量设置
-                self.topic_analyzer._incremental_max_count = None
-                self.golden_quote_analyzer._incremental_max_count = None
+                self.topic_analyzer.incremental_max_count = None
+                self.golden_quote_analyzer.incremental_max_count = None
 
         except Exception as e:
             logger.error(f"增量并发分析失败: {e}", exc_info=True)
             trace = TraceContext.current()
             if trace:
-                for s in reversed(trace._spans):
+                for s in reversed(trace.spans):
                     if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         s.setdefault("payload", {}).update(
                             {

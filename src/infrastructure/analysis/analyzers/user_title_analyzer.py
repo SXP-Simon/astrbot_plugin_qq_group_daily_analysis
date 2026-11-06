@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, TypedDict
+
 from ....domain.value_objects import TokenUsage, UserTitle
 from ....utils.logger import logger
 from ....utils.template_utils import render_template
@@ -13,8 +15,36 @@ from ..utils.response_validation import validate_user_title_items
 from ..utils.structured_output_schema import JSONObject, build_user_titles_schema
 from .base_analyzer import BaseAnalyzer
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
-class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
+    from ....domain.value_objects.analysis_results import (
+        UserActivityPayload,
+        UserActivityRanking,
+        UserActivityStats,
+    )
+    from ....domain.value_objects.unified_message import LegacyMessagePayload
+
+
+class UserSummary(TypedDict):
+    """称号分析提示词中的用户特征。"""
+
+    name: str
+    user_id: str
+    message_count: int
+    avg_chars: float
+    emoji_ratio: float
+    night_ratio: float
+    reply_ratio: float
+
+
+class UserTitleInput(TypedDict):
+    """用户称号分析器的输入。"""
+
+    user_summaries: list[UserSummary]
+
+
+class UserTitleAnalyzer(BaseAnalyzer[UserTitle, UserTitleInput]):
     """
     用户称号分析器
     专门处理用户称号分配和MBTI类型分析
@@ -38,7 +68,7 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
     def get_response_schema(self) -> JSONObject:
         return build_user_titles_schema(self.get_max_count())
 
-    def build_prompt(self, data: dict) -> str:
+    def build_prompt(self, data: UserTitleInput) -> str:
         """
         构建用户称号分析提示词
 
@@ -78,7 +108,9 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
         logger.warning("未找到有效的用户称号分析提示词配置，请检查配置文件")
         return ""
 
-    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
+    def extract_with_regex(
+        self, result_text: str, max_count: int
+    ) -> list[dict[str, object]]:
         """
         使用正则表达式提取用户称号信息
 
@@ -91,7 +123,9 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
         """
         return extract_user_titles_with_regex(result_text, max_count)
 
-    def create_data_objects(self, data_list: list[dict]) -> list[UserTitle]:
+    def create_data_objects(
+        self, data_list: list[dict[str, object]]
+    ) -> list[UserTitle]:
         """
         创建用户称号对象列表
 
@@ -102,16 +136,16 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
             UserTitle对象列表
         """
         try:
-            titles = []
+            titles: list[UserTitle] = []
             max_titles = self.get_max_count()
 
             for title_data in data_list[:max_titles]:
                 # 确保数据格式正确
-                name = title_data.get("name", "").strip()
+                name = str(title_data.get("name", "") or "").strip()
                 user_id = title_data.get("user_id")
-                title = title_data.get("title", "").strip()
-                mbti = title_data.get("mbti", "").strip()
-                reason = title_data.get("reason", "").strip()
+                title = str(title_data.get("title", "") or "").strip()
+                mbti = str(title_data.get("mbti", "") or "").strip()
+                reason = str(title_data.get("reason", "") or "").strip()
 
                 # 验证必要字段
                 if not name or not title or not mbti or not reason:
@@ -142,16 +176,16 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
             return []
 
     def validate_parsed_data(
-        self, data_list: list[dict]
-    ) -> tuple[bool, list[dict] | None, str | None]:
+        self, data_list: list[dict[str, object]]
+    ) -> tuple[bool, list[dict[str, object]] | None, str | None]:
         return validate_user_title_items(data_list)
 
     def prepare_user_data(
         self,
-        messages: list[dict],
-        user_analysis: dict,
-        top_users: list[dict] | None = None,
-    ) -> dict:
+        messages: list[LegacyMessagePayload],
+        user_analysis: Mapping[str, UserActivityStats | UserActivityPayload],
+        top_users: list[UserActivityRanking] | None = None,
+    ) -> UserTitleInput:
         """
         准备用户数据
 
@@ -167,7 +201,7 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
             # 获取机器人 ID 列表用于过滤
             bot_self_ids = self.config_manager.get_bot_self_ids()
 
-            user_summaries = []
+            user_summaries: list[UserSummary] = []
 
             # 如果提供了top_users列表,只分析这些活跃用户
             if top_users:
@@ -181,7 +215,7 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
                 target_user_ids = {
                     user_id
                     for user_id, stats in user_analysis.items()
-                    if stats["message_count"] >= 5
+                    if stats.get("message_count", 0) >= 5
                 }
 
             for user_id, stats in user_analysis.items():
@@ -242,10 +276,10 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
 
     async def analyze_user_titles(
         self,
-        messages: list[dict],
-        user_activity: dict,
+        messages: list[LegacyMessagePayload],
+        user_activity: Mapping[str, UserActivityStats | UserActivityPayload],
         umo: str | None = None,
-        top_users: list[dict] | None = None,
+        top_users: list[UserActivityRanking] | None = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
         """分析用户称号
 

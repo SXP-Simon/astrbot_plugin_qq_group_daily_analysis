@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from ....shared.type_guards import is_object_list, is_string_mapping
 from ....utils.logger import logger
 from .base_analyzer import BaseAnalyzer
 
@@ -39,7 +40,7 @@ DEFAULT_COMIC_STORYBOARD_PROMPT = (
 
 
 class ComicStoryboardAnalyzer(
-    BaseAnalyzer[dict, "Sequence[SummaryTopic] | Sequence[dict[str, object]]"]
+    BaseAnalyzer[dict[str, str], "Sequence[SummaryTopic] | Sequence[dict[str, object]]"]
 ):
     """
     分镜及绘画提示词分析器
@@ -69,7 +70,7 @@ class ComicStoryboardAnalyzer(
 
         valid_topics: list[tuple[str, str]] = []
         for item in data:
-            if isinstance(item, dict):
+            if is_string_mapping(item):
                 t = str(item.get("topic", "")).strip()
                 d = str(item.get("detail", "")).strip()
             else:
@@ -123,10 +124,10 @@ class ComicStoryboardAnalyzer(
             return [text] if text else []
 
         chunks: list[str] = []
-        if isinstance(obj, list):
+        if is_object_list(obj):
             for item in obj:
                 chunks.extend(cls._extract_text_chunks(item, depth + 1))
-        elif isinstance(obj, dict):
+        elif is_string_mapping(obj):
             for val in obj.values():
                 chunks.extend(cls._extract_text_chunks(val, depth + 1))
 
@@ -164,7 +165,9 @@ class ComicStoryboardAnalyzer(
 
         return "\n\n".join(unique_chunks) if unique_chunks else None
 
-    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
+    def extract_with_regex(
+        self, result_text: str, max_count: int
+    ) -> list[dict[str, object]]:
         del max_count
         scene_match = re.search(r'"scene"\s*:\s*"((?:[^"\\]|\\.)*)"', result_text)
         if scene_match:
@@ -173,7 +176,7 @@ class ComicStoryboardAnalyzer(
 
     def parse_structured_response(
         self, result_text: str
-    ) -> tuple[bool, list[dict] | None, str | None]:
+    ) -> tuple[bool, list[dict[str, object]] | None, str | None]:
         from ..utils.json_utils import (
             parse_json_object_response,
             parse_json_response,
@@ -183,7 +186,7 @@ class ComicStoryboardAnalyzer(
         success, data, error = parse_json_object_response(
             result_text, self.get_data_type()
         )
-        if success and isinstance(data, dict):
+        if success and is_string_mapping(data):
             # 主线：优先提取官方约定的 scene 字段
             scene_val = data.get("scene")
             scene_str = scene_val.strip() if isinstance(scene_val, str) else ""
@@ -225,9 +228,10 @@ class ComicStoryboardAnalyzer(
 
         return False, None, error or "无法从 JSON 响应中提取有效的漫画分镜描述"
 
-    def create_data_objects(self, data_list: list[dict]) -> list[dict]:
-        # 我们直接返回 dict，因为不需要特别的类型验证
-        return data_list
+    def create_data_objects(
+        self, data_list: list[dict[str, object]]
+    ) -> list[dict[str, str]]:
+        return [{"scene": str(item.get("scene", ""))} for item in data_list]
 
     def get_response_schema(self) -> JSONObject:
         return {
@@ -248,7 +252,7 @@ class ComicStoryboardAnalyzer(
         umo: str | None = None,
         persona_id: str | None = None,
         prompt_template: str | None = None,
-    ) -> tuple[list[dict], TokenUsage]:
+    ) -> tuple[list[dict[str, str]], TokenUsage]:
         """执行分析，返回 storyboards 和 token 消耗。
 
         Args:

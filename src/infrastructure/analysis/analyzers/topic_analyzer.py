@@ -9,6 +9,11 @@ import re
 from datetime import datetime
 
 from ....domain.value_objects import SummaryTopic, TokenUsage
+from ....domain.value_objects.unified_message import (
+    AnalysisTextMessage,
+    LegacyMessagePayload,
+)
+from ....shared.type_guards import is_object_list
 from ....utils.logger import logger
 from ....utils.template_utils import render_template
 from ..utils import InfoUtils
@@ -18,7 +23,7 @@ from ..utils.structured_output_schema import JSONObject, build_topics_schema
 from .base_analyzer import BaseAnalyzer
 
 
-class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
+class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[LegacyMessagePayload]]):
     """
     话题分析器
     专门处理群聊话题的提取和分析
@@ -34,8 +39,8 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
 
     def get_max_count(self) -> int:
         """获取最大话题数量，增量模式下使用覆盖值"""
-        if self._incremental_max_count is not None:
-            return self._incremental_max_count
+        if self.incremental_max_count is not None:
+            return self.incremental_max_count
         return self.config_manager.get_max_topics()
 
     def get_response_schema_name(self) -> str:
@@ -44,7 +49,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
     def get_response_schema(self) -> JSONObject:
         return build_topics_schema(self.get_max_count())
 
-    def build_prompt(self, data: list[dict]) -> str:
+    def build_prompt(self, data: list[LegacyMessagePayload]) -> str:
         """
         构建话题分析提示词
 
@@ -60,13 +65,11 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
             return ""
 
         # 提取文本消息
-        text_messages = []
+        text_messages: list[AnalysisTextMessage] = []
         for i, msg in enumerate(data):
             try:
                 sender = msg.get("sender", {})
                 # 确保sender是字典类型，避免'str' object has no attribute 'get'错误
-                if not isinstance(sender, dict):
-                    continue
 
                 # 获取发送者ID并过滤机器人消息
                 user_id = str(sender.get("user_id", ""))
@@ -82,11 +85,8 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
                 message_list = msg.get("message", [])
 
                 # 提取文本内容，可能分布在多个 content 中
-                text_parts = []
+                text_parts: list[str] = []
                 for _j, content in enumerate(message_list):
-                    if not isinstance(content, dict):
-                        continue
-
                     content_type = content.get("type", "")
 
                     if content_type == "text":
@@ -170,7 +170,9 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
         logger.warning("未找到有效的话题分析提示词配置，请检查配置文件")
         return ""
 
-    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
+    def extract_with_regex(
+        self, result_text: str, max_count: int
+    ) -> list[dict[str, object]]:
         """
         使用正则表达式提取话题信息
 
@@ -183,7 +185,9 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
         """
         return extract_topics_with_regex(result_text, max_count)
 
-    def create_data_objects(self, data_list: list[dict]) -> list[SummaryTopic]:
+    def create_data_objects(
+        self, data_list: list[dict[str, object]]
+    ) -> list[SummaryTopic]:
         """
         创建话题对象列表
 
@@ -199,7 +203,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
         logger.debug(f"输入数据类型: {type(data_list)}")
 
         try:
-            topics = []
+            topics: list[SummaryTopic] = []
             max_topics = self.get_max_count()
 
             logger.debug(f"处理前 {max_topics} 条话题数据")
@@ -209,9 +213,9 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
 
                 try:
                     # 确保数据格式正确
-                    topic_name = topic_data.get("topic", "").strip()
+                    topic_name = str(topic_data.get("topic", "") or "").strip()
                     contributors = topic_data.get("contributors", [])
-                    detail = topic_data.get("detail", "").strip()
+                    detail = str(topic_data.get("detail", "") or "").strip()
 
                     logger.debug(
                         f"话题数据 - 名称: {topic_name}, 参与者: {contributors}, 详情: {detail[:50]}..."
@@ -223,7 +227,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
                         continue
 
                     # 确保参与者列表有效
-                    if not contributors or not isinstance(contributors, list):
+                    if not contributors or not is_object_list(contributors):
                         contributors = ["群友"]
                     else:
                         # 清理参与者名称
@@ -250,11 +254,13 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
             return []
 
     def validate_parsed_data(
-        self, data_list: list[dict]
-    ) -> tuple[bool, list[dict] | None, str | None]:
+        self, data_list: list[dict[str, object]]
+    ) -> tuple[bool, list[dict[str, object]] | None, str | None]:
         return validate_topic_items(data_list)
 
-    def extract_text_messages(self, messages: list[dict]) -> list[dict]:
+    def extract_text_messages(
+        self, messages: list[LegacyMessagePayload]
+    ) -> list[AnalysisTextMessage]:
         """
         从已清理的消息中提取文本消息用于话题分析。
 
@@ -264,7 +270,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
         Returns:
             提取的文本消息列表
         """
-        text_messages = []
+        text_messages: list[AnalysisTextMessage] = []
 
         for msg in messages:
             # 获取发送者显示名
@@ -293,7 +299,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
 
     async def analyze_topics(
         self,
-        messages: list[dict],
+        messages: list[LegacyMessagePayload],
         umo: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """分析群聊话题
@@ -331,7 +337,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
                 logger.debug(f"第一条文本消息内容: {text_messages[0]}")
 
             # 建立 ID 到昵称的映射表
-            id_to_nickname = {}
+            id_to_nickname: dict[str, str] = {}
             for msg in text_messages:
                 sender = msg.get("sender")
                 user_id = msg.get("user_id")
@@ -349,7 +355,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
                 # 因此仅接受本批次已知用户或已配置机器人 ID，而不是用 isdigit 过滤。
                 bot_ids = {str(uid) for uid in self.config_manager.get_bot_self_ids()}
                 known_ids = set(id_to_nickname) | bot_ids
-                valid_ids = []
+                valid_ids: list[str] = []
                 for raw_uid in raw_ids:
                     uid = str(raw_uid).strip().strip("[]")
                     if uid and uid in known_ids and uid not in valid_ids:
@@ -357,7 +363,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
                 topic.contributor_ids = valid_ids
 
                 # 映射回昵称用于显示
-                resolved_names = []
+                resolved_names: list[str] = []
                 for uid in valid_ids:
                     # 尝试从当前批次消息映射
                     name = id_to_nickname.get(uid)
