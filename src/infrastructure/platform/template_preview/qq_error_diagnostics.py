@@ -10,6 +10,8 @@ from urllib.parse import unquote
 
 import aiohttp
 
+from ....shared.type_guards import is_object_collection, is_string_mapping
+
 _SECRET_FIELDS = (
     r"authorization|proxy[-_]?authorization|cookie|set[-_]?cookie|"
     r"(?:access|refresh|id|bot)[-_]?token|token|(?:client|app)[-_]?secret|secret|"
@@ -79,14 +81,14 @@ def describe_preview_error(exc: Exception) -> str:
         if not pending:
             break
         candidate = pending.popleft()
-        if isinstance(candidate, dict):
+        if is_string_mapping(candidate):
             for key, label in (
                 ("status", "http_status"),
                 ("status_code", "http_status"),
                 ("code", "code"),
                 ("errcode", "code"),
             ):
-                value = dict.get(candidate, key)
+                value = candidate.get(key)
                 if isinstance(value, str) and re.fullmatch(r"-?[0-9]{1,10}", value):
                     value = int(value)
                 if (
@@ -98,12 +100,12 @@ def describe_preview_error(exc: Exception) -> str:
                     numbers.setdefault(label, value)
             # 不展开 headers、request、response、data 等任意 SDK 附加信息。
             for key in ("error", "error_description", "msg", "message", "msgs"):
-                value = dict.get(candidate, key)
+                value = candidate.get(key)
                 if value is not None:
                     pending.appendleft(value)
             continue
-        if isinstance(candidate, (tuple, list)):
-            pending.extend(candidate[:3])
+        if is_object_collection(candidate):
+            pending.extend(list(candidate)[:3])
             continue
         if isinstance(candidate, bytes):
             candidate = candidate[:8192].decode("utf-8", errors="replace")

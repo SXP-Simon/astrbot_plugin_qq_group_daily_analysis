@@ -9,11 +9,9 @@ from __future__ import annotations
 import base64
 import html
 import mimetypes
-from collections.abc import Awaitable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from ....domain.repositories.plugin_host_repository import PluginHostProtocol
 from ....domain.value_objects.platform_capabilities import (
     SATORI_CAPABILITIES,
     PlatformCapabilities,
@@ -24,11 +22,18 @@ from ....domain.value_objects.unified_message import (
     MessageContentType,
     UnifiedMessage,
 )
+from ....entrypoints.plugin_host import PluginHostProtocol
+from ....shared.type_guards import (
+    is_object_awaitable,
+    is_object_collection,
+    is_object_list,
+    is_string_mapping,
+)
 from ....utils.logger import logger
 from ..base import PlatformAdapter
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from astrbot.api.star import Context
 
@@ -67,10 +72,10 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
             raw_plugin if isinstance(raw_plugin, PluginHostProtocol) else None
         )
         self._platform_id = str(config.get("platform_id", "")).strip() if config else ""
-        raw_ids = config.get("bot_self_ids", []) if config else []
+        raw_ids = config.get("bot_self_ids") if config else None
         self.bot_self_ids = (
             [str(item) for item in raw_ids if item]
-            if isinstance(raw_ids, (list, tuple, set))
+            if is_object_collection(raw_ids)
             else []
         )
         # 用户资料运行时缓存：user_id -> {"nickname": ..., "avatar_url": ...}
@@ -226,10 +231,12 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
         data: dict[str, object] | None = None,
     ) -> object:
         """发送 Satori HTTP API 请求并返回响应。"""
-        send_req = getattr(self.bot, "send_http_request", None)
+        send_req: Callable[[str, str, dict[str, object] | None], object] | None = (
+            getattr(self.bot, "send_http_request", None)
+        )
         if callable(send_req):
             res = send_req(method, path, data)
-            if isinstance(res, Awaitable):
+            if is_object_awaitable(res):
                 return await res
             return res
         return None
@@ -248,17 +255,17 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
         """
         try:
             raw_content = getattr(record, "content", None)
-            if not isinstance(raw_content, dict):
+            if not is_string_mapping(raw_content):
                 return None
-            content: dict[str, Any] = raw_content
+            content = raw_content
 
             contents: list[MessageContent] = []
             text_parts: list[str] = []
             raw_parts = content.get("message", [])
 
-            if isinstance(raw_parts, list):
+            if is_object_list(raw_parts):
                 for part in raw_parts:
-                    if not isinstance(part, dict):
+                    if not is_string_mapping(part):
                         continue
                     part_type = str(part.get("type", "")).lower()
                     if part_type in {"plain", "text"}:
@@ -338,7 +345,7 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
             self.remember_user_profile(sender_id, nickname=sender_name)
 
             raw_meta = content.get("_satori")
-            metadata: dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
+            metadata = raw_meta if is_string_mapping(raw_meta) else {}
             message_id = str(
                 metadata.get("message_id")
                 or content.get("message_id")
@@ -348,7 +355,10 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
             if not message_id:
                 message_id = f"local:{getattr(record, 'id', '') or ''}"
 
-            timestamp = int(metadata.get("timestamp", 0) or 0)
+            raw_timestamp = metadata.get("timestamp", 0) or 0
+            if not isinstance(raw_timestamp, (str, int, float)):
+                return None
+            timestamp = int(raw_timestamp)
             if timestamp <= 0:
                 created_at = getattr(record, "created_at", None)
                 timestamp = int(created_at.timestamp()) if created_at is not None else 0
@@ -380,12 +390,14 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
         if self._plugin_instance:
             registry = getattr(self._plugin_instance, "platform_group_registry", None)
             if registry is not None:
-                get_all_group_ids = getattr(registry, "get_all_group_ids", None)
+                get_all_group_ids: Callable[[str], object] | None = getattr(
+                    registry, "get_all_group_ids", None
+                )
                 if callable(get_all_group_ids):
                     try:
                         res = get_all_group_ids(self.platform_id)
-                        kv_groups = await res if isinstance(res, Awaitable) else res
-                        if isinstance(kv_groups, (list, tuple, set)):
+                        kv_groups = await res if is_object_awaitable(res) else res
+                        if is_object_collection(kv_groups):
                             groups.extend([str(gid) for gid in kv_groups])
                     except Exception as exc:
                         logger.warning("[Satori] 从群注册表读取群列表失败: %s", exc)
@@ -412,9 +424,11 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
             guild_data = await self._call_satori_api(
                 "POST", "/guild.get", {"guild_id": target_id}
             )
-            if isinstance(guild_data, dict):
+            if is_string_mapping(guild_data):
                 group_name = str(guild_data.get("name") or group_name)
-                member_count = int(guild_data.get("member_count", 0) or 0)
+                raw_count = guild_data.get("member_count", 0) or 0
+                if isinstance(raw_count, (str, int, float)):
+                    member_count = int(raw_count)
         except Exception as exc:
             logger.debug("[Satori] /guild.get 查询失败 %s: %s", target_id, exc)
 
@@ -459,18 +473,18 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
                 resp = await self._call_satori_api(
                     "POST", "/guild.member.list", payload
                 )
-                if not isinstance(resp, dict):
+                if not is_string_mapping(resp):
                     break
 
                 data_list = resp.get("data")
-                if not isinstance(data_list, list):
+                if not is_object_list(data_list):
                     break
 
                 for item in data_list:
-                    if not isinstance(item, dict):
+                    if not is_string_mapping(item):
                         continue
                     raw_u = item.get("user")
-                    user: dict[str, Any] = raw_u if isinstance(raw_u, dict) else {}
+                    user = raw_u if is_string_mapping(raw_u) else {}
                     user_id = str(user.get("id") or item.get("user_id") or "").strip()
                     if not user_id:
                         continue
@@ -535,9 +549,9 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
                     "/guild.member.get",
                     {"guild_id": str(group_id), "user_id": target_uid},
                 )
-                if isinstance(resp, dict):
+                if is_string_mapping(resp):
                     raw_u = resp.get("user")
-                    user: dict[str, Any] = raw_u if isinstance(raw_u, dict) else {}
+                    user = raw_u if is_string_mapping(raw_u) else {}
                     nickname = (
                         resp.get("nick")
                         or user.get("nick")
@@ -586,7 +600,7 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
             resp = await self._call_satori_api(
                 "POST", "/user.get", {"user_id": target_uid}
             )
-            if isinstance(resp, dict) and resp.get("avatar"):
+            if is_string_mapping(resp) and resp.get("avatar"):
                 avatar = str(resp["avatar"])
                 self.remember_user_profile(target_uid, avatar_url=avatar)
                 return avatar
@@ -650,7 +664,7 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
             resp = await self._call_satori_api(
                 "POST", "/guild.get", {"guild_id": target_gid}
             )
-            if isinstance(resp, dict) and resp.get("avatar"):
+            if is_string_mapping(resp) and resp.get("avatar"):
                 return str(resp["avatar"])
         except Exception:
             pass
@@ -734,7 +748,9 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
             logger.error("[Satori] 发送图片消息失败 %s: %s", target_id, exc)
             return False
 
-    async def send_forward_msg(self, group_id: str, nodes: list[dict]) -> bool:
+    async def send_forward_msg(
+        self, group_id: str, nodes: list[dict[str, object]]
+    ) -> bool:
         """发送转发消息节点。
 
         Args:

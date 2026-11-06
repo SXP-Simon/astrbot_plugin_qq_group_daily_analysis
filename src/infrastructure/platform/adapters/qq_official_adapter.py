@@ -8,13 +8,12 @@ import hashlib
 import os
 import random
 import re
-from collections.abc import Awaitable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import aiohttp
 
-from ....domain.repositories.plugin_host_repository import PluginHostProtocol
 from ....domain.value_objects.platform_capabilities import (
     QQ_OFFICIAL_CAPABILITIES,
     PlatformCapabilities,
@@ -24,6 +23,13 @@ from ....domain.value_objects.unified_message import (
     MessageContent,
     MessageContentType,
     UnifiedMessage,
+)
+from ....entrypoints.plugin_host import PluginHostProtocol
+from ....shared.type_guards import (
+    is_object_awaitable,
+    is_object_collection,
+    is_object_list,
+    is_string_mapping,
 )
 from ....utils.logger import logger
 from ..base import PlatformAdapter
@@ -61,10 +67,10 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
             raw_plugin if isinstance(raw_plugin, PluginHostProtocol) else None
         )
         self._platform_id = str(config.get("platform_id", "")).strip() if config else ""
-        raw_ids = config.get("bot_self_ids", []) if config else []
+        raw_ids: object = config.get("bot_self_ids", []) if config else []
         self.bot_self_ids = (
             [str(item) for item in raw_ids if item]
-            if isinstance(raw_ids, (list, tuple, set))
+            if is_object_collection(raw_ids)
             else []
         )
         self.appid = self._resolve_appid(config or {})
@@ -224,18 +230,18 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
     ) -> UnifiedMessage | None:
         try:
             content = record.content
-            if not isinstance(content, dict):
+            if not is_string_mapping(content):
                 return None
             metadata = content.get("_qq_official")
-            if not isinstance(metadata, dict):
+            if not is_string_mapping(metadata):
                 return None
 
             contents: list[MessageContent] = []
             text_parts: list[str] = []
             raw_parts = content.get("message", [])
-            if isinstance(raw_parts, list):
+            if is_object_list(raw_parts):
                 for part in raw_parts:
-                    if not isinstance(part, dict):
+                    if not is_string_mapping(part):
                         continue
                     part_type = str(part.get("type", "")).lower()
                     if part_type in {"plain", "text"}:
@@ -288,7 +294,12 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
             )
             if not message_id:
                 message_id = f"local:{record.id or ''}"
-            timestamp = int(metadata.get("timestamp", 0) or 0)
+            raw_timestamp = metadata.get("timestamp", 0) or 0
+            timestamp = (
+                int(raw_timestamp)
+                if isinstance(raw_timestamp, (str, int, float))
+                else 0
+            )
             if timestamp <= 0:
                 created_at = record.created_at
                 timestamp = int(created_at.timestamp()) if created_at else 0
@@ -314,10 +325,12 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
             logger.debug("[QQOfficial] 转换本地历史记录失败: %s", exc)
             return None
 
-    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
-        result: list[dict] = []
+    def convert_to_raw_format(
+        self, messages: list[UnifiedMessage]
+    ) -> list[dict[str, object]]:
+        result: list[dict[str, object]] = []
         for message in messages:
-            chain: list[dict] = []
+            chain: list[dict[str, object]] = []
             # 表情特征段补充统计语义；原正文已保留可读表示，此处不重复拼接。
             for content in message.contents:
                 if content.type == MessageContentType.TEXT:
@@ -466,11 +479,11 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
             markdown=markdown,
             msg_seq=self._next_markdown_msg_seq(),
         )
-        if isinstance(call_result, Awaitable):
+        if is_object_awaitable(call_result):
             result = await call_result
         else:
             result = call_result
-        return isinstance(result, dict) and bool(result.get("id"))
+        return is_string_mapping(result) and bool(result.get("id"))
 
     def _next_markdown_msg_seq(self) -> int:
         self._markdown_msg_seq = (self._markdown_msg_seq % 10000) + 1

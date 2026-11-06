@@ -12,6 +12,7 @@ from ....domain.repositories.bot_client_protocol import (
     TelegramApplicationProtocol,
     TelegramClientProtocol,
 )
+from ....shared.type_guards import is_string_mapping
 from ....utils.logger import logger
 from ..command_prefix import get_command_prefix
 
@@ -629,7 +630,7 @@ class TelegramTemplatePreviewHandler:
         platform_id = None
         platform_name = None
         if metadata:
-            if isinstance(metadata, dict):
+            if is_string_mapping(metadata):
                 platform_id = metadata.get("id")
                 platform_name = metadata.get("type") or metadata.get("name")
             else:
@@ -641,7 +642,9 @@ class TelegramTemplatePreviewHandler:
             platform_name = str(platform_name).lower()
         if platform_id:
             platform_id = str(platform_id)
-        return platform_id, platform_name
+        return str(platform_id) if platform_id else None, str(
+            platform_name
+        ) if platform_name else None
 
     @staticmethod
     def _extract_platform_client(platform: object) -> TelegramClientProtocol | None:

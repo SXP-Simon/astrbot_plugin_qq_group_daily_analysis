@@ -22,6 +22,10 @@ from ....domain.value_objects.platform_capabilities import (
     PlatformCapabilities,
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
+from ....shared.type_guards import (
+    is_object_list,
+    is_string_mapping,
+)
 from ....utils.logger import logger
 from ..base import PlatformAdapter
 from .telegram_message_converter import TelegramMessageConverter
@@ -48,7 +52,7 @@ TELEGRAM_AVATAR_NEGATIVE_CACHE_TTL = 600
 TELEGRAM_AVATAR_NEGATIVE_CACHE_MAX_SIZE = 1024
 
 
-class TelegramAdapter(PlatformAdapter):
+class TelegramAdapter(PlatformAdapter[object]):
     """Telegram Bot API 适配器。
 
     实现 PlatformAdapter 接口，支持：
@@ -72,7 +76,7 @@ class TelegramAdapter(PlatformAdapter):
         self.bot_self_ids: list[str] = []
         if config:
             ids = config.get("bot_self_ids", [])
-            self.bot_self_ids = [str(i) for i in ids] if isinstance(ids, list) else []
+            self.bot_self_ids = [str(i) for i in ids] if is_object_list(ids) else []
             self._plugin_instance = config.get("plugin_instance")
         else:
             self._plugin_instance = None
@@ -104,7 +108,7 @@ class TelegramAdapter(PlatformAdapter):
         1. 尝试调用 API (如果未来支持)
         2. 回退：从插件的 KV 存储中获取已知群组 (需注入插件实例)
         """
-        groups = []
+        groups: list[str] = []
 
         # 1. 尝试 API (目前 python-telegram-bot 不支持直接列出所有 chat)
         # 如果 client 有扩展方法或未来支持，可在此实现
@@ -261,7 +265,7 @@ class TelegramAdapter(PlatformAdapter):
                             content = getattr(record, "content", None)
                             raw_mid = (
                                 content.get("message_id")
-                                if isinstance(content, dict)
+                                if is_string_mapping(content)
                                 else None
                             )
                             rec_id = raw_mid or getattr(record, "id", None)
@@ -366,7 +370,9 @@ class TelegramAdapter(PlatformAdapter):
         """将数据库记录转换为 UnifiedMessage（委托 TelegramMessageConverter）。"""
         return TelegramMessageConverter.to_unified_message(record, group_id)
 
-    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
+    def convert_to_raw_format(
+        self, messages: list[UnifiedMessage]
+    ) -> list[dict[str, object]]:
         """将统一消息格式转换为 OneBot 兼容格式（委托 TelegramMessageConverter）。
 
         用于向后兼容现有分析逻辑。
@@ -606,7 +612,9 @@ class TelegramAdapter(PlatformAdapter):
             logger.error(f"[Telegram] 发送文件失败: {e}")
             return False
 
-    async def send_forward_msg(self, group_id: str, nodes: list[dict]) -> bool:
+    async def send_forward_msg(
+        self, group_id: str, nodes: list[dict[str, object]]
+    ) -> bool:
         """发送合并转发消息。
 
         Telegram 不支持原生转发消息链，转换为格式化文本发送。
@@ -695,7 +703,7 @@ class TelegramAdapter(PlatformAdapter):
             # 只能获取管理员列表，无法获取全部成员
             admins = await client.get_chat_administrators(chat_id=chat_id)
 
-            members = []
+            members: list[UnifiedMember] = []
             for admin in admins:
                 user = admin.user
                 members.append(

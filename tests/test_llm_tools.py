@@ -40,7 +40,7 @@ def mock_config_manager():
     cfg.get_user_title_analysis_enabled.return_value = True
     cfg.get_golden_quote_analysis_enabled.return_value = True
     cfg.get_chat_quality_analysis_enabled.return_value = False  # 默认关闭质量分析测试配置交集
-    cfg._get_group.return_value = {"admin_users": ["99999"]}
+    cfg.get_group.return_value = {"admin_users": ["99999"]}
     return cfg
 
 

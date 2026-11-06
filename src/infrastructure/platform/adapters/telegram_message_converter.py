@@ -16,6 +16,10 @@ from ....domain.value_objects.unified_message import (
     MessageContentType,
     UnifiedMessage,
 )
+from ....shared.type_guards import (
+    is_object_list,
+    is_string_mapping,
+)
 from ....utils.logger import logger
 
 if TYPE_CHECKING:
@@ -227,12 +231,12 @@ class TelegramMessageConverter:
 
             # 提取消息内容
             raw_parts = content.get("message", [])
-            message_parts = raw_parts if isinstance(raw_parts, list) else []
+            message_parts = raw_parts if is_object_list(raw_parts) else []
             text_content = ""
             contents: list[MessageContent] = []
 
             for part in message_parts:
-                if isinstance(part, dict):
+                if is_string_mapping(part):
                     part_type = str(part.get("type", ""))
                     if part_type in ("plain", "text"):
                         text = str(part.get("text", ""))
@@ -347,7 +351,7 @@ class TelegramMessageConverter:
         return result
 
     @staticmethod
-    def format_forward_nodes_to_text(nodes: list[dict]) -> str:
+    def format_forward_nodes_to_text(nodes: list[dict[str, object]]) -> str:
         """将合并转发节点列表排版为 Markdown 格式的文本内容。
 
         Telegram 没有原生合并转发，只能把节点扁平化成一条消息。平台按段落切分时
@@ -368,13 +372,17 @@ class TelegramMessageConverter:
         contents: list[str] = []
         for node in nodes:
             data = node.get("data", node)
+            if not is_string_mapping(data):
+                continue
             name = str(data.get("name", "AstrBot"))
             content = data.get("content", "")
-            if isinstance(content, list):
+            if is_object_list(content):
                 text_parts: list[str] = []
                 for seg in content:
-                    if isinstance(seg, dict) and seg.get("type") == "text":
-                        text_parts.append(seg.get("data", {}).get("text", ""))
+                    if is_string_mapping(seg) and seg.get("type") == "text":
+                        segment_data = seg.get("data")
+                        if is_string_mapping(segment_data):
+                            text_parts.append(str(segment_data.get("text", "")))
                 content = "".join(text_parts)
             text = str(content).strip()
             if not text:

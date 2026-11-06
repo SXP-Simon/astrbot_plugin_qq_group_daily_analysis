@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from .....shared.type_guards import is_object_list, is_string_mapping
 from .....utils.logger import logger
 from .standard_driver import StandardOneBotDriver
 
@@ -87,32 +88,32 @@ class LLOneBotDriver(StandardOneBotDriver):
                 f"[OneBot:{self.name}] 接口 get_group_album_list 原始响应内容: {res}"
             )
             albums: list[OneBotAlbumPayload] = []
-            if isinstance(res, list):
+            if is_object_list(res):
                 albums = [
                     cast("OneBotAlbumPayload", item)
                     for item in res
-                    if isinstance(item, dict)
+                    if is_string_mapping(item)
                 ]
-            elif isinstance(res, dict):
+            elif is_string_mapping(res):
                 data = res.get("data")
-                if isinstance(data, list):
+                if is_object_list(data):
                     albums = [
                         cast("OneBotAlbumPayload", item)
                         for item in data
-                        if isinstance(item, dict)
+                        if is_string_mapping(item)
                     ]
-                elif isinstance(data, dict):
+                elif is_string_mapping(data):
                     album_list = (
                         data.get("album_list")
                         or data.get("albumList")
                         or data.get("list")
                         or data.get("albums")
                     )
-                    if isinstance(album_list, list):
+                    if is_object_list(album_list):
                         albums = [
                             cast("OneBotAlbumPayload", item)
                             for item in album_list
-                            if isinstance(item, dict)
+                            if is_string_mapping(item)
                         ]
                 if not albums:
                     album_list = (
@@ -121,11 +122,11 @@ class LLOneBotDriver(StandardOneBotDriver):
                         or res.get("list")
                         or res.get("albums")
                     )
-                    if isinstance(album_list, list):
+                    if is_object_list(album_list):
                         albums = [
                             cast("OneBotAlbumPayload", item)
                             for item in album_list
-                            if isinstance(item, dict)
+                            if is_string_mapping(item)
                         ]
             if albums:
                 logger.debug(

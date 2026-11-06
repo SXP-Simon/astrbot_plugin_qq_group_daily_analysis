@@ -12,6 +12,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ....shared.type_guards import (
+    is_string_mapping,
+)
+
 try:
     import discord
 except ImportError:
@@ -154,19 +158,21 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                 since_ts,
                 before_id,
             )
-            messages = []
+            messages: list[UnifiedMessage] = []
 
             # 构建 Discord SDK 的 history 查询参数
-            history_kwargs = {"limit": max_count, "after": start_time}
+            before = None
             if before_id:
                 try:
                     # 使用 Snowflake ID 指向特定消息
-                    history_kwargs["before"] = discord.Object(id=int(before_id))
+                    before = discord.Object(id=int(before_id))
                 except (ValueError, TypeError):
                     pass
 
             # 消息迭代处理
-            async for msg in channel.history(**history_kwargs):
+            async for msg in channel.history(
+                limit=max_count, after=start_time, before=before
+            ):
                 # 排除机器人自身发布的消息
                 if self.bot_user_id and str(msg.author.id) == self.bot_user_id:
                     continue
@@ -193,7 +199,7 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
     ) -> UnifiedMessage | None:
         """内部方法：将 `discord.Message` 对象转换为统一的 `UnifiedMessage`。"""
         try:
-            contents = []
+            contents: list[MessageContent] = []
 
             # 1. 基础文本
             if raw_msg.content:
@@ -290,11 +296,14 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
             logger.debug(f"Discord 消息转换错误: {e}")
             return None
 
-    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
+    def convert_to_raw_format(
+        self, messages: list[UnifiedMessage]
+    ) -> list[dict[str, object]]:
         """将统一格式降级转换为 OneBot 风格的字典，以适配下游组件。"""
-        raw_messages = []
+        raw_messages: list[dict[str, object]] = []
         for msg in messages:
-            raw_msg = {
+            segments: list[dict[str, object]] = []
+            raw_msg: dict[str, object] = {
                 "message_id": msg.message_id,
                 "group_id": msg.group_id,
                 "time": msg.timestamp,
@@ -303,32 +312,30 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                     "nickname": msg.sender_name,
                     "card": msg.sender_card,
                 },
-                "message": [],
+                "message": segments,
                 "user_id": msg.sender_id,  # 后向兼容
             }
 
             for content in msg.contents:
                 if content.type == MessageContentType.TEXT:
-                    raw_msg["message"].append(
+                    segments.append(
                         {"type": "text", "data": {"text": content.text or ""}}
                     )
                 elif content.type == MessageContentType.IMAGE:
-                    raw_msg["message"].append(
+                    segments.append(
                         {
                             "type": "image",
                             "data": {"url": content.url, "file": content.url},
                         }
                     )
                 elif content.type == MessageContentType.AT:
-                    raw_msg["message"].append(
-                        {"type": "at", "data": {"qq": content.at_user_id}}
-                    )
+                    segments.append({"type": "at", "data": {"qq": content.at_user_id}})
                 elif (
                     content.type == MessageContentType.REPLY
-                    and isinstance(content.raw_data, dict)
+                    and is_string_mapping(content.raw_data)
                     and "reply_id" in content.raw_data
                 ):
-                    raw_msg["message"].append(
+                    segments.append(
                         {
                             "type": "reply",
                             "data": {"id": content.raw_data["reply_id"]},
@@ -514,7 +521,7 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
     async def send_forward_msg(
         self,
         group_id: str,
-        nodes: list[dict],
+        nodes: list[dict[str, object]],
     ) -> bool:
         """
         在 Discord 模拟合并转发。
@@ -540,6 +547,8 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
             lines = ["📊 **结构化报告摘要 (Structured Report)**\n"]
             for node in nodes:
                 data = node.get("data", node)  # 兼容不同格式
+                if not is_string_mapping(data):
+                    continue
                 name = data.get("name", "AstrBot")
                 content = data.get("content", "")
                 lines.append(f"**[{name}]**:\n{content}\n")
@@ -609,7 +618,7 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
             client = self._discord_client
             if not client:
                 return []
-            channel_ids = []
+            channel_ids: list[str] = []
             for guild in client.guilds:
                 for channel in guild.text_channels:
                     channel_ids.append(str(channel.id))
@@ -645,7 +654,7 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                     for u in getattr(channel, "recipients", [])
                 ]
 
-            members = []
+            members: list[UnifiedMember] = []
             for member in guild.members:
                 role = "member"
                 if member.id == guild.owner_id:

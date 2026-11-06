@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -28,8 +29,11 @@ def get_command_prefix(context: Context | None, event: AstrMessageEvent) -> str:
     if not isinstance(umo, str) or not umo:
         return ""
     try:
-        prefixes: object = context.get_config(umo=umo).get("wake_prefix", [])
-        if isinstance(prefixes, list):
+        config = context.get_config(umo=umo)
+        prefixes: object = (
+            config.get("wake_prefix", []) if is_string_mapping(config) else []
+        )
+        if is_object_list(prefixes):
             for prefix in prefixes:
                 if isinstance(prefix, str):
                     return prefix

@@ -9,6 +9,10 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from .....shared.type_guards import (
+    is_object_list,
+    is_string_mapping,
+)
 from .....utils.logger import logger
 
 if TYPE_CHECKING:
@@ -107,9 +111,9 @@ class OneBotGroupFileManager:
                 parent_id="/",
             )
             folder_id = None
-            if isinstance(result, dict):
+            if is_string_mapping(result):
                 data = result.get("data")
-                if isinstance(data, dict):
+                if is_string_mapping(data):
                     folder_id = (
                         data.get("folder_id") or data.get("id") or data.get("folderId")
                     )
@@ -140,7 +144,7 @@ class OneBotGroupFileManager:
     async def get_group_file_root_folders(
         self,
         group_id: str,
-    ) -> list[dict]:
+    ) -> list[dict[str, object]]:
         """获取群文件根目录下的文件夹列表。
 
         兼容顶层 folders、data.folders 及直接返回列表等多种 OneBot 实现规范。
@@ -149,7 +153,7 @@ class OneBotGroupFileManager:
             group_id: 目标群号。
 
         Returns:
-            list[dict]: 文件夹字典列表。
+            list[dict[str, object]]: 文件夹字典列表。
         """
         try:
             logger.debug(f"[OneBot] 正在获取群 {group_id} 的根目录文件夹列表...")
@@ -157,22 +161,22 @@ class OneBotGroupFileManager:
                 "get_group_root_files",
                 group_id=int(group_id),
             )
-            folders: list[dict] = []
-            if isinstance(result, list):
-                folders = [f for f in result if isinstance(f, dict)]
-            elif isinstance(result, dict):
+            folders: list[dict[str, object]] = []
+            if is_object_list(result):
+                folders = [f for f in result if is_string_mapping(f)]
+            elif is_string_mapping(result):
                 data = result.get("data")
-                if isinstance(data, list):
-                    folders = [f for f in data if isinstance(f, dict)]
-                elif isinstance(data, dict):
+                if is_object_list(data):
+                    folders = [f for f in data if is_string_mapping(f)]
+                elif is_string_mapping(data):
                     raw_folders = (
                         data.get("folders")
                         or data.get("folder_list")
                         or data.get("folderList")
                         or data.get("list")
                     )
-                    if isinstance(raw_folders, list):
-                        folders = [f for f in raw_folders if isinstance(f, dict)]
+                    if is_object_list(raw_folders):
+                        folders = [f for f in raw_folders if is_string_mapping(f)]
                 if not folders:
                     raw_folders = (
                         result.get("folders")
@@ -180,8 +184,8 @@ class OneBotGroupFileManager:
                         or result.get("folderList")
                         or result.get("list")
                     )
-                    if isinstance(raw_folders, list):
-                        folders = [f for f in raw_folders if isinstance(f, dict)]
+                    if is_object_list(raw_folders):
+                        folders = [f for f in raw_folders if is_string_mapping(f)]
 
             logger.debug(
                 f"[OneBot] 获取群文件夹列表成功 (群 {group_id}): 提取到 {len(folders)} 个文件夹"

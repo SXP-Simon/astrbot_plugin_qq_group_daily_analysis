@@ -8,6 +8,11 @@ import re
 from typing import TYPE_CHECKING, TypedDict
 
 from ...domain.value_objects.unified_message import MessageContent, MessageContentType
+from ...shared.type_guards import (
+    is_object_collection,
+    is_object_list,
+    is_string_mapping,
+)
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
@@ -39,9 +44,9 @@ def extract_qq_face_features(event: AstrMessageEvent) -> list[QQFaceFeature]:
     message = event.message_obj
     raw = getattr(message, "raw_message", None)
     raw_data = getattr(raw, "raw_data", None)
-    sources = []
+    sources: list[object] = []
     for source in (raw_data, raw):
-        if isinstance(source, dict):
+        if is_string_mapping(source):
             sources.append(source.get("d"))
         sources.append(source)
     raw_text: str | None = None
@@ -49,7 +54,7 @@ def extract_qq_face_features(event: AstrMessageEvent) -> list[QQFaceFeature]:
     for source in sources:
         content = (
             source.get("content")
-            if isinstance(source, dict)
+            if is_string_mapping(source)
             else getattr(source, "content", None)
         )
         if isinstance(content, str):
@@ -59,7 +64,10 @@ def extract_qq_face_features(event: AstrMessageEvent) -> list[QQFaceFeature]:
     if faces:
         # 宿主将来若同时输出 Face 组件，也不能把同一份原始表情重复记录。
         return faces
-    for component in getattr(message, "message", None) or []:
+    components: object = getattr(message, "message", None)
+    if not is_object_collection(components):
+        return faces
+    for component in components:
         if getattr(component, "type", None) not in ("Face", "face"):
             continue
         face_id = getattr(component, "id", None)
@@ -93,8 +101,11 @@ def _parse_face_tags(text: str) -> list[QQFaceFeature]:
         if ext and len(ext) <= 16384:
             try:
                 decoded = json.loads(base64.b64decode(ext, validate=True))
-                if isinstance(decoded, dict) and isinstance(decoded.get("text"), str):
-                    description = decoded["text"][:256]
+                description_text = (
+                    decoded.get("text") if is_string_mapping(decoded) else None
+                )
+                if isinstance(description_text, str):
+                    description = description_text[:256]
                     description.encode("utf-8")
                     name = description
             except (ValueError, UnicodeError, RecursionError):
@@ -120,11 +131,11 @@ def restore_qq_face_features(metadata: dict[str, object]) -> list[MessageContent
         明确保存的表情段；旧记录缺少事实时不依据占位描述或图片补猜。
     """
     faces = metadata.get("faces")
-    if not isinstance(faces, list):
+    if not is_object_list(faces):
         return []
-    contents = []
+    contents: list[MessageContent] = []
     for face in faces:
-        if not isinstance(face, dict):
+        if not is_string_mapping(face):
             continue
         kind, face_id, name = (
             face.get("face_type"),

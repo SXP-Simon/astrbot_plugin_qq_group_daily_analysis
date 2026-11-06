@@ -20,12 +20,17 @@ from ....domain.repositories.platform_adapter_repository import (
     GroupAlbumSupportProtocol,
     GroupFileSupportProtocol,
 )
-from ....domain.repositories.plugin_host_repository import PluginHostProtocol
 from ....domain.value_objects.platform_capabilities import (
     ONEBOT_V11_CAPABILITIES,
     PlatformCapabilities,
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
+from ....entrypoints.plugin_host import PluginHostProtocol
+from ....shared.type_guards import (
+    is_object_collection,
+    is_object_list,
+    is_string_mapping,
+)
 from ....utils.logger import logger
 from ..base import PlatformAdapter
 from .onebot import (
@@ -78,10 +83,10 @@ class OneBotAdapter(
         super().__init__(bot_instance, config)
         # 支持从多个潜在的配置键中提取机器人 ID
         raw_ids = config.get("bot_self_ids") if config else None
-        if not isinstance(raw_ids, (list, tuple)):
+        if not is_object_collection(raw_ids):
             raw_ids = config.get("bot_qq_ids") if config else None
         self.bot_self_ids = (
-            [str(id) for id in raw_ids] if isinstance(raw_ids, (list, tuple)) else []
+            [str(id) for id in raw_ids] if is_object_collection(raw_ids) else []
         )
         self.filter_bot_messages = (
             config.get("filter_bot_messages", True) if config else True
@@ -93,7 +98,7 @@ class OneBotAdapter(
         self._driver_detection_lock = asyncio.Lock()
 
         # 禁言状态缓存 (group_id -> timestamp)
-        self._muted_groups_cache = {}
+        self._muted_groups_cache: dict[str, float] = {}
         # 群角色缓存 (group_id -> (role, timestamp))，用于 get_group_member_info 超时降级
         self._group_role_cache: dict[str, tuple[str, float]] = {}
         # 协议端头像缓存 (uid -> (url, expires_at))；负缓存 (uid -> expires_at)
@@ -153,7 +158,7 @@ class OneBotAdapter(
 
         try:
             chunk_size = 100  # 每次拉取 100 条，较为稳健
-            all_raw_messages = []
+            all_raw_messages: list[dict[str, object]] = []
             seen_raw_ids: set[str] = set()
 
             # 确定回溯的起始时间点（以配置的 days 作为最远回溯边界，避免 since_ts 跨天/长期停机时越界拉取）
@@ -215,13 +220,18 @@ class OneBotAdapter(
                         )
                     break
 
-                if not isinstance(result, dict) or "messages" not in result:
+                if not is_string_mapping(result) or "messages" not in result:
                     logger.debug(
                         f"OneBot 分页拉取：API 调用返回空或无效数据，停止回溯。群: {group_id}"
                     )
                     break
 
-                messages = result.get("messages", [])
+                raw_messages = result.get("messages", [])
+                messages = (
+                    [item for item in raw_messages if is_string_mapping(item)]
+                    if is_object_list(raw_messages)
+                    else []
+                )
                 if not messages:
                     logger.debug(
                         f"OneBot 分页拉取：获取到 0 条消息，停止回溯。群: {group_id}"
@@ -233,17 +243,24 @@ class OneBotAdapter(
                 # 我们通过比较首尾消息的时间戳，动态识别出本批次中最旧的消息
                 first_msg = messages[0]
                 last_msg = messages[-1]
-                if first_msg.get("time", 0) <= last_msg.get("time", 0):
-                    # 正序：首条消息最旧
-                    chunk_earliest_msg = first_msg
-                else:
-                    # 逆序：末条消息最旧
-                    chunk_earliest_msg = last_msg
+                first_time, last_time = (
+                    first_msg.get("time", 0),
+                    last_msg.get("time", 0),
+                )
+                if not isinstance(first_time, (int, float)) or not isinstance(
+                    last_time, (int, float)
+                ):
+                    logger.debug("OneBot 历史页时间戳无效，停止回溯")
+                    break
+                # 同时兼容历史页按正序或逆序返回。
+                chunk_earliest_msg = first_msg if first_time <= last_time else last_msg
 
-                chunk_earliest_time = chunk_earliest_msg.get("time", 0)
+                chunk_earliest_time = min(first_time, last_time)
 
                 for raw_msg in messages:
                     msg_time = raw_msg.get("time", 0)
+                    if not isinstance(msg_time, (int, float)):
+                        continue
                     msg_id = str(raw_msg.get("message_id", ""))
 
                     # 使用集合去重分页重叠消息，避免消息量较大时反复线性扫描。
@@ -280,8 +297,8 @@ class OneBotAdapter(
                 await asyncio.sleep(0.05)
 
             # 统一转换为 UnifiedMessage 并在返回前去重排序
-            unified_messages = []
-            seen_ids = set()
+            unified_messages: list[UnifiedMessage] = []
+            seen_ids: set[str] = set()
             for raw_msg in all_raw_messages:
                 mid = str(raw_msg.get("message_id", ""))
                 if not mid or mid in seen_ids:
@@ -304,7 +321,9 @@ class OneBotAdapter(
             logger.warning(f"OneBot 分页获取消息失败: {e}")
             return []
 
-    def _convert_message(self, raw_msg: dict, group_id: str) -> UnifiedMessage | None:
+    def _convert_message(
+        self, raw_msg: dict[str, object], group_id: str
+    ) -> UnifiedMessage | None:
         """将 OneBot 原生原始消息字典转换为 UnifiedMessage 值对象（委托 OneBotMessageConverter）。
 
         Args:
@@ -316,14 +335,16 @@ class OneBotAdapter(
         """
         return OneBotMessageConverter.to_unified_message(raw_msg, group_id)
 
-    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
+    def convert_to_raw_format(
+        self, messages: list[UnifiedMessage]
+    ) -> list[dict[str, object]]:
         """将统一格式转换回 OneBot v11 原生字典格式（委托 OneBotMessageConverter）。
 
         Args:
             messages: 统一消息列表。
 
         Returns:
-            list[dict]: OneBot 格式的消息字典列表。
+            list[dict[str, object]]: OneBot 格式的消息字典列表。
         """
         return OneBotMessageConverter.to_raw_messages(messages)
 
@@ -483,7 +504,7 @@ class OneBotAdapter(
         """向群组发送图片消息。"""
 
         async def do_send(file_val: str, label: str):
-            msg = []
+            msg: list[dict[str, object]] = []
             if caption:
                 msg.append({"type": "text", "data": {"text": caption}})
             msg.append({"type": "image", "data": {"file": file_val}})
@@ -559,7 +580,7 @@ class OneBotAdapter(
     async def send_forward_msg(
         self,
         group_id: str,
-        nodes: list[dict],
+        nodes: list[dict[str, object]],
     ) -> bool:
         """
         发送群合并转发消息。
@@ -570,12 +591,9 @@ class OneBotAdapter(
         try:
             # 兼容处理节点中的 uin -> user_id (有些后端偏好 uin)
             for node in nodes:
-                if (
-                    "data" in node
-                    and "user_id" in node["data"]
-                    and "uin" not in node["data"]
-                ):
-                    node["data"]["uin"] = node["data"]["user_id"]
+                data = node.get("data")
+                if is_string_mapping(data) and "user_id" in data and "uin" not in data:
+                    data["uin"] = data["user_id"]
 
             await self.bot.call_action(
                 "send_group_forward_msg",
@@ -600,12 +618,13 @@ class OneBotAdapter(
                 group_id=int(group_id),
             )
 
-            if not isinstance(result, dict):
+            if not is_string_mapping(result):
                 return None
 
             info: dict[str, object] = result
-            if isinstance(result.get("data"), dict):
-                info = cast("dict[str, object]", result["data"])
+            data = result.get("data")
+            if is_string_mapping(data):
+                info = data
 
             create_time_raw = info.get("group_create_time")
             member_count_raw = info.get("member_count", 0)
@@ -629,21 +648,21 @@ class OneBotAdapter(
         """获取当前机器人已加入的所有群组 ID 列表。"""
         try:
             result = await self.bot.call_action("get_group_list")
-            groups: list[dict] = []
-            if isinstance(result, list):
-                groups = [g for g in result if isinstance(g, dict)]
-            elif isinstance(result, dict):
+            groups: list[dict[str, object]] = []
+            if is_object_list(result):
+                groups = [g for g in result if is_string_mapping(g)]
+            elif is_string_mapping(result):
                 data = result.get("data")
-                if isinstance(data, list):
-                    groups = [g for g in data if isinstance(g, dict)]
-                elif isinstance(data, dict):
+                if is_object_list(data):
+                    groups = [g for g in data if is_string_mapping(g)]
+                elif is_string_mapping(data):
                     raw = data.get("group_list") or data.get("list")
-                    if isinstance(raw, list):
-                        groups = [g for g in raw if isinstance(g, dict)]
+                    if is_object_list(raw):
+                        groups = [g for g in raw if is_string_mapping(g)]
                 if not groups:
                     raw = result.get("group_list") or result.get("list")
-                    if isinstance(raw, list):
-                        groups = [g for g in raw if isinstance(g, dict)]
+                    if is_object_list(raw):
+                        groups = [g for g in raw if is_string_mapping(g)]
             return [str(g.get("group_id", "")) for g in groups if g.get("group_id")]
         except Exception as e:
             logger.debug(f"[OneBot] 获取群列表失败: {e}")
@@ -657,39 +676,42 @@ class OneBotAdapter(
                 group_id=int(group_id),
             )
 
-            raw_members: list[dict] = []
-            if isinstance(result, list):
-                raw_members = [m for m in result if isinstance(m, dict)]
-            elif isinstance(result, dict):
+            raw_members: list[dict[str, object]] = []
+            if is_object_list(result):
+                raw_members = [m for m in result if is_string_mapping(m)]
+            elif is_string_mapping(result):
                 data = result.get("data")
-                if isinstance(data, list):
-                    raw_members = [m for m in data if isinstance(m, dict)]
-                elif isinstance(data, dict):
+                if is_object_list(data):
+                    raw_members = [m for m in data if is_string_mapping(m)]
+                elif is_string_mapping(data):
                     raw = (
                         data.get("member_list")
                         or data.get("members")
                         or data.get("list")
                     )
-                    if isinstance(raw, list):
-                        raw_members = [m for m in raw if isinstance(m, dict)]
+                    if is_object_list(raw):
+                        raw_members = [m for m in raw if is_string_mapping(m)]
                 if not raw_members:
                     raw = (
                         result.get("member_list")
                         or result.get("members")
                         or result.get("list")
                     )
-                    if isinstance(raw, list):
-                        raw_members = [m for m in raw if isinstance(m, dict)]
+                    if is_object_list(raw):
+                        raw_members = [m for m in raw if is_string_mapping(m)]
 
-            members = []
+            members: list[UnifiedMember] = []
             for m in raw_members:
+                join_time = m.get("join_time")
                 members.append(
                     UnifiedMember(
                         user_id=str(m.get("user_id", "")),
-                        nickname=m.get("nickname", ""),
-                        card=m.get("card", "") or None,
-                        role=m.get("role", "member"),
-                        join_time=m.get("join_time"),
+                        nickname=str(m.get("nickname", "")),
+                        card=str(m.get("card") or "") or None,
+                        role=str(m.get("role", "member")),
+                        join_time=int(join_time)
+                        if isinstance(join_time, (str, int, float))
+                        else None,
                     )
                 )
             return members
@@ -710,12 +732,13 @@ class OneBotAdapter(
                 user_id=int(user_id),
             )
 
-            if not isinstance(result, dict):
+            if not is_string_mapping(result):
                 return None
 
             info: dict[str, object] = result
-            if isinstance(result.get("data"), dict):
-                info = cast("dict[str, object]", result["data"])
+            data = result.get("data")
+            if is_string_mapping(data):
+                info = data
 
             join_time_raw = info.get("join_time")
             return UnifiedMember(
@@ -761,11 +784,12 @@ class OneBotAdapter(
     @staticmethod
     def _extract_protocol_avatar_url(payload: object) -> str | None:
         """从协议端用户资料响应中提取头像 URL。"""
-        if not isinstance(payload, dict):
+        if not is_string_mapping(payload):
             return None
         targets: list[dict[str, object]] = [payload]
-        if isinstance(payload.get("data"), dict):
-            targets.append(payload["data"])
+        data = payload.get("data")
+        if is_string_mapping(data):
+            targets.append(data)
         for target in targets:
             for key in (
                 "avatar_url",
@@ -982,11 +1006,11 @@ class OneBotAdapter(
                 )
                 info = (
                     login_info.get("data")
-                    if isinstance(login_info, dict)
-                    and isinstance(login_info.get("data"), dict)
+                    if is_string_mapping(login_info)
+                    and is_string_mapping(login_info.get("data"))
                     else login_info
                 )
-                if isinstance(info, dict) and "user_id" in info:
+                if is_string_mapping(info) and "user_id" in info:
                     bot_user_id = str(info["user_id"])
                     self.bot_self_ids = [bot_user_id]
             except Exception as e:
@@ -1014,15 +1038,20 @@ class OneBotAdapter(
                 )
                 info = (
                     member_info.get("data")
-                    if isinstance(member_info, dict)
-                    and isinstance(member_info.get("data"), dict)
+                    if is_string_mapping(member_info)
+                    and is_string_mapping(member_info.get("data"))
                     else member_info
                 )
-                if member_info and isinstance(info, dict):
-                    role = info.get("role", "member")
+                if member_info and is_string_mapping(info):
+                    role = str(info.get("role", "member"))
                     # 缓存角色信息，用于 get_group_member_info 超时时降级使用
                     self._group_role_cache[group_id_str] = (role, time.time())
-                    shut_up_time = info.get("shut_up_time", 0)
+                    raw_shut_up_time = info.get("shut_up_time", 0)
+                    shut_up_time = (
+                        float(raw_shut_up_time)
+                        if isinstance(raw_shut_up_time, (int, float, str))
+                        else 0
+                    )
                     # 大数按 Unix 截止时间判断，其余正数按剩余禁言秒数判断。
                     is_individually_muted = shut_up_time > 0 and (
                         shut_up_time <= 1000000000 or shut_up_time > time.time()
@@ -1072,11 +1101,11 @@ class OneBotAdapter(
                 return False
             info = (
                 group_info.get("data")
-                if isinstance(group_info, dict)
-                and isinstance(group_info.get("data"), dict)
+                if is_string_mapping(group_info)
+                and is_string_mapping(group_info.get("data"))
                 else group_info
             )
-            if not isinstance(info, dict):
+            if not is_string_mapping(info):
                 return False
             driver = await self._ensure_driver()
             if driver.is_whole_ban(info):
@@ -1160,7 +1189,7 @@ class OneBotAdapter(
     async def get_group_file_root_folders(
         self,
         group_id: str,
-    ) -> list[dict]:
+    ) -> list[dict[str, object]]:
         """获取群文件根目录下的文件夹列表（委托 OneBotGroupFileManager）。"""
         return await self._file_manager.get_group_file_root_folders(group_id=group_id)
 
@@ -1195,10 +1224,10 @@ class OneBotAdapter(
     async def get_group_album_list(
         self,
         group_id: str,
-    ) -> list[dict]:
+    ) -> list[dict[str, object]]:
         """获取群相册列表（委托 OneBotGroupFileManager）。"""
         return cast(
-            "list[dict]",
+            "list[dict[str, object]]",
             await self._file_manager.get_group_album_list(group_id=group_id),
         )
 
@@ -1285,7 +1314,7 @@ class OneBotAdapter(
 
     def _find_item_in_list(
         self,
-        items: list[dict],
+        items: list[dict[str, object]],
         target_name: str | None,
         id_keys: list[str],
         name_keys: list[str],

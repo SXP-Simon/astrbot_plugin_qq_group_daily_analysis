@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
 from astrbot.api.message_components import Image, Plain
 
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from astrbot.api.star import Context
 
     from ....application.services.template_command_service import TemplateCommandService
+    from ..host_images import ImageFactory
     from .image_cache import PreviewImageCache
 
 
@@ -186,7 +187,9 @@ class TemplatePreviewRouter:
                     try:
                         source = component.file or component.url or ""
                         path = await self.image_cache.get_jpeg(source)
-                        node.content[index] = Image.fromFileSystem(path)
+                        node.content[index] = cast(
+                            "ImageFactory", Image
+                        ).fromFileSystem(path)
                     except Exception as exc:
                         failures += 1
                         logger.debug(
