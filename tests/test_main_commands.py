@@ -226,7 +226,7 @@ async def test_analyze_group_daily_success_image_flow(plugin):
     )
     plugin.html_render = AsyncMock()
 
-    with patch.object(plugin, "_save_report_to_history"):
+    with patch.object(plugin, "save_report_to_history"):
         results = []
         async for res in plugin.analyze_group_daily(event):
             results.append(res)
@@ -343,7 +343,7 @@ async def test_analyze_group_daily_reaction_mode(plugin):
         return_value=("file:///tmp/rep.jpg", "<html></html>")
     )
 
-    with patch.object(plugin, "_save_report_to_history"):
+    with patch.object(plugin, "save_report_to_history"):
         results = []
         async for res in plugin.analyze_group_daily(event):
             results.append(res)
@@ -372,7 +372,7 @@ async def test_generate_group_comic_not_in_group(plugin):
 
 @pytest.mark.asyncio
 async def test_generate_group_comic_feature_disabled(plugin):
-    plugin.config_manager._ensure_group("daily_comic")["enable_daily_comic"] = False
+    plugin.config_manager.ensure_group("daily_comic")["enable_daily_comic"] = False
     event = MockEvent(group_id="123456")
     results = []
     async for res in plugin.generate_group_comic(event):
@@ -383,7 +383,7 @@ async def test_generate_group_comic_feature_disabled(plugin):
 
 @pytest.mark.asyncio
 async def test_generate_group_comic_group_not_allowed(plugin):
-    plugin.config_manager._ensure_group("daily_comic")["comic_group_list"] = ["999999"]
+    plugin.config_manager.ensure_group("daily_comic")["comic_group_list"] = ["999999"]
     event = MockEvent(group_id="123456")
     results = []
     async for res in plugin.generate_group_comic(event):
@@ -396,7 +396,7 @@ async def test_generate_group_comic_group_not_allowed(plugin):
 async def test_generate_group_comic_duplicate_task(plugin):
     event = MockEvent(group_id="123456")
     fake_task = Mock(done=Mock(return_value=False))
-    plugin._comic_group_tasks["aiocqhttp_1:123456"] = fake_task
+    plugin.comic_group_tasks["aiocqhttp_1:123456"] = fake_task
 
     results = []
     async for res in plugin.generate_group_comic(event):
@@ -637,8 +637,8 @@ async def test_analysis_settings_enable_and_disable_whitelist(plugin):
 
 @pytest.mark.asyncio
 async def test_analysis_settings_enable_and_disable_blacklist(plugin):
-    plugin.config_manager._ensure_group("basic")["group_list_mode"] = "blacklist"
-    plugin.config_manager._ensure_group("basic")["group_list"] = []
+    plugin.config_manager.ensure_group("basic")["group_list_mode"] = "blacklist"
+    plugin.config_manager.ensure_group("basic")["group_list"] = []
     event = MockEvent(group_id="777888", unified_msg_origin="qq:GroupMessage:777888")
 
     # 1. 禁用 -> 加入黑名单
@@ -658,7 +658,7 @@ async def test_analysis_settings_enable_and_disable_blacklist(plugin):
 async def test_analysis_settings_reload(plugin):
     event = MockEvent(group_id="123456")
     plugin.auto_scheduler.schedule_jobs = Mock()
-    plugin._refresh_incremental_target_states = AsyncMock()
+    plugin.refresh_incremental_target_states = AsyncMock()
 
     results = []
     async for res in plugin.analysis_settings(event, action="reload"):
@@ -711,7 +711,7 @@ async def test_incremental_status_not_in_group(plugin):
 
 @pytest.mark.asyncio
 async def test_incremental_status_disabled(plugin):
-    plugin.config_manager._ensure_group("incremental")["incremental_group_list"] = []
+    plugin.config_manager.ensure_group("incremental")["incremental_group_list"] = []
     event = MockEvent(group_id="123456")
     results = []
     async for res in plugin.incremental_status(event):
