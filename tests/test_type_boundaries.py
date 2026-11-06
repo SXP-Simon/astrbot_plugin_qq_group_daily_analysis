@@ -89,9 +89,10 @@ def test_generated_activity_chart_keeps_peak_counts_after_json_roundtrip():
     from src.infrastructure.visualization.activity_charts import ActivityVisualizer
 
     timestamp = int(datetime(2026, 11, 6, 10, 0).timestamp())
+    from src.domain.value_objects import UnifiedMessage
     messages = [
-        {"time": timestamp, "sender": {"user_id": "u", "nickname": "群友"}, "message": []},
-        {"time": timestamp + 60, "sender": {"user_id": "u", "nickname": "群友"}, "message": []},
+        UnifiedMessage(message_id=str(i), sender_id="u", sender_name="群友", group_id="g", text_content="", timestamp=timestamp + i * 60)
+        for i in range(2)
     ]
     chart = ActivityVisualizer().generate_activity_visualization(messages)
     restored = ActivityVisualization.from_dict(json.loads(json.dumps(chart.to_dict())))
