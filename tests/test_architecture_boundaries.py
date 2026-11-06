@@ -25,6 +25,25 @@ def test_domain_does_not_import_outer_layers():
             else:
                 continue
             for module in modules:
-                if any(module == name or module.startswith(name + ".") for name in forbidden):
-                    violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: {module}")
+                if any(
+                    module == name or module.startswith(name + ".")
+                    for name in forbidden
+                ):
+                    violations.append(
+                        f"{path.relative_to(ROOT)}:{node.lineno}: {module}"
+                    )
     assert not violations, "领域层不应导入外层实现：\n" + "\n".join(violations)
+
+
+def test_domain_does_not_parse_dynamic_sdk_objects():
+    """宿主与供应商的动态字段读取应在接入边界完成。"""
+    violations = []
+    for path in (ROOT / "src/domain").rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in {"getattr", "hasattr", "setattr"}
+            ):
+                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+    assert not violations, "领域层不应通过反射解释外部对象：" + ", ".join(violations)

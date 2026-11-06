@@ -10,8 +10,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TypedDict
 
-from ...shared.type_guards import is_string_mapping
-
 
 class AnalysisTextMessage(TypedDict):
     """交给提示词构建器的文本消息。"""
@@ -48,8 +46,7 @@ class MessageContent:
     值对象：消息内容段
 
     表示消息链中的一个组成部分（如文本、图片、表情等）。
-    字段禁止重新赋值；raw_data 可能包含可变容器，仅供接入和兼容读取，
-    不保证深度不可变，业务处理不得原地修改它。
+    仅保存明确的不可变字段，平台原始数据在接入边界完成解析。
 
     Attributes:
         type (MessageContentType): 内容类型
@@ -58,7 +55,7 @@ class MessageContent:
         emoji_id (str): 表情 ID
         emoji_name (str): 表情名称
         at_user_id (str): 被 @ 的用户 ID
-        raw_data (object): 平台转换及旧快照兼容所需的原始数据，读取前检查类型
+        is_sticker (bool): 图片是否为已确认的贴纸或表情包
     """
 
     type: MessageContentType
@@ -67,26 +64,17 @@ class MessageContent:
     emoji_id: str = ""
     emoji_name: str = ""
     at_user_id: str = ""
-    raw_data: object = None
+    is_sticker: bool = False
 
     def is_emoji(self) -> bool:
-        """识别统一表情及旧快照中以图片保存的表情。
+        """判断是否属于表情，平台标记由接入边界预先归一化。
 
         Returns:
-            是否应计入表情统计；明确的图片子类型优先于摘要文本。
+            明确的表情段或已确认的图片表情返回 True。
         """
-        if self.type == MessageContentType.EMOJI:
-            return True
-        if self.type != MessageContentType.IMAGE:
-            return False
-        if is_string_mapping(self.raw_data):
-            sub_type = self.raw_data.get("sub_type")
-            if sub_type is not None:
-                return str(sub_type) == "1"
-            summary = str(self.raw_data.get("summary", ""))
-        else:
-            summary = str(self.raw_data or "")
-        return "动画表情" in summary or "表情" in summary
+        return self.type == MessageContentType.EMOJI or (
+            self.type == MessageContentType.IMAGE and self.is_sticker
+        )
 
 
 @dataclass(frozen=True)
