@@ -29,7 +29,7 @@ class ScheduledTargetResolver:
         """
         self.config_manager = config_manager
         self.bot_manager = bot_manager
-        self._group_name_cache: dict[str, str] = {}
+        self._group_name_cache: dict[tuple[str, str], str] = {}
 
     async def get_platform_id_for_group(self, group_id: str | int) -> str | None:
         """根据群ID获取对应的平台ID（精准验证）。
@@ -95,17 +95,20 @@ class ScheduledTargetResolver:
         Returns:
             str: 群名称或回退的 group_id。
         """
-        if group_id in self._group_name_cache:
-            return self._group_name_cache[group_id]
-
         try:
             pid = platform_id or await self.get_platform_id_for_group(group_id)
             if pid:
                 adapter = self.bot_manager.get_adapter(pid)
                 if adapter:
+                    key = (pid, group_id)
+                    # QQ 官方适配器自带成功/失败过期缓存，不能在这里永久固定旧名。
+                    cache_locally = adapter.get_platform_name() != "qq_official"
+                    if cache_locally and key in self._group_name_cache:
+                        return self._group_name_cache[key]
                     info = await adapter.get_group_info(group_id)
                     if info and info.group_name:
-                        self._group_name_cache[group_id] = info.group_name
+                        if cache_locally and info.group_name != group_id:
+                            self._group_name_cache[key] = info.group_name
                         return info.group_name
         except Exception:
             pass
