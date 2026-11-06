@@ -4,7 +4,7 @@ import { mockTemplateResources, mockTypstFonts } from "./data/templateResources"
 import { supportsTemplate } from "../entities/report/model/templates";
 import { renderingRuntimeSchema } from "../entities/config/model/renderingConfig";
 import { mockFontDownloadProgress, mockFontDownloads } from "./data/fontDownloads";
-import { mockMetricsSummary, mockAnalyticsTrends } from "./data/metrics";
+import { mockMetricsSummary, createMockAnalyticsTrends } from "./data/metrics";
 import { mockActiveTasks, mockConnectedPlatforms } from "./data/tasks";
 import { mockTraces } from "./data/traces";
 import { mockReportHistory, mockReportTemplates } from "./data/reports";
@@ -226,7 +226,13 @@ export const mockHandlers = {
   },
   // 1. 大盘指标与趋势
   "GET metrics/summary": () => ({ status: "ok", data: mockMetricsSummary }),
-  "GET metrics/trends": () => ({ status: "ok", data: mockAnalyticsTrends }),
+  "GET metrics/trends": (params?: Record<string, unknown>) => ({
+    status: "ok",
+    data: createMockAnalyticsTrends(
+      params?.granularity === "hour" ? "hour" : "day",
+      Number(params?.range_count ?? 14),
+    ),
+  }),
 
   // 2. 活跃任务与控制
   "GET tasks/active": () => ({ status: "ok", data: mockActiveTasks }),
