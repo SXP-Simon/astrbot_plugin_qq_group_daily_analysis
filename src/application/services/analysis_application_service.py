@@ -317,6 +317,18 @@ class AnalysisApplicationService:
             if trace and actual_platform:
                 trace.platform = str(actual_platform)
 
+            # WebUI 可能只带历史 OpenID；在已确定的平台内补全本次任务的群名。
+            if trace.group_name in ("", str(group_id), f"群 {group_id}", "未知群"):
+                try:
+                    async with asyncio.timeout(5):
+                        group_info = await adapter.get_group_info(group_id)
+                    if group_info and group_info.group_name:
+                        trace.group_name = group_info.group_name
+                except Exception as exc:
+                    logger.debug(
+                        "补全任务群名失败，保留原显示名称（%s）", type(exc).__name__
+                    )
+
             try:
                 if await adapter.is_group_muted(group_id):
                     logger.info(
