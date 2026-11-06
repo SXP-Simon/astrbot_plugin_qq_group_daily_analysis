@@ -1,17 +1,19 @@
-import React from "react";
-import { Tag } from "antd";
+import type { CSSProperties } from "react";
 import { formatTriggerType } from "../lib/formatters";
 
-interface TriggerTypeTagProps {
+export function TriggerTypeTag({
+  triggerType,
+  style,
+}: {
   triggerType?: string;
-  style?: React.CSSProperties;
-}
-
-export const TriggerTypeTag: React.FC<TriggerTypeTagProps> = ({ triggerType, style }) => {
-  const { text, color } = formatTriggerType(triggerType);
+  style?: CSSProperties;
+}) {
   return (
-    <Tag color={color} style={{ margin: 0, ...style }}>
-      {text}
-    </Tag>
+    <span
+      className="inline-flex rounded-lg bg-muted px-2 py-1 text-xs text-muted-foreground"
+      style={style}
+    >
+      {formatTriggerType(triggerType).text}
+    </span>
   );
-};
+}
