@@ -318,7 +318,7 @@ class AnalysisApplicationService:
                 trace.platform = str(actual_platform)
 
             # WebUI 可能只带历史 OpenID；在已确定的平台内补全本次任务的群名。
-            if trace.group_name in ("", str(group_id), "未知群"):
+            if trace.group_name in ("", str(group_id), f"群 {group_id}", "未知群"):
                 try:
                     async with asyncio.timeout(5):
                         group_info = await adapter.get_group_info(group_id)

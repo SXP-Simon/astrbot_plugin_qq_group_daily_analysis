@@ -1,6 +1,7 @@
 """QQ 官方群资料查询、缓存隔离与任务展示回归。"""
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -10,10 +11,15 @@ from src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
 from src.application.services.task_guard import TaskGuard
+from src.application.services.incremental_analysis_service import (
+    IncrementalAnalysisService,
+)
 from src.infrastructure.platform.adapters import qq_official_adapter as module
 from src.infrastructure.platform.adapters.qq_official_adapter import QQOfficialAdapter
 from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from src.infrastructure.scheduler.target_resolver import ScheduledTargetResolver
+from src.infrastructure.webui.active_task_manager import ActiveTaskManager
+from src.shared import trace_context as trace_module
 from src.shared.trace_context import TraceContext
 
 
@@ -134,6 +140,34 @@ async def test_concurrent_queries_are_coalesced_and_cache_is_bot_scoped():
     assert all(item.group_name == "机器人 A" for item in await asyncio.gather(*tasks))
     assert method.await_count == 1
     assert (await b.get_group_info("GROUP")).group_name == "机器人 B"
+    assert not a._group_info_locks
+
+
+@pytest.mark.asyncio
+async def test_slow_group_does_not_block_other_groups_or_cached_names():
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def query(*, group_openid):
+        if group_openid == "SLOW":
+            entered.set()
+            await release.wait()
+        return {"group_name": f"名称 {group_openid}"}
+
+    method = AsyncMock(side_effect=query)
+    adapter = adapter_for(SimpleNamespace(get_group_info=method))
+    await adapter.get_group_info("CACHED")
+    slow = asyncio.create_task(adapter.get_group_info("SLOW"))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        for group in ("FAST", "CACHED"):
+            result = await asyncio.wait_for(adapter.get_group_info(group), timeout=1)
+            assert result.group_name == f"名称 {group}"
+        assert not slow.done()
+    finally:
+        release.set()
+        await slow
+    assert method.await_count == 3
+    assert not adapter._group_info_locks
 
 
 @pytest.mark.asyncio
@@ -155,6 +189,7 @@ async def test_timeout_and_cancellation_do_not_block_future_queries():
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+    assert all(not lock.locked() for lock in adapter._group_info_locks.values())
     method.side_effect = None
     method.return_value = {"group_name": "正常群"}
     assert (await adapter.get_group_info("CANCELLED")).group_name == "正常群"
@@ -196,12 +231,16 @@ async def test_scheduler_does_not_freeze_qq_fallback_or_mix_platform_names():
     [
         ("GROUP", False, "读书分享会"),
         ("", False, "读书分享会"),
+        ("群 GROUP", False, "读书分享会"),
+        ("未知群", False, "读书分享会"),
         ("自定义名称", False, "自定义名称"),
         ("GROUP", True, "GROUP"),
+        ("群 GROUP", True, "GROUP"),
     ],
 )
+@pytest.mark.parametrize("incremental", [False, True])
 async def test_web_trigger_enriches_trace_and_persists_name(
-    tmp_path, monkeypatch, original, fail, expected
+    tmp_path, monkeypatch, original, fail, expected, incremental
 ):
     adapter = adapter_for(
         SimpleNamespace(
@@ -212,28 +251,57 @@ async def test_web_trigger_enriches_trace_and_persists_name(
         )
     )
     adapter.is_group_muted = AsyncMock(return_value=False)
-    service = object.__new__(AnalysisApplicationService)
+    service = object.__new__(
+        IncrementalAnalysisService if incremental else AnalysisApplicationService
+    )
     service._task_guard = TaskGuard()
+    service.task_guard = service._task_guard
     service.bot_manager = SimpleNamespace(
         get_adapter=lambda _: adapter, get_adapter_platform_id=lambda _: "official-a"
     )
     service.config_manager = SimpleNamespace(
-        get_analysis_days=lambda: 1, get_max_messages=lambda: 10
+        get_analysis_days=lambda: 1,
+        get_max_messages=lambda: 10,
+        get_incremental_min_messages=lambda: 5,
     )
     service.checkpoint_store = None
-    service._fetch_daily_messages = AsyncMock(return_value=[])
+    service.incremental_store = SimpleNamespace(
+        get_last_analyzed_cursor=AsyncMock(return_value=(0, []))
+    )
     trace = TraceContext(
         trace_id="web-test",
         group_id="GROUP",
         group_name=original,
-        platform="official-a",
+        platform="",
     )
-    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
-    result = await service.execute_daily_analysis("GROUP", "official-a", manual=True)
-    assert result["reason"] == "no_messages"
     store = TraceSQLiteStore(tmp_path / "trace.db")
-    store.save_trace(trace.to_dict())
+    manager = ActiveTaskManager()
+    monkeypatch.setattr(trace_module, "_global_trace_store", store)
+    monkeypatch.setattr(trace_module, "_global_task_lifecycle_service", None)
+    monkeypatch.setattr(trace_module, "_global_active_task_manager", manager)
+    await manager.register_task("web-test", "GROUP", original, "official-a")
+    events = manager.subscribe()
+
+    async def fetch(**kwargs):
+        assert manager.get_active_tasks()[0]["group_name"] == expected
+        return []
+
+    adapter.fetch_messages = AsyncMock(side_effect=fetch)
+    async with trace:
+        if incremental:
+            result = await service.execute_incremental_analysis("GROUP", "official-a")
+        else:
+            result = await service.execute_daily_analysis(
+                "GROUP", "official-a", manual=True
+            )
+        assert result["reason"] == "no_messages"
+    await asyncio.gather(*manager._bg_tasks)
+    progress = json.loads(events.get_nowait())
+    assert progress["event"] == "task_progress"
+    assert progress["data"]["group_name"] == expected
     assert store.get_trace("web-test")["group_name"] == expected
+    assert store.get_trace("web-test")["status"] != "running"
+    assert store.get_trace("web-test")["platform"] == "official-a"
     assert store.get_distinct_groups(by_session=True)[0]["group_name"] == expected
     if original == "自定义名称":
         adapter.bot.api.get_group_info.assert_not_awaited()

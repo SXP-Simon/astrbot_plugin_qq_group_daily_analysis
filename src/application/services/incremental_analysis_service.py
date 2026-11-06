@@ -133,6 +133,20 @@ class IncrementalAnalysisService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
+            actual_platform = self.bot_manager.get_adapter_platform_id(adapter)
+            if actual_platform:
+                trace.platform = str(actual_platform)
+            if trace.group_name in ("", str(group_id), f"群 {group_id}", "未知群"):
+                try:
+                    async with asyncio.timeout(5):
+                        group_info = await adapter.get_group_info(group_id)
+                    if group_info and group_info.group_name:
+                        trace.group_name = group_info.group_name
+                except Exception as exc:
+                    logger.debug(
+                        "补全增量任务群名失败，保留原显示名称（%s）", type(exc).__name__
+                    )
+
             try:
                 if await adapter.is_group_muted(group_id):
                     logger.debug(
