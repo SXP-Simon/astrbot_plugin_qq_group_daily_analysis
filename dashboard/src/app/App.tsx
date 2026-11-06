@@ -59,7 +59,7 @@ export const App: React.FC = () => {
   }, [activeTab]);
 
   // ViewModels
-  const overviewVM = useOverviewViewModel();
+  const overviewVM = useOverviewViewModel(activeTab === "overview");
   const tracesVM = useTracesViewModel();
   const contextInsightVM = useContextInsightViewModel();
   const reportsVM = useReportsViewModel();

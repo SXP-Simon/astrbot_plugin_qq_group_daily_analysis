@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { App } from "../App";
 import * as devBridge from "../../shared/api/devBridge";
 import * as traceApi from "../../entities/trace/api/traceApi";
@@ -22,6 +22,7 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
       return () => {};
     });
     const cacheSpy = vi.spyOn(traceApi, "invalidateTraceCache");
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     const pending: Promise<unknown>[] = [];
     const originalGet = devBridge.devApiGet;
     const getSpy = vi.spyOn(devBridge, "devApiGet").mockImplementation(function <T>(
@@ -54,6 +55,27 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
           await Promise.allSettled(pending);
         });
       }
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "日志" }), { button: 0, ctrlKey: false });
+      expect(screen.getByRole("tabpanel")).toHaveAccessibleName("日志");
+      await act(async () => {
+        await Promise.allSettled(pending);
+      });
+      const activeQueries = () =>
+        getSpy.mock.calls.filter(([path]) => path === "tasks/active").length;
+      const beforeHiddenEvent = activeQueries();
+      act(() =>
+        receiveEvent?.({ parsed: { event: "task_finished", data: { task_id: "HIDDEN-TASK" } } }),
+      );
+      await act(async () => {
+        await Promise.allSettled(pending);
+      });
+      expect(activeQueries()).toBe(beforeHiddenEvent);
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "总览" }), { button: 0, ctrlKey: false });
+      expect(screen.getByRole("tabpanel")).toHaveAccessibleName("总览");
+      await act(async () => {
+        await Promise.allSettled(pending);
+      });
+      expect(activeQueries()).toBe(beforeHiddenEvent + 1);
     } finally {
       view.unmount();
       // 等待初始化引出的详情请求收尾，避免回调落到已销毁的测试环境。
@@ -63,6 +85,7 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
       getSpy.mockRestore();
       sseSpy.mockRestore();
       cacheSpy.mockRestore();
+      scrollSpy.mockRestore();
     }
   }, 20000);
 });
