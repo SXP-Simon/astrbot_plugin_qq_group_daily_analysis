@@ -62,7 +62,7 @@ async def test_json_checkpoint_keeps_relations_through_resumed_llm_call():
             MessageContent(type=MessageContentType.AT, at_user_id="openid-def"),
             MessageContent(type=MessageContentType.TEXT, text="明天见"),
             MessageContent(type=MessageContentType.EMOJI, emoji_id="smile"),
-            MessageContent(type=MessageContentType.IMAGE, url="https://invalid.example/picture", raw_data={"summary": "动画表情"}),
+            MessageContent(type=MessageContentType.IMAGE, url="https://invalid.example/picture", is_sticker=True),
         ),
     )
     checkpoint = json.loads(json.dumps(AnalysisResultSerializer.to_json_friendly({
