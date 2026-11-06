@@ -117,7 +117,7 @@ def test_corrupted_face_features_are_ignored_without_failing_message():
     assert len(contents) == 1
     assert contents[0].type == MessageContentType.EMOJI
     assert contents[0].emoji_name == "笑哭"
-    assert contents[0].raw_data == {"face_type": "1", "face_id": "14"}
+    assert contents[0].emoji_id == "qq:1:14"
 
 
 def test_quoted_faces_are_not_counted_as_new_message_faces():

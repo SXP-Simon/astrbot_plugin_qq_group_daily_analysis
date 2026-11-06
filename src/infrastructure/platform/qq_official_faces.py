@@ -155,7 +155,6 @@ def restore_qq_face_features(metadata: dict[str, object]) -> list[MessageContent
                 type=MessageContentType.EMOJI,
                 emoji_id=f"qq:{kind}:{face_id or name or 'unknown'}",
                 emoji_name=name,
-                raw_data={"face_type": kind, "face_id": face_id},
             )
         )
     return contents

@@ -10,6 +10,7 @@ Discord 平台适配器
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from ....shared.type_guards import (
@@ -201,10 +202,38 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
         try:
             contents: list[MessageContent] = []
 
-            # 1. 基础文本
-            if raw_msg.content:
+            # 将 Discord 的提及与自定义表情保留为消息段，避免清洗时丢失。
+            cursor = 0
+            for match in re.finditer(
+                r"<@!?(\d+)>|<a?:([^:>]+):(\d+)>", raw_msg.content
+            ):
+                if match.start() > cursor:
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.TEXT,
+                            text=raw_msg.content[cursor : match.start()],
+                        )
+                    )
+                if match.group(1):
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.AT, at_user_id=match.group(1)
+                        )
+                    )
+                else:
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.EMOJI,
+                            emoji_name=match.group(2),
+                            emoji_id=match.group(3),
+                        )
+                    )
+                cursor = match.end()
+            if cursor < len(raw_msg.content):
                 contents.append(
-                    MessageContent(type=MessageContentType.TEXT, text=raw_msg.content)
+                    MessageContent(
+                        type=MessageContentType.TEXT, text=raw_msg.content[cursor:]
+                    )
                 )
 
             # 2. 附件处理 (图片/视频/语音/普通文件)
@@ -232,11 +261,8 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                     contents.append(
                         MessageContent(
                             type=MessageContentType.FILE,
+                            text=attachment.filename,
                             url=attachment.url,
-                            raw_data={
-                                "filename": attachment.filename,
-                                "size": attachment.size,
-                            },
                         )
                     )
 
@@ -261,12 +287,11 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                 for sticker in raw_msg.stickers:
                     contents.append(
                         MessageContent(
-                            type=MessageContentType.IMAGE,  # 贴纸在逻辑上按图片处理
+                            type=MessageContentType.IMAGE,
+                            is_sticker=True,
+                            emoji_id=str(sticker.id),
+                            emoji_name=sticker.name,
                             url=sticker.url,
-                            raw_data={
-                                "sticker_id": str(sticker.id),
-                                "sticker_name": sticker.name,
-                            },
                         )
                     )
 
@@ -295,55 +320,6 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
         except Exception as e:
             logger.debug(f"Discord 消息转换错误: {e}")
             return None
-
-    def convert_to_raw_format(
-        self, messages: list[UnifiedMessage]
-    ) -> list[dict[str, object]]:
-        """将统一格式降级转换为 OneBot 风格的字典，以适配下游组件。"""
-        raw_messages: list[dict[str, object]] = []
-        for msg in messages:
-            segments: list[dict[str, object]] = []
-            raw_msg: dict[str, object] = {
-                "message_id": msg.message_id,
-                "group_id": msg.group_id,
-                "time": msg.timestamp,
-                "sender": {
-                    "user_id": msg.sender_id,
-                    "nickname": msg.sender_name,
-                    "card": msg.sender_card,
-                },
-                "message": segments,
-                "user_id": msg.sender_id,  # 后向兼容
-            }
-
-            for content in msg.contents:
-                if content.type == MessageContentType.TEXT:
-                    segments.append(
-                        {"type": "text", "data": {"text": content.text or ""}}
-                    )
-                elif content.type == MessageContentType.IMAGE:
-                    segments.append(
-                        {
-                            "type": "image",
-                            "data": {"url": content.url, "file": content.url},
-                        }
-                    )
-                elif content.type == MessageContentType.AT:
-                    segments.append({"type": "at", "data": {"qq": content.at_user_id}})
-                elif (
-                    content.type == MessageContentType.REPLY
-                    and is_string_mapping(content.raw_data)
-                    and "reply_id" in content.raw_data
-                ):
-                    segments.append(
-                        {
-                            "type": "reply",
-                            "data": {"id": content.raw_data["reply_id"]},
-                        }
-                    )
-
-            raw_messages.append(raw_msg)
-        return raw_messages
 
     # ==================== IMessageSender 实现 ====================
 

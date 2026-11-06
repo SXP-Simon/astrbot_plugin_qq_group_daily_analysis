@@ -31,6 +31,7 @@ from ....shared.type_guards import (
 )
 from ....utils.logger import logger
 from ..base import PlatformAdapter
+from ..message_normalization import is_image_sticker
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -260,6 +261,7 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
             content = raw_content
 
             contents: list[MessageContent] = []
+            reply_to_id = str(content.get("reply_to_id") or "")
             text_parts: list[str] = []
             raw_parts = content.get("message", [])
 
@@ -278,6 +280,7 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
                         contents.append(
                             MessageContent(
                                 type=MessageContentType.IMAGE,
+                                is_sticker=is_image_sticker(part),
                                 url=str(
                                     part.get("url", "") or part.get("file", "") or ""
                                 ),
@@ -303,7 +306,6 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
                                 url=str(
                                     part.get("url", "") or part.get("file", "") or ""
                                 ),
-                                raw_data={"name": part.get("name", "")},
                             )
                         )
                     elif part_type in {"record", "audio", "voice"}:
@@ -324,13 +326,19 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
                                 ),
                             )
                         )
+                    elif part_type in ("face", "emoji"):
+                        contents.append(
+                            MessageContent(
+                                type=MessageContentType.EMOJI,
+                                emoji_id=str(part.get("id") or ""),
+                                emoji_name=str(part.get("name") or ""),
+                            )
+                        )
                     elif part_type == "reply":
+                        reply_to_id = reply_to_id or str(part.get("id") or "")
                         contents.append(
                             MessageContent(
                                 type=MessageContentType.REPLY,
-                                raw_data={
-                                    "reply_message_id": str(part.get("id", "") or "")
-                                },
                             )
                         )
 
@@ -371,6 +379,7 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
                 sender_name=sender_name,
                 timestamp=timestamp,
                 contents=tuple(contents),
+                reply_to_id=reply_to_id or None,
                 platform=self.platform_name,
                 text_content=text_content,
             )
@@ -841,35 +850,6 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
         except Exception as exc:
             logger.error("[Satori] 发送文件失败 %s: %s", target_id, exc)
             return False
-
-    def convert_to_raw_format(
-        self, messages: list[UnifiedMessage]
-    ) -> list[dict[str, object]]:
-        """将 UnifiedMessage 列表转换为分析流水线使用的标准原始字典列表。
-
-        Args:
-            messages: 统一消息对象列表。
-
-        Returns:
-            标准字典格式的消息记录列表。
-        """
-        raw_list: list[dict[str, object]] = []
-        for msg in messages:
-            raw_list.append(
-                {
-                    "message_id": msg.message_id,
-                    "time": msg.timestamp,
-                    "sender": {
-                        "user_id": msg.sender_id,
-                        "nickname": msg.sender_name,
-                        "card": msg.sender_name,
-                    },
-                    "message": msg.text_content,
-                    "raw_message": msg.text_content,
-                    "group_id": msg.group_id,
-                }
-            )
-        return raw_list
 
     @staticmethod
     def _resolve_image_src(image_ref: str) -> str:

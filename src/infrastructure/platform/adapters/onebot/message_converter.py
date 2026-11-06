@@ -1,7 +1,7 @@
 """
 OneBot v11 消息与领域模型转换器 (OneBot Message Converter)
 
-负责 OneBot 原始消息字典（包含 CQ 码与分段 Segment 链）与统一领域消息对象 (UnifiedMessage) 之间的双向转换。
+负责 OneBot 原始消息字典（包含 CQ 码与分段 Segment 链）与统一领域消息对象 (UnifiedMessage) 之间的转换。
 """
 
 from __future__ import annotations
@@ -13,10 +13,11 @@ from .....domain.value_objects.unified_message import (
 )
 from .....shared.type_guards import is_object_list, is_string_mapping
 from .....utils.logger import logger
+from ...message_normalization import is_image_sticker
 
 
 class OneBotMessageConverter:
-    """OneBot v11 消息双向协议转换器。"""
+    """OneBot v11 消息协议转换器。"""
 
     @staticmethod
     def to_unified_message(
@@ -45,6 +46,7 @@ class OneBotMessageConverter:
 
             contents: list[MessageContent] = []
             text_parts: list[str] = []
+            reply_to: str | None = None
 
             for seg in message_chain:
                 if not is_string_mapping(seg):
@@ -62,30 +64,15 @@ class OneBotMessageConverter:
                     )
 
                 elif seg_type == "image":
-                    # QQ 平台: subType=1 表示表情包，通过 raw_data 传递给下游统计
-                    sub_type = seg_data.get("subType", seg_data.get("sub_type"))
-                    try:
-                        is_sticker = (
-                            isinstance(sub_type, (str, int, float))
-                            and int(sub_type) == 1
-                        )
-                    except (TypeError, ValueError):
-                        is_sticker = False
-                    raw_data: dict[str, object] = {
-                        "summary": seg_data.get("summary", "")
-                    }
-                    if isinstance(sub_type, (str, int, float)):
-                        try:
-                            raw_data["sub_type"] = int(sub_type)
-                        except (TypeError, ValueError):
-                            pass
+                    is_sticker = is_image_sticker(seg_data)
                     contents.append(
                         MessageContent(
                             type=MessageContentType.EMOJI
-                            if is_sticker
+                            if str(seg_data.get("subType", seg_data.get("sub_type")))
+                            == "1"
                             else MessageContentType.IMAGE,
+                            is_sticker=is_sticker,
                             url=str(seg_data.get("url", seg_data.get("file", ""))),
-                            raw_data=raw_data,
                         )
                     )
 
@@ -102,22 +89,21 @@ class OneBotMessageConverter:
                         MessageContent(
                             type=MessageContentType.EMOJI,
                             emoji_id=str(seg_data.get("id", "")),
-                            raw_data={"face_type": seg_type},
                         )
                     )
 
                 elif seg_type == "reply":
+                    reply_to = reply_to or str(seg_data.get("id", "")) or None
                     contents.append(
                         MessageContent(
                             type=MessageContentType.REPLY,
-                            raw_data={"reply_id": seg_data.get("id", "")},
                         )
                     )
 
                 elif seg_type == "forward":
                     contents.append(
                         MessageContent(
-                            type=MessageContentType.FORWARD, raw_data=seg_data
+                            type=MessageContentType.FORWARD,
                         )
                     )
 
@@ -139,15 +125,10 @@ class OneBotMessageConverter:
 
                 else:
                     contents.append(
-                        MessageContent(type=MessageContentType.UNKNOWN, raw_data=seg)
+                        MessageContent(
+                            type=MessageContentType.UNKNOWN,
+                        )
                     )
-
-            # 提取回复 ID
-            reply_to = None
-            for c in contents:
-                if c.type == MessageContentType.REPLY and is_string_mapping(c.raw_data):
-                    reply_to = str(c.raw_data.get("reply_id", ""))
-                    break
 
             timestamp = raw_msg.get("time", 0)
             if not isinstance(timestamp, (str, int, float)):
@@ -168,80 +149,3 @@ class OneBotMessageConverter:
         except Exception as e:
             logger.debug(f"OneBot 消息转换失败: {e}")
             return None
-
-    @staticmethod
-    def to_raw_messages(messages: list[UnifiedMessage]) -> list[dict[str, object]]:
-        """将 UnifiedMessage 领域消息列表逆向转换为 OneBot 原生字典格式。
-
-        Args:
-            messages: 统一消息值对象列表。
-
-        Returns:
-            list[dict]: 符合 OneBot v11 规范的消息字典列表。
-        """
-        raw_messages: list[dict[str, object]] = []
-        for msg in messages:
-            message_chain: list[dict[str, object]] = []
-            for content in msg.contents:
-                if content.type == MessageContentType.TEXT:
-                    message_chain.append(
-                        {"type": "text", "data": {"text": content.text or ""}}
-                    )
-                elif content.type == MessageContentType.IMAGE:
-                    message_chain.append(
-                        {"type": "image", "data": {"url": content.url or ""}}
-                    )
-                elif content.type == MessageContentType.AT:
-                    message_chain.append(
-                        {"type": "at", "data": {"qq": content.at_user_id or ""}}
-                    )
-                elif content.type == MessageContentType.EMOJI:
-                    face_type = (
-                        str(content.raw_data.get("face_type", "face"))
-                        if is_string_mapping(content.raw_data)
-                        else "face"
-                    )
-                    message_chain.append(
-                        {"type": face_type, "data": {"id": content.emoji_id or ""}}
-                    )
-                elif content.type == MessageContentType.REPLY:
-                    reply_id = (
-                        str(content.raw_data.get("reply_id", ""))
-                        if is_string_mapping(content.raw_data)
-                        else ""
-                    )
-                    message_chain.append({"type": "reply", "data": {"id": reply_id}})
-                elif content.type == MessageContentType.FORWARD:
-                    fwd_data = (
-                        content.raw_data if is_string_mapping(content.raw_data) else {}
-                    )
-                    message_chain.append({"type": "forward", "data": fwd_data})
-                elif content.type == MessageContentType.VOICE:
-                    message_chain.append(
-                        {"type": "record", "data": {"url": content.url or ""}}
-                    )
-                elif content.type == MessageContentType.VIDEO:
-                    message_chain.append(
-                        {"type": "video", "data": {"url": content.url or ""}}
-                    )
-                elif content.type == MessageContentType.UNKNOWN and is_string_mapping(
-                    content.raw_data
-                ):
-                    message_chain.append(content.raw_data)
-
-            raw_msg: dict[str, object] = {
-                "message_id": msg.message_id,
-                "time": msg.timestamp,
-                "sender": {
-                    "user_id": msg.sender_id,
-                    "nickname": msg.sender_name,
-                    "card": msg.sender_card or "",
-                },
-                "message": message_chain,
-                "group_id": msg.group_id,
-                "raw_message": msg.text_content,
-                "user_id": msg.sender_id,
-            }
-            raw_messages.append(raw_msg)
-
-        return raw_messages

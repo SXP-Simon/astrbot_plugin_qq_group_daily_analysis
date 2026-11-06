@@ -160,8 +160,8 @@ def test_telegram_message_converter_fix_sender_name():
     asyncio.run(scenario())
 
 
-def test_telegram_message_converter_to_unified_message_and_raw():
-    """测试历史记录转换为 UnifiedMessage 以及后续转换为 OneBot 原始字典。"""
+def test_telegram_message_converter_to_unified_message():
+    """测试历史记录转换后保留统一消息字段。"""
     record = SimpleNamespace(
         id=88,
         sender_id="1000",
@@ -187,15 +187,6 @@ def test_telegram_message_converter_to_unified_message_and_raw():
     assert unified.contents[2].type == MessageContentType.AT
     assert unified.contents[2].at_user_id == "2000"
 
-    raw_list = TelegramMessageConverter.to_raw_format([unified])
-    assert len(raw_list) == 1
-    raw = raw_list[0]
-    assert raw["message_id"] == "88"
-    assert raw["sender"]["nickname"] == "Charlie"
-    assert len(raw["message"]) == 3
-    assert raw["message"][0]["type"] == "text"
-    assert raw["message"][1]["type"] == "image"
-    assert raw["message"][2]["type"] == "at"
 
 
 def test_telegram_message_converter_format_forward_nodes():

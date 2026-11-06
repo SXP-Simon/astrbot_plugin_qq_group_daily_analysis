@@ -186,45 +186,6 @@ async def test_fetch_messages_with_filters_attachments_and_stickers():
     assert any("[Embed] Embed summary description" in (c.text or "") for c in msg3_contents)
 
 
-def test_convert_to_raw_format():
-    bot = SimpleNamespace(user=SimpleNamespace(id=123))
-    adapter = DiscordAdapter(bot)
-
-    # Construct unified message
-    from src.domain.value_objects.unified_message import MessageContent, UnifiedMessage
-
-    contents = (
-        MessageContent(type=MessageContentType.TEXT, text="Hello raw"),
-        MessageContent(type=MessageContentType.IMAGE, url="https://img.png"),
-        MessageContent(type=MessageContentType.AT, at_user_id="999"),
-        MessageContent(
-            type=MessageContentType.REPLY, raw_data={"reply_id": "888"}
-        ),
-    )
-    unified = UnifiedMessage(
-        message_id="msg_1",
-        sender_id="user_1",
-        sender_name="Alice",
-        sender_card="AliceCard",
-        group_id="guild_channel_1",
-        text_content="Hello raw",
-        contents=contents,
-        timestamp=1700000000,
-        platform="discord",
-    )
-
-    raw_list = adapter.convert_to_raw_format([unified])
-    assert len(raw_list) == 1
-    raw = raw_list[0]
-    assert raw["message_id"] == "msg_1"
-    assert raw["group_id"] == "guild_channel_1"
-    assert raw["sender"]["nickname"] == "Alice"
-    assert raw["sender"]["card"] == "AliceCard"
-
-    types = [seg["type"] for seg in raw["message"]]
-    assert types == ["text", "image", "at", "reply"]
-    assert raw["message"][2]["data"]["qq"] == "999"
-    assert raw["message"][3]["data"]["id"] == "888"
 
 
 # ==========================================

@@ -335,19 +335,6 @@ class OneBotAdapter(
         """
         return OneBotMessageConverter.to_unified_message(raw_msg, group_id)
 
-    def convert_to_raw_format(
-        self, messages: list[UnifiedMessage]
-    ) -> list[dict[str, object]]:
-        """将统一格式转换回 OneBot v11 原生字典格式（委托 OneBotMessageConverter）。
-
-        Args:
-            messages: 统一消息列表。
-
-        Returns:
-            list[dict[str, object]]: OneBot 格式的消息字典列表。
-        """
-        return OneBotMessageConverter.to_raw_messages(messages)
-
     # ==================== IMessageSender 实现 ====================
 
     async def send_text(

@@ -358,27 +358,3 @@ async def test_satori_send_messages(tmp_path: Path):
     file_content = call_args[2]["content"]
     assert 'name="daily_summary.pdf"' in file_content
     assert '<file src="data:application/pdf;base64,' in file_content
-
-
-def test_satori_convert_to_raw_format():
-    """验证 convert_to_raw_format 将 UnifiedMessage 列表转换为标准字典结构。"""
-    adapter, _ = make_satori_adapter()
-    msg = SimpleNamespace(
-        message_id="msg-1",
-        timestamp=123456,
-        sender_id="u1",
-        sender_name="Alice",
-        text_content="Hello world",
-        group_id="g1",
-    )
-    raw = adapter.convert_to_raw_format([msg])  # type: ignore[arg-type]
-    assert len(raw) == 1
-    assert raw[0]["message_id"] == "msg-1"
-    assert raw[0]["time"] == 123456
-    sender_dict = raw[0]["sender"]
-    assert isinstance(sender_dict, dict)
-    assert sender_dict["nickname"] == "Alice"
-    assert raw[0]["message"] == "Hello world"
-    assert raw[0]["group_id"] == "g1"
-
-

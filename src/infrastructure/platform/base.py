@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from astrbot.api.star import Context
 
     from ...domain.value_objects.platform_capabilities import PlatformCapabilities
-    from ...domain.value_objects.unified_message import UnifiedMessage
 
 
 TBot = TypeVar("TBot", covariant=True)
@@ -176,23 +175,6 @@ class PlatformAdapter(
     def get_platform_name(self) -> str:
         """获取当前适配器的平台标识名称。"""
         return self.capabilities.platform_name
-
-    @abstractmethod
-    def convert_to_raw_format(
-        self, messages: list[UnifiedMessage]
-    ) -> list[dict[str, object]]:
-        """
-        将平台无关的统一消息列表转换回当前平台的原生字典格式。
-
-        此方法主要用于向后兼容，使新的统一接口能与依赖原生数据结构的旧版分析逻辑协同工作。
-
-        Args:
-            messages (list[UnifiedMessage]): 待转换的统一消息列表
-
-        Returns:
-            list[dict[str, object]]: 转换后的平台原生消息字典列表
-        """
-        raise NotImplementedError
 
     async def send_forward_msg(
         self,

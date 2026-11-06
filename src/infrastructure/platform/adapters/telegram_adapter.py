@@ -370,15 +370,6 @@ class TelegramAdapter(PlatformAdapter[object]):
         """将数据库记录转换为 UnifiedMessage（委托 TelegramMessageConverter）。"""
         return TelegramMessageConverter.to_unified_message(record, group_id)
 
-    def convert_to_raw_format(
-        self, messages: list[UnifiedMessage]
-    ) -> list[dict[str, object]]:
-        """将统一消息格式转换为 OneBot 兼容格式（委托 TelegramMessageConverter）。
-
-        用于向后兼容现有分析逻辑。
-        """
-        return TelegramMessageConverter.to_raw_format(messages)
-
     # ==================== IMessageSender ====================
 
     # 只有「HTML 被 Telegram 拒绝」（请求未被接受）才值得降级重发；

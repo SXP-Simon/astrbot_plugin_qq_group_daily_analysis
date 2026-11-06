@@ -1,7 +1,7 @@
 """
 Telegram 消息转换器 (Telegram Message Converter)
 
-负责 Telegram 数据库历史记录、统一领域消息 (UnifiedMessage) 与 OneBot 兼容格式之间的双向转换，
+负责将 Telegram 数据库历史记录转换为统一领域消息 (UnifiedMessage)，
 并提供占位昵称自愈、群组话题 ID 解析以及转发消息文本排版功能。
 """
 
@@ -21,6 +21,7 @@ from ....shared.type_guards import (
     is_string_mapping,
 )
 from ....utils.logger import logger
+from ..message_normalization import is_image_sticker
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -234,6 +235,7 @@ class TelegramMessageConverter:
             message_parts = raw_parts if is_object_list(raw_parts) else []
             text_content = ""
             contents: list[MessageContent] = []
+            reply_to_id = str(content.get("reply_to_id") or "")
 
             for part in message_parts:
                 if is_string_mapping(part):
@@ -251,11 +253,40 @@ class TelegramMessageConverter:
                         contents.append(
                             MessageContent(
                                 type=MessageContentType.IMAGE,
+                                is_sticker=is_image_sticker(part),
                                 url=str(
                                     part.get("url", "") or part.get("attachment_id", "")
                                 ),
                             )
                         )
+                    elif part_type in ("file", "voice", "record", "audio", "video"):
+                        content_type = (
+                            MessageContentType.FILE
+                            if part_type == "file"
+                            else (
+                                MessageContentType.VIDEO
+                                if part_type == "video"
+                                else MessageContentType.VOICE
+                            )
+                        )
+                        contents.append(
+                            MessageContent(
+                                type=content_type,
+                                url=str(part.get("url") or ""),
+                                text=str(part.get("name") or ""),
+                            )
+                        )
+                    elif part_type in ("face", "emoji"):
+                        contents.append(
+                            MessageContent(
+                                type=MessageContentType.EMOJI,
+                                emoji_id=str(part.get("id") or ""),
+                                emoji_name=str(part.get("name") or ""),
+                            )
+                        )
+                    elif part_type == "reply":
+                        reply_to_id = reply_to_id or str(part.get("id") or "")
+                        contents.append(MessageContent(type=MessageContentType.REPLY))
                     elif part_type == "at":
                         target_id = (
                             part.get("target_id", "")
@@ -297,58 +328,12 @@ class TelegramMessageConverter:
                 contents=tuple(contents),
                 timestamp=int(record.created_at.timestamp()),
                 platform="telegram",
-                reply_to_id=None,
+                reply_to_id=reply_to_id or None,
             )
 
         except Exception as e:
             logger.debug(f"[Telegram] 转换历史记录失败: {e}")
             return None
-
-    @staticmethod
-    def to_raw_format(messages: list[UnifiedMessage]) -> list[dict[str, object]]:
-        """将统一消息列表转换为 OneBot 兼容的原生消息字典列表。
-
-        用于向后兼容现有分析管线与数据序列化。
-
-        Args:
-            messages: 统一消息列表。
-
-        Returns:
-            list[dict[str, object]]: OneBot 兼容格式的原始消息字典列表。
-        """
-        result: list[dict[str, object]] = []
-        for msg in messages:
-            msg_segments: list[dict[str, object]] = []
-            for content in msg.contents:
-                if content.type == MessageContentType.TEXT:
-                    msg_segments.append(
-                        {"type": "text", "data": {"text": content.text or ""}}
-                    )
-                elif content.type == MessageContentType.IMAGE:
-                    msg_segments.append(
-                        {"type": "image", "data": {"url": content.url or ""}}
-                    )
-                elif content.type == MessageContentType.AT:
-                    msg_segments.append(
-                        {"type": "at", "data": {"qq": content.at_user_id or ""}}
-                    )
-
-            raw: dict[str, object] = {
-                "message_id": msg.message_id,
-                "group_id": msg.group_id,
-                "time": msg.timestamp,
-                "sender": {
-                    "user_id": msg.sender_id,
-                    "nickname": msg.sender_name,
-                    "card": msg.sender_card or "",
-                },
-                "message": msg_segments,
-                "user_id": msg.sender_id,
-            }
-
-            result.append(raw)
-
-        return result
 
     @staticmethod
     def format_forward_nodes_to_text(nodes: list[dict[str, object]]) -> str:

@@ -102,11 +102,6 @@ def test_local_history_is_deduplicated_filtered_and_sorted():
     assert [message.sender_name for message in messages] == ["用户甲", "用户乙"]
     assert [message.text_content for message in messages] == ["first", "second"]
 
-    raw_messages = adapter.convert_to_raw_format(messages)
-    assert [message["sender"]["nickname"] for message in raw_messages] == [
-        "用户甲",
-        "用户乙",
-    ]
 
 
 def test_local_history_sender_name_uses_group_scoped_alias_for_placeholder():
