@@ -8,6 +8,7 @@ import { mockMetricsSummary, createMockAnalyticsTrends } from "./data/metrics";
 import { mockActiveTasks, mockConnectedPlatforms } from "./data/tasks";
 import { mockTraces } from "./data/traces";
 import { mockReportHistory, mockReportTemplates } from "./data/reports";
+import { mockReportHtml, mockReportImage, mockReportImageBytes } from "./data/reportContent";
 import { configMockHandlers, mockPluginConfig, mockProviders, mockPersonas } from "./data/configs";
 import { mockPluginLogs } from "./data/logs";
 import { mockConfigBackups } from "./data/configBackups";
@@ -396,28 +397,39 @@ export const mockHandlers = {
   // 4. 历史报告与海报模板
   "GET reports/history": (params?: Record<string, unknown>) => {
     let items = [...mockReportHistory];
-    if (params?.group_id && typeof params.group_id === "string") {
-      items = items.filter((r) => r.group_id?.includes(params.group_id as string));
-    }
+    const group = typeof params?.group_id === "string" ? params.group_id.trim() : "";
+    const search = typeof params?.search === "string" ? params.search.trim().toLowerCase() : "";
+    if (group) items = items.filter((item) => item.group_id === group);
+    if (search)
+      items = items.filter((item) =>
+        [item.filename, item.group_id, item.trace_id].some((value) =>
+          value?.toLowerCase().includes(search),
+        ),
+      );
     if (params?.report_type && typeof params.report_type === "string") {
       items = items.filter((r) => r.report_type === params.report_type);
     }
-    return { status: "ok", data: items };
+    items.sort(
+      (a, b) => (b.modified_at || b.created_at || 0) - (a.modified_at || a.created_at || 0),
+    );
+    const limit = Math.max(1, Math.min(100, Math.trunc(Number(params?.limit) || 20)));
+    const offset = Math.max(0, Math.trunc(Number(params?.offset) || 0));
+    return {
+      status: "ok",
+      data: { items: items.slice(offset, offset + limit), total: items.length },
+    };
   },
   "GET reports/content": (params?: Record<string, unknown>) => {
-    const filename = (params?.filename as string) || "";
-    const isHtml = filename.endsWith(".html");
+    const item = mockReportHistory.find((report) => report.filename === params?.filename);
+    if (!item) return { status: "error", message: "示例报告不存在，请刷新列表。" };
+    const isHtml = item.is_html || /\.html?$/i.test(item.filename);
     return {
       status: "ok",
       data: {
-        ...mockReportHistory[0],
-        filename,
+        ...item,
         is_html: isHtml,
-        html_content: isHtml
-          ? "<!DOCTYPE html><html><body style='background:#0f172a;color:#f8fafc;padding:24px;font-family:sans-serif;'><h2>Interactive Daily Report</h2><p>This is a simulated interactive HTML daily report for visualization.</p></body></html>"
-          : undefined,
-        data_url:
-          "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='300'><rect width='100%' height='100%' fill='%231677ff'/><text x='50%' y='50%' fill='white' font-size='22' text-anchor='middle'>Mock Daily Analysis Poster Preview</text></svg>",
+        html_content: isHtml ? mockReportHtml : undefined,
+        data_url: isHtml ? undefined : mockReportImage,
       },
     };
   },
@@ -576,15 +588,55 @@ export const mockHandlers = {
     for (const key of files?.keys() || []) if (key.startsWith(name + "/")) files?.delete(key);
     return { status: "ok", data: { name, removed: true } };
   },
-  "POST reports/rerender": () => ({
-    status: "ok",
-    data: {
-      success: true,
-      filename: "report_rerendered.png",
-      report_path: "reports/report_rerendered.png",
-      is_html: false,
-    },
-  }),
+  "POST reports/rerender": (body?: Record<string, unknown>) => {
+    const format = body?.render_format;
+    if (format !== "html" && format !== "image")
+      return { status: "error", message: "请选择图片或 HTML 格式。" };
+    const source = mockReportHistory.find(
+      (item) =>
+        item.group_id === body?.group_id &&
+        (!body?.trace_id || item.trace_id === body.trace_id) &&
+        (!body?.platform_id || item.platform === body.platform_id),
+    );
+    if (!source) return { status: "error", message: "未找到这次分析的示例产物记录。" };
+    const available = mockHandlers["GET reports/templates"]({ render_format: format }).data;
+    if (!available.some((item) => item.id === body?.template_name))
+      return { status: "error", message: "所选模板不支持当前输出格式。" };
+    const isHtml = format === "html";
+    const filename = `report_demo_${crypto.randomUUID()}.${isHtml ? "html" : "png"}`;
+    const timestamp = Date.now() / 1000;
+    const bytes = isHtml
+      ? new TextEncoder().encode(mockReportHtml).byteLength
+      : mockReportImageBytes;
+    mockReportHistory.unshift({
+      ...source,
+      filename,
+      created_at: timestamp,
+      modified_at: timestamp,
+      size_bytes: bytes,
+      is_html: isHtml,
+      is_comic: false,
+      report_type: isHtml ? "html" : "image",
+    });
+    const trace = mockTraces.find((item) => item.trace_id === source.trace_id);
+    if (trace)
+      (trace.report_files ??= []).push({
+        filename,
+        format: isHtml ? "html" : "png",
+        report_type: isHtml ? "html" : "image",
+        size_bytes: bytes,
+        created_at: timestamp,
+      });
+    return {
+      status: "ok",
+      data: {
+        success: true,
+        filename,
+        report_path: `reports/${filename}`,
+        is_html: isHtml,
+      },
+    };
+  },
 
   // 5. 日志流
   "GET logs": (params?: Record<string, unknown>) => {
