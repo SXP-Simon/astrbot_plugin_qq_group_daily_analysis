@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   Drawer,
   Tag,
@@ -12,13 +12,10 @@ import {
   theme,
 } from "antd";
 import { ReloadOutlined, SyncOutlined } from "@ant-design/icons";
-import { fetchTraceDetail, resumeTraceTask } from "../../entities/trace/api/traceApi";
-import { fetchTraceLogs } from "../../entities/log/api/logApi";
+import { resumeTraceTask } from "../../entities/trace/api/traceApi";
 import { fetchReportContent } from "../../entities/report/api/reportApi";
 import { ReportItem } from "../../entities/report/model/types";
 import { ReportPreviewModal } from "../report-preview-modal/ReportPreviewModal";
-import { TraceRecord } from "../../entities/trace/model/types";
-import { PluginLogItem } from "../../entities/log/model/types";
 import { StatusTag } from "../../shared/ui/StatusTag";
 import { SpanTimeline } from "../../entities/trace/ui/SpanTimeline";
 import { formatStageName } from "../../shared/lib/formatters";
@@ -26,6 +23,8 @@ import { ResumeTaskModal } from "../../features/resume-task/ui/ResumeTaskModal";
 import { TraceMetricsChart } from "../../entities/trace/ui/TraceMetricsChart";
 import { TraceLogViewer } from "./ui/TraceLogViewer";
 import { TraceSummaryCard } from "./ui/TraceSummaryCard";
+
+import { useTraceDetail } from "./model/useTraceDetail";
 
 const { Text, Paragraph } = Typography;
 
@@ -37,19 +36,13 @@ interface TraceDrawerProps {
 
 export const TraceDrawer: React.FC<TraceDrawerProps> = ({ traceId, open, onClose }) => {
   const { token } = theme.useToken();
-  const [storedTrace, setTrace] = useState<TraceRecord | null>(null);
-  const trace =
-    storedTrace?.status === "running" && storedTrace.duration_ms == null
-      ? { ...storedTrace, duration_ms: Math.max(0, Date.now() - storedTrace.started_at * 1000) }
-      : storedTrace;
-  const [logs, setLogs] = useState<PluginLogItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { trace, logs, loading, refreshing, error, logsError, effectiveStatus, refresh } =
+    useTraceDetail(traceId, open);
   const [resuming, setResuming] = useState(false);
   const [resumeModalOpen, setResumeModalOpen] = useState(false);
   const [previewReport, setPreviewReport] = useState<ReportItem | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleConfirmResume = async (selectedProvider?: string, selectedTemplate?: string) => {
     if (!traceId) return;
@@ -58,7 +51,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({ traceId, open, onClose
       await resumeTraceTask(traceId, selectedProvider, selectedTemplate);
       message.success("已成功触发断点续跑任务，正在恢复分析...");
       setResumeModalOpen(false);
-      loadDetail(true);
+      refresh();
     } catch (e) {
       message.error(`触发续跑失败: ${e}`);
     } finally {
@@ -127,85 +120,6 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({ traceId, open, onClose
     }
   };
 
-  const loadDetail = useCallback(
-    async (isManual = false) => {
-      if (!traceId) return;
-      if (!isManual) setLoading(true);
-      try {
-        const [detailData, logsData] = await Promise.allSettled([
-          fetchTraceDetail(traceId),
-          fetchTraceLogs(traceId),
-        ]);
-        if (detailData.status === "fulfilled") setTrace(detailData.value);
-        if (logsData.status === "fulfilled") setLogs(logsData.value);
-      } finally {
-        if (!isManual) setLoading(false);
-      }
-    },
-    [traceId],
-  );
-
-  useEffect(() => {
-    if (open && traceId) {
-      loadDetail();
-    } else {
-      setTrace(null);
-      setLogs([]);
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    }
-  }, [open, traceId, loadDetail]);
-
-  // 运行中高频静默轮询（同时实时刷新 Spans 状态与执行日志流）
-  useEffect(() => {
-    if (open && trace?.status === "running" && traceId) {
-      if (!pollRef.current) {
-        pollRef.current = setInterval(async () => {
-          try {
-            const [detailData, logsData] = await Promise.allSettled([
-              fetchTraceDetail(traceId, true),
-              fetchTraceLogs(traceId),
-            ]);
-            if (detailData.status === "fulfilled" && detailData.value) {
-              setTrace(detailData.value);
-              if (detailData.value.status !== "running" && pollRef.current) {
-                clearInterval(pollRef.current);
-                pollRef.current = null;
-              }
-            }
-            if (logsData.status === "fulfilled" && logsData.value) {
-              setLogs(logsData.value);
-            }
-          } catch {
-            // 忽略轮询异常
-          }
-        }, 1500);
-      }
-    }
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [open, trace?.status, traceId]);
-
-  const hasWarningSpan = trace?.spans?.some(
-    (s) =>
-      s.status === "warning" ||
-      s.payload?.success === false ||
-      Boolean(s.payload?.warning) ||
-      (Array.isArray(s.payload?.subtask_errors) && s.payload.subtask_errors.length > 0),
-  );
-  const effectiveStatus =
-    trace?.status === "warning" ||
-    Boolean(trace?.extra?.has_warnings) ||
-    (trace?.status === "succeeded" && hasWarningSpan)
-      ? "warning"
-      : trace?.status || "unknown";
-
   return (
     <Drawer
       title={
@@ -231,8 +145,9 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({ traceId, open, onClose
           <Button
             size="small"
             type="text"
-            icon={<ReloadOutlined spin={loading} />}
-            onClick={() => loadDetail(true)}
+            icon={<ReloadOutlined spin={loading || refreshing} />}
+            onClick={refresh}
+            disabled={loading || refreshing}
           >
             刷新
           </Button>
@@ -244,6 +159,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({ traceId, open, onClose
       open={open}
       destroyOnHidden
     >
+      {error && <Alert type="error" showIcon message={error} />}
       {loading ? (
         <div style={{ textAlign: "center", padding: "60px 0" }}>
           <Spin tip="正在加载任务详情..." />
@@ -264,7 +180,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({ traceId, open, onClose
                     {trace.current_stage ? formatStageName(trace.current_stage) : "准备中"}
                   </Tag>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    （已自动每 3 秒刷新，任务结束后将显示完整数据）
+                    （详情自动更新，任务结束后停止刷新）
                   </Text>
                 </span>
               }
@@ -381,6 +297,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({ traceId, open, onClose
           </div>
 
           {/* 专属执行日志流 */}
+          {logsError && <Alert type="warning" showIcon message={logsError} />}
           <TraceLogViewer logs={logs} />
         </Space>
       ) : (
