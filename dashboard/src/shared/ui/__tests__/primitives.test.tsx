@@ -3,8 +3,51 @@ import { describe, expect, it, vi } from "vitest";
 import { Button } from "../button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "../dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../tabs";
+import { NativeSelect } from "../native-select";
+import { useState } from "react";
 
 describe("基础控件的交互约定", () => {
+  it("受控弹窗没有专用 Trigger 时，也能恢复列表按钮的焦点", async () => {
+    function ControlledDialog() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <Button onClick={() => setOpen(true)}>查看任务</Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent>
+              <DialogTitle>任务详情</DialogTitle>
+              <DialogDescription>示例任务</DialogDescription>
+            </DialogContent>
+          </Dialog>
+        </>
+      );
+    }
+    render(<ControlledDialog />);
+    const trigger = screen.getByRole("button", { name: "查看任务" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+  });
+
+  it("原生选择器保留表单名称、标签与选项值", () => {
+    const change = vi.fn();
+    render(
+      <label>
+        渲染方案
+        <NativeSelect name="render" defaultValue="auto" onChange={change}>
+          <option value="auto">跟随配置</option>
+          <option value="local">本地</option>
+        </NativeSelect>
+      </label>,
+    );
+    const select = screen.getByRole("combobox", { name: "渲染方案" });
+    fireEvent.change(select, { target: { value: "local" } });
+    expect(select).toHaveValue("local");
+    expect(select).toHaveAttribute("name", "render");
+    expect(change).toHaveBeenCalledTimes(1);
+  });
   it("普通按钮不会意外提交表单，禁用后不触发操作", () => {
     const submit = vi.fn((event: React.FormEvent) => event.preventDefault());
     const click = vi.fn();
