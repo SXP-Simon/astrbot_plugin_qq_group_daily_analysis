@@ -28,6 +28,7 @@ from .llm_diagnostics import (
     extract_task_await_frames,
     format_task_await_chain,
 )
+from .token_usage import parse_token_usage
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -995,9 +996,8 @@ def extract_token_usage(response: object) -> dict[str, int]:
     Returns:
         Token使用统计字典，包含prompt_tokens, completion_tokens, total_tokens
     """
-    from ....domain.value_objects import TokenUsage
 
-    usage_vo = TokenUsage.from_llm_response(response)
+    usage_vo = parse_token_usage(response)
     return {
         "prompt_tokens": usage_vo.prompt_tokens,
         "completion_tokens": usage_vo.completion_tokens,
