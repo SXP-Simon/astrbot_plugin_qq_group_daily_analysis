@@ -10,8 +10,9 @@ import random
 import re
 import time
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 from urllib.parse import quote
+from weakref import WeakValueDictionary
 
 import aiohttp
 
@@ -50,6 +51,14 @@ if TYPE_CHECKING:
     from ....domain.value_objects.analysis_results import QQOfficialMemberProfile
 
 
+class _GroupInfoQuery(Protocol):
+    """可选 SDK 群资料方法的调用契约。"""
+
+    def __call__(self, *, group_openid: str) -> object:
+        """返回原始响应或可等待的响应，交由适配器校验。"""
+        ...
+
+
 class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
     """Adapter for QQ Official group bots (WebSocket and Webhook variants)."""
 
@@ -82,7 +91,9 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         self._member_profiles: dict[str, QQOfficialMemberProfile] = {}
         self._markdown_images: QQMarkdownImages | None = None
         self._group_info_cache: dict[str, tuple[float, UnifiedGroup]] = {}
-        self._group_info_lock = asyncio.Lock()
+        self._group_info_locks: WeakValueDictionary[str, asyncio.Lock] = (
+            WeakValueDictionary()
+        )
 
     @property
     def platform_id(self) -> str:
@@ -568,12 +579,16 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         Returns:
             群资料；空标识返回 None。成功缓存一小时，失败五分钟后再尝试，
             缓存仅属于当前适配器实例，不在不同机器人之间共享。
+
+        Raises:
+            asyncio.CancelledError: 调用方取消查询时原样传播。
         """
         target_id = str(group_id).strip()
         if not target_id:
             return None
-        # 合并并发查询，避免相同群聊在准备分析时重复消耗接口配额。
-        async with self._group_info_lock:
+        # 只合并同群查询；弱引用让最后一个等待者退出后自动释放锁记录。
+        lock = self._group_info_locks.setdefault(target_id, asyncio.Lock())
+        async with lock:
             cached = self._group_info_cache.get(target_id)
             if cached and cached[0] > time.monotonic():
                 return cached[1]
@@ -589,11 +604,13 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
             ttl = 300
             try:
                 api = self.bot.api if self.bot else None
-                method = getattr(api, "get_group_info", None)
+                method: object = getattr(api, "get_group_info", None)
                 async with asyncio.timeout(self.GROUP_INFO_TIMEOUT):
                     response: object
                     if callable(method):
-                        pending: object = method(group_openid=target_id)
+                        # 边界已确认可调用；参数不兼容仍由下方异常回退处理。
+                        query = cast("_GroupInfoQuery", method)
+                        pending = query(group_openid=target_id)
                         response = (
                             await pending if is_object_awaitable(pending) else pending
                         )
