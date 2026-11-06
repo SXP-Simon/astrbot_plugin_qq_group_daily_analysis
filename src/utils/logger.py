@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import inspect
 import os
-import sys
 
 from astrbot.api import logger as astrbot_logger
 
@@ -18,8 +18,9 @@ def _extract_caller_location(stacklevel: int = 1) -> str | None:
     Returns:
         形如 'filename.py:line' 的代码位置字符串，无法获取时返回 None。
     """
+    frame = None
     try:
-        frame = sys._getframe(1)
+        frame = inspect.currentframe()
         current_file = os.path.abspath(__file__)
         # 逐层回溯并跳过 logger.py 内部的调用帧
         while frame and os.path.abspath(frame.f_code.co_filename) == current_file:
@@ -36,6 +37,8 @@ def _extract_caller_location(stacklevel: int = 1) -> str | None:
             return f"{basename}:{lineno}"
     except Exception:
         pass
+    finally:
+        del frame
     return None
 
 
@@ -61,7 +64,7 @@ class PluginLogger:
         level: str,
         formatted_msg: str,
         trace_id: str | None,
-        args: tuple = (),
+        args: tuple[object, ...] = (),
         stacklevel: int = 1,
     ) -> None:
         try:
