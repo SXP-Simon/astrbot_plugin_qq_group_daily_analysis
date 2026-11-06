@@ -1,17 +1,21 @@
-"""Persistent registry of groups observed by event-driven platforms."""
+"""保存事件驱动平台中已见群组的注册表。"""
 
 from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+from ...shared.type_guards import is_string_mapping
 
 if TYPE_CHECKING:
     from astrbot.api.star import Star
 
+    from .kv_contracts import KeyValueWriter
+
 
 class PlatformGroupRegistry:
-    """Keep a small, platform-scoped list of groups seen in incoming events."""
+    """按平台保存收到过消息的群组，用于群列表发现。"""
 
     _KV_KEY = "platform_seen_groups_v1"
     _LEGACY_TELEGRAM_KEY = "telegram_seen_groups_v1"
@@ -43,21 +47,19 @@ class PlatformGroupRegistry:
             if identity in self._known_groups:
                 return
 
-            registry = await self.plugin.get_kv_data(self._KV_KEY, {})
-            if not isinstance(registry, dict):
+            registry = await self.plugin.get_kv_data(self._KV_KEY, None)
+            if not is_string_mapping(registry):
                 registry = {}
             platforms = registry.setdefault("platforms", {})
-            if not isinstance(platforms, dict):
+            if not is_string_mapping(platforms):
                 platforms = {}
                 registry["platforms"] = platforms
             platform_map = platforms.setdefault(platform_key, {})
-            if not isinstance(platform_map, dict):
+            if not is_string_mapping(platform_map):
                 platform_map = {}
                 platforms[platform_key] = platform_map
 
-            # Existing groups only need to be remembered in memory. The
-            # registry is used for group discovery, so rewriting last_seen and
-            # the full KV document for every message creates unnecessary I/O.
+            # 已登记的群只需记入内存，避免每条消息都重写完整注册表。
             if group_key in platform_map:
                 self._known_groups.add(identity)
                 return
@@ -71,12 +73,14 @@ class PlatformGroupRegistry:
                 "last_event_message_id": str(event_message_id or ""),
             }
             registry["updated_at"] = now_iso
-            await self.plugin.put_kv_data(self._KV_KEY, registry)
+            await cast("KeyValueWriter", self.plugin).put_kv_data(
+                self._KV_KEY, registry
+            )
             self._known_groups.add(identity)
 
     async def get_all_group_ids(self, platform_id: str | None = None) -> list[str]:
         async with self._lock:
-            registry = await self.plugin.get_kv_data(self._KV_KEY, {})
+            registry = await self.plugin.get_kv_data(self._KV_KEY, None)
             groups = self._extract_groups(registry, platform_id)
             platform_key = str(platform_id).strip() if platform_id else None
             if platform_id:
@@ -84,8 +88,8 @@ class PlatformGroupRegistry:
                     (str(platform_key), group_id) for group_id in groups
                 )
 
-            # Preserve groups recorded by older plugin versions.
-            legacy = await self.plugin.get_kv_data(self._LEGACY_TELEGRAM_KEY, {})
+            # 保留旧版本登记的群组。
+            legacy = await self.plugin.get_kv_data(self._LEGACY_TELEGRAM_KEY, None)
             legacy_groups = self._extract_groups(legacy, platform_id)
             groups.update(legacy_groups)
             if platform_id:
@@ -96,10 +100,10 @@ class PlatformGroupRegistry:
 
     @staticmethod
     def _extract_groups(registry: object, platform_id: str | None) -> set[str]:
-        if not isinstance(registry, dict):
+        if not is_string_mapping(registry):
             return set()
         platforms = registry.get("platforms")
-        if not isinstance(platforms, dict):
+        if not is_string_mapping(platforms):
             return set()
 
         maps: list[object]
@@ -110,7 +114,7 @@ class PlatformGroupRegistry:
 
         groups: set[str] = set()
         for platform_map in maps:
-            if isinstance(platform_map, dict):
+            if is_string_mapping(platform_map):
                 groups.update(
                     str(group_id).strip()
                     for group_id in platform_map

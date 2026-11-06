@@ -211,7 +211,7 @@ class HistoryRepository:
             list[str]: 群组 ID 字符串列表
         """
         try:
-            groups = []
+            groups: list[str] = []
             for file_path in self.history_dir.glob("group_*.json"):
                 # 从文件名反推群组 ID (group_123.json -> 123)
                 group_id = file_path.stem.replace("group_", "")

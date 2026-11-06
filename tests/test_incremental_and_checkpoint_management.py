@@ -573,7 +573,7 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
             emoji_count=0,
         )
     )
-    mock_stat_service._convert_to_legacy_dict = MagicMock(
+    mock_stat_service.convert_to_legacy_dict = MagicMock(
         side_effect=lambda msgs: [
             {"id": m.message_id, "text": m.text_content} for m in msgs
         ]
@@ -609,7 +609,7 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
     assert fetch_call_args.kwargs["since_ts"] >= now_ts - 86400 - 5  # 允许 5s 运行误差
 
     # 验证传入统计与转换的消息只有周三的消息 (msg_wed)，周一与周二的消息被严格过滤
-    legacy_msgs_passed = mock_stat_service._convert_to_legacy_dict.call_args[0][0]
+    legacy_msgs_passed = mock_stat_service.convert_to_legacy_dict.call_args[0][0]
     assert len(legacy_msgs_passed) == 1
     assert legacy_msgs_passed[0].message_id == "msg_wed"
     assert legacy_msgs_passed[0].text_content == "周三今天的话题消息"

@@ -16,6 +16,7 @@ from ...domain.services.task_state_machine import TaskStateMachine
 from ...domain.value_objects.task_event import TaskEvent
 from ...domain.value_objects.task_status import TaskStatus
 from ...shared.constants import PROCESS_BOOT_ID, PROCESS_PID, AnalysisStage
+from ...shared.type_guards import is_object_list, is_string_mapping
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -36,7 +37,24 @@ def _load_json_object(raw: str | None) -> dict[str, object]:
         parsed = json.loads(raw or "{}")
     except (ValueError, TypeError):
         return {}
-    return parsed if isinstance(parsed, dict) else {}
+    return parsed if is_string_mapping(parsed) else {}
+
+
+def _metric_number(value: object) -> str | int | float:
+    """校验指标的可转换数值，防止未知结构写入数值列。
+
+    Args:
+        value: 快照中的原始数值。
+
+    Returns:
+        数值或数字字符串，由对应字段决定转换为整数还是浮点数。
+
+    Raises:
+        TypeError: 值不是支持的数值类型。
+    """
+    if not isinstance(value, (str, int, float)):
+        raise TypeError("追踪指标必须是数值")
+    return value
 
 
 class TokenBreakdownItem(TypedDict):
@@ -200,9 +218,10 @@ class TraceSQLiteStore:
                     t_id = str(r["trace_id"] or "")
                     g_id = str(r["group_id"] or "")
                     c_at = float(r["started_at"] or time.time())
-                    extra_obj = json.loads(r["extra_json"] or "{}")
-                    for rf in extra_obj.get("report_files", []):
-                        if not isinstance(rf, dict) or not rf.get("filename"):
+                    extra_obj = _load_json_object(r["extra_json"])
+                    raw_reports = extra_obj.get("report_files")
+                    for rf in raw_reports if is_object_list(raw_reports) else []:
+                        if not is_string_mapping(rf) or not rf.get("filename"):
                             continue
                         fn = str(rf["filename"])
                         fmt = str(
@@ -293,12 +312,12 @@ class TraceSQLiteStore:
 
             # 6. 同步写入结构化产物关联表 report_artifacts
             raw_rfiles = extra_payload.get("report_files")
-            if not isinstance(raw_rfiles, list):
+            if not is_object_list(raw_rfiles):
                 return
             grp_id = str(trace_dict.get("group_id", ""))
             fallback_ts = time.time()
             for rf in raw_rfiles:
-                if not isinstance(rf, dict) or not rf.get("filename"):
+                if not is_string_mapping(rf) or not rf.get("filename"):
                     continue
                 fn = str(rf["filename"])
                 fmt = str(
@@ -341,35 +360,36 @@ class TraceSQLiteStore:
         """
         extra_raw = trace_dict.get("extra")
         extra_payload: dict[str, object] = (
-            dict(extra_raw) if isinstance(extra_raw, dict) else {}
+            dict(extra_raw) if is_string_mapping(extra_raw) else {}
         )
         meta = trace_dict.get("metadata", {})
-        if isinstance(meta, dict):
+        if is_string_mapping(meta):
             for k, v in meta.items():
                 if k not in extra_payload:
                     extra_payload[k] = v
-                elif isinstance(v, dict):
+                elif is_string_mapping(v):
                     existing_val = extra_payload.get(k)
-                    if isinstance(existing_val, dict):
+                    if is_string_mapping(existing_val):
                         existing_val.update(v)
-                elif isinstance(v, list):
+                elif is_object_list(v):
                     extra_payload[k] = v
 
         if previous_json:
             try:
-                old_extra = json.loads(previous_json)
-                merged_rfiles = list(old_extra.get("report_files", []))
+                old_extra = _load_json_object(previous_json)
+                old_reports = old_extra.get("report_files")
+                merged_rfiles = list(old_reports) if is_object_list(old_reports) else []
                 seen_filenames = {
-                    rf.get("filename")
+                    str(rf.get("filename"))
                     for rf in merged_rfiles
-                    if isinstance(rf, dict) and rf.get("filename")
+                    if is_string_mapping(rf) and rf.get("filename")
                 }
                 new_rfiles = extra_payload.get("report_files")
-                if isinstance(new_rfiles, list):
+                if is_object_list(new_rfiles):
                     for rf in new_rfiles:
-                        if not isinstance(rf, dict):
+                        if not is_string_mapping(rf):
                             continue
-                        fn = rf.get("filename")
+                        fn = str(rf.get("filename") or "")
                         if not fn or fn in seen_filenames:
                             continue
                         seen_filenames.add(fn)
@@ -419,9 +439,9 @@ class TraceSQLiteStore:
                 pass
 
         spans_raw = trace_dict.get("spans")
-        spans = spans_raw if isinstance(spans_raw, list) else []
+        spans = spans_raw if is_object_list(spans_raw) else []
         for span in spans:
-            if not isinstance(span, dict):
+            if not is_string_mapping(span):
                 continue
             span_status = str(span.get("status", "success"))
             if span_status == "running" and terminal_span_status:
@@ -468,7 +488,7 @@ class TraceSQLiteStore:
         """
         # 3. 写入 Context Metrics
         context_metrics = trace_dict.get("context_metrics")
-        if isinstance(context_metrics, dict):
+        if is_string_mapping(context_metrics):
             conn.execute(
                 """
                 INSERT INTO context_metrics (
@@ -484,17 +504,21 @@ class TraceSQLiteStore:
                 """,
                 (
                     trace_id,
-                    int(context_metrics.get("raw_message_count", 0)),
-                    int(context_metrics.get("cleaned_message_count", 0)),
-                    float(context_metrics.get("compression_ratio", 0.0)),
-                    int(context_metrics.get("incremental_batches", 0)),
-                    int(context_metrics.get("window_size", 0)),
+                    int(_metric_number(context_metrics.get("raw_message_count", 0))),
+                    int(
+                        _metric_number(context_metrics.get("cleaned_message_count", 0))
+                    ),
+                    float(
+                        _metric_number(context_metrics.get("compression_ratio", 0.0))
+                    ),
+                    int(_metric_number(context_metrics.get("incremental_batches", 0))),
+                    int(_metric_number(context_metrics.get("window_size", 0))),
                 ),
             )
 
         # 4. 写入 Token Usage
         token_usage = trace_dict.get("token_usage")
-        if isinstance(token_usage, dict):
+        if is_string_mapping(token_usage):
             conn.execute(
                 """
                 INSERT INTO token_usage (
@@ -510,17 +534,17 @@ class TraceSQLiteStore:
                 """,
                 (
                     trace_id,
-                    int(token_usage.get("prompt_tokens", 0)),
-                    int(token_usage.get("completion_tokens", 0)),
-                    int(token_usage.get("total_tokens", 0)),
-                    float(token_usage.get("estimated_cost", 0.0)),
+                    int(_metric_number(token_usage.get("prompt_tokens", 0))),
+                    int(_metric_number(token_usage.get("completion_tokens", 0))),
+                    int(_metric_number(token_usage.get("total_tokens", 0))),
+                    float(_metric_number(token_usage.get("estimated_cost", 0.0))),
                     json.dumps(token_usage.get("per_analyzer", {}), ensure_ascii=False),
                 ),
             )
 
         # 5. 写入 Performance Metrics
         perf_metrics = trace_dict.get("performance_metrics")
-        if perf_metrics and isinstance(perf_metrics, dict):
+        if perf_metrics and is_string_mapping(perf_metrics):
             conn.execute(
                 """
                 INSERT INTO performance_metrics (
@@ -535,10 +559,10 @@ class TraceSQLiteStore:
                 """,
                 (
                     trace_id,
-                    float(perf_metrics.get("init_memory_mb", 0.0)),
-                    float(perf_metrics.get("peak_memory_mb", 0.0)),
-                    float(perf_metrics.get("final_memory_mb", 0.0)),
-                    float(perf_metrics.get("delta_memory_mb", 0.0)),
+                    float(_metric_number(perf_metrics.get("init_memory_mb", 0.0))),
+                    float(_metric_number(perf_metrics.get("peak_memory_mb", 0.0))),
+                    float(_metric_number(perf_metrics.get("final_memory_mb", 0.0))),
+                    float(_metric_number(perf_metrics.get("delta_memory_mb", 0.0))),
                     json.dumps(
                         perf_metrics.get("metrics_extra", {}), ensure_ascii=False
                     ),
@@ -653,7 +677,7 @@ class TraceSQLiteStore:
                 "SELECT * FROM trace_spans WHERE trace_id = ? ORDER BY started_at ASC",
                 (trace_id,),
             ).fetchall()
-            spans = []
+            spans: list[dict[str, object]] = []
             extra_prompts = trace_data.get("extra", {}).get("llm_prompts", {})
             extra_attempts = trace_data.get("extra", {}).get("llm_attempts", [])
             for r in spans_rows:
@@ -718,9 +742,9 @@ class TraceSQLiteStore:
         """
         seen: set[str] = set()
         reports: list[dict[str, object]] = []
-        if isinstance(raw_files, list):
+        if is_object_list(raw_files):
             for raw in raw_files:
-                if not isinstance(raw, dict):
+                if not is_string_mapping(raw):
                     continue
                 filename = raw.get("filename")
                 if not isinstance(filename, str) or not filename or filename in seen:
@@ -799,7 +823,7 @@ class TraceSQLiteStore:
                     try:
                         extra = json.loads(r["extra_json"] or "{}")
                         for rf in extra.get("report_files", []):
-                            fn = rf.get("filename")
+                            fn = str(rf.get("filename") or "")
                             if fn:
                                 mapping[fn] = t_id
                     except Exception:
@@ -915,7 +939,7 @@ class TraceSQLiteStore:
                     ORDER BY started_at ASC
                 """
                 rows = conn.execute(query).fetchall()
-            result = []
+            result: list[dict[str, object]] = []
             for r in rows:
                 item = dict(r)
                 try:
@@ -1099,7 +1123,7 @@ class TraceSQLiteStore:
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         """分页筛选查询 Trace 列表（支持按群组、状态、触发方式、关键词、时间范围筛选与排序）"""
-        conditions = []
+        conditions: list[str] = []
         params: list[object] = []
 
         if group_id:
@@ -1166,17 +1190,17 @@ class TraceSQLiteStore:
             """
             rows = conn.execute(query_sql, [*params, limit, offset]).fetchall()
 
-            traces = []
+            traces: list[dict[str, object]] = []
             for r in rows:
                 item = dict(r)
                 try:
                     extra = json.loads(item.pop("extra_json") or "{}")
-                    if isinstance(extra, dict):
+                    if is_string_mapping(extra):
                         # 列表接口剔除大体积 Payload，极大降低传输流量
                         extra.pop("llm_prompts", None)
                         extra.pop("llm_attempts", None)
                         extra.pop("checkpoint_summary", None)
-                    item["extra"] = extra if isinstance(extra, dict) else {}
+                    item["extra"] = extra if is_string_mapping(extra) else {}
                 except Exception:
                     item["extra"] = {}
                 traces.append(item)
@@ -1398,12 +1422,7 @@ class TraceSQLiteStore:
         model_map: dict[str, TokenBreakdownItem] = {}
 
         for tw in usage_rows:
-            try:
-                extra = json.loads(tw["extra_json"] or "{}")
-            except Exception:
-                extra = {}
-            if not isinstance(extra, dict):
-                extra = {}
+            extra = _load_json_object(tw["extra_json"])
 
             llm_prompts = extra.get("llm_prompts", {})
 
@@ -1411,9 +1430,9 @@ class TraceSQLiteStore:
             providers_in_trace: set[str] = set()
             models_in_trace: set[str] = set()
 
-            if isinstance(llm_prompts, dict):
+            if is_string_mapping(llm_prompts):
                 for _, p_info in llm_prompts.items():
-                    if isinstance(p_info, dict):
+                    if is_string_mapping(p_info):
                         p_id = str(p_info.get("provider_id", "")).strip()
                         if p_id and p_id.lower() not in invalid_provider_names:
                             providers_in_trace.add(p_id)

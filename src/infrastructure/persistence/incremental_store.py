@@ -15,14 +15,24 @@ KV 键设计：
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict, cast
 
 from ...domain.entities.incremental_state import IncrementalBatch
 from ...domain.repositories.persistence_repository import IIncrementalStore
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
     from astrbot.api.star import Star
+
+    from .kv_contracts import KeyValueWriter
+
+
+class BatchIndexEntry(TypedDict):
+    """持久化批次索引条目，读取时验证身份和时间戳。"""
+
+    batch_id: str
+    timestamp: float
 
 
 class IncrementalStore(IIncrementalStore):
@@ -59,11 +69,13 @@ class IncrementalStore(IIncrementalStore):
         try:
             groups_data = await self.plugin.get_kv_data(self.GROUPS_REGISTRY_KEY, [])
             current_groups = (
-                set(groups_data) if isinstance(groups_data, list) else set()
+                {str(item) for item in groups_data}
+                if is_object_list(groups_data)
+                else set[str]()
             )
             if group_id not in current_groups:
                 current_groups.add(str(group_id))
-                await self.plugin.put_kv_data(
+                await cast("KeyValueWriter", self.plugin).put_kv_data(
                     self.GROUPS_REGISTRY_KEY, sorted(current_groups)
                 )
         except Exception as e:
@@ -75,7 +87,7 @@ class IncrementalStore(IIncrementalStore):
             groups_data = await self.plugin.get_kv_data(self.GROUPS_REGISTRY_KEY, [])
             return (
                 sorted({str(g) for g in groups_data})
-                if isinstance(groups_data, list)
+                if is_object_list(groups_data)
                 else []
             )
         except Exception as e:
@@ -102,7 +114,7 @@ class IncrementalStore(IIncrementalStore):
     # 批次索引操作
     # ================================================================
 
-    async def _get_index(self, group_id: str) -> list[dict]:
+    async def _get_index(self, group_id: str) -> list[BatchIndexEntry]:
         """
         获取指定群的批次索引列表。
 
@@ -110,19 +122,26 @@ class IncrementalStore(IIncrementalStore):
             group_id: 群组 ID
 
         Returns:
-            list[dict]: 索引条目列表，每项包含 batch_id 和 timestamp
+            list[BatchIndexEntry]: 索引条目列表，每项包含 batch_id 和 timestamp
         """
         key = self._index_key(group_id)
         try:
             data = await self.plugin.get_kv_data(key, default=[])
-            if isinstance(data, list):
-                return [item for item in data if isinstance(item, dict)]
-            return []
+            entries: list[BatchIndexEntry] = []
+            for item in data if is_object_list(data) else []:
+                if not is_string_mapping(item):
+                    continue
+                batch_id, timestamp = item.get("batch_id"), item.get("timestamp", 0)
+                if isinstance(batch_id, str) and isinstance(timestamp, (int, float)):
+                    entries.append(
+                        {"batch_id": batch_id, "timestamp": float(timestamp)}
+                    )
+            return entries
         except Exception as e:
             logger.error(f"读取批次索引失败 (Key: {key}): {e}", exc_info=True)
             return []
 
-    async def _save_index(self, group_id: str, index: list[dict]) -> None:
+    async def _save_index(self, group_id: str, index: list[BatchIndexEntry]) -> None:
         """
         保存批次索引列表。
 
@@ -132,7 +151,7 @@ class IncrementalStore(IIncrementalStore):
         """
         key = self._index_key(group_id)
         try:
-            await self.plugin.put_kv_data(key, index)
+            await cast("KeyValueWriter", self.plugin).put_kv_data(key, index)
         except Exception as e:
             logger.error(f"保存批次索引失败 (Key: {key}): {e}", exc_info=True)
             raise
@@ -160,7 +179,9 @@ class IncrementalStore(IIncrementalStore):
 
         try:
             # 1. 保存批次数据
-            await self.plugin.put_kv_data(batch_key, batch.to_dict())
+            await cast("KeyValueWriter", self.plugin).put_kv_data(
+                batch_key, batch.to_dict()
+            )
 
             # 2. 更新索引
             index = await self._get_index(group_id)
@@ -272,13 +293,18 @@ class IncrementalStore(IIncrementalStore):
         key = self._last_ts_key(group_id)
         try:
             data = await self.plugin.get_kv_data(key, 0)
-            if isinstance(data, dict):
-                timestamp = max(0, int(data.get("timestamp", 0)))
+            if is_string_mapping(data):
+                raw_timestamp = data.get("timestamp", 0)
+                if not isinstance(raw_timestamp, (str, int, float)):
+                    raise TypeError("增量游标时间戳必须是数值")
+                timestamp = max(0, int(raw_timestamp))
                 message_ids = data.get("message_ids", [])
-                if not isinstance(message_ids, list):
+                if not is_object_list(message_ids):
                     message_ids = []
                 return timestamp, {str(item) for item in message_ids if str(item)}
-            return (int(data) if data else 0), set()
+            return (
+                int(data) if isinstance(data, (str, int, float)) and data else 0
+            ), set()
         except Exception as e:
             logger.error(f"读取最后分析游标失败 (Key: {key}): {e}", exc_info=True)
             return 0, set()
@@ -298,7 +324,7 @@ class IncrementalStore(IIncrementalStore):
         """
         key = self._last_ts_key(group_id)
         try:
-            await self.plugin.put_kv_data(
+            await cast("KeyValueWriter", self.plugin).put_kv_data(
                 key,
                 {
                     "timestamp": max(0, int(timestamp)),
@@ -331,8 +357,8 @@ class IncrementalStore(IIncrementalStore):
         """
         batch_key = self._batch_key(group_id, batch_id)
         try:
-            data = await self.plugin.get_kv_data(batch_key, default={})
-            if isinstance(data, dict) and data:
+            data = await self.plugin.get_kv_data(batch_key, default=None)
+            if is_string_mapping(data) and data:
                 return IncrementalBatch.from_dict(data)
             return None
         except Exception as e:
@@ -360,7 +386,7 @@ class IncrementalStore(IIncrementalStore):
 
             await self._save_index(group_id, retained)
             batch_key = self._batch_key(group_id, batch_id)
-            await self.plugin.put_kv_data(batch_key, None)
+            await cast("KeyValueWriter", self.plugin).put_kv_data(batch_key, None)
             logger.info(f"已删除增量批次: 群 {group_id}, 批次 {batch_id}")
             return True
         except Exception as e:
@@ -384,11 +410,13 @@ class IncrementalStore(IIncrementalStore):
             for entry in index:
                 b_id = entry.get("batch_id")
                 if b_id:
-                    await self.plugin.put_kv_data(self._batch_key(group_id, b_id), None)
+                    await cast("KeyValueWriter", self.plugin).put_kv_data(
+                        self._batch_key(group_id, b_id), None
+                    )
 
             # 清空索引与游标
             await self._save_index(group_id, [])
-            await self.plugin.put_kv_data(
+            await cast("KeyValueWriter", self.plugin).put_kv_data(
                 self._last_ts_key(group_id),
                 {"timestamp": 0, "message_ids": []},
             )
@@ -421,8 +449,8 @@ class IncrementalStore(IIncrementalStore):
             return 0
 
         # 分离过期和保留
-        expired = []
-        retained = []
+        expired: list[BatchIndexEntry] = []
+        retained: list[BatchIndexEntry] = []
         for entry in index:
             if entry.get("timestamp", 0) < before_timestamp:
                 expired.append(entry)
@@ -440,7 +468,7 @@ class IncrementalStore(IIncrementalStore):
                 continue
             batch_key = self._batch_key(group_id, batch_id)
             try:
-                await self.plugin.put_kv_data(batch_key, None)
+                await cast("KeyValueWriter", self.plugin).put_kv_data(batch_key, None)
                 deleted_count += 1
             except Exception as e:
                 logger.error(
@@ -475,7 +503,7 @@ class IncrementalStore(IIncrementalStore):
         index = await self._get_index(group_id)
         return len(index)
 
-    async def get_all_batch_summaries(self, group_id: str) -> list[dict]:
+    async def get_all_batch_summaries(self, group_id: str) -> list[BatchIndexEntry]:
         """
         获取指定群所有批次的摘要信息（不加载完整数据）。
 
@@ -485,7 +513,7 @@ class IncrementalStore(IIncrementalStore):
             group_id: 群组 ID
 
         Returns:
-            list[dict]: 批次摘要列表，按时间升序
+            list[BatchIndexEntry]: 批次摘要列表，按时间升序
         """
         index = await self._get_index(group_id)
         # 按时间戳升序排列

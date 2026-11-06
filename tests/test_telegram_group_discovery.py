@@ -51,7 +51,7 @@ def test_scheduled_target_resolver_passes_plugin_instance_to_fallback_adapter():
     bot_manager.get_all_bot_instances.return_value = {"tg-main": Mock()}
     bot_manager.is_plugin_enabled.return_value = True
     bot_manager.get_adapter.return_value = None  # 模拟未注册 adapter，触发 fallback 构造
-    bot_manager._detect_platform_name.return_value = "telegram"
+    bot_manager.detect_platform_name.return_value = "telegram"
     bot_manager.get_adapter_platform_id.return_value = "tg-main"
 
     bot_manager.auto_discover_bot_instances = AsyncMock()
