@@ -1,11 +1,14 @@
-import React from "react";
-import { Modal, Form, Input, Select, Alert, Button } from "antd";
-import { ConnectedPlatform } from "../../../entities/task/api/taskApi";
-import { LLMProviderItem } from "../../../entities/trace/api/traceApi";
+import { useEffect, useId, useRef, useState } from "react";
+import type { ConnectedPlatform } from "../../../entities/task/api/taskApi";
+import type { LLMProviderItem } from "../../../entities/trace/api/traceApi";
 import {
-  ReportTemplateItem,
+  type ReportTemplateItem,
   formatTemplateOptions,
 } from "../../../entities/report/model/templates";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import { Button } from "../../../shared/ui/button";
+import { Input } from "../../../shared/ui/input";
+import { NativeSelect } from "../../../shared/ui/native-select";
 
 interface TriggerTaskModalProps {
   open: boolean;
@@ -29,10 +32,12 @@ interface TriggerTaskModalProps {
   onProviderChange?: (val: string) => void;
   onTemplateChange?: (val: string) => void;
   onClose: () => void;
-  onSubmit: () => void;
+  onSubmit: () => void | Promise<void>;
+  optionsError?: string;
+  onRefreshOptions?: () => void;
 }
 
-export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
+export function TriggerTaskModal({
   open,
   groupId,
   groupName,
@@ -48,6 +53,8 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
   loadingTemplates = false,
   templatesError,
   onRefreshTemplates,
+  optionsError,
+  onRefreshOptions,
   onGroupIdChange,
   onGroupNameChange,
   onPlatformChange,
@@ -55,109 +62,181 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
   onTemplateChange,
   onClose,
   onSubmit,
-}) => {
+}: TriggerTaskModalProps) {
+  const id = useId();
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const request = useRef<symbol | null>(null);
+  const busy = pending || submitting;
+  useEffect(() => {
+    setError("");
+    setPending(false);
+    return () => {
+      request.current = null;
+    };
+  }, [open]);
   const platformOptions = [
-    { label: "自动识别 / 默认平台 (推荐)", value: "auto" },
-    ...(connectedPlatforms.length > 0
-      ? connectedPlatforms.map((p) => ({
-          label: p.label,
-          value: p.id,
-        }))
+    { label: "自动识别平台", value: "auto" },
+    ...(connectedPlatforms.length
+      ? connectedPlatforms.map((item) => ({ label: item.label, value: item.id }))
       : [
-          { label: "OneBot (aiocqhttp)", value: "aiocqhttp" },
+          { label: "OneBot", value: "aiocqhttp" },
           { label: "QQ 官方机器人", value: "qq_official" },
           { label: "Telegram", value: "telegram" },
           { label: "Discord", value: "discord" },
         ]),
   ];
-
   const providerOptions = [
-    { label: "跟随系统默认配置 (推荐)", value: "auto" },
-    ...providers.map((p) => ({
-      label: p.label || `${p.name} (${p.id})`,
-      value: p.id,
+    { label: "使用默认模型", value: "auto" },
+    ...providers.map((item) => ({
+      label: item.label || `${item.name} (${item.id})`,
+      value: item.id,
     })),
   ];
-
   const templateOptions = formatTemplateOptions(templates, true);
-
   return (
-    <Modal
-      title="手动触发群聊日报分析"
+    <Dialog
       open={open}
-      onOk={onSubmit}
-      onCancel={onClose}
-      confirmLoading={submitting}
-      okText="立即触发"
-      cancelText="取消"
-      destroyOnClose
-      width={460}
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose();
+      }}
     >
-      {templatesError && (
-        <Alert
-          type="warning"
-          message={templatesError}
-          action={<Button onClick={onRefreshTemplates}>重试</Button>}
-        />
-      )}
-      <Form layout="vertical" style={{ marginTop: 16 }}>
-        <Form.Item label="群号 / 会话标识" required>
-          <Input
-            placeholder="例如: 123456789"
-            value={groupId}
-            onChange={(e) => onGroupIdChange(e.target.value)}
-            autoFocus
-          />
-        </Form.Item>
-
-        <Form.Item label="群名称 (选填)">
-          <Input
-            placeholder="例如: 核心交流群"
-            value={groupName}
-            onChange={(e) => onGroupNameChange(e.target.value)}
-          />
-        </Form.Item>
-
-        <Form.Item
-          label="接入平台"
-          extra={
-            connectedPlatforms.length > 0
-              ? `已自动检测到 ${connectedPlatforms.length} 个活跃平台实例，支持自由指定`
-              : "自动调用当前已连接的 Bot 平台进行消息抓取与报告发送"
-          }
+      <DialogContent>
+        <DialogTitle>发起分析</DialogTitle>
+        <DialogDescription>选择目标群聊。本次模型和模板选择不会修改默认配置。</DialogDescription>
+        {error && (
+          <p role="alert" className="m-0 break-words text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {optionsError && (
+          <div role="alert" className="space-y-2 text-sm">
+            <p className="m-0">{optionsError}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || loadingPlatforms || loadingProviders}
+              onClick={onRefreshOptions}
+            >
+              重新加载选项
+            </Button>
+          </div>
+        )}
+        <form
+          className="grid gap-4"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (busy || request.current) return;
+            const current = Symbol();
+            request.current = current;
+            setPending(true);
+            setError("");
+            try {
+              await onSubmit();
+            } catch (failure: unknown) {
+              if (request.current === current)
+                setError(
+                  failure instanceof Error ? failure.message : "未能发起分析，请检查连接后重试。",
+                );
+            } finally {
+              if (request.current === current) {
+                request.current = null;
+                setPending(false);
+              }
+            }
+          }}
         >
-          <Select
-            value={platform}
-            onChange={onPlatformChange}
-            loading={loadingPlatforms}
-            options={platformOptions}
-          />
-        </Form.Item>
-
-        <Form.Item
-          label="指定大模型 Provider (选填)"
-          extra="若希望本次分析使用特定 Provider 处理大模型语义分析，可在此选择"
-        >
-          <Select
-            value={providerId}
-            onChange={onProviderChange}
-            loading={loadingProviders}
-            options={providerOptions}
-          />
-        </Form.Item>
-
-        <Form.Item
-          label="报告视觉模板 (选填)"
-          extra="指定本次分析生成的报告模板主题，留空则使用基础配置中的默认模板"
-        >
-          <Select
-            value={templateName}
-            onChange={onTemplateChange}
-            loading={loadingTemplates}
-            options={templateOptions}
-          />
-        </Form.Item>
-      </Form>
-    </Modal>
+          <div className="grid gap-2">
+            <label htmlFor={`${id}-group`}>群号 / 会话标识</label>
+            <Input
+              id={`${id}-group`}
+              required
+              autoComplete="off"
+              placeholder="输入目标群聊或会话的标识"
+              value={groupId}
+              disabled={busy}
+              onChange={(event) => onGroupIdChange(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <label htmlFor={`${id}-name`}>群名称（选填）</label>
+            <Input
+              id={`${id}-name`}
+              value={groupName}
+              disabled={busy}
+              onChange={(event) => onGroupNameChange(event.target.value)}
+            />
+          </div>
+          {[
+            {
+              key: "platform",
+              label: "平台",
+              value: platform,
+              options: platformOptions,
+              loading: loadingPlatforms,
+              change: onPlatformChange,
+            },
+            {
+              key: "provider",
+              label: "模型",
+              value: providerId,
+              options: providerOptions,
+              loading: loadingProviders,
+              change: onProviderChange,
+            },
+            {
+              key: "template",
+              label: "报告模板",
+              value: templateName,
+              options: templateOptions,
+              loading: loadingTemplates,
+              change: onTemplateChange,
+            },
+          ].map((field) => (
+            <div key={field.key} className="grid gap-2">
+              <label htmlFor={`${id}-${field.key}`}>{field.label}</label>
+              <NativeSelect
+                id={`${id}-${field.key}`}
+                value={field.value}
+                disabled={busy || field.loading}
+                onChange={(event) => field.change?.(event.target.value)}
+              >
+                {!field.options.some((option) => option.value === field.value) && (
+                  <option value={field.value}>
+                    已选{field.label}：{field.value}
+                  </option>
+                )}
+                {field.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+              {field.loading && (
+                <span role="status" className="text-xs text-muted-foreground">
+                  正在读取{field.label}…
+                </span>
+              )}
+            </div>
+          ))}
+          {templatesError && (
+            <div role="alert" className="space-y-2 text-sm">
+              <p className="m-0">{templatesError}</p>
+              <Button size="sm" variant="outline" disabled={busy} onClick={onRefreshTemplates}>
+                重新加载模板
+              </Button>
+            </div>
+          )}
+          <div className="mt-2 flex justify-end gap-2">
+            <Button variant="outline" disabled={busy} onClick={onClose}>
+              取消
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "正在提交…" : "开始分析"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
-};
+}
