@@ -1,0 +1,117 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "lxgw-wenkai-screen-webfont/lxgwwenkaiscreen.css";
+@source "../";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: "LXGW WenKai Screen", sans-serif;
+  --font-mono: "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --background: oklch(0.9892 0.0054 117.9205);
+  --foreground: oklch(0.2077 0.0398 265.7549);
+  --card: #fff;
+  --primary: oklch(0.8871 0.2122 128.5041);
+  --primary-foreground: #263513;
+  --secondary: #eeece5;
+  --muted: #f1f1ec;
+  --muted-foreground: #62666c;
+  --accent: #edf2e2;
+  --destructive: #a63631;
+  --destructive-foreground: #fff;
+  --border: #dedfd7;
+  --input: #c7cabf;
+  --ring: #6a852e;
+  --radius: 0.75rem;
+  color-scheme: light;
+}
+
+:root.dark {
+  --background: #161618;
+  --foreground: #e8e8ed;
+  --card: #1e1e21;
+  --primary: #c5d7a8;
+  --primary-foreground: #202b14;
+  --secondary: #29292d;
+  --muted: #242427;
+  --muted-foreground: #aaaab4;
+  --accent: #30372a;
+  --destructive: #f2958d;
+  --destructive-foreground: #361512;
+  --border: #38383d;
+  --input: #52525b;
+  --ring: #b5ce85;
+  color-scheme: dark;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    margin: 0;
+    min-height: 100%;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+  code,
+  pre,
+  kbd {
+    font-family: var(--font-mono);
+  }
+  [hidden] {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
 
 const devOnlyModule =
@@ -28,7 +29,7 @@ const classicScriptPlugin = (): Plugin => ({
 
 export default defineConfig({
   base: "./",
-  plugins: [react(), classicScriptPlugin()],
+  plugins: [react(), tailwindcss(), classicScriptPlugin()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -38,7 +39,8 @@ export default defineConfig({
     outDir: "../pages/daily-analysis",
     emptyOutDir: true,
     cssCodeSplit: false,
-    assetsInlineLimit: 150000,
+    // 字体按字符分片加载，不能把全部字形内嵌到首屏 CSS 中。
+    assetsInlineLimit: (path, content) => !/\.woff2?$/i.test(path) && content.length < 150000,
     chunkSizeWarningLimit: 5000,
     rollupOptions: {
       treeshake: {
