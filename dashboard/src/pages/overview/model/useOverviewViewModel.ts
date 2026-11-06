@@ -1,118 +1,186 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { message } from "antd";
+import { z } from "zod";
 import { fetchActiveTasks, cancelActiveTask } from "../../../entities/task/api/taskApi";
 import { fetchMetricsSummary } from "../../../entities/metric/api/metricApi";
-import { ActiveTask } from "../../../entities/task/model/types";
-import { MetricsSummary } from "../../../entities/metric/model/types";
+import { fetchTraceList } from "../../../entities/trace/api/traceApi";
+import type { ActiveTask } from "../../../entities/task/model/types";
+import type { MetricsSummary } from "../../../entities/metric/model/types";
+import type { TraceRecord } from "../../../entities/trace/model/types";
 
-export function useOverviewViewModel() {
-  const [metrics, setMetrics] = useState<MetricsSummary>({
-    total_traces: 0,
-    succeeded_count: 0,
-    failed_count: 0,
-    success_rate: 0,
-    avg_duration_ms: 0,
-    today_traces: 0,
-    today_active_groups: 0,
-    total_tokens_spent: 0,
-    total_cost_spent: 0,
-    today_tokens_spent: 0,
-    today_cost_spent: 0,
-  });
+const activeTaskSchema: z.ZodType<ActiveTask> = z.object({
+  task_id: z.string().min(1),
+  group_id: z.string(),
+  group_name: z.string(),
+  platform: z.string(),
+  trigger_type: z.string(),
+  current_stage: z.string(),
+  started_at: z.number().finite(),
+  duration_s: z.number().finite(),
+  last_heartbeat: z.number().finite(),
+});
+const eventSchema = z.object({ event: z.string(), data: z.unknown() });
+const finishedSchema = z.object({ task_id: z.string().min(1) });
+
+export function useOverviewViewModel(active = true) {
+  const [metrics, setMetrics] = useState<MetricsSummary | null>(null);
   const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([]);
+  const [recentTraces, setRecentTraces] = useState<TraceRecord[]>([]);
   const [loading, setLoading] = useState(false);
-  const hasLoadedOnce = useRef(false);
-  const reqIdRef = useRef(0);
+  const [tasksLoaded, setTasksLoaded] = useState(false);
+  const [errors, setErrors] = useState({ tasks: "", metrics: "", recent: "" });
+  const [feedback, setFeedback] = useState("");
+  const requestId = useRef<symbol | null>(null);
+  const taskRevision = useRef(0);
+  const endedTasks = useRef(new Set<string>());
+  const cancelling = useRef(new Set<string>());
+  const mounted = useRef(false);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   const loadData = useCallback(async (silent = false) => {
-    const currentReqId = ++reqIdRef.current;
-    if (!silent && !hasLoadedOnce.current) {
-      setLoading(true);
+    if (!mounted.current || !activeRef.current) return;
+    const request = Symbol();
+    requestId.current = request;
+    const revision = taskRevision.current;
+    if (!silent) setLoading(true);
+    const [tasks, summary, recent] = await Promise.allSettled([
+      fetchActiveTasks(),
+      fetchMetricsSummary(),
+      fetchTraceList({ limit: 20, offset: 0, sort_by: "started_at", sort_order: "desc" }),
+    ]);
+    if (!mounted.current || request !== requestId.current) return;
+    // SSE 比查询快时只放弃活跃列表快照，统计和历史记录仍可独立更新。
+    const taskSnapshot =
+      tasks.status === "fulfilled" ? z.array(activeTaskSchema).safeParse(tasks.value) : null;
+    if (revision === taskRevision.current && taskSnapshot?.success) {
+      setActiveTasks(taskSnapshot.data.filter((task) => !endedTasks.current.has(task.task_id)));
+      setTasksLoaded(true);
     }
-    try {
-      const [tasks, summary] = await Promise.all([fetchActiveTasks(), fetchMetricsSummary()]);
-      // 忽略陈旧的过时异步响应，防止覆盖最新的 SSE 状态
-      if (currentReqId !== reqIdRef.current) return;
-      setActiveTasks(tasks);
-      if (summary) setMetrics(summary);
-      hasLoadedOnce.current = true;
-    } catch {
-      // 忽略加载异常
-    } finally {
-      if (currentReqId === reqIdRef.current) {
-        setLoading(false);
-      }
-    }
+    if (summary.status === "fulfilled") setMetrics(summary.value);
+    if (recent.status === "fulfilled") setRecentTraces(recent.value.items);
+    setErrors((previous) => ({
+      tasks:
+        revision !== taskRevision.current
+          ? previous.tasks
+          : taskSnapshot?.success
+            ? ""
+            : "运行中任务未能更新，请刷新重试。",
+      metrics: summary.status === "fulfilled" ? "" : "统计数据未能更新，请刷新重试。",
+      recent: recent.status === "fulfilled" ? "" : "近期分析记录未能更新，请刷新重试。",
+    }));
+    setLoading(false);
   }, []);
 
   const handleSSEEvent = useCallback(
     (eventPayload: unknown) => {
-      if (!eventPayload || typeof eventPayload !== "object") return;
-      const evt = eventPayload as { event?: string; data?: unknown };
-      if (!evt.event) return;
-
-      if (evt.event === "initial_state") {
-        if (Array.isArray(evt.data)) {
-          setActiveTasks(evt.data as ActiveTask[]);
-        }
-      } else if (evt.event === "task_started") {
-        const newTask = evt.data as ActiveTask;
-        if (newTask && newTask.task_id) {
-          setActiveTasks((prev) => {
-            const filtered = prev.filter((t) => t.task_id !== newTask.task_id);
-            return [newTask, ...filtered];
-          });
-        }
-      } else if (evt.event === "task_progress") {
-        const updatedTask = evt.data as ActiveTask;
-        if (updatedTask && updatedTask.task_id) {
-          setActiveTasks((prev) =>
-            prev.map((t) => (t.task_id === updatedTask.task_id ? { ...t, ...updatedTask } : t)),
-          );
-        }
-      } else if (["task_finished", "task_canceled", "task_timed_out"].includes(evt.event)) {
-        const finishData = evt.data as { task_id?: string } | undefined;
-        if (finishData?.task_id) {
-          setActiveTasks((prev) => prev.filter((t) => t.task_id !== finishData.task_id));
-        }
-        // 任务完成时使先前可能在途中的全量拉取失效，并静默刷新总览 KPI 指标
-        loadData(true);
+      if (!mounted.current) return;
+      const parsed = eventSchema.safeParse(eventPayload);
+      if (!parsed.success) return;
+      const { event, data } = parsed.data;
+      if (event === "initial_state") {
+        const tasks = z.array(activeTaskSchema).safeParse(data);
+        if (!tasks.success) return;
+        ++taskRevision.current;
+        setActiveTasks(tasks.data.filter((task) => !endedTasks.current.has(task.task_id)));
+        setTasksLoaded(true);
+        setErrors((previous) => ({ ...previous, tasks: "" }));
+      } else if (event === "task_started" || event === "task_progress") {
+        const task = activeTaskSchema.safeParse(data);
+        if (!task.success || endedTasks.current.has(task.data.task_id)) return;
+        ++taskRevision.current;
+        setActiveTasks((previous) => {
+          const exists = previous.some((item) => item.task_id === task.data.task_id);
+          return exists
+            ? previous.map((item) => (item.task_id === task.data.task_id ? task.data : item))
+            : [task.data, ...previous];
+        });
+      } else if (["task_finished", "task_canceled", "task_timed_out"].includes(event)) {
+        const finished = finishedSchema.safeParse(data);
+        if (!finished.success) return;
+        ++taskRevision.current;
+        endedTasks.current.add(finished.data.task_id);
+        if (endedTasks.current.size > 500)
+          endedTasks.current.delete(endedTasks.current.values().next().value!);
+        setActiveTasks((previous) =>
+          previous.filter((task) => task.task_id !== finished.data.task_id),
+        );
+        void loadData(true);
       }
     },
     [loadData],
   );
 
-  const handleCancelTask = async (taskId: string) => {
-    const accepted = await cancelActiveTask(taskId);
-    if (accepted) {
-      ++reqIdRef.current;
-      setActiveTasks((prev) => prev.filter((task) => task.task_id !== taskId));
-      message.success("已请求中止分析任务，后台正在清理资源。");
-    } else {
-      message.error("中止请求未成功，任务可能已结束或连接异常，请刷新后确认。");
+  const handleCancelTask = async (taskId: string): Promise<boolean> => {
+    if (cancelling.current.has(taskId)) return false;
+    cancelling.current.add(taskId);
+    try {
+      const accepted = await cancelActiveTask(taskId);
+      if (accepted && mounted.current) {
+        ++taskRevision.current;
+        endedTasks.current.add(taskId);
+        if (endedTasks.current.size > 500)
+          endedTasks.current.delete(endedTasks.current.values().next().value!);
+        setActiveTasks((previous) => previous.filter((task) => task.task_id !== taskId));
+        setFeedback("中止请求已接受，后台正在清理资源。");
+        void loadData(true);
+      }
+      return accepted;
+    } catch {
+      return false;
+    } finally {
+      cancelling.current.delete(taskId);
     }
-    await loadData(true);
   };
 
   useEffect(() => {
-    loadData(false);
-    // 活跃任务动态计时器 (每秒刷新运行时长)
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestId.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    if (active) void loadData(false);
+    else setLoading(false);
+    return () => {
+      requestId.current = null;
+    };
+  }, [active, loadData]);
+  const hasActiveTasks = activeTasks.length > 0;
+  useEffect(() => {
+    if (!active || !hasActiveTasks) return;
     const timer = setInterval(() => {
-      setActiveTasks((prev) =>
-        prev.map((t) => ({
-          ...t,
-          duration_s: Math.round((Date.now() / 1000 - t.started_at) * 10) / 10,
-        })),
+      const now = Date.now() / 1000;
+      setActiveTasks((previous) =>
+        previous.map((task) =>
+          task.started_at > 0 && task.started_at <= now
+            ? {
+                ...task,
+                duration_s: Math.round((now - task.started_at) * 10) / 10,
+              }
+            : task,
+        ),
       );
     }, 1000);
-
     return () => clearInterval(timer);
-  }, [loadData]);
+  }, [active, hasActiveTasks]);
+
+  const attentionTraces = recentTraces.filter(
+    (trace) =>
+      trace.status === "failed" ||
+      trace.status === "warning" ||
+      (["succeeded", "completed"].includes(trace.status) && trace.extra?.has_warnings === true),
+  );
 
   return {
     metrics,
     activeTasks,
+    recentTraces,
+    attentionTraces,
     loading,
+    tasksLoaded,
+    errors,
+    feedback,
     refresh: (silent = true) => loadData(silent),
     handleSSEEvent,
     handleCancelTask,
