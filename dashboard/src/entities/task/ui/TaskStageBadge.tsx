@@ -1,36 +1,11 @@
-import React from "react";
-import { Tag } from "antd";
-import { SyncOutlined } from "@ant-design/icons";
+import { IconActivity } from "@tabler/icons-react";
 import { formatStageName } from "../../../shared/lib/formatters";
 
-interface TaskStageBadgeProps {
-  stage: string;
-}
-
-export const TaskStageBadge: React.FC<TaskStageBadgeProps> = ({ stage }) => {
-  let color = "processing";
-  let label = stage;
-
-  if (stage.toUpperCase().startsWith("TYPST_") || stage.toUpperCase().startsWith("IMAGE_")) {
-    color = "orange";
-    label = formatStageName(stage);
-  } else if (stage.includes("FETCH")) {
-    color = "blue";
-    label = "拉取消息";
-  } else if (stage.includes("LLM") || stage.includes("ANALYSIS")) {
-    color = "purple";
-    label = "大模型分析";
-  } else if (stage.includes("RENDER") || stage.includes("REPORT")) {
-    color = "orange";
-    label = "渲染排版";
-  } else if (stage.includes("DISPATCH") || stage.includes("SEND")) {
-    color = "cyan";
-    label = "下发推送";
-  }
-
+export function TaskStageBadge({ stage }: { stage: string }) {
   return (
-    <Tag icon={<SyncOutlined spin />} color={color} className="font-mono text-xs">
-      {label}
-    </Tag>
+    <span className="inline-flex items-center gap-2 text-sm text-foreground">
+      <IconActivity size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+      {formatStageName(stage)}
+    </span>
   );
-};
+}
