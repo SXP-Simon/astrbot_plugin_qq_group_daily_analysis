@@ -477,7 +477,7 @@ class SatoriClientProtocol(Protocol):
         self,
         method: str,
         path: str,
-        data: dict | None = None,
+        data: dict[str, object] | None = None,
         platform: str | None = None,
         user_id: str | None = None,
     ) -> object:

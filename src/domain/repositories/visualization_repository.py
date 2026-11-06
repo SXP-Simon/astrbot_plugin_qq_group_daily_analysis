@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..value_objects import ActivityVisualization
+    from ..value_objects.unified_message import LegacyMessagePayload
 
 
 class IActivityVisualizer(ABC):
@@ -17,6 +18,6 @@ class IActivityVisualizer(ABC):
 
     @abstractmethod
     def generate_activity_visualization(
-        self, messages: list[dict]
+        self, messages: list[LegacyMessagePayload]
     ) -> ActivityVisualization:
         """从消息列表生成活跃度可视化数据"""

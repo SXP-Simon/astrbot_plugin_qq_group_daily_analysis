@@ -78,7 +78,7 @@ class IMessageSender(ABC):
     async def send_forward_msg(
         self,
         group_id: str,
-        nodes: list[dict],
+        nodes: list[dict[str, object]],
     ) -> bool:
         """
         发送合并转发消息。

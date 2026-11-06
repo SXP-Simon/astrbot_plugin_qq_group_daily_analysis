@@ -66,7 +66,7 @@ class PlatformAdapterProtocol(Protocol):
     async def send_forward_msg(
         self,
         group_id: str,
-        nodes: list[dict],
+        nodes: list[dict[str, object]],
     ) -> bool:
         """发送合并转发消息。"""
         ...
@@ -125,7 +125,9 @@ class PlatformAdapterProtocol(Protocol):
         """设置或移除消息表情回应。"""
         ...
 
-    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
+    def convert_to_raw_format(
+        self, messages: list[UnifiedMessage]
+    ) -> list[dict[str, object]]:
         """将统一消息列表转换为平台原生字典结构。"""
         ...
 
@@ -156,7 +158,7 @@ class GroupAlbumSupportProtocol(Protocol):
     async def get_group_album_list(
         self,
         group_id: str,
-    ) -> list[dict]:
+    ) -> list[dict[str, object]]:
         """获取群相册列表。"""
         ...
 
@@ -194,6 +196,6 @@ class GroupFileSupportProtocol(Protocol):
     async def get_group_file_root_folders(
         self,
         group_id: str,
-    ) -> list[dict]:
+    ) -> list[dict[str, object]]:
         """获取群文件根目录文件夹列表。"""
         ...
