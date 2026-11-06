@@ -3,6 +3,10 @@
  * 用于在独立前端开发环境下模拟实时任务流转、阶段变更与日志推送
  */
 
+import { mockActiveTasks } from "./data/tasks";
+import { mockPluginLogs } from "./data/logs";
+import type { PluginLogItem } from "../entities/log/model/types";
+
 export interface SSEListener {
   onMessage: (event: unknown) => void;
   onError?: () => void;
@@ -30,29 +34,31 @@ class MockSSEService {
   private startEmitting() {
     this.timer = window.setInterval(() => {
       this.tickCount++;
-      const progress = (this.tickCount * 15) % 100;
-
-      const payload = {
-        type: "TASK_UPDATE",
-        event: "task_progress",
-        data: {
-          task_id: "task-live-demo-1",
-          trace_id: "trace-20260926-active-01",
-          group_id: "123456789",
-          stage:
-            progress > 80 ? "report_rendering" : progress > 40 ? "llm_analysis" : "data_fetching",
-          progress,
-          elapsed_seconds: 40 + this.tickCount * 2,
-        },
+      const task = mockActiveTasks[(this.tickCount - 1) % mockActiveTasks.length];
+      if (!task) return;
+      const date = new Date();
+      task.last_heartbeat = date.getTime() / 1000;
+      task.duration_s = Math.max(0, task.last_heartbeat - task.started_at);
+      // 只更新真实示例任务的心跳，不循环伪造完成比例或退回前一阶段。
+      this.emitManualEvent({ event: "task_progress", data: { ...task } });
+      const time =
+        date.toLocaleString("sv-SE") + "." + String(date.getMilliseconds()).padStart(3, "0");
+      const message = "演示：任务仍在运行，当前阶段 " + task.current_stage;
+      const entry: PluginLogItem = {
+        id: "mock-live-log-" + this.tickCount,
+        timestamp: task.last_heartbeat,
+        time_str: time,
+        level: "DEBUG",
+        logger_name: "astrbot_plugin_qq_group_daily_analysis.mock",
+        tag: "Trace",
+        trace_id: task.task_id,
+        stage: task.current_stage,
+        message,
+        raw: "[" + time + "] [DEBUG] [" + task.task_id + "] " + message,
       };
-
-      this.listeners.forEach((listener) => {
-        try {
-          listener.onMessage(payload);
-        } catch {
-          // ignore
-        }
-      });
+      mockPluginLogs.unshift(entry);
+      if (mockPluginLogs.length > 2000) mockPluginLogs.length = 2000;
+      this.emitManualEvent({ event: "log_entry", data: entry });
     }, 3000);
   }
 
@@ -61,7 +67,7 @@ class MockSSEService {
       try {
         listener.onMessage(event);
       } catch {
-        // ignore
+        // 单个演示订阅失败不影响其他页面。
       }
     });
   }
