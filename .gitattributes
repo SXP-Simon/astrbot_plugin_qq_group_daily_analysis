@@ -11,6 +11,8 @@
 *.yml text eol=lf
 *.md text eol=lf
 pages/** text eol=lf
+# 本地字体属于二进制，不能套用 pages 文本产物的换行转换。
+*.woff2 binary
 
 ### 模板素材 — 统一由仓库/CDN分发，运行时按需保存到插件data目录
 /assets/                 export-ignore
