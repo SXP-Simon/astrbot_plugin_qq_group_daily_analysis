@@ -90,6 +90,8 @@ Python 基线统一为 3.12。`requirements-tools.txt` 固定 Ruff 和 Pyright �
 
 Pyright 使用运行检查脚本的 Python 解释器查找依赖，不再混用硬编码的 `site-packages`。嵌入 AstrBot 开发时，`uv run python ...` 使用宿主环境；独立检出时，先安装开发依赖，再用 `.venv/bin/python scripts/check_python.py typecheck`（Windows 为 `.venv/Scripts/python.exe`）。IDE 也应选择同一解释器。`extraPaths` 仅保留插件及嵌入开发时的 AstrBot 源码目录，支持跳转到宿主源码。
 
+如果命令行通过，但 VS Code 提示无法导入 `aiohttp`、`apscheduler` 或 `botpy`，先核对解释器。嵌入开发可运行 `uv run python -c "import sys; print(sys.executable)"`，再通过命令面板的 `Python: 选择解释器` → `输入解释器路径` 选择输出的路径；独立检出则选择已安装开发依赖的插件 `.venv`。仅打开插件目录时，编辑器可能自动选中系统 Python，不会自动沿用 `uv run` 找到的宿主环境。切换后等待 Pylance 重新分析，仍有诊断时再检查具体代码和依赖。不要通过关闭诊断、添加机器专属的 `site-packages` 路径或降低 strict 来消除报错。
+
 Ruff 保留现有测试目录豁免，并启用 `force-exclude`，目录扫描和暂存文件检查使用相同范围；这不影响 pytest 执行测试。旧枚举及泛型语法暂不强制改写，避免工具迁移改变运行时类型行为。引号由 formatter 管理，现代化语法检查统一交给 Ruff `UP`，不再重复运行 pyupgrade。
 
 前端使用 Node.js 20.19+（20.x）或 22.12+，Oxlint 与 Oxfmt 固定版本并提交 pnpm 锁文件。`pnpm lint` 检查代码，`pnpm lint:fix` 修复可自动修复的问题；`pnpm format` 统一格式，`pnpm format:check` 只读检查。类型检查仍使用 `tsc`，行为测试仍使用 Vitest。已有 ESLint 推荐规则按职责映射到 Oxlint，语法和类型检查交给 TypeScript、格式交给 Oxfmt，不自动启用新一代 React Compiler 规则。
@@ -116,6 +118,18 @@ pnpm dev
 
 ### 2.1 Python 后端开发规范
 
+#### 类型边界与自动检查
+
+- `src/domain/`：业务数据使用实体、值对象、`TypedDict` 和仓储协议；禁止直接依赖 `application`、`infrastructure` 或 AstrBot。反序列化入口可以接收未知数据，校验后必须返回明确的领域类型。
+- `src/application/`：用例参数、结果和内部服务调用使用明确契约。不要用 `object`、裸 `dict` 或任意键值字典代替已知的业务字段。
+- `src/infrastructure/`：宿主 API、平台响应、数据库 JSON、旧配置等外部入口可以接收 `object`。在边界检查结构和字段类型后再交给业务层，不能仅靠 `cast` 宣称输入合法。
+- 配置备份、原始日志附加信息和模板扩展上下文等确实开放的数据，可以保留 `Mapping[str, object]` 等宽结构；业务读取具体字段时必须收窄。不能借此放宽整条业务链路。
+- 全部生产代码禁止显式 `Any`，包括别名导入、容器成员、返回值和变量注解。Ruff `TID251` 禁止 `typing.Any` / `typing_extensions.Any`，`ANN401` 作为补充；Pyright strict 检查未知类型及缺失泛型参数。第三方库自身的类型缺陷需在适配边界处理，不修改宿主源码。
+- `cast` 仅用于已有可说明依据、但检查器无法表达的收窄，不替代运行时校验。不要批量加忽略、将规则降级或扩大排除范围以通过 strict。
+
+`tests/test_architecture_boundaries.py` 检查领域层的直接静态导入（包括相对导入和 `TYPE_CHECKING` 分支），随完整 pytest 在本地和 CI 执行。它不分析动态导入或传递依赖，业务类型是否表达正确仍需代码审查。Ruff 规则随暂存文件检查及 CI 执行；Pyright 检查生产代码，测试文件继续由 pytest 验证。
+
+
 1. **KISS 原则与内联优先 (Inline-First Rule)**：
    * 优先在主函数内直接实现清晰的线性逻辑，除非满足高复用（$\ge 3$ 处重复）或极端复杂（$>50$ 行破坏主流程），否则**严禁过度抽取无意义的辅助函数**。
 2. **强制 Google 风格 Docstring**：
@@ -127,7 +141,7 @@ pnpm dev
    * 代码内部所有注释、Log 输出与异常提示必须使用清晰的 **中文**。
 5. **静态类型检查与类型体操准则 (Static Type & Type Gymnastics Standards)**：
    * 本项目统一使用 **Pyright / Pylance** 进行静态类型分析与语法校验，规则配置文件为项目根目录的 [`pyrightconfig.json`](pyrightconfig.json)；
-   * **类型检查模式与环境对齐**：采用严格生产标准的 `"typeCheckingMode": "standard"`，统一设置 `"pythonVersion": "3.12"`，严格对齐 AstrBot 依赖环境；
+   * **类型检查模式与环境对齐**：采用 `"typeCheckingMode": "strict"`，统一设置 `"pythonVersion": "3.12"`，严格对齐 AstrBot 依赖环境；
    * **严格模块导入与重写门禁**：开启 `"reportMissingImports": "error"`, `"reportIncompatibleMethodOverride": "error"`, `"reportFunctionMemberAccess": "error"`, `"reportUntypedFunctionDecorator": "error"`, `"reportUntypedBaseClass": "error"`；
    * **严禁滥用 `Any` (Zero `Any` Abuse Policy)**：
      - **接口协议化 (`Protocol`)**：跨模块、跨平台的动态处理器一律使用 `typing.Protocol` 与 `@runtime_checkable` 声明契约方法（如 `TemplatePreviewHandler`），严禁使用 `list[Any]`；

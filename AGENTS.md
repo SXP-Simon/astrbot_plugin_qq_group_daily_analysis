@@ -34,8 +34,9 @@
 ## 3. 门禁与代码质量规范
 
 1. **类型安全与 Zero `Any` 政策**：
-   - 严格避免随意使用 `Any` 类型。使用具体模型、TypedDict、Protocol、Union 或 `object` 配合类型守卫（`isinstance` / `callable` 等）。
+   - 禁止显式 `Any`（包括别名、变量及容器成员），由 Ruff `TID251` 与 `ANN401` 检查。使用具体模型、TypedDict、Protocol、Union 或 `object` 配合类型守卫（`isinstance` / `callable` 等）。
    - 杜绝非必要的 `# type: ignore`，优先通过精准的类型注解解决类型推导问题。
+   - 宽类型仅用于外部数据入口和确实开放的原始数据；领域层及应用层业务契约必须明确。边界校验后再进入内部，不用批量 `cast` 绕过检查。详见 CONTRIBUTING.md 的“类型边界与自动检查”。
 2. **静态检查与格式化**：
    - 按改动范围验证；准备 PR 或完成一组改动时，相关静态检查必须通过：
      ```bash
