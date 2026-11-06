@@ -125,12 +125,6 @@ class PlatformAdapterProtocol(Protocol):
         """设置或移除消息表情回应。"""
         ...
 
-    def convert_to_raw_format(
-        self, messages: list[UnifiedMessage]
-    ) -> list[dict[str, object]]:
-        """将统一消息列表转换为平台原生字典结构。"""
-        ...
-
 
 @runtime_checkable
 class GroupAlbumSupportProtocol(Protocol):
