@@ -85,7 +85,7 @@
 ### 2.4 `widgets/`（复合微件层）
 * 将多个实体和功能有机组合为自包含的业务组件（Organisms）：
   * `ActiveTaskBoard.tsx`：活跃任务看板与实时步进计时器。
-  * `TraceDrawer.tsx`：任务执行详情全屏/半屏抽屉（包含 Summary、SpanTimeline、TraceLogViewer）。
+  * `TraceDrawer.tsx`：保留调用接口的任务诊断窗口，使用 shadcn Dialog 组织 Summary、SpanTimeline、TraceLogViewer；宽屏并排显示阶段树与记录，窄屏改为单列。
   * `AnalysisTimelinePicker.tsx`：全景时间线选择器与状态节点可视化。
   * `OverviewTrendCharts.tsx`：时序指标图表与 Token 消耗趋势。
   * `FieldRenderer.tsx` & `TemplateListRenderer.tsx`：动态配置表单渲染器（支持 Provider/Persona 自动点选与模板列表）。
@@ -102,6 +102,8 @@
 * 新组件使用 shadcn/ui 和 Tailwind CSS，基础组件源码放在 `shared/ui`，底层 Radix 交互不直接散布到业务页面。迁移中的旧页面暂时保留 Ant Design 主题适配，完成组件替换后移除。
 
 任务详情的 `useTraceDetail` 管理详情与日志加载。运行中每轮请求完成后再延迟 1.5 秒更新，终态、关闭或卸载时停止；切换任务及手动刷新使旧响应失效。手动刷新绕过终态缓存，部分请求失败保留已取得的记录并单独提示。ViewModel 不用当前时间补写缺失的任务总耗时。
+
+`useTraceDrawerViewModel` 组合详情读取与 `useTraceActions`，后者管理产物预览、下载和续跑请求，隔离关闭或切换后的迟到结果。续跑成功后按回执任务编号读取新记录，同编号回执则强制刷新。`ResumeTaskModal` 使用 `useResumeOptions` 加载并校验模型、模板选项，失败保留编辑值并在弹窗内反馈。详情视图不直接调用 API。
 
 WebUI 手动触发的分析可通过「运行总览 → 正在执行中的分析任务 → 中止」取消。确认后按任务编号调用 `tasks/cancel`，明确显示请求是否成功；成功表示取消请求已接受，后台仍需完成资源回收。看板同时处理 `task_finished`、`task_canceled`、`task_timed_out`，移除对应任务并刷新指标，在途旧响应不得重新插入任务。Mock 中触发、活跃列表和中止后的历史终态也保持一致。
 

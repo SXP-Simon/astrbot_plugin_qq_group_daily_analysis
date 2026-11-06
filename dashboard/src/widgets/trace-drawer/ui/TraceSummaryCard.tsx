@@ -1,283 +1,181 @@
-import React from "react";
-import { Alert, Descriptions, Tag, Typography, Tooltip, Space, Button } from "antd";
-import {
-  DatabaseOutlined,
-  FileImageOutlined,
-  PictureOutlined,
-  FileTextOutlined,
-  EyeOutlined,
-  DownloadOutlined,
-} from "@ant-design/icons";
-import { TraceRecord } from "../../../entities/trace/model/types";
-import { TriggerTypeTag } from "../../../shared/ui/TriggerTypeTag";
+import { useState } from "react";
+import { IconCopy } from "@tabler/icons-react";
+import type { TraceRecord } from "../../../entities/trace/model/types";
 import {
   formatDuration,
   formatTokens,
   formatTimestamp,
   formatPercent,
+  formatTriggerType,
 } from "../../../shared/lib/formatters";
-import { useTheme } from "../../../shared/lib/useTheme";
-
-const { Text } = Typography;
+import { copyToClipboard } from "../../../shared/lib/clipboard";
+import { Button } from "../../../shared/ui/button";
+import { TraceReportFiles } from "./TraceReportFiles";
 
 interface TraceSummaryCardProps {
   trace: TraceRecord;
+  downloading?: boolean;
   onPreviewFile: (filename: string, isHtml: boolean) => void;
   onDownloadFile: (filename: string, isHtml: boolean) => void;
 }
 
-export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
+export function TraceSummaryCard({
   trace,
+  downloading,
   onPreviewFile,
   onDownloadFile,
-}) => {
-  const { isDark } = useTheme();
-
-  const isFallbackToFresh = Boolean(
-    trace.extra?.fallback_to_fresh_run ||
-    (trace.extra as Record<string, unknown> | undefined)?.resumed_from === "fresh_run_fallback",
+}: TraceSummaryCardProps) {
+  const [copied, setCopied] = useState<{ id: string; message: string } | null>(null);
+  const fallback = Boolean(
+    trace.extra?.fallback_to_fresh_run || trace.extra?.resumed_from === "fresh_run_fallback",
   );
-
-  const rawFiles =
-    trace.report_files ||
-    (Array.isArray(trace.extra?.report_files)
-      ? (trace.extra.report_files as TraceRecord["report_files"])
-      : []) ||
-    [];
-  const seenNames = new Set<string>();
-  const reportFiles = rawFiles.filter((f) => {
-    if (!f || !f.filename || seenNames.has(f.filename)) return false;
-    seenNames.add(f.filename);
-    return true;
+  const rawFiles: unknown[] =
+    trace.report_files ??
+    (Array.isArray(trace.extra?.report_files) ? trace.extra.report_files : []);
+  const names = new Set<string>();
+  const files = rawFiles.flatMap((file) => {
+    if (
+      !file ||
+      typeof file !== "object" ||
+      !("filename" in file) ||
+      typeof file.filename !== "string" ||
+      !file.filename ||
+      names.has(file.filename)
+    )
+      return [];
+    names.add(file.filename);
+    return [
+      {
+        filename: file.filename,
+        isHtml: ("format" in file && file.format === "html") || /\.html?$/i.test(file.filename),
+        isComic:
+          ("report_type" in file && file.report_type === "comic") ||
+          /^(comic_|漫画_)/i.test(file.filename),
+        size:
+          "size_bytes" in file && typeof file.size_bytes === "number" ? file.size_bytes : undefined,
+      },
+    ];
   });
-
+  const raw = trace.context_metrics?.raw_message_count ?? trace.raw_message_count;
+  const cleaned = trace.context_metrics?.cleaned_message_count ?? trace.cleaned_message_count;
+  const duration = trace.duration_ms;
   return (
-    <>
-      {isFallbackToFresh && (
-        <Alert
-          type="info"
-          showIcon
-          message="未检测到历史快照，已自动降级为全量重新拉取分析"
-          description="本次续跑由于前置消息清洗快照不存在或已过期，系统已自动重新向平台拉取最新群消息并完成了全量分析交付。"
-          style={{ marginBottom: 12, fontSize: 12 }}
-        />
+    <section aria-label="任务摘要" className="grid gap-4">
+      {fallback && (
+        <p role="status" className="m-0 rounded-xl bg-muted px-4 py-3 text-sm">
+          历史快照缺失，本次续跑已改为重新拉取消息并分析。
+        </p>
       )}
-
-      {/* 基本信息 */}
-      <Descriptions
-        size="small"
-        bordered
-        column={2}
-        labelStyle={{ width: 85, fontSize: 12 }}
-        contentStyle={{ fontSize: 12 }}
-      >
-        <Descriptions.Item label="任务编号" span={2}>
-          <Text
-            copyable
-            style={{
-              fontFamily:
-                "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
-              fontSize: 12,
-            }}
-          >
-            {trace.trace_id}
-          </Text>
-        </Descriptions.Item>
-        <Descriptions.Item label="分析群聊" span={2}>
-          <span>
-            {trace.group_name || "未知群"} <Text type="secondary">({trace.group_id})</Text>
-          </span>
-        </Descriptions.Item>
-        <Descriptions.Item label="接入平台">
-          <Tag style={{ margin: 0 }}>
-            {!trace.platform || trace.platform === "auto" || trace.platform === "default"
-              ? "-"
-              : trace.platform}
-          </Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label="触发方式">
-          <Space size={4} wrap>
-            <TriggerTypeTag triggerType={trace.trigger_type} />
-            {isFallbackToFresh && (
-              <Tooltip title="未检测到历史清洗快照，已自动降级为全量重新拉取最新消息">
-                <Tag color="orange" style={{ margin: 0 }}>
-                  快照缺失·全量拉取
-                </Tag>
-              </Tooltip>
-            )}
-          </Space>
-        </Descriptions.Item>
-        <Descriptions.Item label="开始时间">
-          <span>{formatTimestamp(trace.started_at)}</span>
-        </Descriptions.Item>
-        <Descriptions.Item label="执行总耗时">
-          <span style={{ color: "#1677ff", fontWeight: 600 }}>
-            {formatDuration(trace.duration_ms ?? undefined)}
-          </span>
-        </Descriptions.Item>
-      </Descriptions>
-
-      {/* 上下文演进与 Token */}
-      {(trace.context_metrics || trace.token_usage) && (
-        <Descriptions
-          title={
-            <span style={{ fontSize: 13, fontWeight: 600 }}>
-              <DatabaseOutlined style={{ marginRight: 6, color: "#1677ff" }} />
-              消息处理与模型消耗
-            </span>
-          }
-          size="small"
-          bordered
-          column={2}
-          labelStyle={{ width: 100, fontSize: 12 }}
-          contentStyle={{ fontSize: 12 }}
-        >
-          {trace.context_metrics && (
-            <>
-              <Descriptions.Item label="读取原始消息">
-                <span>{trace.context_metrics.raw_message_count.toLocaleString()} 条</span>
-              </Descriptions.Item>
-              <Descriptions.Item label="有效消息留存">
-                <span style={{ color: "#52c41a", fontWeight: 500 }}>
-                  {trace.context_metrics.cleaned_message_count.toLocaleString()} 条 (
-                  {formatPercent(trace.context_metrics.compression_ratio)})
-                </span>
-              </Descriptions.Item>
-            </>
-          )}
-          {trace.token_usage && (
-            <>
-              <Descriptions.Item label="模型消耗总量">
-                <span style={{ fontWeight: 600 }}>
-                  {formatTokens(trace.token_usage.total_tokens)}
-                </span>
-              </Descriptions.Item>
-              <Descriptions.Item label="输入 / 输出">
-                <span style={{ fontSize: 11 }}>
-                  输入: {formatTokens(trace.token_usage.prompt_tokens)} / 输出:{" "}
-                  {formatTokens(trace.token_usage.completion_tokens)}
-                </span>
-              </Descriptions.Item>
-            </>
-          )}
-        </Descriptions>
-      )}
-
-      {/* 产物报告文件 */}
-      {reportFiles.length > 0 && (
+      <dl className="m-0 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-            <FileImageOutlined style={{ marginRight: 6, color: "#52c41a" }} />
-            产物报告文件 ({reportFiles.length} 个)
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {reportFiles.map((file, idx) => {
-              const filename = file.filename || "";
-              const isHtml = Boolean(
-                file.format === "html" ||
-                filename.toLowerCase().endsWith(".html") ||
-                filename.toLowerCase().endsWith(".htm"),
-              );
-              const isComic = Boolean(
-                file.report_type === "comic" ||
-                filename.toLowerCase().startsWith("comic_") ||
-                filename.startsWith("漫画_"),
-              );
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "8px 12px",
-                    background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
-                    border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"}`,
-                    borderRadius: 4,
-                    gap: 8,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      minWidth: 0,
-                      flex: 1,
-                      gap: 6,
-                      overflow: "hidden",
-                    }}
-                  >
-                    {isComic ? (
-                      <PictureOutlined style={{ color: "#eb2f96", flexShrink: 0 }} />
-                    ) : isHtml ? (
-                      <FileTextOutlined style={{ color: "#fa8c16", flexShrink: 0 }} />
-                    ) : (
-                      <FileImageOutlined style={{ color: "#1677ff", flexShrink: 0 }} />
-                    )}
-                    <Tooltip title={filename} placement="topLeft">
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          minWidth: 0,
-                        }}
-                      >
-                        {filename}
-                      </span>
-                    </Tooltip>
-                    <Tag
-                      color={isComic ? "magenta" : isHtml ? "orange" : "blue"}
-                      style={{
-                        margin: 0,
-                        fontSize: 10,
-                        lineHeight: "16px",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {isComic ? "群漫画" : isHtml ? "HTML" : "日报长图"}
-                    </Tag>
-                    {file.size_bytes ? (
-                      <Text
-                        type="secondary"
-                        style={{
-                          fontSize: 11,
-                          whiteSpace: "nowrap",
-                          flexShrink: 0,
-                        }}
-                      >
-                        ({(file.size_bytes / 1024).toFixed(1)} KB)
-                      </Text>
-                    ) : null}
-                  </div>
-                  <Space size="small" style={{ flexShrink: 0, whiteSpace: "nowrap" }}>
-                    <Button
-                      size="small"
-                      type="primary"
-                      ghost
-                      icon={<EyeOutlined />}
-                      onClick={() => onPreviewFile(filename, isHtml)}
-                      style={{ fontSize: 11, height: 24 }}
-                    >
-                      {isComic ? "预览漫画" : isHtml ? "预览 HTML" : "预览大图"}
-                    </Button>
-                    <Button
-                      size="small"
-                      icon={<DownloadOutlined />}
-                      onClick={() => onDownloadFile(filename, isHtml)}
-                      style={{ fontSize: 11, height: 24 }}
-                    >
-                      下载
-                    </Button>
-                  </Space>
-                </div>
-              );
-            })}
-          </div>
+          <dt className="text-sm text-muted-foreground">已记录耗时</dt>
+          <dd className="m-0 text-xl">
+            {duration != null && Number.isFinite(duration) && duration >= 0
+              ? duration === 0
+                ? "0ms"
+                : formatDuration(duration)
+              : "未记录"}
+          </dd>
         </div>
-      )}
-    </>
+        <div>
+          <dt className="text-sm text-muted-foreground">有效 / 拉取消息</dt>
+          <dd className="m-0 text-xl">
+            {cleaned?.toLocaleString() ?? "—"}
+            <span className="text-sm text-muted-foreground"> / {raw?.toLocaleString() ?? "—"}</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted-foreground">消耗 Tokens</dt>
+          <dd className="m-0 text-xl">
+            {formatTokens(trace.token_usage?.total_tokens ?? trace.total_tokens ?? undefined)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted-foreground">报告文件</dt>
+          <dd className="m-0 text-xl">
+            {files.length} <span className="text-sm">份</span>
+          </dd>
+        </div>
+      </dl>
+      <details className="text-sm">
+        <summary className="cursor-pointer text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+          任务与消耗明细
+        </summary>
+        <dl className="my-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:break-words">
+          <div>
+            <dt>任务编号</dt>
+            <dd className="font-mono text-xs">
+              {trace.trace_id}
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label="复制任务编号"
+                onClick={async () =>
+                  setCopied({
+                    id: trace.trace_id,
+                    message: (await copyToClipboard(trace.trace_id))
+                      ? "已复制"
+                      : "无法复制，请手动选择。",
+                  })
+                }
+              >
+                <IconCopy aria-hidden="true" />
+              </Button>
+              {copied?.id === trace.trace_id && <span role="status">{copied.message}</span>}
+            </dd>
+          </div>
+          <div>
+            <dt>群聊</dt>
+            <dd>
+              {trace.group_name || "未记录名称"} ·{" "}
+              <span className="font-mono">{trace.group_id}</span>
+            </dd>
+          </div>
+          <div>
+            <dt>平台</dt>
+            <dd>{trace.platform || "未记录"}</dd>
+          </div>
+          <div>
+            <dt>触发方式</dt>
+            <dd>{formatTriggerType(trace.trigger_type).text}</dd>
+          </div>
+          <div>
+            <dt>开始时间</dt>
+            <dd>{formatTimestamp(trace.started_at)}</dd>
+          </div>
+          <div>
+            <dt>结束时间</dt>
+            <dd>{trace.completed_at ? formatTimestamp(trace.completed_at) : "未记录"}</dd>
+          </div>
+          <div>
+            <dt>消息保留比例</dt>
+            <dd>
+              {formatPercent(
+                trace.context_metrics?.compression_ratio ?? trace.compression_ratio ?? undefined,
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>输入 / 输出 Tokens</dt>
+            <dd>
+              {formatTokens(trace.token_usage?.prompt_tokens)} /{" "}
+              {formatTokens(trace.token_usage?.completion_tokens)}
+            </dd>
+          </div>
+          {trace.estimated_cost != null && (
+            <div>
+              <dt>预估费用（美元）</dt>
+              <dd>{trace.estimated_cost}</dd>
+            </div>
+          )}
+        </dl>
+      </details>
+      <TraceReportFiles
+        files={files}
+        downloading={downloading}
+        onPreviewFile={onPreviewFile}
+        onDownloadFile={onDownloadFile}
+      />
+    </section>
   );
-};
+}

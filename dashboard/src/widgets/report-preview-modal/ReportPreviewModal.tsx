@@ -1,145 +1,117 @@
-import React from "react";
-import { Modal, Button, Space, Typography, Spin, Empty } from "antd";
-import { FileImageOutlined, FileTextOutlined, DownloadOutlined } from "@ant-design/icons";
-import { ReportItem } from "../../entities/report/model/types";
-
-const { Text } = Typography;
+import { useState } from "react";
+import { IconDownload, IconCopy } from "@tabler/icons-react";
+import type { ReportItem } from "../../entities/report/model/types";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../shared/ui/dialog";
+import { Button } from "../../shared/ui/button";
+import { copyToClipboard } from "../../shared/lib/clipboard";
 
 interface ReportPreviewModalProps {
   open: boolean;
   loading: boolean;
   report: ReportItem | null;
+  error?: string | null;
+  downloading?: boolean;
   onClose: () => void;
   onDownload: (report: ReportItem) => void;
 }
 
-export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
+export function ReportPreviewModal({
   open,
   loading,
   report,
+  error,
+  downloading,
   onClose,
   onDownload,
-}) => {
-  const isHtml = Boolean(
-    report?.is_html ||
-    report?.filename.toLowerCase().endsWith(".html") ||
-    report?.filename.toLowerCase().endsWith(".htm"),
-  );
-
+}: ReportPreviewModalProps) {
+  const [copyResult, setCopyResult] = useState<{ path: string; message: string } | null>(null);
+  const isHtml = Boolean(report?.is_html || /\.html?$/i.test(report?.filename || ""));
   return (
-    <Modal
+    <Dialog
       open={open}
-      onCancel={onClose}
-      title={
-        <Space>
-          {isHtml ? (
-            <FileTextOutlined style={{ color: "#fa8c16" }} />
-          ) : (
-            <FileImageOutlined style={{ color: "#1677ff" }} />
-          )}
-          <span style={{ fontSize: 15, fontWeight: 600 }}>
-            {report?.filename || (isHtml ? "HTML 报告预览" : "日报长图预览")}
-          </span>
-        </Space>
-      }
-      width={isHtml ? 920 : 760}
-      footer={[
-        <Button key="close" onClick={onClose}>
-          关闭
-        </Button>,
-        report && (
-          <Button
-            key="download"
-            type="primary"
-            icon={<DownloadOutlined />}
-            onClick={() => onDownload(report)}
-          >
-            {isHtml ? "下载 HTML" : "下载图片"}
-          </Button>
-        ),
-      ]}
-      destroyOnHidden
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
     >
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "60px 0" }}>
-          <Spin tip={isHtml ? "正在加载 HTML 报告内容..." : "正在加载高清报告图片..."} />
-        </div>
-      ) : report?.data_url || (isHtml && report?.html_content) ? (
-        <div>
-          {report.absolute_path && (
-            <div
-              style={{
-                marginBottom: 12,
-                padding: "6px 12px",
-                background: "rgba(0,0,0,0.03)",
-                borderRadius: 4,
-                textAlign: "left",
-                fontSize: 12,
-              }}
-            >
-              <Text type="secondary">服务器/容器文件路径：</Text>
-              <Text
-                copyable
-                style={{
-                  fontSize: 12,
-                  fontFamily:
-                    "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
-                }}
-              >
-                {report.absolute_path}
-              </Text>
-            </div>
-          )}
-          {isHtml ? (
-            <div
-              style={{
-                border: "1px solid #f0f0f0",
-                borderRadius: 6,
-                overflow: "hidden",
-                background: "#ffffff",
-              }}
-            >
+      <DialogContent className={isHtml ? "max-w-5xl" : "max-w-3xl"}>
+        <DialogTitle>报告预览</DialogTitle>
+        <DialogDescription className="break-all font-mono text-xs">
+          {report?.filename || "正在读取报告"}
+        </DialogDescription>
+        {error && (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {loading ? (
+          <p role="status" className="py-12 text-center text-muted-foreground">
+            正在加载报告…
+          </p>
+        ) : (
+          <>
+            {report?.absolute_path && (
+              <details className="text-sm">
+                <summary className="cursor-pointer text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                  服务器文件位置
+                </summary>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <code className="min-w-0 break-all text-xs">{report.absolute_path}</code>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      const path = report.absolute_path;
+                      if (!path) return;
+                      setCopyResult({
+                        path,
+                        message: (await copyToClipboard(path))
+                          ? "已复制路径"
+                          : "无法复制，请手动选择路径。",
+                      });
+                    }}
+                  >
+                    <IconCopy aria-hidden="true" />
+                    复制路径
+                  </Button>
+                  {copyResult?.path === report.absolute_path && (
+                    <span role="status">{copyResult.message}</span>
+                  )}
+                </div>
+              </details>
+            )}
+            {isHtml && (report?.html_content || report?.data_url) ? (
               <iframe
                 title={report.filename}
                 srcDoc={report.html_content || undefined}
                 src={!report.html_content ? (report.data_url ?? undefined) : undefined}
                 sandbox="allow-scripts allow-same-origin"
-                style={{
-                  width: "100%",
-                  height: "68vh",
-                  border: "none",
-                  display: "block",
-                }}
+                className="block h-[65dvh] w-full rounded-xl border border-solid border-border bg-white"
               />
-            </div>
-          ) : (
-            <div
-              style={{
-                maxHeight: "68vh",
-                overflowY: "auto",
-                border: "1px solid #f0f0f0",
-                borderRadius: 4,
-                padding: 8,
-                background: "#fafafa",
-              }}
-            >
-              <img
-                src={report.data_url ?? undefined}
-                alt={report.filename}
-                style={{
-                  maxWidth: "100%",
-                  height: "auto",
-                  display: "block",
-                  margin: "0 auto",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                }}
-              />
-            </div>
+            ) : report?.data_url ? (
+              <div className="max-h-[65dvh] overflow-auto rounded-xl bg-muted p-2">
+                <img
+                  src={report.data_url}
+                  alt={report.filename}
+                  className="mx-auto block h-auto max-w-full"
+                />
+              </div>
+            ) : (
+              !error && <p className="py-12 text-center text-muted-foreground">未找到报告内容</p>
+            )}
+          </>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            关闭预览
+          </Button>
+          {report && (
+            <Button onClick={() => onDownload(report)} disabled={loading || downloading}>
+              <IconDownload aria-hidden="true" />
+              {downloading ? "正在下载…" : isHtml ? "下载 HTML" : "下载图片"}
+            </Button>
           )}
         </div>
-      ) : (
-        <Empty description="未找到报告文件内容" style={{ margin: "40px 0" }} />
-      )}
-    </Modal>
+      </DialogContent>
+    </Dialog>
   );
-};
+}
