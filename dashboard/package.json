@@ -1,19 +1,22 @@
 {
   "name": "daily-analysis-dashboard",
-  "private": true,
   "version": "1.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "build:no-typecheck": "vite build",
     "generate:types": "openapi-typescript ../openapi.json -o src/shared/api/generated/schema.d.ts",
-    "test": "vitest run",
+    "test": "pnpm test:tooling && vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "lint:fix": "eslint . --ext ts,tsx --fix",
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives .",
+    "lint:fix": "pnpm lint --fix",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "test:tooling": "node --test scripts/tooling.test.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
@@ -30,16 +33,16 @@
     "@types/node": "^22.13.4",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "eslint": "^8.57.1",
-    "eslint-plugin-react-hooks": "^4.6.2",
-    "eslint-plugin-react-refresh": "^0.4.26",
     "jsdom": "^25.0.1",
     "openapi-typescript": "^7.13.0",
+    "oxfmt": "0.76.0",
+    "oxlint": "1.91.0",
     "typescript": "^5.7.3",
     "vite": "^5.4.14",
     "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }
