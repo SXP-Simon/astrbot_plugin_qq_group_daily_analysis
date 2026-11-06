@@ -1,7 +1,7 @@
 export function resolveSpanOutcome(
   status: string,
   payload?: Record<string, unknown>,
-): "cancelled" | "failed" | "warning" | "running" | "success" {
+): "cancelled" | "failed" | "warning" | "running" | "success" | "skipped" | "unknown" {
   if (["cancelled", "canceled", "aborted"].includes(status) || payload?.cancelled === true)
     return "cancelled";
   if (["failed", "error"].includes(status) || payload?.error) return "failed";
@@ -13,5 +13,7 @@ export function resolveSpanOutcome(
     (Array.isArray(payload?.subtask_errors) && payload.subtask_errors.length)
   )
     return "warning";
-  return "success";
+  if (status === "skipped") return "skipped";
+  if (["success", "succeeded", "completed"].includes(status)) return "success";
+  return "unknown";
 }

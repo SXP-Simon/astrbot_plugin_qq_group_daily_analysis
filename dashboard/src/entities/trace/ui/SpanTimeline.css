@@ -1,0 +1,109 @@
+.stage-inspection {
+  container-type: inline-size;
+}
+.stage-diagnostics {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.1fr);
+  gap: 24px;
+  align-items: start;
+}
+.stage-branch {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.stage-branch .stage-branch {
+  padding-left: 16px;
+  margin-left: 12px;
+  border-left: 1px solid var(--border);
+}
+.stage-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  margin: 2px 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background-color 160ms ease-out;
+}
+.stage-row:hover,
+.stage-row[data-selected] {
+  background: var(--accent);
+}
+.stage-row:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.stage-row-heading,
+.stage-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.stage-row-heading {
+  font-size: 14px;
+}
+.stage-name {
+  flex: 1;
+  min-width: 120px;
+}
+.stage-row small,
+.stage-row-meta {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.stage-row-meta {
+  justify-content: space-between;
+  margin: 5px 0 0 24px;
+}
+.stage-row[data-outcome="failed"] .stage-name {
+  color: var(--destructive);
+}
+.stage-duration-track {
+  display: block;
+  height: 3px;
+  margin: 8px 0 0 24px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.stage-duration-track > span {
+  display: block;
+  height: 100%;
+  background: var(--ring);
+}
+.stage-slow {
+  display: block;
+  margin: 4px 0 0 24px;
+}
+.stage-evidence {
+  min-width: 0;
+  padding-left: 24px;
+  border-left: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.stage-evidence h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 500;
+}
+.stage-missing {
+  color: var(--muted-foreground);
+  font-size: 14px;
+}
+@container (max-width: 700px) {
+  .stage-diagnostics {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .stage-evidence {
+    padding: 20px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
