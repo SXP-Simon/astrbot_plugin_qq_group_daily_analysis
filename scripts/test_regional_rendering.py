@@ -177,7 +177,7 @@ async def verify_rendering(source: str):
         "group_name": "Test Group",
     }
 
-    render_payload = await generator._prepare_render_data(
+    render_payload = await generator.prepare_render_data(
         analysis_result, mock_get_user_avatar
     )
     html = generator.html_templates.render_template(
