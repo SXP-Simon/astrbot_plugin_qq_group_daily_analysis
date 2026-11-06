@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { TraceSummaryCard } from "../../widgets/trace-drawer/ui/TraceSummaryCard";
 import { TraceDrawer } from "../../widgets/trace-drawer/TraceDrawer";
 import { ActiveTaskBoard } from "../../widgets/active-task-board/ActiveTaskBoard";
@@ -8,22 +8,28 @@ import { mockTraces } from "../data/traces";
 import { mockActiveTasks } from "../data/tasks";
 import { mockPluginLogs } from "../data/logs";
 
+// 此处验证真实示例数据和界面操作，图表数值由实体测试覆盖，避免 JSDOM 执行 Canvas。
+vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="trace-chart" /> }));
+
 describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Stress Tests)", () => {
   const dummyPreview = vi.fn();
   const dummyDownload = vi.fn();
 
   it("示例任务展开后显示完整阶段指标、模型调用和两轮渲染", async () => {
     render(<TraceDrawer open traceId="trace-20260926-001" onClose={vi.fn()} />);
-    expect(await screen.findByText("消息处理与模型消耗")).toBeInTheDocument();
-    expect(screen.getByText(/1,210 条 \(79%\)/)).toBeInTheDocument();
-    fireEvent.click(screen.getByText("消息清洗过滤"));
+    await screen.findByRole("heading", { name: "执行过程" });
+    expect(screen.getByText("有效 / 拉取消息").parentElement).toHaveTextContent("1,210 / 1,540");
+    fireEvent.click(screen.getByText("任务与消耗明细"));
+    expect(screen.getByText("79%")).toBeVisible();
+    const stages = within(screen.getByRole("navigation", { name: "执行阶段" }));
+    fireEvent.click(stages.getByRole("button", { name: /消息清洗过滤/ }));
     expect(screen.getByText("过滤噪音:")).toBeInTheDocument();
     expect(screen.getByText("330 条")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("基础统计分析"));
+    fireEvent.click(stages.getByRole("button", { name: /基础统计分析/ }));
     expect(screen.getByText("发言人数:")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("大模型分析"));
+    fireEvent.click(stages.getByRole("button", { name: /大模型分析/ }));
     expect(screen.getByText("大模型调用与重试链路")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("报告长图渲染与生成"));
+    fireEvent.click(stages.getByRole("button", { name: /报告长图渲染与生成/ }));
     expect(screen.getByText("图片渲染过程")).toBeInTheDocument();
     expect(screen.getByText("共 2 轮策略")).toBeInTheDocument();
     expect(screen.getByText(/请求等待上限/)).toBeInTheDocument();
@@ -43,7 +49,8 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
     );
 
     // 验证超长群名与群号存在
-    expect(screen.getByText(/2026 深度学习与自然语言处理前沿学术讨论/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("任务与消耗明细"));
+    expect(screen.getByText(/2026 深度学习与自然语言处理前沿学术讨论/i)).toBeVisible();
     expect(screen.getAllByText(/8899001122/).length).toBeGreaterThan(0);
 
     // 验证多格式产物文件平铺（PNG/Comic/HTML/JSON）
@@ -66,21 +73,25 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
       />,
     );
 
-    expect(screen.getByText("测试群")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("任务与消耗明细"));
+    expect(screen.getByText(/测试群/)).toBeVisible();
     expect(screen.getAllByText(/556677/).length).toBeGreaterThan(0);
     expect(screen.getByText("320ms")).toBeInTheDocument();
-    expect(screen.getByText("8 条")).toBeInTheDocument();
+    expect(screen.getByText("有效 / 拉取消息").parentElement).toHaveTextContent("2 / 8");
+    expect(screen.getByText("消耗 Tokens").parentElement).toHaveTextContent("0");
   });
 
   it("超时中断与抽屉异常渲染：多行 Python Traceback 堆栈与错误阶段应清晰展示", async () => {
     render(<TraceDrawer open={true} traceId="trace-20260926-004-timeout" onClose={vi.fn()} />);
 
     // 验证抽屉内异步加载后渲染的错误阶段与异常详情
-    expect(await screen.findByText(/在【大模型分析】阶段发生异常/i)).toBeInTheDocument();
+    expect(await screen.findByText("大模型分析失败")).toBeVisible();
     expect(screen.getAllByText(/Connection timeout to api\.openai\.com/i).length).toBeGreaterThan(
       0,
     );
-    expect(screen.getByText(/查看异常堆栈/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("异常堆栈"));
+    const stack = within(screen.getByText("异常堆栈").closest("details")!);
+    expect(stack.getByText(/Traceback \(most recent call last\):/)).toBeVisible();
   });
 
   it("降级告警场景：多平台 Telegram 渠道与群名应正常展现", () => {
@@ -96,7 +107,8 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
       />,
     );
 
-    expect(screen.getByText(/DevOps & SRE Infra Alert Channel/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("任务与消耗明细"));
+    expect(screen.getByText(/DevOps & SRE Infra Alert Channel/i)).toBeVisible();
     expect(screen.getAllByText(/-1001987654321/).length).toBeGreaterThan(0);
     expect(screen.getByText("telegram")).toBeInTheDocument();
   });
