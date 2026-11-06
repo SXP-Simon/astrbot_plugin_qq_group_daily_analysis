@@ -69,9 +69,7 @@ class StatisticsService:
                         emoji_statistics.face_details.get(f"emoji_{face_id}", 0) + 1
                     )
                 elif content.type == MessageContentType.IMAGE:
-                    # 兼容识别“图片形态的表情”:
-                    # 1) 优先使用 onebot sub_type=1 信号
-                    # 2) 若无该字段，再回退到历史 summary 文本匹配
+                    # 接入层已确认的图片表情计入图片表情分类。
                     if content.is_emoji():
                         emoji_statistics.mface_count += 1
                 elif content.type in (
