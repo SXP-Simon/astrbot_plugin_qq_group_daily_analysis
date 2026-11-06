@@ -7,21 +7,27 @@ import time
 from collections import OrderedDict
 from typing import TYPE_CHECKING, TypedDict
 
+from ...shared.type_guards import is_object_collection, is_string_mapping
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from ...domain.repositories.plugin_host_repository import PluginHostProtocol
+    from ...entrypoints.plugin_host import PluginHostProtocol
     from ..config.config_manager import ConfigManager
 
 
-class IncrementalTriggerState(TypedDict):
-    """增量分析触发状态强类型契约字典。"""
+class PendingGroupCount(TypedDict):
+    """持久化的群消息计数。"""
 
     platform_id: str
     group_id: str
     count: int
+
+
+class IncrementalTriggerState(PendingGroupCount):
+    """增量分析触发状态强类型契约字典。"""
+
     version: int
 
 
@@ -92,7 +98,7 @@ class IncrementalTriggerCoordinator:
         """生成影响增量目标群判定的配置快照。"""
 
         def normalize_list(values: object) -> tuple[str, ...]:
-            if not isinstance(values, (list, tuple, set)):
+            if not is_object_collection(values):
                 values = [values] if values is not None else []
             return tuple(
                 sorted({str(value).strip() for value in values if str(value).strip()})
@@ -115,7 +121,7 @@ class IncrementalTriggerCoordinator:
         if config_signature == self._target_config_signature:
             return
 
-        tasks_to_cancel: list[asyncio.Task] = []
+        tasks_to_cancel: list[asyncio.Task[object]] = []
         removed_state_keys: list[str] = []
         cancelled_state_keys: list[str] = []
         removed_count = 0
@@ -172,11 +178,11 @@ class IncrementalTriggerCoordinator:
             if self._loaded:
                 return
             data = await self.plugin.get_kv_data(self._KV_KEY, {})
-            if isinstance(data, dict):
+            if is_string_mapping(data):
                 states_dict = data.get("states")
-                if isinstance(states_dict, dict):
+                if is_string_mapping(states_dict):
                     for key, raw_state in states_dict.items():
-                        if not isinstance(raw_state, dict):
+                        if not is_string_mapping(raw_state):
                             continue
                         platform_id = str(raw_state.get("platform_id", "")).strip()
                         group_id = str(raw_state.get("group_id", "")).strip()
@@ -233,7 +239,7 @@ class IncrementalTriggerCoordinator:
         """立即持久化当前计数状态。"""
         await self._ensure_loaded()
         async with self._state_lock:
-            states = {
+            states: dict[str, PendingGroupCount] = {
                 key: {
                     "platform_id": state["platform_id"],
                     "group_id": state["group_id"],
@@ -439,7 +445,7 @@ class IncrementalTriggerCoordinator:
                     getattr(self._semaphore, "_value", None),
                 )
 
-            result = result if isinstance(result, dict) else {}
+            result = result if is_string_mapping(result) else {}
             raw_consumed = result.get("messages_count", 0)
             consumed = max(
                 0,

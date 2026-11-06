@@ -208,7 +208,7 @@ class ScheduledTargetResolver:
             try:
                 adapter = self.bot_manager.get_adapter(platform_id)
                 if not adapter:
-                    platform_name = self.bot_manager._detect_platform_name(bot_instance)
+                    platform_name = self.bot_manager.detect_platform_name(bot_instance)
                     if platform_name and PlatformAdapterFactory.is_supported(
                         platform_name
                     ):

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import time as time_mod
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from apscheduler.triggers.cron import CronTrigger
 
@@ -16,6 +16,9 @@ from ...domain.repositories.platform_adapter_repository import PlatformAdapterPr
 from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import (
+    is_string_mapping,
+)
 from ...utils.logger import logger
 from ..messaging.message_sender import MessageSender
 from ..reporting.dispatcher import ReportDispatcher
@@ -32,11 +35,11 @@ if TYPE_CHECKING:
     from ...application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
-    from ...domain.repositories.plugin_host_repository import PluginHostProtocol
     from ...domain.value_objects import (
         AnalysisResultPayload,
         DailyAnalysisExecutionResult,
     )
+    from ...entrypoints.plugin_host import PluginHostProtocol
     from ..config.config_manager import ConfigManager
     from ..platform.bot_manager import BotManager
     from ..reporting.generators import ReportGenerator
@@ -54,6 +57,22 @@ AUTO_ANALYSIS_SKIP_REASONS: dict[str, str] = {
     "already_running": "群聊分析任务已在执行中（并发锁拦截），本次调度跳过",
     "terminating": "系统正在停止中，跳过调度任务",
 }
+
+
+class SchedulerJobs(Protocol):
+    """插件所需的调度器接口，补齐 APScheduler 的未标注参数。"""
+
+    def add_job(
+        self,
+        func: Callable[[], Awaitable[None]],
+        *,
+        trigger: CronTrigger,
+        id: str,
+        replace_existing: bool,
+        misfire_grace_time: int,
+    ) -> object: ...
+    def get_job(self, job_id: str) -> object | None: ...
+    def remove_job(self, job_id: str) -> None: ...
 
 
 class AutoScheduler:
@@ -97,11 +116,11 @@ class AutoScheduler:
         if html_render_func:
             self.report_dispatcher.set_html_render(html_render_func)
 
-        self.scheduler_job_ids = []  # 存储已注册的定时任务 ID
+        self.scheduler_job_ids: list[str] = []  # 存储已注册的定时任务 ID
         self.last_executed_target = None  # 记录上次执行的具体时间点，防止重复执行
 
         self._terminating = False  # 终止标志位
-        self._immediate_report_tasks: dict[str, asyncio.Task] = {}
+        self._immediate_report_tasks: dict[str, asyncio.Task[None]] = {}
         self._immediate_report_versions: dict[str, int] = {}
         self.incremental_trigger = (
             IncrementalTriggerCoordinator(
@@ -122,10 +141,7 @@ class AutoScheduler:
         self, bot_self_ids: list[str | int] | str | int | None
     ) -> None:
         """设置bot ID（支持单个ID或ID列表）"""
-        if isinstance(bot_self_ids, list):
-            self.bot_manager.set_bot_self_ids(bot_self_ids)
-        elif bot_self_ids:
-            self.bot_manager.set_bot_self_ids([bot_self_ids])
+        self.bot_manager.set_bot_self_ids(bot_self_ids)
 
     def set_bot_qq_ids(self, bot_qq_ids: list[str | int] | str | int | None) -> None:
         """设置bot QQ号（已弃用，使用 set_bot_self_ids）"""
@@ -191,7 +207,7 @@ class AutoScheduler:
                 trigger = CronTrigger(hour=int(hour), minute=int(minute))
                 job_id = f"astrbot_plugin_qq_group_daily_analysis_trigger_{i}"
 
-                scheduler.add_job(
+                cast("SchedulerJobs", scheduler).add_job(
                     self._run_scheduled_report,
                     trigger=trigger,
                     id=job_id,
@@ -220,8 +236,8 @@ class AutoScheduler:
 
         for job_id in self.scheduler_job_ids:
             try:
-                if scheduler.get_job(job_id):
-                    scheduler.remove_job(job_id)
+                if cast("SchedulerJobs", scheduler).get_job(job_id):
+                    cast("SchedulerJobs", scheduler).remove_job(job_id)
                     logger.debug(f"已移除定时任务: {job_id}")
             except Exception as e:
                 logger.warning(f"移除定时任务失败 ({job_id}): {e}")
@@ -362,7 +378,9 @@ class AutoScheduler:
                         max_concurrent,
                     )
 
-            tasks = []
+            tasks: list[
+                asyncio.Task[DailyAnalysisExecutionResult | dict[str, object] | None]
+            ] = []
             stagger = self.config_manager.get_stagger_seconds() or 2
             # 针对定时大任务加入交错等待，减少瞬间峰值延迟
             for idx, (gid, pid, mode) in enumerate(all_targets):
@@ -394,9 +412,9 @@ class AutoScheduler:
                 elif isinstance(result, Exception):
                     logger.error(f"群 {gid} 定时报告任务异常: {result}")
                     error_count += 1
-                elif isinstance(result, dict) and result.get("success"):
+                elif is_string_mapping(result) and (result or {}).get("success"):
                     success_count += 1
-                elif isinstance(result, dict):
+                elif is_string_mapping(result):
                     reason = result.get("reason", "unknown")
                     if reason in {
                         "below_threshold",
@@ -424,11 +442,11 @@ class AutoScheduler:
 
     async def _perform_auto_analysis_for_group_with_timeout(
         self, group_id: str, target_platform_id: str | None = None
-    ):
+    ) -> DailyAnalysisExecutionResult | dict[str, object] | None:
         """为指定群执行自动分析并返回真实的分析与发送状态。"""
         try:
             return await asyncio.wait_for(
-                self._perform_auto_analysis_for_group(group_id, target_platform_id),
+                self.perform_auto_analysis_for_group(group_id, target_platform_id),
                 timeout=1800,
             )
         except TimeoutError:
@@ -448,9 +466,9 @@ class AutoScheduler:
                 "reason": str(e),
             }
 
-    async def _perform_auto_analysis_for_group(
+    async def perform_auto_analysis_for_group(
         self, group_id: str, target_platform_id: str | None = None
-    ):
+    ) -> dict[str, object]:
         """为指定群执行自动分析（业务逻辑委派给 AnalysisApplicationService）"""
         trace = None
         try:
@@ -499,7 +517,7 @@ class AutoScheduler:
                 group_id=group_id, platform_id=target_platform_id, manual=False
             )
 
-            if not result.get("success"):
+            if not (result or {}).get("success"):
                 reason = str(result.get("reason", "unknown"))
                 skip_msg = str(result.get("error") or result.get("message") or "")
                 is_skip = reason in AUTO_ANALYSIS_SKIP_REASONS
@@ -532,7 +550,7 @@ class AutoScheduler:
             raw_analysis = result.get("analysis_result")
             analysis_result = cast(
                 "AnalysisResultPayload",
-                raw_analysis if isinstance(raw_analysis, dict) else {},
+                raw_analysis if is_string_mapping(raw_analysis) else {},
             )
             adapter = result.get("adapter")
             dispatch_platform_id = (
@@ -641,7 +659,7 @@ class AutoScheduler:
 
     async def _trigger_incremental_analysis(
         self, group_id: str, platform_id: str
-    ) -> dict | None:
+    ) -> dict[str, object] | None:
         """执行消息量触发的单群增量分析。
 
         Args:
@@ -720,8 +738,8 @@ class AutoScheduler:
                     platform_id,
                     group_id,
                     requested_version,
-                    bool(result.get("success")),
-                    result.get("reason", "none"),
+                    bool((result or {}).get("success")),
+                    (result or {}).get("reason", "none"),
                     has_new_batch,
                 )
                 if not has_new_batch:
@@ -753,7 +771,7 @@ class AutoScheduler:
         self,
         group_id: str,
         target_platform_id: str | None = None,
-    ):
+    ) -> dict[str, object] | None:
         """为指定群执行增量分析（带超时控制，10分钟）。"""
         try:
             return await asyncio.wait_for(
@@ -773,7 +791,7 @@ class AutoScheduler:
         self,
         group_id: str,
         target_platform_id: str | None = None,
-    ):
+    ) -> dict[str, object] | None:
         """为指定群执行增量分析（业务逻辑委派给 AnalysisApplicationService）"""
         trace = None
         try:
@@ -814,7 +832,7 @@ class AutoScheduler:
                 platform_id=target_platform_id,
             )
 
-            if not result.get("success"):
+            if not (result or {}).get("success"):
                 reason = str(result.get("reason", "unknown"))
                 skip_msg = str(result.get("error") or result.get("message") or "")
                 is_skip = reason in AUTO_ANALYSIS_SKIP_REASONS
@@ -842,7 +860,7 @@ class AutoScheduler:
             # 增量分析只累积数据，不发送报告
             raw_summary = result.get("batch_summary")
             batch_summary: dict[str, object] = (
-                raw_summary if isinstance(raw_summary, dict) else {}
+                raw_summary if is_string_mapping(raw_summary) else {}
             )
             logger.debug(
                 f"群 {group_id} 增量分析调度回调完成: "
@@ -879,7 +897,7 @@ class AutoScheduler:
 
     async def _perform_incremental_final_report_for_group_with_timeout(
         self, group_id: str, target_platform_id: str | None = None
-    ):
+    ) -> DailyAnalysisExecutionResult | dict[str, object] | None:
         """带超时及回退机制的增量最终报告生成。
 
         若增量汇报失败（非 '消息不足' 或 '正在运行' 导致的），
@@ -894,7 +912,7 @@ class AutoScheduler:
             )
 
             # 判定是否需要触发回退 (例如：无增量数据等)
-            if not result.get("success"):
+            if not (result or {}).get("success"):
                 reason = result.get("reason", "")
                 if reason in ("below_threshold", "already_running", "target_removed"):
                     return result  # 正常跳过，无需回退
@@ -935,7 +953,7 @@ class AutoScheduler:
 
     async def _fallback_to_traditional(
         self, group_id: str, target_platform_id: str | None = None
-    ):
+    ) -> dict[str, object]:
         """回退操作：在增量报告失败时，执行传统的全量拉取分析。"""
         try:
             logger.info(
@@ -945,6 +963,9 @@ class AutoScheduler:
             result = await self._perform_auto_analysis_for_group_with_timeout(
                 group_id, target_platform_id
             )
+            if result is None:
+                return {"success": False, "fallback": True}
+            result = dict(result)
             result["fallback"] = True
             return result
         except Exception as fallback_err:
@@ -962,7 +983,7 @@ class AutoScheduler:
 
     async def _perform_incremental_final_report_for_group(
         self, group_id: str, target_platform_id: str | None = None
-    ):
+    ) -> DailyAnalysisExecutionResult | dict[str, object]:
         """为指定群生成增量最终报告（业务逻辑委派给 AnalysisApplicationService）"""
         trace = None
         try:
@@ -1034,7 +1055,7 @@ class AutoScheduler:
                 group_id=group_id, platform_id=target_platform_id
             )
 
-            if not result.get("success"):
+            if not (result or {}).get("success"):
                 reason = str(result.get("reason", "unknown"))
                 skip_msg = str(result.get("error") or result.get("message") or "")
                 is_skip = reason in AUTO_ANALYSIS_SKIP_REASONS
@@ -1065,7 +1086,7 @@ class AutoScheduler:
             raw_analysis = result.get("analysis_result")
             analysis_result = cast(
                 "AnalysisResultPayload",
-                raw_analysis if isinstance(raw_analysis, dict) else {},
+                raw_analysis if is_string_mapping(raw_analysis) else {},
             )
             adapter = result.get("adapter")
             dispatch_platform_id = (
