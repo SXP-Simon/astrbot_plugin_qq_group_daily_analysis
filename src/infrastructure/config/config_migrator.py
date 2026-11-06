@@ -16,11 +16,12 @@ import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from astrbot.api.star import StarTools
 
 from ...shared.constants import PLUGIN_NAME
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 from ...utils.template_utils import upgrade_str_format_template
 from .rendering_config import (
@@ -44,6 +45,15 @@ LEGACY_RENDERING_RESOURCE_KEYS = (
     "t2i_overseas_google_fonts",
     "t2i_overseas_gstatic",
 )
+
+
+class UpgradeProtectionState(TypedDict, total=False):
+    """升级保护记录；config 原样保留旧版本配置的所有字段。"""
+
+    version: str
+    schema_fingerprint: str
+    captured_at: str
+    config: dict[str, object]
 
 
 class ConfigMigrator:
@@ -73,25 +83,27 @@ class ConfigMigrator:
             return
         previous_config = previous.get("config")
         if (
-            not isinstance(previous_config, dict)
+            not is_string_mapping(previous_config)
             and getattr(self.cm.config, "first_deploy", False) is not True
         ):
             logger.warning(
                 "未找到升级前的配置快照，旧自定义地址和参考图无法自动恢复，缺少的新配置将使用预设。"
             )
         self.migrate_legacy_configs(
-            previous_config if isinstance(previous_config, dict) else None
+            previous_config if is_string_mapping(previous_config) else None
         )
         self.upgrade_prompt_templates()
         self.migrate_daily_comic_character_references(
-            previous_config if isinstance(previous_config, dict) else None
+            previous_config if is_string_mapping(previous_config) else None
         )
         self.migrate_daily_comic_character_prompts()
         self.migrate_legacy_comic_storyboard_prompts()
         self._upgrade_ready = self._migration_valid
         self.refresh_upgrade_protection()
 
-    def migrate_legacy_configs(self, previous_config: dict | None = None) -> bool:
+    def migrate_legacy_configs(
+        self, previous_config: dict[str, object] | None = None
+    ) -> bool:
         """升级旧版配置项的类型与数据结构，确保兼容新 Schema。
 
         Args:
@@ -103,22 +115,22 @@ class ConfigMigrator:
         modified = False
         self._migration_valid = True
 
-        val = self.cm._get_group("basic").get("output_format")
+        val = self.cm.get_group("basic").get("output_format")
         if isinstance(val, str):
-            self.cm._ensure_group("basic")["output_format"] = [val]
+            self.cm.ensure_group("basic")["output_format"] = [val]
             logger.info("output_format 已从旧版 string 自动迁移为 list")
             modified = True
 
-        group = self.cm._get_group("t2i_rendering")
+        group = self.cm.get_group("t2i_rendering")
         previous_group = (previous_config or {}).get("t2i_rendering", {})
         legacy = {
-            **(previous_group if isinstance(previous_group, dict) else {}),
+            **(previous_group if is_string_mapping(previous_group) else {}),
             **group,
         }
         strategies = group.get("t2i_rendering_strategies")
         if strategies is None and group:
             strategies = [dict(item) for item in DEFAULT_RENDERING_STRATEGY_PRESETS]
-        if isinstance(strategies, list):
+        if is_object_list(strategies):
             try:
                 if not strategies:
                     strategies = [
@@ -133,6 +145,8 @@ class ConfigMigrator:
                     group["t2i_rendering_strategies"] = strategies
                     modified = True
                 for item, plan in zip(strategies, normalized, strict=True):
+                    if not is_string_mapping(item):
+                        raise ValueError("渲染方案必须是配置对象")
                     # 旧版自定义服务改用独立条目，保持原资源环境和服务地址。
                     for key in (
                         "__template_key",
@@ -231,11 +245,11 @@ class ConfigMigrator:
             "golden_quote_analysis_prompts",
             "comic_analysis_prompts",
         ):
-            target_group = self.cm._get_group("prompts").get(group, {})
+            target_group = self.cm.get_group("prompts").get(group, {})
         else:
-            target_group = self.cm._get_group(group)
+            target_group = self.cm.get_group(group)
 
-        val = target_group.get(key, "")
+        val = target_group.get(key, "") if is_string_mapping(target_group) else ""
         if not val or not isinstance(val, str):
             return False
 
@@ -310,16 +324,16 @@ class ConfigMigrator:
         self.cm.save_config()
 
     def migrate_daily_comic_character_references(
-        self, previous_config: dict | None = None
+        self, previous_config: dict[str, object] | None = None
     ) -> None:
         """从当前配置或保护快照迁移旧参考图，成功后移除旧键。
 
         Args:
             previous_config: 宿主清理配置前留存的旧配置快照。
         """
-        daily_comic = self.cm._get_group("daily_comic")
+        daily_comic = self.cm.get_group("daily_comic")
         characters = daily_comic.get("comic_characters")
-        if isinstance(characters, list) and len(characters) > 0:
+        if is_object_list(characters) and len(characters) > 0:
             if "drawing_reference_image" in daily_comic:
                 del daily_comic["drawing_reference_image"]
                 self._save_config()
@@ -328,7 +342,7 @@ class ConfigMigrator:
         previous_group = (previous_config or {}).get("daily_comic", {})
         previous_references = (
             previous_group.get("drawing_reference_image")
-            if isinstance(previous_group, dict)
+            if is_string_mapping(previous_group)
             else None
         )
         old_references = daily_comic.get("drawing_reference_image", previous_references)
@@ -357,7 +371,7 @@ class ConfigMigrator:
                 for reference in old_references
                 if isinstance(reference, str) and reference.strip()
             ]
-            if isinstance(old_references, list)
+            if is_object_list(old_references)
             else []
         )
 
@@ -420,13 +434,13 @@ class ConfigMigrator:
         if state_path.exists():
             return
 
-        daily_comic = self.cm._get_group("daily_comic")
+        daily_comic = self.cm.get_group("daily_comic")
         characters = daily_comic.get("comic_characters", [])
         default_prompt = self.cm.get_comic_storyboard_prompt()
         modified = False
-        if isinstance(characters, list):
+        if is_object_list(characters):
             for character in characters:
-                if not isinstance(character, dict):
+                if not is_string_mapping(character):
                     continue
                 if not str(character.get("storyboard_prompt", "")).strip():
                     character["storyboard_prompt"] = default_prompt
@@ -454,9 +468,9 @@ class ConfigMigrator:
 
         modified = False
 
-        prompts = self.cm._get_group("prompts")
+        prompts = self.cm.get_group("prompts")
         comic_prompts = prompts.get("comic_analysis_prompts")
-        if isinstance(comic_prompts, dict):
+        if is_string_mapping(comic_prompts):
             current_global = comic_prompts.get("comic_storyboard_prompt")
             if self.is_legacy_default_comic_prompt(current_global):
                 comic_prompts["comic_storyboard_prompt"] = (
@@ -464,11 +478,11 @@ class ConfigMigrator:
                 )
                 modified = True
 
-        daily_comic = self.cm._get_group("daily_comic")
+        daily_comic = self.cm.get_group("daily_comic")
         characters = daily_comic.get("comic_characters", [])
-        if isinstance(characters, list):
+        if is_object_list(characters):
             for char in characters:
-                if not isinstance(char, dict):
+                if not is_string_mapping(char):
                     continue
                 char_prompt = char.get("storyboard_prompt")
                 if self.is_legacy_default_comic_prompt(char_prompt):
@@ -484,7 +498,9 @@ class ConfigMigrator:
             except Exception as exc:
                 logger.warning(f"自动迁移漫画分镜提示词失败: {exc}")
 
-    def protect_upgrade_data(self, *, update_baseline: bool = True) -> dict | None:
+    def protect_upgrade_data(
+        self, *, update_baseline: bool = True
+    ) -> UpgradeProtectionState | None:
         """归档旧快照，成功后允许更新基线。
 
         Args:
@@ -510,17 +526,16 @@ class ConfigMigrator:
         if not previous_state:
             logger.debug("未找到升级保护基线，将在迁移完成后记录当前配置。")
 
+        previous_config = previous_state.get("config")
         if previous_state.get(
             "schema_fingerprint"
-        ) != current_schema_fingerprint and isinstance(
-            previous_state.get("config"), dict
-        ):
+        ) != current_schema_fingerprint and is_string_mapping(previous_config):
             backup_func = getattr(
                 self.cm,
                 "_write_upgrade_config_backup",
                 self.write_upgrade_config_backup,
             )
-            if not backup_func(previous_state["config"], previous_version):
+            if not backup_func(previous_config, previous_version):
                 logger.warning("插件旧配置备份失败，本次不会更新升级保护状态。")
                 return None
 
@@ -537,7 +552,9 @@ class ConfigMigrator:
         state_path = (
             self.star_tools.get_data_dir(PLUGIN_NAME) / "upgrade_protection_state.json"
         )
-        config_data = dict(self.cm.config) if self.cm.config else {}
+        config_data: dict[str, object] = (
+            dict(self.cm.config) if is_string_mapping(self.cm.config) else {}
+        )
         self.save_upgrade_protection_state(
             state_path,
             {
@@ -554,9 +571,7 @@ class ConfigMigrator:
         Returns:
             Path: 插件根目录路径。
         """
-        if hasattr(self.cm, "_get_plugin_root") and callable(self.cm._get_plugin_root):
-            return self.cm._get_plugin_root()
-        return self.get_plugin_root()
+        return self.cm.get_plugin_root()
 
     @staticmethod
     def get_plugin_root() -> Path:
@@ -604,10 +619,12 @@ class ConfigMigrator:
             logger.warning(f"读取插件配置结构失败: {exc}")
             return ""
 
-        def extract_shape(items: dict) -> dict:
-            shape = {}
+        def extract_shape(items: object) -> dict[str, object]:
+            if not is_string_mapping(items):
+                return {}
+            shape: dict[str, object] = {}
             for key, item in items.items():
-                if not isinstance(item, dict):
+                if not is_string_mapping(item):
                     continue
                 entry = {"type": item.get("type")}
                 for property_name in ("default", "options", "file_types"):
@@ -615,11 +632,12 @@ class ConfigMigrator:
                         entry[property_name] = item[property_name]
                 if isinstance(item.get("items"), dict):
                     entry["items"] = extract_shape(item["items"])
-                if isinstance(item.get("templates"), dict):
+                templates = item.get("templates")
+                if is_string_mapping(templates):
                     entry["templates"] = {
                         template_key: extract_shape(template.get("items", {}))
-                        for template_key, template in item["templates"].items()
-                        if isinstance(template, dict)
+                        for template_key, template in templates.items()
+                        if is_string_mapping(template)
                     }
                 shape[key] = entry
             return shape
@@ -633,7 +651,7 @@ class ConfigMigrator:
         return hashlib.sha256(serialized_shape.encode("utf-8")).hexdigest()
 
     @staticmethod
-    def read_upgrade_protection_state(state_path: Path) -> dict:
+    def read_upgrade_protection_state(state_path: Path) -> UpgradeProtectionState:
         """读取最近一次成功保存的升级保护快照。
 
         Args:
@@ -643,13 +661,25 @@ class ConfigMigrator:
             dict: 升级保护状态字典。
         """
         try:
-            state = json.loads(state_path.read_text(encoding="utf-8"))
-            return state if isinstance(state, dict) else {}
+            raw: object = json.loads(state_path.read_text(encoding="utf-8"))
+            state: UpgradeProtectionState = {}
+            if not is_string_mapping(raw):
+                return state
+            for key in ("version", "schema_fingerprint", "captured_at"):
+                value = raw.get(key)
+                if isinstance(value, str):
+                    state[key] = value
+            config = raw.get("config")
+            if is_string_mapping(config):
+                state["config"] = config
+            return state
         except (OSError, json.JSONDecodeError):
             return {}
 
     @staticmethod
-    def save_upgrade_protection_state(state_path: Path, state: dict) -> None:
+    def save_upgrade_protection_state(
+        state_path: Path, state: UpgradeProtectionState
+    ) -> None:
         """原子保存升级保护状态。
 
         Args:
@@ -816,7 +846,7 @@ class ConfigMigrator:
             "files/daily_comic/comic_characters/templates/character/reference_images"
         )
         target_dir = plugin_data_dir / relative_dir
-        migrated_references = []
+        migrated_references: list[str] = []
         for index, reference in enumerate(references, start=1):
             try:
                 source_path = (plugin_data_dir / reference).resolve()

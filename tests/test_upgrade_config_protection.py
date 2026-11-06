@@ -34,7 +34,7 @@ def protection(tmp_path, monkeypatch):
     manager = object.__new__(ConfigManager)
     manager.StarTools = Tools
     manager.config = Config({"t2i_rendering": {"t2i_rendering_strategies": [{"__template_key": "mainland"}, {"cdn_base_url": "https://explicit.example", "priority": 30}]}})
-    manager._get_plugin_root = lambda: root
+    manager.get_plugin_root = lambda: root
     migrator = ConfigMigrator(manager, star_tools=Tools)
     manager._migrator = migrator
     for method in ("upgrade_prompt_templates", "migrate_daily_comic_character_references", "migrate_daily_comic_character_prompts", "migrate_legacy_comic_storyboard_prompts"):
