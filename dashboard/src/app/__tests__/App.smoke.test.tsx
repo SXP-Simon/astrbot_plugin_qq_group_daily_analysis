@@ -1,10 +1,11 @@
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { App } from "../App";
 import { toast } from "sonner";
 import * as devBridge from "../../shared/api/devBridge";
 import * as traceApi from "../../entities/trace/api/traceApi";
+import * as taskApi from "../../entities/task/api/taskApi";
 
 // 本测试验证页面装配和数据加载，不在 JSDOM 中运行 Canvas 动画。
 vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
@@ -23,6 +24,9 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
       return () => {};
     });
     const cacheSpy = vi.spyOn(traceApi, "invalidateTraceCache");
+    const platformsSpy = vi
+      .spyOn(taskApi, "fetchConnectedPlatforms")
+      .mockRejectedValueOnce(new Error("连接失败"));
     const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     const pending: Promise<unknown>[] = [];
     const originalGet = devBridge.devApiGet;
@@ -48,6 +52,20 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
         await Promise.allSettled(pending);
       });
       expect(screen.getByText("142")).toBeInTheDocument();
+      fireEvent.click(screen.getAllByRole("button", { name: "发起分析" })[0]);
+      const form = within(await screen.findByRole("dialog", { name: "发起分析" }));
+      expect(await form.findByText("平台列表未能读取，可重试加载或使用默认选择。")).toBeVisible();
+      fireEvent.change(form.getByLabelText("群号 / 会话标识"), { target: { value: "demo-retry" } });
+      fireEvent.click(form.getByRole("button", { name: "重新加载选项" }));
+      await act(async () => {
+        await Promise.allSettled(pending);
+      });
+      expect(
+        form.queryByText("平台列表未能读取，可重试加载或使用默认选择。"),
+      ).not.toBeInTheDocument();
+      expect(form.getByLabelText("群号 / 会话标识")).toHaveValue("demo-retry");
+      expect(platformsSpy).toHaveBeenCalledTimes(2);
+      fireEvent.click(form.getByRole("button", { name: "取消" }));
       act(() => {
         toast.success("示例：任务已提交", { duration: Infinity });
       });
@@ -93,6 +111,7 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
       getSpy.mockRestore();
       sseSpy.mockRestore();
       cacheSpy.mockRestore();
+      platformsSpy.mockRestore();
       scrollSpy.mockRestore();
     }
   }, 20000);

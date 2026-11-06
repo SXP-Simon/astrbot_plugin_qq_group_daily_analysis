@@ -287,6 +287,8 @@ export const App: React.FC = () => {
               templates={triggerVM.templates}
               loadingTemplates={triggerVM.loadingTemplates}
               templatesError={triggerVM.templatesError}
+              optionsError={triggerVM.optionsError}
+              onRefreshOptions={triggerVM.refreshOptions}
               onRefreshTemplates={() => void triggerVM.refreshTemplates()}
               onGroupIdChange={triggerVM.setGroupId}
               onGroupNameChange={triggerVM.setGroupName}
