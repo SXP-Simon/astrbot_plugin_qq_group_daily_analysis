@@ -1,219 +1,96 @@
-import React from "react";
-import { useTheme } from "../../../shared/lib/useTheme";
+import { formatDuration } from "../../../shared/lib/formatters";
+import { llmAttemptSchema } from "../model/llmAttempts";
+import { resolveSpanOutcome } from "../model/spanOutcome";
 
-interface LlmAttemptsTableProps {
-  attempts: Array<Record<string, unknown>>;
-}
-
-const AREA_NAME_MAP: Record<string, string> = {
-  topics: "话题",
-  user_titles: "用户称号",
-  golden_quotes: "金句",
-  chat_quality: "聊天质量",
-  话题分析: "话题",
-  群友画像: "用户称号",
-  群聊金句: "金句",
-  聊天质量: "聊天质量",
-  group_sentiment: "情感分析",
-  activity_prediction: "活跃预测",
-  comic: "群漫画生成",
+const areaNames = new Map(
+  Object.entries({
+    topics: "话题",
+    user_titles: "用户称号",
+    golden_quotes: "金句",
+    chat_quality: "聊天质量",
+    话题分析: "话题",
+    群友画像: "用户称号",
+    群聊金句: "金句",
+    聊天质量: "聊天质量",
+    group_sentiment: "情感分析",
+    activity_prediction: "活跃预测",
+    comic: "群漫画生成",
+  }),
+);
+const statusLabels = {
+  success: "成功",
+  failed: "失败",
+  cancelled: "已停止",
+  running: "请求中",
+  warning: "有警告",
+  skipped: "已跳过",
+  unknown: "状态未记录",
 };
 
-export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) => {
-  const { isDark } = useTheme();
-
-  if (!attempts || attempts.length === 0) {
-    return null;
-  }
-
+export function LlmAttemptsTable({ attempts }: { attempts: Record<string, unknown>[] }) {
+  if (!attempts.length) return null;
   return (
-    <div
-      style={{
-        marginTop: 8,
-        marginBottom: 8,
-        border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
-        borderRadius: 4,
-        overflow: "hidden",
-        background: isDark ? "#161b22" : "#ffffff",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "5px 8px",
-          background: isDark ? "#21262d" : "#f8fafc",
-          borderBottom: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
-          fontSize: 11,
-        }}
-      >
-        <span style={{ fontWeight: 600, color: isDark ? "#c9d1d9" : "#334155" }}>
-          大模型调用与重试链路
-        </span>
-        <span className="font-mono" style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b" }}>
-          共 {attempts.length} 次请求
-        </span>
+    <section className="my-5 text-sm" aria-label="大模型调用与重试链路">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="m-0 text-sm font-medium">大模型调用与重试链路</h4>
+        <span className="text-xs text-muted-foreground">共 {attempts.length} 次请求</span>
       </div>
-
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {attempts.map((att: Record<string, unknown>, i: number) => {
-          const isSuccess = att.status === "success";
-          const isFallback = Boolean(att.is_fallback);
-          const hasError = !isSuccess && Boolean(att.error);
-
-          const retryMatch = String(att.area || "").match(/^(.*?)#(?:schema_retry|retry)_(\d+)$/);
-          const rawArea = retryMatch ? retryMatch[1] : String(att.area || "analysis");
-          const areaName = AREA_NAME_MAP[rawArea] || rawArea;
-          const isRetry = Boolean(retryMatch);
-          const retryIdx = retryMatch ? retryMatch[2] : null;
-
-          const badgeText = isFallback
-            ? `降级 #${String(att.attempt || i + 1)}`
-            : isRetry
-              ? `输出解析校正 #${retryIdx}`
-              : `调用 #${String(att.attempt || i + 1)}`;
-
+      <ol className="m-0 list-none p-0">
+        {attempts.map((record, index) => {
+          const att = llmAttemptSchema.parse(record);
+          const outcome = resolveSpanOutcome(att.status ?? "", { error: att.error });
+          const retry = /^(.*)#(schema_retry|retry)_(\d+)$/.exec(att.area ?? "");
+          const area = retry?.[1] ?? att.area;
+          const provider = [
+            att.provider_id,
+            att.model && !att.provider_id?.includes(att.model) ? att.model : undefined,
+          ]
+            .filter(Boolean)
+            .join(" / ");
           return (
-            <div
-              key={i}
-              style={{
-                padding: "6px 8px",
-                borderBottom:
-                  i < attempts.length - 1 ? `1px solid ${isDark ? "#21262d" : "#f1f5f9"}` : "none",
-                fontSize: 11,
-              }}
+            <li
+              key={index}
+              className="border-0 border-b border-solid border-border py-3 last:border-b-0"
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: 6,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span
-                    className="font-mono"
-                    style={{
-                      fontSize: 10,
-                      padding: "1px 5px",
-                      borderRadius: 3,
-                      background:
-                        isFallback || isRetry
-                          ? isDark
-                            ? "rgba(217, 119, 6, 0.15)"
-                            : "#fffbeb"
-                          : isDark
-                            ? "rgba(37, 99, 235, 0.12)"
-                            : "#eff6ff",
-                      color:
-                        isFallback || isRetry
-                          ? isDark
-                            ? "#fbbf24"
-                            : "#b45309"
-                          : isDark
-                            ? "#60a5fa"
-                            : "#1d4ed8",
-                      border: `1px solid ${
-                        isFallback || isRetry
-                          ? isDark
-                            ? "rgba(217, 119, 6, 0.3)"
-                            : "#fde68a"
-                          : isDark
-                            ? "rgba(37, 99, 235, 0.25)"
-                            : "#bfdbfe"
-                      }`,
-                    }}
-                  >
-                    {badgeText}
-                  </span>
-                  <span style={{ fontWeight: 500, color: isDark ? "#c9d1d9" : "#1e293b" }}>
-                    {areaName}
-                  </span>
-                  <span
-                    className="font-mono"
-                    style={{ color: isDark ? "#8b949e" : "#64748b", fontSize: 11 }}
-                  >
-                    {String(att.provider_id || "default")}
-                    {att.model &&
-                    String(att.model) !== String(att.provider_id) &&
-                    !String(att.provider_id || "").includes(String(att.model))
-                      ? ` / ${String(att.model)}`
-                      : ""}
-                  </span>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {att.duration_ms !== undefined && (
-                    <span
-                      className="font-mono"
-                      style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b" }}
-                    >
-                      {Number(att.duration_ms) < 1000
-                        ? `${att.duration_ms}ms`
-                        : `${(Number(att.duration_ms) / 1000).toFixed(1)}s`}
-                    </span>
-                  )}
-                  <span
-                    style={{
-                      fontSize: 10,
-                      padding: "1px 5px",
-                      borderRadius: 3,
-                      fontWeight: 500,
-                      background: isSuccess
-                        ? isDark
-                          ? "rgba(22, 163, 74, 0.12)"
-                          : "#f0fdf4"
-                        : isDark
-                          ? "rgba(220, 38, 38, 0.12)"
-                          : "#fef2f2",
-                      color: isSuccess
-                        ? isDark
-                          ? "#4ade80"
-                          : "#15803d"
-                        : isDark
-                          ? "#f87171"
-                          : "#b91c1c",
-                      border: `1px solid ${
-                        isSuccess
-                          ? isDark
-                            ? "rgba(22, 163, 74, 0.25)"
-                            : "#bbf7d0"
-                          : isDark
-                            ? "rgba(220, 38, 38, 0.25)"
-                            : "#fecaca"
-                      }`,
-                    }}
-                  >
-                    {isSuccess ? "成功" : "失败"}
-                  </span>
-                </div>
-              </div>
-
-              {hasError && (
-                <div
-                  className="font-mono"
-                  style={{
-                    marginTop: 4,
-                    padding: "3px 6px",
-                    background: isDark ? "rgba(220, 38, 38, 0.08)" : "#fff1f0",
-                    borderLeft: "2px solid #ef4444",
-                    borderRadius: "0 3px 3px 0",
-                    color: isDark ? "#fca5a5" : "#cf1322",
-                    fontSize: 10,
-                    wordBreak: "break-all",
-                    lineHeight: 1.4,
-                  }}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-xs text-muted-foreground">请求 {index + 1}</span>
+                <span className="flex-1 font-medium">
+                  {area ? (areaNames.get(area) ?? area) : "分析模块未记录"}
+                </span>
+                <span
+                  className={outcome === "failed" ? "text-destructive" : "text-muted-foreground"}
                 >
-                  {String(att.error)}
-                </div>
+                  {statusLabels[outcome]}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {att.duration_ms === undefined
+                    ? "耗时未记录"
+                    : att.duration_ms === 0
+                      ? "0ms"
+                      : formatDuration(att.duration_ms)}
+                </span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {provider && <span className="break-all font-mono">{provider}</span>}
+                {att.attempt !== undefined && <span>调用次数 {att.attempt}</span>}
+                {att.is_fallback && <span>备用 Provider</span>}
+                {retry && (
+                  <span>
+                    {retry[2] === "schema_retry" ? "格式修复" : "重试"}第 {Number(retry[3])} 次
+                  </span>
+                )}
+              </div>
+              {att.error && (
+                <p
+                  className={`mb-0 mt-2 whitespace-pre-wrap break-words font-mono text-xs ${outcome === "failed" ? "text-destructive" : "text-muted-foreground"}`}
+                >
+                  {att.error}
+                </p>
               )}
-            </div>
+            </li>
           );
         })}
-      </div>
-    </div>
+      </ol>
+    </section>
   );
-};
+}
