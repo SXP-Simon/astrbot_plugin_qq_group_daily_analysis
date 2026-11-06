@@ -87,7 +87,7 @@
   * `ActiveTaskBoard.tsx`：活跃任务看板与实时步进计时器。
   * `TraceDrawer.tsx`：保留调用接口的任务诊断窗口，使用 shadcn Dialog 组织 Summary、SpanTimeline、TraceLogViewer；宽屏并排显示阶段树与记录，窄屏改为单列。
   * `AnalysisTimelinePicker.tsx`：全景时间线选择器与状态节点可视化。
-  * `OverviewTrendCharts.tsx`：时序指标图表与 Token 消耗趋势。
+  * `OverviewTrendCharts.tsx`：分析次数、Token 消耗和服务商分布，使用共享范围选择器与原生明细表。`useOverviewTrends` 管理范围、校验响应及隔离迟到请求；旧图保留自身范围标识，零消耗不借用历史总量。图表配置独立于请求状态，沿用 ECharts、主题变量与纯文本提示。
   * `FieldRenderer.tsx` & `TemplateListRenderer.tsx`：动态配置表单渲染器（支持 Provider/Persona 自动点选与模板列表）。
 
 ### 2.5 `pages/`（页面与视图模型层）
