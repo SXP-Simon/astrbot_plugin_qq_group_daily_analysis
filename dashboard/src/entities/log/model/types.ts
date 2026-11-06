@@ -1,8 +1,23 @@
 import type { components } from "../../../shared/api/generated/schema";
+import { z } from "zod";
 
 export type PluginLogItem = components["schemas"]["PluginLogItem"];
 export type AvailableTag = components["schemas"]["AvailableTag"];
 export type PluginLogResponse = components["schemas"]["PluginLogResponse"];
+
+export const logEntrySchema: z.ZodType<PluginLogItem> = z.object({
+  id: z.string().min(1),
+  timestamp: z.number().finite(),
+  time_str: z.string(),
+  level: z.enum(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+  logger_name: z.string(),
+  tag: z.string(),
+  message: z.string(),
+  raw: z.string(),
+  trace_id: z.string().nullish(),
+  stage: z.string().nullish(),
+  location: z.string().nullish(),
+});
 
 export const TAG_STYLE_MAP: Record<string, { label: string; color: string }> = {
   LLM: { label: "大模型调用", color: "purple" },
