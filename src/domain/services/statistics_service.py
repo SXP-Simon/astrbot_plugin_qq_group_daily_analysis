@@ -9,8 +9,13 @@ from collections import defaultdict
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from ...shared.type_guards import is_string_mapping
 from ..value_objects import EmojiStatistics, GroupStatistics, TokenUsage
-from ..value_objects.unified_message import MessageContentType, UnifiedMessage
+from ..value_objects.unified_message import (
+    LegacyMessagePayload,
+    MessageContentType,
+    UnifiedMessage,
+)
 
 if TYPE_CHECKING:
     from ..repositories.visualization_repository import IActivityVisualizer
@@ -43,8 +48,8 @@ class StatisticsService:
             GroupStatistics: 群聊基础统计与可视化数据模型。
         """
         total_chars = 0
-        participants = set()
-        hour_counts = defaultdict(int)
+        participants: set[str] = set()
+        hour_counts: dict[int, int] = defaultdict(int)
         emoji_statistics = EmojiStatistics()
 
         for msg in messages:
@@ -87,7 +92,7 @@ class StatisticsService:
         )
 
         # 生成活跃度可视化数据（转换为兼容字典格式以适配图表引擎）
-        raw_msgs = self._convert_to_legacy_dict(messages)
+        raw_msgs = self.convert_to_legacy_dict(messages)
         activity_visualization = (
             self.activity_visualizer.generate_activity_visualization(raw_msgs)
         )
@@ -114,7 +119,7 @@ class StatisticsService:
         Returns:
             bool: 是否属于表情包形态图片。
         """
-        if isinstance(raw_data, dict):
+        if is_string_mapping(raw_data):
             sub_type = raw_data.get("sub_type")
             if sub_type is not None:
                 return str(sub_type) == "1"
@@ -127,7 +132,9 @@ class StatisticsService:
         text = str(raw_data)
         return "动画表情" in text or "表情" in text
 
-    def _convert_to_legacy_dict(self, messages: list[UnifiedMessage]) -> list[dict]:
+    def convert_to_legacy_dict(
+        self, messages: list[UnifiedMessage]
+    ) -> list[LegacyMessagePayload]:
         """将 UnifiedMessage 转换为字典格式以兼容图表生成器。
 
         Args:
@@ -136,7 +143,7 @@ class StatisticsService:
         Returns:
             list[dict]: 兼容消息字典列表。
         """
-        legacy_list = []
+        legacy_list: list[LegacyMessagePayload] = []
         for msg in messages:
             legacy_list.append(
                 {

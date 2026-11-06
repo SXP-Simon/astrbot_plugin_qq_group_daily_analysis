@@ -41,7 +41,7 @@ class MessageCleanerService:
             清理后的消息列表
         """
         bot_ids = set(bot_self_ids or [])
-        cleaned_list = []
+        cleaned_list: list[UnifiedMessage] = []
 
         for msg in messages:
             # 1. 过滤机器人发送的消息
@@ -58,7 +58,7 @@ class MessageCleanerService:
                 continue
 
             # 3. 清理消息内容中的技术性噪音
-            cleaned_contents = []
+            cleaned_contents: list[MessageContent] = []
             has_meaningful_content = False
 
             for content in msg.contents:
@@ -90,7 +90,7 @@ class MessageCleanerService:
                 # 重新合成 text_content 用于 LLM 分析
                 new_text_content = "".join(
                     [
-                        c.text
+                        c.text or ""
                         for c in cleaned_contents
                         if c.type == MessageContentType.TEXT
                     ]

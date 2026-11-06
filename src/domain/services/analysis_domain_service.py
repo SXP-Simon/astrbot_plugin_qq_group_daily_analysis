@@ -6,18 +6,22 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
+from ...shared.type_guards import is_string_mapping
 from ..value_objects.unified_message import MessageContentType, UnifiedMessage
 
+if TYPE_CHECKING:
+    from ..value_objects.analysis_results import UserActivityRanking
+    from ..value_objects.analysis_results import UserActivityStats as UserActivityStats
 
-class UserActivityStats(TypedDict):
-    message_count: int
-    char_count: int
-    emoji_count: int
-    nickname: str
-    hours: dict[int, int]
-    reply_count: int
+
+class UserActivityPattern(TypedDict, total=False):
+    """用户活跃时间与夜间发言比例。"""
+
+    most_active_hour: int
+    night_ratio: float
+    hourly_distribution: dict[int, int]
 
 
 class AnalysisDomainService:
@@ -97,7 +101,7 @@ class AnalysisDomainService:
         Returns:
             bool: 是否属于表情包形态图片。
         """
-        if isinstance(raw_data, dict):
+        if is_string_mapping(raw_data):
             sub_type = raw_data.get("sub_type")
             if sub_type is not None:
                 return str(sub_type) == "1"
@@ -112,7 +116,7 @@ class AnalysisDomainService:
 
     def get_top_users(
         self, user_activity: dict[str, UserActivityStats], limit: int = 10
-    ) -> list[dict]:
+    ) -> list[UserActivityRanking]:
         """获取最活跃的用户列表。
 
         Args:
@@ -122,7 +126,7 @@ class AnalysisDomainService:
         Returns:
             list[dict]: 排序后的前 N 名活跃用户列表。
         """
-        users = []
+        users: list[UserActivityRanking] = []
         for user_id, stats in user_activity.items():
             users.append(
                 {
@@ -141,7 +145,7 @@ class AnalysisDomainService:
 
     def get_user_activity_pattern(
         self, user_activity: dict[str, UserActivityStats], user_id: str
-    ) -> dict:
+    ) -> UserActivityPattern:
         """获取并识别指定用户的活动模式。
 
         Args:
