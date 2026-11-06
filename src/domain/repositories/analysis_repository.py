@@ -24,7 +24,7 @@ if TYPE_CHECKING:
         UserActivityRanking,
         UserActivityStats,
     )
-    from ..value_objects.unified_message import LegacyMessagePayload
+    from ..value_objects.unified_message import UnifiedMessage
 
 
 class IAnalysisProvider(ABC):
@@ -35,7 +35,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_topics(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """分析话题"""
@@ -43,7 +43,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_user_titles(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         user_activity: Mapping[str, UserActivityStats | UserActivityPayload],
         umo: str | None = None,
         top_users: list[UserActivityRanking] | None = None,
@@ -53,7 +53,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_golden_quotes(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """分析金句"""
@@ -61,7 +61,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_all_concurrent(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         user_activity: Mapping[str, UserActivityStats | UserActivityPayload],
         umo: str | None = None,
         top_users: list[UserActivityRanking] | None = None,
@@ -81,7 +81,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_incremental_concurrent(
         self,
-        messages: list[LegacyMessagePayload],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
         topics_per_batch: int = 3,
         quotes_per_batch: int = 3,
