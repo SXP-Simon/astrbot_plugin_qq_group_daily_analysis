@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Row, Col, Card, Empty, Typography, Space, Radio } from "antd";
 import ReactECharts from "echarts-for-react";
-import {
-  AreaChartOutlined,
-  BarChartOutlined,
-  PieChartOutlined,
-} from "@ant-design/icons";
+import { AreaChartOutlined, BarChartOutlined, PieChartOutlined } from "@ant-design/icons";
 import {
   AnalyticsTrendsResponse,
   AnalyticsTrendPoint,
@@ -73,7 +69,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
 
   const points: AnalyticsTrendPoint[] = trendData?.points || [];
   const providers: ProviderBreakdownItem[] = (trendData?.provider_breakdown || []).filter(
-    (p) => p.total_tokens > 0 || p.request_count > 0
+    (p) => p.total_tokens > 0 || p.request_count > 0,
   );
 
   const hasData = points.length > 0;
@@ -286,7 +282,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
 
   // 超过 7 个服务商时进行 Top 6 聚合，其余归入“其他服务商”，保证环形图始终清晰易读
   const sortedProviders = [...providers].sort(
-    (a, b) => (b.total_tokens || 0) - (a.total_tokens || 0)
+    (a, b) => (b.total_tokens || 0) - (a.total_tokens || 0),
   );
 
   let pieDataList: { name: string; value: number }[] = [];
@@ -387,7 +383,10 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
       >
         <Space size={6} align="center">
           <AreaChartOutlined style={{ color: "#2563eb", fontSize: 13 }} />
-          <Text strong style={{ fontSize: 13, letterSpacing: "-0.2px", color: isDark ? "#c9d1d9" : "#1e293b" }}>
+          <Text
+            strong
+            style={{ fontSize: 13, letterSpacing: "-0.2px", color: isDark ? "#c9d1d9" : "#1e293b" }}
+          >
             分析行为与 Token 消耗可观测趋势
           </Text>
         </Space>
@@ -398,10 +397,18 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
           onChange={(e) => handleRangeChange(e.target.value)}
           buttonStyle="solid"
         >
-          <Radio.Button value="48h" style={{ fontSize: 12 }}>近48小时</Radio.Button>
-          <Radio.Button value="7d" style={{ fontSize: 12 }}>近7天</Radio.Button>
-          <Radio.Button value="14d" style={{ fontSize: 12 }}>近14天</Radio.Button>
-          <Radio.Button value="30d" style={{ fontSize: 12 }}>近30天</Radio.Button>
+          <Radio.Button value="48h" style={{ fontSize: 12 }}>
+            近48小时
+          </Radio.Button>
+          <Radio.Button value="7d" style={{ fontSize: 12 }}>
+            近7天
+          </Radio.Button>
+          <Radio.Button value="14d" style={{ fontSize: 12 }}>
+            近14天
+          </Radio.Button>
+          <Radio.Button value="30d" style={{ fontSize: 12 }}>
+            近30天
+          </Radio.Button>
         </Radio.Group>
       </div>
 
@@ -418,7 +425,14 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
               height: "100%",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 6,
+              }}
+            >
               <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
                 <AreaChartOutlined style={{ color: "#2563eb", marginRight: 6 }} />
                 API 请求次数
@@ -439,7 +453,12 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description="暂无请求趋势数据"
-                style={{ height: 160, display: "flex", flexDirection: "column", justifyContent: "center" }}
+                style={{
+                  height: 160,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                }}
               />
             )}
           </div>
@@ -456,25 +475,58 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
               height: "100%",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 6,
+              }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
                   <BarChartOutlined style={{ color: "#2563eb", marginRight: 6 }} />
                   Tokens 消耗趋势
                 </Text>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 11,
+                    color: isDark ? "#8b949e" : "#64748b",
+                  }}
+                >
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                    <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 2, background: "#2563eb" }} />
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 7,
+                        height: 7,
+                        borderRadius: 2,
+                        background: "#2563eb",
+                      }}
+                    />
                     <span>输入</span>
                   </span>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                    <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 2, background: "#60a5fa" }} />
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 7,
+                        height: 7,
+                        borderRadius: 2,
+                        background: "#60a5fa",
+                      }}
+                    />
                     <span>输出</span>
                   </span>
                 </div>
               </div>
               <Text strong className="font-mono" style={{ fontSize: 12, color: "#2563eb" }}>
-                {rangeTotalTokens > 0 ? formatSmartTokens(rangeTotalTokens) : formatSmartTokens(totalTokens)}
+                {rangeTotalTokens > 0
+                  ? formatSmartTokens(rangeTotalTokens)
+                  : formatSmartTokens(totalTokens)}
               </Text>
             </div>
 
@@ -489,7 +541,12 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description="暂无 Token 消耗趋势数据"
-                style={{ height: 160, display: "flex", flexDirection: "column", justifyContent: "center" }}
+                style={{
+                  height: 160,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                }}
               />
             )}
           </div>
@@ -506,7 +563,14 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
               height: "100%",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 6,
+              }}
+            >
               <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
                 <PieChartOutlined style={{ color: "#2563eb", marginRight: 6 }} />
                 服务商消耗占比
@@ -527,7 +591,12 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description="暂无服务商消耗分布"
-                style={{ height: 160, display: "flex", flexDirection: "column", justifyContent: "center" }}
+                style={{
+                  height: 160,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                }}
               />
             )}
           </div>

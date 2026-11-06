@@ -13,17 +13,26 @@ export function useT2iProbe(input: T2iProbeInput) {
   const [groupKey, setGroupKey] = useState("");
   const [groupsError, setGroupsError] = useState("");
   const hostService = input.render_service === "astrbot";
-  const selectedGroup = groups.find((group) => JSON.stringify([group.platform, group.group_id]) === groupKey);
+  const selectedGroup = groups.find(
+    (group) => JSON.stringify([group.platform, group.group_id]) === groupKey,
+  );
 
   useEffect(() => {
     if (!hostService) return;
     let active = true;
-    void fetchGroupSessions().then((list) => {
-      if (active) { setGroups(list.filter((group) => Boolean(group.platform))); setGroupsError(""); }
-    }).catch(() => {
-      if (active) setGroupsError("群列表暂时无法读取，可以先测试 AstrBot 默认配置。");
-    });
-    return () => { active = false; };
+    void fetchGroupSessions()
+      .then((list) => {
+        if (active) {
+          setGroups(list.filter((group) => Boolean(group.platform)));
+          setGroupsError("");
+        }
+      })
+      .catch(() => {
+        if (active) setGroupsError("群列表暂时无法读取，可以先测试 AstrBot 默认配置。");
+      });
+    return () => {
+      active = false;
+    };
   }, [hostService]);
 
   useEffect(() => {
@@ -31,8 +40,19 @@ export function useT2iProbe(input: T2iProbeInput) {
     setLoading(false);
     setResult(null);
     setError("");
-    return () => { sequence.current += 1; };
-  }, [input.render_service, input.service_endpoint, input.service_token, input.timeout, input.request_timeout, input.group_id, input.platform_id, groupKey]);
+    return () => {
+      sequence.current += 1;
+    };
+  }, [
+    input.render_service,
+    input.service_endpoint,
+    input.service_token,
+    input.timeout,
+    input.request_timeout,
+    input.group_id,
+    input.platform_id,
+    groupKey,
+  ]);
 
   const run = async () => {
     if (loading) return;
@@ -41,12 +61,19 @@ export function useT2iProbe(input: T2iProbeInput) {
     setResult(null);
     setError("");
     try {
-      const data = await testT2i(hostService && selectedGroup ? {
-        ...input, group_id: selectedGroup.group_id, platform_id: selectedGroup.platform,
-      } : input);
+      const data = await testT2i(
+        hostService && selectedGroup
+          ? {
+              ...input,
+              group_id: selectedGroup.group_id,
+              platform_id: selectedGroup.platform,
+            }
+          : input,
+      );
       if (sequence.current === requestId) setResult(data);
     } catch (err: unknown) {
-      if (sequence.current === requestId) setError(err instanceof Error ? err.message : "测试没能完成，请稍后再试。");
+      if (sequence.current === requestId)
+        setError(err instanceof Error ? err.message : "测试没能完成，请稍后再试。");
     } finally {
       if (sequence.current === requestId) setLoading(false);
     }

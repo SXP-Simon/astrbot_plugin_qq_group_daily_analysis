@@ -15,8 +15,8 @@ interface TypstMemorySummary {
 
 /** 将明确的父级关联组成树；缺失父级或循环关联回到顶层，避免丢失记录。 */
 export function buildSpanTree(spans: TraceSpan[]): SpanTreeNode[] {
-  const nodes: SpanTreeNode[] = spans.map(span => ({ span, children: [] }));
-  const byId = new Map(nodes.map(node => [node.span.span_id, node]));
+  const nodes: SpanTreeNode[] = spans.map((span) => ({ span, children: [] }));
+  const byId = new Map(nodes.map((node) => [node.span.span_id, node]));
   const roots: SpanTreeNode[] = [];
   for (const node of nodes) {
     const parentId = node.span.payload?.parent_span_id;
@@ -51,23 +51,34 @@ function summarizeTypstMemory(node: SpanTreeNode): TypstMemorySummary {
     summary.typst_peak_rss_mb = peak;
     summary.typst_rss_source = typeof source === "string" ? source : "unknown";
   }
-  if (typeof delta === "number" && Number.isFinite(delta) && delta >= 0) summary.typst_peak_delta_mb = delta;
-  if (payload.worker_metrics_partial === true || payload.typst_metrics_partial === true) summary.typst_metrics_partial = true;
+  if (typeof delta === "number" && Number.isFinite(delta) && delta >= 0)
+    summary.typst_peak_delta_mb = delta;
+  if (payload.worker_metrics_partial === true || payload.typst_metrics_partial === true)
+    summary.typst_metrics_partial = true;
   for (const child of node.children) {
     const memory = summarizeTypstMemory(child);
-    if (memory.typst_peak_rss_mb !== undefined && memory.typst_peak_rss_mb >= (summary.typst_peak_rss_mb ?? -1)) {
+    if (
+      memory.typst_peak_rss_mb !== undefined &&
+      memory.typst_peak_rss_mb >= (summary.typst_peak_rss_mb ?? -1)
+    ) {
       summary.typst_peak_rss_mb = memory.typst_peak_rss_mb;
       summary.typst_rss_source = memory.typst_rss_source;
     }
-    if (memory.typst_peak_delta_mb !== undefined) summary.typst_peak_delta_mb = Math.max(summary.typst_peak_delta_mb ?? 0, memory.typst_peak_delta_mb);
+    if (memory.typst_peak_delta_mb !== undefined)
+      summary.typst_peak_delta_mb = Math.max(
+        summary.typst_peak_delta_mb ?? 0,
+        memory.typst_peak_delta_mb,
+      );
     if (memory.typst_metrics_partial) summary.typst_metrics_partial = true;
   }
-  if (["RENDER_REPORT", "REPORT_RENDERING", "IMAGE_RENDER_ATTEMPT"].includes(node.span.stage_name)) node.typstMemory = summary;
+  if (["RENDER_REPORT", "REPORT_RENDERING", "IMAGE_RENDER_ATTEMPT"].includes(node.span.stage_name))
+    node.typstMemory = summary;
   return summary;
 }
 
-
 /** 子步骤归属于当前尝试，不与其他父阶段合并为重试。 */
 export function spanGroupKey(span: TraceSpan): string {
-  return typeof span.payload?.parent_span_id === "string" ? `span:${span.span_id}` : `stage:${span.stage_name}`;
+  return typeof span.payload?.parent_span_id === "string"
+    ? `span:${span.span_id}`
+    : `stage:${span.stage_name}`;
 }

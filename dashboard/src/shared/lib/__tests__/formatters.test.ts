@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { formatBytes, formatCost, formatDuration, formatPercent, formatTokens } from "../formatters";
+import {
+  formatBytes,
+  formatCost,
+  formatDuration,
+  formatPercent,
+  formatTokens,
+} from "../formatters";
 
 describe("数据格式化工具库 (Shared Formatters Library)", () => {
   describe("formatBytes (字节换算)", () => {

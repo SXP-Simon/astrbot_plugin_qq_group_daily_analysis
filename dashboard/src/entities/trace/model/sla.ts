@@ -22,11 +22,7 @@ export function getStageSlaThreshold(stageName: string): {
   ) {
     return { thresholdMs: 180000, description: "文生图/绘图排队健康阈值 180s" };
   }
-  if (
-    norm.includes("RENDER") ||
-    norm.includes("渲染") ||
-    norm.includes("REPORT")
-  ) {
+  if (norm.includes("RENDER") || norm.includes("渲染") || norm.includes("REPORT")) {
     return { thresholdMs: 45000, description: "长图渲染与平台发送健康阈值 45s" };
   }
   if (norm.includes("FETCH") || norm.includes("拉取")) {

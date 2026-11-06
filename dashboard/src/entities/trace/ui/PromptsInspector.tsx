@@ -39,10 +39,10 @@ const ANALYZER_NAME_MAP: Record<string, string> = {
   user_titles: "用户称号",
   golden_quotes: "金句",
   chat_quality: "聊天质量",
-  "话题分析": "话题",
-  "群友画像": "用户称号",
-  "群聊金句": "金句",
-  "聊天质量": "聊天质量",
+  话题分析: "话题",
+  群友画像: "用户称号",
+  群聊金句: "金句",
+  聊天质量: "聊天质量",
   group_sentiment: "情感分析",
   activity_prediction: "活跃预测",
   comic: "群漫画",
@@ -61,7 +61,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
   }
 
   const promptEntries = Object.entries(prompts).filter(
-    ([key]) => !key.includes("#") && !key.toLowerCase().includes("retry")
+    ([key]) => !key.includes("#") && !key.toLowerCase().includes("retry"),
   );
   const currentKey = activeTab || promptEntries[0]?.[0] || "";
 
@@ -83,10 +83,20 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
           {
             key: "prompts",
             label: (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", paddingRight: 4 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  width: "100%",
+                  paddingRight: 4,
+                }}
+              >
                 <Space size={6}>
                   <FileTextOutlined style={{ color: "#2563eb" }} />
-                  <span style={{ fontWeight: 600, fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
+                  <span
+                    style={{ fontWeight: 600, fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}
+                  >
                     各分析模块运行提示词与大模型产物 (Prompts & Output)
                   </span>
                 </Space>
@@ -120,9 +130,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                   onChange={setActiveTab}
                   items={promptEntries.map(([analyzerName, pInfo]) => {
                     const isStr = typeof pInfo === "string";
-                    const detail: PromptDetail = isStr
-                      ? { prompt: pInfo }
-                      : pInfo || {};
+                    const detail: PromptDetail = isStr ? { prompt: pInfo } : pInfo || {};
 
                     const mappedName = ANALYZER_NAME_MAP[analyzerName] || analyzerName;
                     const retryKeys = Object.keys(prompts || {}).filter(
@@ -130,7 +138,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                         k.startsWith(`${analyzerName}#schema_retry_`) ||
                         k.startsWith(`${analyzerName}#retry_`) ||
                         k.startsWith(`${mappedName}#schema_retry_`) ||
-                        k.startsWith(`${mappedName}#retry_`)
+                        k.startsWith(`${mappedName}#retry_`),
                     );
 
                     let lastRetryDetail: PromptDetail | null = null;
@@ -148,14 +156,16 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                     }
 
                     const initialCompletion =
-                      detail.initial_completion ||
-                      (lastRetryDetail ? detail.completion : null);
+                      detail.initial_completion || (lastRetryDetail ? detail.completion : null);
 
                     const correctedCompletion =
                       detail.corrected_completion ||
-                      (lastRetryDetail?.completion && lastRetryDetail.completion !== detail.completion
+                      (lastRetryDetail?.completion &&
+                      lastRetryDetail.completion !== detail.completion
                         ? lastRetryDetail.completion
-                        : (detail.retry_count ? detail.completion : null));
+                        : detail.retry_count
+                          ? detail.completion
+                          : null);
 
                     const initialPrompt =
                       detail.initial_prompt ||
@@ -171,13 +181,14 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                       "";
 
                     const effectiveRetryCount =
-                      detail.retry_count ||
-                      (retryKeys.length > 0 ? retryKeys.length : 0);
+                      detail.retry_count || (retryKeys.length > 0 ? retryKeys.length : 0);
 
                     const hasCorrection = Boolean(
-                      (correctedCompletion && initialCompletion && correctedCompletion !== initialCompletion) ||
+                      (correctedCompletion &&
+                        initialCompletion &&
+                        correctedCompletion !== initialCompletion) ||
                       (effectiveRetryCount > 0 && lastRetryDetail?.completion) ||
-                      (detail.corrected_completion && detail.initial_completion)
+                      (detail.corrected_completion && detail.initial_completion),
                     );
 
                     const viewMode = viewModeMap[analyzerName] || "corrected";
@@ -190,8 +201,8 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
 
                     const completionText = hasCorrection
                       ? viewMode === "initial"
-                        ? (initialCompletion || detail.completion || "")
-                        : (correctedCompletion || detail.completion || "")
+                        ? initialCompletion || detail.completion || ""
+                        : correctedCompletion || detail.completion || ""
                       : detail.completion || "";
 
                     const systemPrompt = detail.system_prompt || "";
@@ -203,9 +214,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                       displayName !== analyzerName && !analyzerName.match(/[\u4e00-\u9fa5]/);
 
                     const showModel = Boolean(
-                      modelId &&
-                      modelId !== providerId &&
-                      !providerId?.includes(modelId)
+                      modelId && modelId !== providerId && !providerId?.includes(modelId),
                     );
                     const providerDisplay = providerId
                       ? showModel
@@ -219,14 +228,27 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                         <span style={{ fontSize: 12 }}>
                           {displayName}
                           {showSubLabel && (
-                            <span style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b", marginLeft: 4 }}>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                color: isDark ? "#8b949e" : "#64748b",
+                                marginLeft: 4,
+                              }}
+                            >
                               ({analyzerName})
                             </span>
                           )}
                         </span>
                       ),
                       children: (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 10,
+                            paddingTop: 4,
+                          }}
+                        >
                           {/* 元数据状态栏 */}
                           <div
                             style={{
@@ -244,15 +266,20 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                           >
                             <Space size={10} wrap>
                               {providerDisplay && (
-                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <span
+                                  style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                                >
                                   <ApartmentOutlined style={{ color: "#2563eb", fontSize: 12 }} />
-                                  <span style={{ color: isDark ? "#8b949e" : "#64748b" }}>Provider:</span>
+                                  <span style={{ color: isDark ? "#8b949e" : "#64748b" }}>
+                                    Provider:
+                                  </span>
                                   <span
                                     className="font-mono"
                                     style={{
                                       fontWeight: 600,
                                       color: isDark ? "#e2e8f0" : "#1e293b",
-                                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                                      fontFamily:
+                                        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                                     }}
                                   >
                                     {providerDisplay}
@@ -308,7 +335,9 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                     {
                                       label: (
                                         <span style={{ fontSize: 11, fontWeight: 500 }}>
-                                          <CheckCircleOutlined style={{ color: "#16a34a", marginRight: 3 }} />
+                                          <CheckCircleOutlined
+                                            style={{ color: "#16a34a", marginRight: 3 }}
+                                          />
                                           校正结果
                                         </span>
                                       ),
@@ -317,7 +346,9 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                     {
                                       label: (
                                         <span style={{ fontSize: 11, fontWeight: 500 }}>
-                                          <WarningOutlined style={{ color: "#d97706", marginRight: 3 }} />
+                                          <WarningOutlined
+                                            style={{ color: "#d97706", marginRight: 3 }}
+                                          />
                                           原始结果
                                         </span>
                                       ),
@@ -330,7 +361,12 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                 size="small"
                                 type="text"
                                 icon={<CopyOutlined style={{ fontSize: 11 }} />}
-                                style={{ fontSize: 11, height: 24, padding: "0 6px", color: isDark ? "#cbd5e1" : "#475569" }}
+                                style={{
+                                  fontSize: 11,
+                                  height: 24,
+                                  padding: "0 6px",
+                                  color: isDark ? "#cbd5e1" : "#475569",
+                                }}
                                 onClick={() => {
                                   const fullDump = `=== System Prompt ===\n${systemPrompt}\n\n=== User Prompt ===\n${promptText}\n\n=== Completion ===\n${completionText}`;
                                   copyToClipboard(fullDump);
@@ -365,7 +401,13 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                               >
                                 <Space size={6}>
                                   <UserOutlined style={{ color: "#7c3aed" }} />
-                                  <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#e2e8f0" : "#334155" }}>
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      color: isDark ? "#e2e8f0" : "#334155",
+                                    }}
+                                  >
                                     系统人设提示词 (System Prompt)
                                   </span>
                                 </Space>
@@ -384,7 +426,8 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                               <pre
                                 style={{
                                   fontSize: 11,
-                                  fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+                                  fontFamily:
+                                    "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
                                   background: isDark ? "#0d1117" : "#fafafa",
                                   color: isDark ? "#e2e8f0" : "#1e293b",
                                   padding: "8px 10px",
@@ -424,12 +467,24 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                               >
                                 <Space size={6}>
                                   <CodeOutlined style={{ color: "#2563eb" }} />
-                                  <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#e2e8f0" : "#334155" }}>
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      color: isDark ? "#e2e8f0" : "#334155",
+                                    }}
+                                  >
                                     {hasCorrection && viewMode === "corrected"
                                       ? "校正提示词 (Correction Prompt)"
                                       : "任务分析输入 (User Prompt)"}
                                   </span>
-                                  <span style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b", fontWeight: "normal" }}>
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      color: isDark ? "#8b949e" : "#64748b",
+                                      fontWeight: "normal",
+                                    }}
+                                  >
                                     ({promptText.length} 字符)
                                   </span>
                                 </Space>
@@ -448,7 +503,8 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                               <pre
                                 style={{
                                   fontSize: 11,
-                                  fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+                                  fontFamily:
+                                    "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
                                   background: isDark ? "#0d1117" : "#fafafa",
                                   color: isDark ? "#e2e8f0" : "#1e293b",
                                   padding: "8px 10px",
@@ -492,7 +548,13 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                   ) : (
                                     <CheckCircleOutlined style={{ color: "#16a34a" }} />
                                   )}
-                                  <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#e2e8f0" : "#334155" }}>
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      color: isDark ? "#e2e8f0" : "#334155",
+                                    }}
+                                  >
                                     {hasCorrection
                                       ? viewMode === "corrected"
                                         ? "大模型校正产物 (Corrected Response - 有效产物)"
@@ -515,7 +577,8 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                               <pre
                                 style={{
                                   fontSize: 11,
-                                  fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+                                  fontFamily:
+                                    "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
                                   background: isDark ? "#0d1117" : "#fafafa",
                                   color: isDark ? "#e2e8f0" : "#1e293b",
                                   padding: "8px 10px",

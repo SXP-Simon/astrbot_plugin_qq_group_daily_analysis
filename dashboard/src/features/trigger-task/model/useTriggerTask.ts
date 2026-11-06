@@ -5,10 +5,7 @@ import {
   fetchConnectedPlatforms,
   ConnectedPlatform,
 } from "../../../entities/task/api/taskApi";
-import {
-  fetchProviderList,
-  LLMProviderItem,
-} from "../../../entities/trace/api/traceApi";
+import { fetchProviderList, LLMProviderItem } from "../../../entities/trace/api/traceApi";
 import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
 import { GroupItem } from "../../../entities/group/model/types";
 
@@ -24,7 +21,13 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
   const [loadingPlatforms, setLoadingPlatforms] = useState(false);
   const [providers, setProviders] = useState<LLMProviderItem[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
-  const { templates, loading: loadingTemplates, ready, error: templatesError, refresh: refreshTemplates } = useReportTemplates("configured", open);
+  const {
+    templates,
+    loading: loadingTemplates,
+    ready,
+    error: templatesError,
+    refresh: refreshTemplates,
+  } = useReportTemplates("configured", open);
 
   const loadOptions = async () => {
     try {
@@ -36,7 +39,6 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
       ]);
       if (platList.status === "fulfilled") setConnectedPlatforms(platList.value);
       if (provList.status === "fulfilled") setProviders(provList.value);
-
     } catch {
       // Ignore background failure, fallback options will be displayed
     } finally {
@@ -79,7 +81,10 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
       return;
     }
 
-    if (templateName !== "auto" && (!ready || !templates.some((item) => item.id === templateName))) {
+    if (
+      templateName !== "auto" &&
+      (!ready || !templates.some((item) => item.id === templateName))
+    ) {
       message.warning(templatesError || "请选择当前支持的模板");
       return;
     }
@@ -90,7 +95,7 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
         groupName.trim(),
         platform,
         providerId !== "auto" ? providerId : undefined,
-        templateName !== "auto" ? templateName : undefined
+        templateName !== "auto" ? templateName : undefined,
       );
       if (res.status === "ok") {
         const traceInfo = res.trace_id ? ` (任务编号: ${res.trace_id})` : "";
@@ -134,4 +139,3 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
     handleSubmit,
   };
 }
-

@@ -10,12 +10,7 @@ interface SectionHeaderProps {
   extra?: React.ReactNode;
 }
 
-export const SectionHeader: React.FC<SectionHeaderProps> = ({
-  icon,
-  title,
-  badge,
-  extra,
-}) => {
+export const SectionHeader: React.FC<SectionHeaderProps> = ({ icon, title, badge, extra }) => {
   return (
     <div
       style={{

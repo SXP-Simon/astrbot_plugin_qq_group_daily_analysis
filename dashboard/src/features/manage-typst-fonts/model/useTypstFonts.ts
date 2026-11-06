@@ -16,18 +16,24 @@ export function useTypstFonts(cdnBaseUrl: string, refreshVersion = 0) {
   useEffect(() => {
     mounted.current = true;
     const request = ++sequence.current;
-    void fetchTypstFonts().then((value) => {
-      if (sequence.current === request) setStatus(value);
-    }).catch((cause: unknown) => {
-      if (sequence.current === request) setError(cause instanceof Error ? cause.message : "字体状态读取失败");
-    });
-    return () => { mounted.current = false; sequence.current += 1; };
+    void fetchTypstFonts()
+      .then((value) => {
+        if (sequence.current === request) setStatus(value);
+      })
+      .catch((cause: unknown) => {
+        if (sequence.current === request)
+          setError(cause instanceof Error ? cause.message : "字体状态读取失败");
+      });
+    return () => {
+      mounted.current = false;
+      sequence.current += 1;
+    };
   }, [refreshVersion]);
 
   const run = async (download: boolean, theme?: string) => {
     if (loading) return;
     const request = ++sequence.current;
-    setOperation(download ? theme === undefined ? "all" : "selected" : "refresh");
+    setOperation(download ? (theme === undefined ? "all" : "selected") : "refresh");
     setError("");
     try {
       if (download && status) await downloadQueue.download(cdnBaseUrl, theme);
@@ -36,7 +42,8 @@ export function useTypstFonts(cdnBaseUrl: string, refreshVersion = 0) {
         if (sequence.current === request) setStatus(value);
       }
     } catch (cause: unknown) {
-      if (sequence.current === request) setError(cause instanceof Error ? cause.message : "字体操作未完成，请重试。");
+      if (sequence.current === request)
+        setError(cause instanceof Error ? cause.message : "字体操作未完成，请重试。");
       if (download) {
         const partial = await fetchTypstFonts().catch(() => null);
         if (partial && sequence.current === request) setStatus(partial);

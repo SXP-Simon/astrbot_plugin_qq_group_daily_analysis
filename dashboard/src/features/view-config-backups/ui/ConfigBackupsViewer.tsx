@@ -1,14 +1,4 @@
-import {
-  Alert,
-  Button,
-  Card,
-  Empty,
-  Modal,
-  Space,
-  Spin,
-  Table,
-  Typography,
-} from "antd";
+import { Alert, Button, Card, Empty, Modal, Space, Spin, Table, Typography } from "antd";
 import { HistoryOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ConfigBackupInfo } from "../../../entities/plugin-data/model/configBackup";
 import { formatBytes } from "../../../shared/lib/formatters";
@@ -25,12 +15,7 @@ export function ConfigBackupsViewer() {
   const vm = useConfigBackups();
   return (
     <>
-      <Button
-        size="small"
-        type="link"
-        icon={<HistoryOutlined />}
-        onClick={vm.load}
-      >
+      <Button size="small" type="link" icon={<HistoryOutlined />} onClick={vm.load}>
         查看备份
       </Button>
       <Modal
@@ -46,12 +31,7 @@ export function ConfigBackupsViewer() {
             <Typography.Text type="secondary">
               选择一份备份，展开查看当时保存的原始键值。没有记录的版本和时间会标为“未记录”。
             </Typography.Text>
-            <Button
-              size="small"
-              icon={<ReloadOutlined />}
-              onClick={vm.load}
-              loading={vm.loading}
-            >
+            <Button size="small" icon={<ReloadOutlined />} onClick={vm.load} loading={vm.loading}>
               刷新列表
             </Button>
           </Space>
@@ -69,9 +49,7 @@ export function ConfigBackupsViewer() {
                 title: "文件名",
                 dataIndex: "filename",
                 render: (value: string) => (
-                  <Typography.Text style={{ overflowWrap: "anywhere" }}>
-                    {value}
-                  </Typography.Text>
+                  <Typography.Text style={{ overflowWrap: "anywhere" }}>{value}</Typography.Text>
                 ),
               },
               {
@@ -90,8 +68,7 @@ export function ConfigBackupsViewer() {
                 title: "备份时间",
                 dataIndex: "saved_at",
                 width: 170,
-                render: (value: string | null) =>
-                  value ? value.replace("T", " ") : "未记录",
+                render: (value: string | null) => (value ? value.replace("T", " ") : "未记录"),
               },
               {
                 title: "大小",
@@ -108,11 +85,7 @@ export function ConfigBackupsViewer() {
                       无法读取
                     </Typography.Text>
                   ) : (
-                    <Button
-                      size="small"
-                      type="link"
-                      onClick={() => vm.select(item.filename)}
-                    >
+                    <Button size="small" type="link" onClick={() => vm.select(item.filename)}>
                       查看
                     </Button>
                   ),
@@ -124,9 +97,7 @@ export function ConfigBackupsViewer() {
               <div style={{ height: 80 }} />
             </Spin>
           )}
-          {vm.detailError && (
-            <Alert type="error" showIcon message={vm.detailError} />
-          )}
+          {vm.detailError && <Alert type="error" showIcon message={vm.detailError} />}
           {vm.detail && (
             <Card
               size="small"
@@ -145,15 +116,9 @@ export function ConfigBackupsViewer() {
               </div>
             </Card>
           )}
-          {!vm.detail &&
-            !vm.detailLoading &&
-            !vm.detailError &&
-            vm.items.length > 0 && (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="点击“查看”展开一份备份"
-              />
-            )}
+          {!vm.detail && !vm.detailLoading && !vm.detailError && vm.items.length > 0 && (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="点击“查看”展开一份备份" />
+          )}
         </Space>
       </Modal>
     </>

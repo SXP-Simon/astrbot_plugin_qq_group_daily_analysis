@@ -8,11 +8,18 @@ import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
 vi.mock("../../../../entities/config/api/configApi", () => ({ testT2i: vi.fn() }));
 vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 
-const input = { service_endpoint: "http://127.0.0.1:8999", service_token: "draft-secret", timeout: 20000, request_timeout: 40000 };
+const input = {
+  service_endpoint: "http://127.0.0.1:8999",
+  service_token: "draft-secret",
+  timeout: 20000,
+  request_timeout: 40000,
+};
 const result: ProbeResult = { image_data_url: "data:image/png;base64,aGVsbG8=", elapsed_ms: 1200 };
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(fetchGroupSessions).mockResolvedValue([{ group_id: "123", group_name: "日常交流群", platform: "onebot_1" }]);
+  vi.mocked(fetchGroupSessions).mockResolvedValue([
+    { group_id: "123", group_name: "日常交流群", platform: "onebot_1" },
+  ]);
 });
 
 it("使用未保存的当前配置，仅在页面显示图片和耗时，不回显 Token", async () => {
@@ -26,7 +33,9 @@ it("使用未保存的当前配置，仅在页面显示图片和耗时，不回�
 });
 
 it("失败显示原因，不留下成功结果", async () => {
-  vi.mocked(testT2i).mockResolvedValueOnce(result).mockRejectedValueOnce(new Error("HTTP 401，请检查服务 Token"));
+  vi.mocked(testT2i)
+    .mockResolvedValueOnce(result)
+    .mockRejectedValueOnce(new Error("HTTP 401，请检查服务 Token"));
   render(<T2iProbe input={input} />);
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
   await screen.findByAltText("T2I 测试图片");
@@ -36,8 +45,10 @@ it("失败显示原因，不留下成功结果", async () => {
 });
 
 it.each([
-  { service_endpoint: "http://another.local" }, { service_token: "new-secret" },
-  { timeout: 10000 }, { request_timeout: 60000 },
+  { service_endpoint: "http://another.local" },
+  { service_token: "new-secret" },
+  { timeout: 10000 },
+  { request_timeout: 60000 },
   { render_service: "astrbot" },
 ])("修改配置后清除已有结果：%j", async (change) => {
   vi.mocked(testT2i).mockResolvedValue(result);
@@ -68,7 +79,9 @@ it("简洁说明宿主和自定义测试的使用范围", () => {
   expect(screen.getByText(/未绑定配置的群使用默认配置/)).toBeInTheDocument();
   expect(screen.getByText(/测试检查 T2I 服务是否可用，不检查模板图片和字体/)).toBeInTheDocument();
   view.rerender(<T2iProbe input={{ render_service: "custom" }} />);
-  expect(screen.getByText(/无需保存即可测试当前 T2I（文字转图片）服务地址和 Token/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/无需保存即可测试当前 T2I（文字转图片）服务地址和 Token/),
+  ).toBeInTheDocument();
   expect(screen.getByText(/不会调用大模型或发到群里/)).toBeInTheDocument();
 });
 
@@ -85,7 +98,13 @@ it("群列表读取失败时保留默认配置测试", async () => {
 
 it("旧请求晚到不能覆盖新请求；等待期间不重复提交", async () => {
   let finishOld: ((value: ProbeResult) => void) | undefined;
-  vi.mocked(testT2i).mockReturnValueOnce(new Promise((resolve) => { finishOld = resolve; })).mockResolvedValueOnce(result);
+  vi.mocked(testT2i)
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishOld = resolve;
+      }),
+    )
+    .mockResolvedValueOnce(result);
   const view = render(<T2iProbe input={input} />);
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
   fireEvent.click(screen.getByRole("button", { name: /正在生成测试图…/ }));
@@ -99,13 +118,16 @@ it("旧请求晚到不能覆盖新请求；等待期间不重复提交", async (
 
 it("卸载后不处理晚到的失败", async () => {
   let fail: ((error: Error) => void) | undefined;
-  vi.mocked(testT2i).mockReturnValue(new Promise((_resolve, reject) => { fail = reject; }));
+  vi.mocked(testT2i).mockReturnValue(
+    new Promise((_resolve, reject) => {
+      fail = reject;
+    }),
+  );
   const view = render(<T2iProbe input={input} />);
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
   view.unmount();
   await act(async () => fail?.(new Error("旧请求失败")));
 });
-
 
 it("相同群号的不同平台可分别选择并传入正确会话", async () => {
   vi.mocked(fetchGroupSessions).mockResolvedValue([
@@ -119,5 +141,9 @@ it("相同群号的不同平台可分别选择并传入正确会话", async () =
   fireEvent.click(screen.getByText("群二（123 · onebot_2）"));
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
   await screen.findByAltText("T2I 测试图片");
-  expect(testT2i).toHaveBeenCalledWith({ render_service: "astrbot", group_id: "123", platform_id: "onebot_2" });
+  expect(testT2i).toHaveBeenCalledWith({
+    render_service: "astrbot",
+    group_id: "123",
+    platform_id: "onebot_2",
+  });
 });

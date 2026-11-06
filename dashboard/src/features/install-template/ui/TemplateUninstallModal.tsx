@@ -13,15 +13,8 @@ import {
   message,
   Space,
 } from "antd";
-import {
-  DeleteOutlined,
-  SafetyOutlined,
-  ReloadOutlined,
-} from "@ant-design/icons";
-import {
-  fetchReportTemplates,
-  uninstallTemplate,
-} from "../../../entities/report/api/reportApi";
+import { DeleteOutlined, SafetyOutlined, ReloadOutlined } from "@ant-design/icons";
+import { fetchReportTemplates, uninstallTemplate } from "../../../entities/report/api/reportApi";
 import { ReportTemplateItem } from "../../../entities/report/model/templates";
 
 const { Text } = Typography;
@@ -132,12 +125,7 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
                       okButtonProps={{ danger: true, loading: uninstalling === item.id }}
                       onConfirm={() => handleUninstall(item.id)}
                     >
-                      <Button
-                        size="small"
-                        danger
-                        type="text"
-                        icon={<DeleteOutlined />}
-                      >
+                      <Button size="small" danger type="text" icon={<DeleteOutlined />}>
                         卸载
                       </Button>
                     </Popconfirm>,
@@ -155,7 +143,11 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
                     description={
                       <Text type="secondary" style={{ fontSize: 12 }}>
                         {item.desc || templateCapabilities(item).join(" / ")}
-                        <span>{templateCapabilities(item).map((capability) => <Tag key={capability}>{capability}</Tag>)}</span>
+                        <span>
+                          {templateCapabilities(item).map((capability) => (
+                            <Tag key={capability}>{capability}</Tag>
+                          ))}
+                        </span>
                       </Text>
                     }
                   />
@@ -165,12 +157,7 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
           )}
         </div>
       </Spin>
-      <Button
-        icon={<ReloadOutlined />}
-        onClick={loadTemplates}
-        style={{ marginTop: 12 }}
-        block
-      >
+      <Button icon={<ReloadOutlined />} onClick={loadTemplates} style={{ marginTop: 12 }} block>
         刷新列表
       </Button>
     </Modal>

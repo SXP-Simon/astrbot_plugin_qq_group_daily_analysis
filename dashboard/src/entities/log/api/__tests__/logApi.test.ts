@@ -3,7 +3,8 @@ import { apiGet } from "../../../../shared/api/bridge";
 import { fetchPluginLogs } from "../logApi";
 
 vi.mock("../../../../shared/api/bridge", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../../../shared/api/bridge")>(), apiGet: vi.fn(),
+  ...(await importOriginal<typeof import("../../../../shared/api/bridge")>()),
+  apiGet: vi.fn(),
 }));
 
 beforeEach(() => vi.resetAllMocks());
@@ -16,6 +17,9 @@ it("保留正确的日志分类，兼容宿主双层响应", async () => {
 
 it("错误的分类结构不会产生空白选项，也不丢弃日志", async () => {
   const items = [{ id: "one", message: "测试" }];
-  vi.mocked(apiGet).mockResolvedValue({ status: "ok", data: { items, total: 1, available_tags: [{ tag: "LLM" }] } });
+  vi.mocked(apiGet).mockResolvedValue({
+    status: "ok",
+    data: { items, total: 1, available_tags: [{ tag: "LLM" }] },
+  });
   expect(await fetchPluginLogs()).toEqual({ items, total: 1, available_tags: [] });
 });

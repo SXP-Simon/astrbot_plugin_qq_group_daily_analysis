@@ -49,9 +49,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
   const mergedSpans = React.useMemo(() => {
     const list = [...(spans || [])];
     if (taskStatus === "running" && currentStage) {
-      const hasActive = list.some(
-        (s) => s.status === "running" || s.stage_name === currentStage
-      );
+      const hasActive = list.some((s) => s.status === "running" || s.stage_name === currentStage);
       if (!hasActive) {
         list.push({
           span_id: `active_${currentStage}`,
@@ -85,21 +83,26 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
 
   const toggleExpand = (id: string) => {
     setExpandedSpanIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
   };
 
   const renderSpan = (node: SpanTreeNode, parent?: TraceSpan): TimelineItemProps => {
     const span = node.span;
-    const parentDuration = parent ? parent.duration_ms ?? Math.max(0, Date.now() - parent.started_at * 1000) : totalDurationMs;
+    const parentDuration = parent
+      ? (parent.duration_ms ?? Math.max(0, Date.now() - parent.started_at * 1000))
+      : totalDurationMs;
     const spanKey = span.span_id;
     const isRunning = span.status === "running" && taskStatus === "running";
     const duration =
       span.duration_ms !== null && span.duration_ms !== undefined
         ? span.duration_ms
         : isRunning
-        ? Math.max(0, Math.round((Date.now() / 1000 - (span.started_at || Date.now() / 1000)) * 1000))
-        : 0;
+          ? Math.max(
+              0,
+              Math.round((Date.now() / 1000 - (span.started_at || Date.now() / 1000)) * 1000),
+            )
+          : 0;
 
     const { thresholdMs } = getStageSlaThreshold(span.stage_name);
     const isSlaExceeded = !isRunning && duration > thresholdMs;
@@ -177,7 +180,8 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
               <RenderAttemptsTable attempts={renderAttempts} />
 
               {/* LLM 真实提示词 Prompt 检视器 */}
-              {(span.stage_name?.toUpperCase() === "LLM_ANALYSIS" || Boolean(span.payload?.prompts)) && (
+              {(span.stage_name?.toUpperCase() === "LLM_ANALYSIS" ||
+                Boolean(span.payload?.prompts)) && (
                 <PromptsInspector
                   prompts={
                     span.payload?.prompts as Record<string, PromptDetail | string> | undefined
@@ -186,13 +190,13 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
               )}
 
               {/* 通用调用产物明细 */}
-              <SpanPayloadViewer
-                payload={span.payload as Record<string, unknown> | undefined}
-              />
-              {node.children.length > 0 && <Timeline
-                items={node.children.map(child => renderSpan(child, span))}
-                style={{ marginTop: 16, paddingLeft: 12 }}
-              />}
+              <SpanPayloadViewer payload={span.payload as Record<string, unknown> | undefined} />
+              {node.children.length > 0 && (
+                <Timeline
+                  items={node.children.map((child) => renderSpan(child, span))}
+                  style={{ marginTop: 16, paddingLeft: 12 }}
+                />
+              )}
             </div>
           )}
         </div>
@@ -203,7 +207,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
   return (
     <Timeline
       mode="left"
-      items={buildSpanTree(mergedSpans).map(node => renderSpan(node))}
+      items={buildSpanTree(mergedSpans).map((node) => renderSpan(node))}
       style={{ marginTop: 8, paddingLeft: 4 }}
     />
   );

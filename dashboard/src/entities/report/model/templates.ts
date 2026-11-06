@@ -18,15 +18,25 @@ export interface TemplateRequirements {
 }
 
 /** 只有实际入口支持当前引擎与全部输出格式时才允许选择。 */
-export function supportsTemplate(template: ReportTemplateItem, requirements?: TemplateRequirements): boolean {
+export function supportsTemplate(
+  template: ReportTemplateItem,
+  requirements?: TemplateRequirements,
+): boolean {
   if (!requirements) return true;
-  if (requirements.formats.includes("html") && !(template.has_html || template.has_image)) return false;
+  if (requirements.formats.includes("html") && !(template.has_html || template.has_image))
+    return false;
   if (!requirements.formats.includes("image")) return true;
-  return requirements.engine === "typst" ? template.has_typst === true : template.has_image === true;
+  return requirements.engine === "typst"
+    ? template.has_typst === true
+    : template.has_image === true;
 }
 
 export function templateCapabilities(template: ReportTemplateItem): string[] {
-  return [template.has_image ? "HTML 图片" : "", template.has_html ? "HTML 网页" : "", template.has_typst ? "Typst 图片" : ""].filter(Boolean);
+  return [
+    template.has_image ? "HTML 图片" : "",
+    template.has_html ? "HTML 网页" : "",
+    template.has_typst ? "Typst 图片" : "",
+  ].filter(Boolean);
 }
 
 export interface SelectOptionItem {
@@ -140,29 +150,116 @@ export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
 export const GITHUB_REPO_OWNER = "SXP-Simon";
 export const GITHUB_REPO_NAME = "astrbot_plugin_qq_group_daily_analysis";
 export const GITHUB_REPO_BRANCH = "main";
-export function getTemplateCdnUrl(templateKey: string, cdnBaseUrl: string | null): string | undefined {
+export function getTemplateCdnUrl(
+  templateKey: string,
+  cdnBaseUrl: string | null,
+): string | undefined {
   if (cdnBaseUrl === null) return undefined;
   return `${cdnBaseUrl}/gh/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}@${GITHUB_REPO_BRANCH}/assets/${templateKey}-demo.webp`;
 }
 
 export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [
-  { id: "HatsuneMiku", label: "初音未来 (HatsuneMiku / 默认)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "scrapbook", label: "手账风格 (Scrapbook)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "ATRI", label: "亚托莉 (ATRI)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "spring_festival", label: "新春佳节 (Spring Festival)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "retro_futurism", label: "复古未来 (Retro Futurism)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "hack", label: "黑客赛博 (Hack)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "BlueArchive", label: "蔚蓝档案 (BlueArchive)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "simple", label: "极简黑白 (Simple)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "art_nouveau", label: "新艺术运动 (Art Nouveau)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "deepseek_maid", label: "DeepSeek 鲸鱼女仆娘", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "maria", label: "圣母在上 (Maria)", is_custom: false, has_image: true, has_html: true, has_typst: true },
-  { id: "format", label: "标准卡片 (Format)", is_custom: false, has_image: true, has_html: true, has_typst: true },
+  {
+    id: "HatsuneMiku",
+    label: "初音未来 (HatsuneMiku / 默认)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "scrapbook",
+    label: "手账风格 (Scrapbook)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "ATRI",
+    label: "亚托莉 (ATRI)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "spring_festival",
+    label: "新春佳节 (Spring Festival)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "retro_futurism",
+    label: "复古未来 (Retro Futurism)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "hack",
+    label: "黑客赛博 (Hack)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "BlueArchive",
+    label: "蔚蓝档案 (BlueArchive)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "simple",
+    label: "极简黑白 (Simple)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "art_nouveau",
+    label: "新艺术运动 (Art Nouveau)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "deepseek_maid",
+    label: "DeepSeek 鲸鱼女仆娘",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "maria",
+    label: "圣母在上 (Maria)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
+  {
+    id: "format",
+    label: "标准卡片 (Format)",
+    is_custom: false,
+    has_image: true,
+    has_html: true,
+    has_typst: true,
+  },
 ];
 
 export function formatTemplateOptions(
   templates: ReportTemplateItem[],
-  includeAuto = false
+  includeAuto = false,
 ): SelectOptionItem[] {
   const list = templates;
   const options: SelectOptionItem[] = list.map((t) => ({

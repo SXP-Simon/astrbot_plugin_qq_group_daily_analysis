@@ -63,4 +63,3 @@ export const MetricPill: React.FC<MetricPillProps> = ({
     </span>
   );
 };
-

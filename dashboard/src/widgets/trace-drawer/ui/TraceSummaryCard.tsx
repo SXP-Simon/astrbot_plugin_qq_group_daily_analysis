@@ -35,7 +35,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
 
   const isFallbackToFresh = Boolean(
     trace.extra?.fallback_to_fresh_run ||
-      (trace.extra as Record<string, unknown> | undefined)?.resumed_from === "fresh_run_fallback"
+    (trace.extra as Record<string, unknown> | undefined)?.resumed_from === "fresh_run_fallback",
   );
 
   const rawFiles =
@@ -85,15 +85,12 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
         </Descriptions.Item>
         <Descriptions.Item label="分析群聊" span={2}>
           <span>
-            {trace.group_name || "未知群"}{" "}
-            <Text type="secondary">({trace.group_id})</Text>
+            {trace.group_name || "未知群"} <Text type="secondary">({trace.group_id})</Text>
           </span>
         </Descriptions.Item>
         <Descriptions.Item label="接入平台">
           <Tag style={{ margin: 0 }}>
-            {!trace.platform ||
-            trace.platform === "auto" ||
-            trace.platform === "default"
+            {!trace.platform || trace.platform === "auto" || trace.platform === "default"
               ? "-"
               : trace.platform}
           </Tag>
@@ -138,14 +135,12 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
           {trace.context_metrics && (
             <>
               <Descriptions.Item label="读取原始消息">
-                <span>
-                  {trace.context_metrics.raw_message_count.toLocaleString()} 条
-                </span>
+                <span>{trace.context_metrics.raw_message_count.toLocaleString()} 条</span>
               </Descriptions.Item>
               <Descriptions.Item label="有效消息留存">
                 <span style={{ color: "#52c41a", fontWeight: 500 }}>
-                  {trace.context_metrics.cleaned_message_count.toLocaleString()}{" "}
-                  条 ({formatPercent(trace.context_metrics.compression_ratio)})
+                  {trace.context_metrics.cleaned_message_count.toLocaleString()} 条 (
+                  {formatPercent(trace.context_metrics.compression_ratio)})
                 </span>
               </Descriptions.Item>
             </>
@@ -180,13 +175,13 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
               const filename = file.filename || "";
               const isHtml = Boolean(
                 file.format === "html" ||
-                  filename.toLowerCase().endsWith(".html") ||
-                  filename.toLowerCase().endsWith(".htm")
+                filename.toLowerCase().endsWith(".html") ||
+                filename.toLowerCase().endsWith(".htm"),
               );
               const isComic = Boolean(
                 file.report_type === "comic" ||
-                  filename.toLowerCase().startsWith("comic_") ||
-                  filename.startsWith("漫画_")
+                filename.toLowerCase().startsWith("comic_") ||
+                filename.startsWith("漫画_"),
               );
               return (
                 <div
@@ -197,9 +192,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
                     alignItems: "center",
                     padding: "8px 12px",
                     background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
-                    border: `1px solid ${
-                      isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"
-                    }`,
+                    border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"}`,
                     borderRadius: 4,
                     gap: 8,
                   }}
@@ -215,17 +208,11 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
                     }}
                   >
                     {isComic ? (
-                      <PictureOutlined
-                        style={{ color: "#eb2f96", flexShrink: 0 }}
-                      />
+                      <PictureOutlined style={{ color: "#eb2f96", flexShrink: 0 }} />
                     ) : isHtml ? (
-                      <FileTextOutlined
-                        style={{ color: "#fa8c16", flexShrink: 0 }}
-                      />
+                      <FileTextOutlined style={{ color: "#fa8c16", flexShrink: 0 }} />
                     ) : (
-                      <FileImageOutlined
-                        style={{ color: "#1677ff", flexShrink: 0 }}
-                      />
+                      <FileImageOutlined style={{ color: "#1677ff", flexShrink: 0 }} />
                     )}
                     <Tooltip title={filename} placement="topLeft">
                       <span
@@ -265,10 +252,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
                       </Text>
                     ) : null}
                   </div>
-                  <Space
-                    size="small"
-                    style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                  >
+                  <Space size="small" style={{ flexShrink: 0, whiteSpace: "nowrap" }}>
                     <Button
                       size="small"
                       type="primary"
@@ -277,11 +261,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
                       onClick={() => onPreviewFile(filename, isHtml)}
                       style={{ fontSize: 11, height: 24 }}
                     >
-                      {isComic
-                        ? "预览漫画"
-                        : isHtml
-                        ? "预览 HTML"
-                        : "预览大图"}
+                      {isComic ? "预览漫画" : isHtml ? "预览 HTML" : "预览大图"}
                     </Button>
                     <Button
                       size="small"

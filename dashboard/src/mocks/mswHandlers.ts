@@ -16,7 +16,7 @@ export interface MswHandlerDefinition {
  * 可直接与 msw 的 `http.get`, `http.post`, `http.delete` 或 Vitest/Playwright 绑定。
  */
 export function createMswHandlerDefinitions(
-  basePrefix = "/api/plugins/astrbot_plugin_qq_group_daily_analysis"
+  basePrefix = "/api/plugins/astrbot_plugin_qq_group_daily_analysis",
 ): MswHandlerDefinition[] {
   const definitions: MswHandlerDefinition[] = [];
 
@@ -35,7 +35,7 @@ export function createMswHandlerDefinitions(
       resolver: (req) => {
         return handler(
           (req.query || req.body) as Record<string, unknown> | undefined,
-          req.params
+          req.params,
         ) as MockHandlerResponse;
       },
     });

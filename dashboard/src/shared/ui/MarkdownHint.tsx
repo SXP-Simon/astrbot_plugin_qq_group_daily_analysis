@@ -7,11 +7,7 @@ interface MarkdownHintProps {
   className?: string;
 }
 
-export const MarkdownHint: React.FC<MarkdownHintProps> = ({
-  content,
-  style,
-  className,
-}) => {
+export const MarkdownHint: React.FC<MarkdownHintProps> = ({ content, style, className }) => {
   const { isDark } = useTheme();
 
   if (!content) return null;
@@ -61,13 +57,9 @@ export const MarkdownHint: React.FC<MarkdownHintProps> = ({
                 padding: "1px 5px",
                 margin: "0 2px",
                 borderRadius: 3,
-                background: isDark
-                  ? "rgba(255, 255, 255, 0.08)"
-                  : "rgba(0, 0, 0, 0.06)",
+                background: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)",
                 color: isDark ? "#fca5a5" : "#b91c1c",
-                border: `1px solid ${
-                  isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)"
-                }`,
+                border: `1px solid ${isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)"}`,
               }}
             >
               {codeMatch[1]}

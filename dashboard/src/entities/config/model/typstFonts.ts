@@ -4,18 +4,27 @@ import type { components, operations } from "../../../shared/api/generated/schem
 export type TypstFontStatus = components["schemas"]["TypstFontStatus"];
 export type TypstFontPreset = components["schemas"]["TypstFontPreset"];
 const fontPresetSchema: z.ZodType<TypstFontPreset> = z.object({
-  name: z.string(), download_url: z.string().url(), upstream_url: z.string().url(), cdn_path: z.string().nullable(),
+  name: z.string(),
+  download_url: z.string().url(),
+  upstream_url: z.string().url(),
+  cdn_path: z.string().nullable(),
 });
 export type FontDownloadSource = "cdn" | "github";
 export const FONT_DOWNLOAD_SOURCES = [
   { value: "cdn", label: "CDN 优先（大字库直连）" },
   { value: "github", label: "GitHub Raw 直连（全部字体）" },
 ];
-export type FontTransfer = NonNullable<operations["getDownloadProgress"]["responses"][200]["content"]["application/json"]["data"]>;
+export type FontTransfer = NonNullable<
+  operations["getDownloadProgress"]["responses"][200]["content"]["application/json"]["data"]
+>;
 export const fontTransferSchema: z.ZodType<FontTransfer> = z.object({
-  name: z.string(), url: z.string(), received: z.number().nonnegative(), total: z.number().nullable(),
+  name: z.string(),
+  url: z.string(),
+  received: z.number().nonnegative(),
+  total: z.number().nullable(),
   phase: z.enum(["connecting", "downloading", "validating"]),
-  elapsed_seconds: z.number(), idle_seconds: z.number(),
+  elapsed_seconds: z.number(),
+  idle_seconds: z.number(),
 });
 
 export const typstFontStatusSchema: z.ZodType<TypstFontStatus> = z.object({
@@ -24,7 +33,14 @@ export const typstFontStatusSchema: z.ZodType<TypstFontStatus> = z.object({
   missing: z.array(z.string()),
   ready: z.boolean(),
   presets: z.array(fontPresetSchema).optional(),
-  groups: z.array(z.object({
-    theme: z.string(), required: z.array(z.string()), missing: z.array(z.string()), ready: z.boolean(),
-  })).optional(),
+  groups: z
+    .array(
+      z.object({
+        theme: z.string(),
+        required: z.array(z.string()),
+        missing: z.array(z.string()),
+        ready: z.boolean(),
+      }),
+    )
+    .optional(),
 });

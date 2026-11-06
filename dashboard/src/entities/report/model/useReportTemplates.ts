@@ -6,7 +6,10 @@ type RenderFormat = Parameters<typeof fetchReportTemplates>[0];
 
 /** Load authoritative capabilities and discard results for an obsolete request. */
 export function useReportTemplates(renderFormat: RenderFormat = "all", enabled = true) {
-  const [result, setResult] = useState<{ format: RenderFormat; items: ReportTemplateItem[] } | null>(null);
+  const [result, setResult] = useState<{
+    format: RenderFormat;
+    items: ReportTemplateItem[];
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const sequence = useRef(0);
@@ -27,8 +30,16 @@ export function useReportTemplates(renderFormat: RenderFormat = "all", enabled =
   useEffect(() => {
     const pending = sequence;
     if (enabled) void refresh();
-    return () => { pending.current++; };
+    return () => {
+      pending.current++;
+    };
   }, [enabled, refresh]);
   const ready = enabled && result?.format === renderFormat && !loading;
-  return { templates: ready ? result.items : [], loading: enabled && (!result || loading) && !error, ready, error, refresh };
+  return {
+    templates: ready ? result.items : [],
+    loading: enabled && (!result || loading) && !error,
+    ready,
+    error,
+    refresh,
+  };
 }

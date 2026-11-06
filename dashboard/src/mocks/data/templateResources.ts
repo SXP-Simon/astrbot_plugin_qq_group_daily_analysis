@@ -4,7 +4,7 @@ import type { TemplateResourceStatus } from "../../entities/config/model/templat
 
 // 使用当前主题的真实资源名，仅在演示页面模拟下载，不发起网络请求。
 const themeFiles: Record<string, string[]> = {
-  "HatsuneMiku": [
+  HatsuneMiku: [
     "HatsuneMiku/retouch_2026032802083201.png",
     "HatsuneMiku/retouch_2026032810150449.png",
     "HatsuneMiku/retouch_2026032810143720.png",
@@ -26,13 +26,11 @@ const themeFiles: Record<string, string[]> = {
     "HatsuneMiku/icon-smile.svg",
     "HatsuneMiku/icon-trending-up.svg",
     "HatsuneMiku/icon-type.svg",
-    "HatsuneMiku/icon-users.svg"
+    "HatsuneMiku/icon-users.svg",
   ],
-  "simple": [],
-  "hack": [
-    "hack/globe.svg"
-  ],
-  "maria": [
+  simple: [],
+  hack: ["hack/globe.svg"],
+  maria: [
     "maria/statue_virgin_mary.png",
     "maria/rose_red.png",
     "maria/rose_white.png",
@@ -47,9 +45,9 @@ const themeFiles: Record<string, string[]> = {
     "maria/flourish-quality-right.svg",
     "maria/flourish.svg",
     "maria/github.svg",
-    "maria/participant.svg"
+    "maria/participant.svg",
   ],
-  "ATRI": [
+  ATRI: [
     "ATRI/file/1775130588385_1774881257527_bg1.webp",
     "ATRI/file/1775130626446_1774881312214_atri1.webp",
     "ATRI/file/1775130623112_1774881319340_atri4.webp",
@@ -96,9 +94,9 @@ const themeFiles: Record<string, string[]> = {
     "ATRI/star.svg",
     "ATRI/text.svg",
     "ATRI/users.svg",
-    "ATRI/wand-sparkles.svg"
+    "ATRI/wand-sparkles.svg",
   ],
-  "deepseek_maid": [
+  deepseek_maid: [
     "deepseek_maid/layers/front.png",
     "deepseek_maid/layers/eye-0.png",
     "deepseek_maid/layers/eye-1.png",
@@ -109,9 +107,9 @@ const themeFiles: Record<string, string[]> = {
     "deepseek_maid/brand.svg",
     "deepseek_maid/rice-bowl.svg",
     "deepseek_maid/star-outline.svg",
-    "deepseek_maid/star.svg"
+    "deepseek_maid/star.svg",
   ],
-  "art_nouveau": [
+  art_nouveau: [
     "art_nouveau/bolt.svg",
     "art_nouveau/calendar.svg",
     "art_nouveau/clock.svg",
@@ -127,9 +125,9 @@ const themeFiles: Record<string, string[]> = {
     "art_nouveau/star.svg",
     "art_nouveau/summary.svg",
     "art_nouveau/text.svg",
-    "art_nouveau/token.svg"
+    "art_nouveau/token.svg",
   ],
-  "scrapbook": [
+  scrapbook: [
     "scrapbook/assistant.jpg",
     "scrapbook/chart.svg",
     "scrapbook/document.svg",
@@ -142,16 +140,16 @@ const themeFiles: Record<string, string[]> = {
     "scrapbook/tokens.svg",
     "scrapbook/topics.svg",
     "scrapbook/user.svg",
-    "scrapbook/users.svg"
+    "scrapbook/users.svg",
   ],
-  "format": [],
-  "spring_festival": [],
-  "retro_futurism": [
+  format: [],
+  spring_festival: [],
+  retro_futurism: [
     "retro_futurism/check.svg",
     "retro_futurism/document.svg",
-    "retro_futurism/list.svg"
+    "retro_futurism/list.svg",
   ],
-  "BlueArchive": [
+  BlueArchive: [
     "BlueArchive/arona.png",
     "BlueArchive/arona-review.png",
     "BlueArchive/background.svg",
@@ -163,14 +161,18 @@ const themeFiles: Record<string, string[]> = {
     "BlueArchive/smile.svg",
     "BlueArchive/topics.svg",
     "BlueArchive/user.svg",
-    "BlueArchive/users.svg"
-  ]
+    "BlueArchive/users.svg",
+  ],
 };
 
 export const mockTemplateResources: TemplateResourceStatus = {
   directory: "demo/data/typst/resources",
   groups: Object.entries(themeFiles).map(([theme, names]) => ({
-    theme, files: names.map((name, index) => ({ name, available: index < 2 && names.length > 2 && name !== "scrapbook/assistant.jpg" })),
+    theme,
+    files: names.map((name, index) => ({
+      name,
+      available: index < 2 && names.length > 2 && name !== "scrapbook/assistant.jpg",
+    })),
   })),
 };
 
@@ -200,73 +202,46 @@ const fonts = [
   "LXGWWenKaiMono.ttf",
 ];
 const themeFonts: Record<string, string[]> = {
-  "HatsuneMiku": [
-    "Outfit.ttf",
-    "ShareTechMono.ttf",
-    "Inter.ttf",
-    "cjkFonts_allseto_v1.11.ttf"
-  ],
-  "simple": [],
-  "hack": [
-    "Inter.ttf",
-    "JetBrainsMono.ttf",
-    "LXGWWenKaiMono.ttf"
-  ],
-  "maria": [
+  HatsuneMiku: ["Outfit.ttf", "ShareTechMono.ttf", "Inter.ttf", "cjkFonts_allseto_v1.11.ttf"],
+  simple: [],
+  hack: ["Inter.ttf", "JetBrainsMono.ttf", "LXGWWenKaiMono.ttf"],
+  maria: [
     "NotoSerifSC.ttf",
     "NotoSerifTC.ttf",
     "Cinzel.ttf",
     "CormorantGaramond.ttf",
     "CormorantGaramond-Italic.ttf",
-    "JetBrainsMono.ttf"
+    "JetBrainsMono.ttf",
   ],
-  "ATRI": [
-    "LXGWWenKai.ttf",
-    "LXGWWenKai-Medium.ttf",
-    "LXGWWenKaiMono.ttf"
-  ],
-  "deepseek_maid": [
-    "JetBrainsMono.ttf"
-  ],
-  "art_nouveau": [
+  ATRI: ["LXGWWenKai.ttf", "LXGWWenKai-Medium.ttf", "LXGWWenKaiMono.ttf"],
+  deepseek_maid: ["JetBrainsMono.ttf"],
+  art_nouveau: [
     "NotoSerifSC.ttf",
     "NotoSerifTC.ttf",
     "Cinzel.ttf",
     "CormorantGaramond.ttf",
     "CormorantGaramond-Italic.ttf",
-    "JetBrainsMono.ttf"
-  ],
-  "scrapbook": [
-    "PatrickHand.ttf",
-    "ZCOOLKuaiLe.ttf",
-    "LXGWWenKai.ttf",
-    "LXGWWenKai-Medium.ttf"
-  ],
-  "format": [
-    "Inter.ttf",
-    "NotoSerifSC.ttf",
-    "NotoSerifTC.ttf"
-  ],
-  "spring_festival": [
-    "ZCOOLXiaoWei.ttf",
-    "MaShanZheng.ttf",
-    "NotoSerifSC.ttf",
-    "NotoSerifTC.ttf"
-  ],
-  "retro_futurism": [
-    "Oswald.ttf",
     "JetBrainsMono.ttf",
-    "NotoSerifSC.ttf",
-    "NotoSerifTC.ttf"
   ],
-  "BlueArchive": [
-  ]
+  scrapbook: ["PatrickHand.ttf", "ZCOOLKuaiLe.ttf", "LXGWWenKai.ttf", "LXGWWenKai-Medium.ttf"],
+  format: ["Inter.ttf", "NotoSerifSC.ttf", "NotoSerifTC.ttf"],
+  spring_festival: ["ZCOOLXiaoWei.ttf", "MaShanZheng.ttf", "NotoSerifSC.ttf", "NotoSerifTC.ttf"],
+  retro_futurism: ["Oswald.ttf", "JetBrainsMono.ttf", "NotoSerifSC.ttf", "NotoSerifTC.ttf"],
+  BlueArchive: [],
 };
 export const mockTypstFonts: TypstFontStatus = {
   presets: mockFontPresets,
-  directory: "demo/data/typst/fonts", files: fonts.slice(0, 2), missing: fonts.slice(2), ready: false,
+  directory: "demo/data/typst/fonts",
+  files: fonts.slice(0, 2),
+  missing: fonts.slice(2),
+  ready: false,
   groups: Object.entries(themeFonts).map(([theme, extra]) => {
     const required = [...fonts.slice(0, 5), ...extra];
-    return { theme, required, missing: required.filter(file => !fonts.slice(0, 2).includes(file)), ready: false };
+    return {
+      theme,
+      required,
+      missing: required.filter((file) => !fonts.slice(0, 2).includes(file)),
+      ready: false,
+    };
   }),
 };

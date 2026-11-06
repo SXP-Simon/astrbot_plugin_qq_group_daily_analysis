@@ -22,7 +22,7 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
       .map(
         (l) =>
           l.raw ||
-          `[${l.time_str}] [${l.level}] ${l.location ? `[${l.location}] ` : ""}${l.tag ? `[${l.tag}] ` : ""}${l.message}`
+          `[${l.time_str}] [${l.level}] ${l.location ? `[${l.location}] ` : ""}${l.tag ? `[${l.tag}] ` : ""}${l.message}`,
       )
       .join("\n");
     copyToClipboard(text);
@@ -36,7 +36,7 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
         .map(
           (l) =>
             l.raw ||
-            `[${l.time_str}] [${l.level}] ${l.location ? `[${l.location}] ` : ""}${l.tag ? `[${l.tag}] ` : ""}${l.message}`
+            `[${l.time_str}] [${l.level}] ${l.location ? `[${l.location}] ` : ""}${l.tag ? `[${l.tag}] ` : ""}${l.message}`,
         )
         .join("\n");
       copyToClipboard(text);
@@ -113,10 +113,16 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
                         isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"
                       }`,
                       color: isError
-                        ? isDark ? "#ff7875" : "#cf1322"
+                        ? isDark
+                          ? "#ff7875"
+                          : "#cf1322"
                         : isWarn
-                        ? isDark ? "#ffc069" : "#d46b08"
-                        : isDark ? "#d9d9d9" : "#1e293b",
+                          ? isDark
+                            ? "#ffc069"
+                            : "#d46b08"
+                          : isDark
+                            ? "#d9d9d9"
+                            : "#1e293b",
                     }}
                   >
                     <span
@@ -127,9 +133,7 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
                     >
                       {l.time_str.split(" ")[1]}
                     </span>
-                    <span style={{ marginRight: 6, fontWeight: 600 }}>
-                      [{l.level}]
-                    </span>
+                    <span style={{ marginRight: 6, fontWeight: 600 }}>[{l.level}]</span>
                     {l.tag && (
                       <Tag
                         color={tagColor}

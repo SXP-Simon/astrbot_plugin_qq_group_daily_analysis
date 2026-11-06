@@ -76,7 +76,9 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
         }
       }
     } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : "读取配置信息失败，请检查网络或后端状态");
+      message.error(
+        error instanceof Error ? error.message : "读取配置信息失败，请检查网络或后端状态",
+      );
     } finally {
       setLoading(false);
     }
@@ -172,7 +174,7 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
 
         // 提示人类可读的友好中文错误
         message.error(
-          `【${firstError.groupLabel}】中的「${firstError.fieldLabel}」${firstError.message}，请检查该部分。`
+          `【${firstError.groupLabel}】中的「${firstError.fieldLabel}」${firstError.message}，请检查该部分。`,
         );
 
         // 平滑滚动定位并自动高亮聚焦到错误字段
@@ -185,7 +187,7 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
           if (targetDom) {
             targetDom.scrollIntoView({ behavior: "smooth", block: "center" });
             const focusable = targetDom.querySelector<HTMLElement>(
-              "input, select, textarea, button"
+              "input, select, textarea, button",
             );
             if (focusable) {
               focusable.focus();
@@ -209,12 +211,14 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
         return;
       }
       const normalized = parsed.data;
-      const res = revision ? await savePluginConfig(normalized, revision) : await savePluginConfig(normalized);
+      const res = revision
+        ? await savePluginConfig(normalized, revision)
+        : await savePluginConfig(normalized);
       if (res.success) {
         setRevision(res.revision ?? revision);
         message.success(res.message || "配置已成功保存并生效");
         setOriginalConfig(normalized);
-        setFormData((current) => current === formData ? normalized : current);
+        setFormData((current) => (current === formData ? normalized : current));
         if (onConfigSaved) onConfigSaved();
       } else {
         message.error(res.message || "保存配置失败");
@@ -234,12 +238,15 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
       const items = group.items || {};
 
       const visibleItems = Object.entries(items).filter(([, item]) =>
-        isFieldVisible(item, formData)
+        isFieldVisible(item, formData),
       );
 
       let matchCount = 0;
       if (q) {
-        if (groupDesc.toLowerCase().includes(q) || (group.hint && group.hint.toLowerCase().includes(q))) {
+        if (
+          groupDesc.toLowerCase().includes(q) ||
+          (group.hint && group.hint.toLowerCase().includes(q))
+        ) {
           matchCount += visibleItems.length;
         } else {
           for (const [, item] of visibleItems) {
@@ -281,17 +288,20 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
       .map(([fieldKey, item]) => ({
         key: fieldKey,
         schema: item,
-        value: formData[activeCategory]?.[fieldKey] !== undefined
-          ? formData[activeCategory][fieldKey]
-          : item.default,
+        value:
+          formData[activeCategory]?.[fieldKey] !== undefined
+            ? formData[activeCategory][fieldKey]
+            : item.default,
       }));
   }, [schema, activeCategory, formData, searchQuery]);
 
   const renderingConfig = renderingRuntimeSchema.safeParse(formData.t2i_rendering ?? {});
 
   const templateRequirements = {
-    engine: renderingConfig.success ? renderingConfig.data.template_engine : "html" as const,
-    formats: Array.isArray(formData.basic?.output_format) ? formData.basic.output_format.filter((value): value is string => typeof value === "string") : ["image"],
+    engine: renderingConfig.success ? renderingConfig.data.template_engine : ("html" as const),
+    formats: Array.isArray(formData.basic?.output_format)
+      ? formData.basic.output_format.filter((value): value is string => typeof value === "string")
+      : ["image"],
   };
 
   return {

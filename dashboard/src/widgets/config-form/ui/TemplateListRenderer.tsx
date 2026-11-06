@@ -21,10 +21,7 @@ import {
 } from "@ant-design/icons";
 import { isFieldVisible } from "../../../entities/config/model/visibility";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
-import {
-  AvailableProvider,
-  AvailablePersona,
-} from "../../../entities/config/api/configApi";
+import { AvailableProvider, AvailablePersona } from "../../../entities/config/api/configApi";
 import { FieldRenderer } from "./FieldRenderer";
 import { T2iProbe } from "../../../features/test-t2i/ui/T2iProbe";
 import { TemplateResources } from "../../../features/manage-template-resources/ui/TemplateResources";
@@ -61,15 +58,16 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
       ? (fieldSchema.default as Record<string, unknown>[])
       : [];
 
-  const templates = (fieldSchema.templates as Record<
-    string,
-    {
-      name?: string;
-      description?: string;
-      display_item?: string;
-      items?: Record<string, SchemaFieldItem>;
-    }
-  >) || {};
+  const templates =
+    (fieldSchema.templates as Record<
+      string,
+      {
+        name?: string;
+        description?: string;
+        display_item?: string;
+        items?: Record<string, SchemaFieldItem>;
+      }
+    >) || {};
 
   const templateKeys = Object.keys(templates);
 
@@ -97,7 +95,11 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
 
   // 添加新条目
   const nativePlan = rawList.find((item) => findTemplateKey(item) === "typst");
-  const nativeCdn = String((nativePlan?.cdn_base_url === "__custom__" ? nativePlan?.custom_cdn_base_url : nativePlan?.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL);
+  const nativeCdn = String(
+    (nativePlan?.cdn_base_url === "__custom__"
+      ? nativePlan?.custom_cdn_base_url
+      : nativePlan?.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL,
+  );
 
   const handleAddItem = (templateKey: string) => {
     const tpl = templates[templateKey];
@@ -125,11 +127,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
   };
 
   // 修改条目内字段
-  const handleItemFieldChange = (
-    index: number,
-    subFieldKey: string,
-    subVal: unknown
-  ) => {
+  const handleItemFieldChange = (index: number, subFieldKey: string, subVal: unknown) => {
     const nextList = rawList.map((item, idx) => {
       const tplKey = findTemplateKey(item) || templateKeys[0] || "character";
       if (idx !== index) {
@@ -198,13 +196,9 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
       key: tplKey,
       label: (
         <div>
-          <div style={{ fontWeight: 600, fontSize: 12 }}>
-            {tpl.name || tplKey}
-          </div>
+          <div style={{ fontWeight: 600, fontSize: 12 }}>{tpl.name || tplKey}</div>
           {tpl.description && (
-            <div style={{ fontSize: 11, color: token.colorTextSecondary }}>
-              {tpl.description}
-            </div>
+            <div style={{ fontSize: 11, color: token.colorTextSecondary }}>{tpl.description}</div>
           )}
         </div>
       ),
@@ -234,13 +228,14 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
             const subItems = tpl?.items || {};
             // 旧条目可能缺少新字段，条件显示应和控件一样使用 schema 默认值。
             const itemContext = {
-              ...Object.fromEntries(Object.entries(subItems).map(([key, field]) => [key, field.default])),
+              ...Object.fromEntries(
+                Object.entries(subItems).map(([key, field]) => [key, field.default]),
+              ),
               ...item,
             };
 
             // 标题展示
-            const displayName =
-              String(item.name || tpl?.name || `条目 #${index + 1}`);
+            const displayName = String(item.name || tpl?.name || `条目 #${index + 1}`);
             const priorityVal = item.priority !== undefined ? item.priority : null;
             const isEnable = item.enable !== undefined ? Boolean(item.enable) : true;
 
@@ -320,51 +315,74 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                 </div>
 
                 {/* 条目内部各字段渲染 */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "10px 16px" }}>
-                  {Object.entries(subItems).filter(([, subField]) => isFieldVisible(subField, { item: itemContext })).map(([subKey, subField]) => {
-                    const isFullWidth =
-                      subField.type === "template_list" ||
-                      subField.type === "text" ||
-                      subField.type === "file" ||
-                      subKey.includes("prompt") ||
-                      subKey.includes("image") ||
-                      subKey.includes("url") ||
-                      subKey.includes("key");
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                    gap: "10px 16px",
+                  }}
+                >
+                  {Object.entries(subItems)
+                    .filter(([, subField]) => isFieldVisible(subField, { item: itemContext }))
+                    .map(([subKey, subField]) => {
+                      const isFullWidth =
+                        subField.type === "template_list" ||
+                        subField.type === "text" ||
+                        subField.type === "file" ||
+                        subKey.includes("prompt") ||
+                        subKey.includes("image") ||
+                        subKey.includes("url") ||
+                        subKey.includes("key");
 
-                    return (
-                      <div
-                        key={subKey}
-                        style={{
-                          gridColumn: isFullWidth ? "1 / -1" : "auto",
-                        }}
-                      >
-                        <FieldRenderer
-                          fieldKey={subKey}
-                          fieldSchema={subField}
-                          value={item[subKey] !== undefined ? item[subKey] : subField.default}
-                          providers={providers}
-                          personas={personas}
-                          isSubField={true}
-                          fullKeyPath={`${fullKeyPath || fieldKey}.templates.${itemTemplateKey}.${subKey}`}
-                          onChange={(newSubVal) =>
-                            handleItemFieldChange(index, subKey, newSubVal)
-                          }
-                        />
-                      </div>
-                    );
-                  })}
+                      return (
+                        <div
+                          key={subKey}
+                          style={{
+                            gridColumn: isFullWidth ? "1 / -1" : "auto",
+                          }}
+                        >
+                          <FieldRenderer
+                            fieldKey={subKey}
+                            fieldSchema={subField}
+                            value={item[subKey] !== undefined ? item[subKey] : subField.default}
+                            providers={providers}
+                            personas={personas}
+                            isSubField={true}
+                            fullKeyPath={`${fullKeyPath || fieldKey}.templates.${itemTemplateKey}.${subKey}`}
+                            onChange={(newSubVal) =>
+                              handleItemFieldChange(index, subKey, newSubVal)
+                            }
+                          />
+                        </div>
+                      );
+                    })}
                 </div>
                 {fieldKey === "t2i_rendering_strategies" && (
                   <>
-                  {itemTemplateKey === "typst" && <TypstFonts cdnBaseUrl={String((item.cdn_base_url === "__custom__" ? item.custom_cdn_base_url : item.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL)} />}
-                  <T2iProbe input={{
-                    render_service: itemTemplateKey === "typst" ? "typst" : itemTemplateKey === "custom" ? "custom" : "astrbot",
-                    service_endpoint: item.service_endpoint,
-                    service_token: item.service_token,
-                    timeout: item.timeout,
-                    request_timeout: item.request_timeout,
-                    raster_ppi: item.raster_ppi,
-                  }} />
+                    {itemTemplateKey === "typst" && (
+                      <TypstFonts
+                        cdnBaseUrl={String(
+                          (item.cdn_base_url === "__custom__"
+                            ? item.custom_cdn_base_url
+                            : item.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL,
+                        )}
+                      />
+                    )}
+                    <T2iProbe
+                      input={{
+                        render_service:
+                          itemTemplateKey === "typst"
+                            ? "typst"
+                            : itemTemplateKey === "custom"
+                              ? "custom"
+                              : "astrbot",
+                        service_endpoint: item.service_endpoint,
+                        service_token: item.service_token,
+                        timeout: item.timeout,
+                        request_timeout: item.request_timeout,
+                        raster_ppi: item.raster_ppi,
+                      }}
+                    />
                   </>
                 )}
               </Card>
@@ -376,12 +394,9 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
       {/* 底部添加条目按钮 */}
       {templateKeys.length > 1 ? (
         <Dropdown menu={{ items: menuItems }} placement="bottomLeft" trigger={["click"]}>
-          <Button
-            type="dashed"
-            icon={<PlusOutlined />}
-            style={{ width: "100%" }}
-          >
-            {fieldKey === "t2i_rendering_strategies" ? "添加渲染方案" : "添加配置项"} <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
+          <Button type="dashed" icon={<PlusOutlined />} style={{ width: "100%" }}>
+            {fieldKey === "t2i_rendering_strategies" ? "添加渲染方案" : "添加配置项"}{" "}
+            <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
           </Button>
         </Dropdown>
       ) : templateKeys.length === 1 ? (
@@ -394,7 +409,9 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
           添加 {templates[templateKeys[0]]?.name || "新条目"}
         </Button>
       ) : null}
-      {fieldKey === "t2i_rendering_strategies" && nativePlan && <TemplateResources cdnBaseUrl={nativeCdn} />}
+      {fieldKey === "t2i_rendering_strategies" && nativePlan && (
+        <TemplateResources cdnBaseUrl={nativeCdn} />
+      )}
     </div>
   );
 };

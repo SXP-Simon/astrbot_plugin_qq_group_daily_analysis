@@ -34,9 +34,7 @@ export function useReportsViewModel() {
             group_id: selectedGroup,
             search: search.trim() || undefined,
           }),
-          groups.length === 0
-            ? fetchDistinctGroups().catch(() => [])
-            : Promise.resolve(groups),
+          groups.length === 0 ? fetchDistinctGroups().catch(() => []) : Promise.resolve(groups),
         ]);
         setReports(res.items);
         setTotal(res.total);
@@ -47,7 +45,7 @@ export function useReportsViewModel() {
         if (!silent) setLoading(false);
       }
     },
-    [page, pageSize, selectedGroup, search, groups]
+    [page, pageSize, selectedGroup, search, groups],
   );
 
   const handlePageChange = (newPage: number, newPageSize?: number) => {
@@ -87,8 +85,8 @@ export function useReportsViewModel() {
     try {
       const isHtml = Boolean(
         report.is_html ||
-          report.filename.toLowerCase().endsWith(".html") ||
-          report.filename.toLowerCase().endsWith(".htm")
+        report.filename.toLowerCase().endsWith(".html") ||
+        report.filename.toLowerCase().endsWith(".htm"),
       );
       let href = report.data_url;
       let cleanupBlobUrl: string | null = null;
@@ -202,7 +200,7 @@ export function useReportsViewModel() {
       if (resetPage) setPage(1);
       return loadReports(targetPage, pageSize, silent);
     },
-    [page, pageSize, loadReports]
+    [page, pageSize, loadReports],
   );
 
   return {
@@ -229,5 +227,3 @@ export function useReportsViewModel() {
     downloadReport,
   };
 }
-
-

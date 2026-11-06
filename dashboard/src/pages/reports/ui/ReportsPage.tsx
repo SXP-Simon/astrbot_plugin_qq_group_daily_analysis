@@ -1,15 +1,5 @@
 import React, { useState } from "react";
-import {
-  Card,
-  Table,
-  Empty,
-  Button,
-  Tag,
-  Typography,
-  Space,
-  Tooltip,
-  Skeleton,
-} from "antd";
+import { Card, Table, Empty, Button, Tag, Typography, Space, Tooltip, Skeleton } from "antd";
 import {
   FileImageOutlined,
   FileTextOutlined,
@@ -68,14 +58,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       ellipsis: true,
       render: (fn: string, r: ReportItem) => {
         const isHtml = Boolean(
-          r.is_html ||
-            fn.toLowerCase().endsWith(".html") ||
-            fn.toLowerCase().endsWith(".htm")
+          r.is_html || fn.toLowerCase().endsWith(".html") || fn.toLowerCase().endsWith(".htm"),
         );
         const isComic = Boolean(
-          r.is_comic ||
-            fn.toLowerCase().startsWith("comic_") ||
-            fn.startsWith("漫画_")
+          r.is_comic || fn.toLowerCase().startsWith("comic_") || fn.startsWith("漫画_"),
         );
         return (
           <Tooltip title={fn} placement="topLeft">
@@ -92,17 +78,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
               }}
             >
               {isComic ? (
-                <PictureOutlined
-                  style={{ marginRight: 6, color: "#eb2f96", flexShrink: 0 }}
-                />
+                <PictureOutlined style={{ marginRight: 6, color: "#eb2f96", flexShrink: 0 }} />
               ) : isHtml ? (
-                <FileTextOutlined
-                  style={{ marginRight: 6, color: "#fa8c16", flexShrink: 0 }}
-                />
+                <FileTextOutlined style={{ marginRight: 6, color: "#fa8c16", flexShrink: 0 }} />
               ) : (
-                <FileImageOutlined
-                  style={{ marginRight: 6, color: "#1677ff", flexShrink: 0 }}
-                />
+                <FileImageOutlined style={{ marginRight: 6, color: "#1677ff", flexShrink: 0 }} />
               )}
               {fn}
             </span>
@@ -118,22 +98,18 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       render: (_: boolean, r: ReportItem) => {
         const isHtml = Boolean(
           r.is_html ||
-            r.filename.toLowerCase().endsWith(".html") ||
-            r.filename.toLowerCase().endsWith(".htm")
+          r.filename.toLowerCase().endsWith(".html") ||
+          r.filename.toLowerCase().endsWith(".htm"),
         );
         const isComic = Boolean(
           r.is_comic ||
-            r.filename.toLowerCase().startsWith("comic_") ||
-            r.filename.startsWith("漫画_")
+          r.filename.toLowerCase().startsWith("comic_") ||
+          r.filename.startsWith("漫画_"),
         );
         if (isComic) {
           return <Tag color="magenta">群漫画</Tag>;
         }
-        return isHtml ? (
-          <Tag color="orange">交互式 HTML</Tag>
-        ) : (
-          <Tag color="blue">长图海报</Tag>
-        );
+        return isHtml ? <Tag color="orange">交互式 HTML</Tag> : <Tag color="blue">长图海报</Tag>;
       },
     },
     {
@@ -160,9 +136,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       width: 110,
       render: (platform: string) => (
         <Tag style={{ margin: 0 }}>
-          {!platform || platform === "auto" || platform === "default"
-            ? "-"
-            : platform}
+          {!platform || platform === "auto" || platform === "default" ? "-" : platform}
         </Tag>
       ),
     },
@@ -224,12 +198,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       key: "modified_at",
       width: 160,
       sorter: (a: ReportItem, b: ReportItem) =>
-        (a.modified_at || a.created_at || 0) -
-        (b.modified_at || b.created_at || 0),
+        (a.modified_at || a.created_at || 0) - (b.modified_at || b.created_at || 0),
       defaultSortOrder: "descend" as const,
-      render: (ts: number) => (
-        <span style={{ fontSize: 12 }}>{formatTimestamp(ts)}</span>
-      ),
+      render: (ts: number) => <span style={{ fontSize: 12 }}>{formatTimestamp(ts)}</span>,
     },
     {
       title: "操作",
@@ -239,8 +210,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       render: (_: unknown, r: ReportItem) => {
         const isComic = Boolean(
           r.is_comic ||
-            r.filename.toLowerCase().startsWith("comic_") ||
-            r.filename.startsWith("漫画_")
+          r.filename.toLowerCase().startsWith("comic_") ||
+          r.filename.startsWith("漫画_"),
         );
         return (
           <Space size="small">
@@ -266,11 +237,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
                 换模板
               </Button>
             )}
-            <Button
-              size="small"
-              icon={<DownloadOutlined />}
-              onClick={() => downloadReport(r)}
-            >
+            <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadReport(r)}>
               下载
             </Button>
           </Space>

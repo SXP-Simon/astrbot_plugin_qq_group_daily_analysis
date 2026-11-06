@@ -13,7 +13,9 @@ export function useTemplateCdnProbe(baseUrl: string) {
     setLoading(false);
     setResult(null);
     setError("");
-    return () => { sequence.current += 1; };
+    return () => {
+      sequence.current += 1;
+    };
   }, [baseUrl]);
 
   const run = async () => {

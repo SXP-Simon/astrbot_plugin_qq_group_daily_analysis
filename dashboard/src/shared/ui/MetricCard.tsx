@@ -51,7 +51,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({
 
         {loading ? (
           <div style={{ margin: "3px 0 2px 0" }}>
-            <Skeleton.Input active size="small" style={{ width: "70%", height: 22, minWidth: 64, borderRadius: 4 }} />
+            <Skeleton.Input
+              active
+              size="small"
+              style={{ width: "70%", height: 22, minWidth: 64, borderRadius: 4 }}
+            />
           </div>
         ) : (
           <Statistic
@@ -83,7 +87,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({
           }}
         >
           {loading ? (
-            <Skeleton.Input active size="small" style={{ width: "88%", height: 12, borderRadius: 2 }} />
+            <Skeleton.Input
+              active
+              size="small"
+              style={{ width: "88%", height: 12, borderRadius: 2 }}
+            />
           ) : (
             subTitle || "\u00A0"
           )}

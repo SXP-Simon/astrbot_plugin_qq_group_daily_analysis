@@ -15,11 +15,7 @@ import {
   Empty,
   theme,
 } from "antd";
-import {
-  DeleteOutlined,
-  EyeOutlined,
-  SaveOutlined,
-} from "@ant-design/icons";
+import { DeleteOutlined, EyeOutlined, SaveOutlined } from "@ant-design/icons";
 import { formatBytes, formatTimestamp } from "../../../../shared/lib/formatters";
 import { CheckpointItem } from "../../../../entities/plugin-data/model/types";
 import { usePluginDataViewModel } from "../../model/usePluginDataViewModel";
@@ -46,9 +42,23 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
     ckptFilterStage,
   } = vm;
 
-  const selection = useRecordSelection(vm.checkpoints.map(item => ({ kind: "checkpoint", group_id: item.group_id, date_str: item.date_str, stage_name: item.stage_name, trace_id: item.trace_id || "" })), () => { void vm.loadCheckpoints(); void vm.refreshCheckpointGroups(); });
+  const selection = useRecordSelection(
+    vm.checkpoints.map((item) => ({
+      kind: "checkpoint",
+      group_id: item.group_id,
+      date_str: item.date_str,
+      stage_name: item.stage_name,
+      trace_id: item.trace_id || "",
+    })),
+    () => {
+      void vm.loadCheckpoints();
+      void vm.refreshCheckpointGroups();
+    },
+  );
   const clearSelection = selection.clear;
-  useEffect(() => { clearSelection(); }, [vm.ckptFilterGroup, vm.ckptFilterDate, vm.ckptFilterStage, clearSelection]);
+  useEffect(() => {
+    clearSelection();
+  }, [vm.ckptFilterGroup, vm.ckptFilterDate, vm.ckptFilterStage, clearSelection]);
   const ckptColumns = [
     {
       title: "群聊号码",
@@ -105,10 +115,7 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
         }
         return (
           <Tooltip title={`完整任务 Trace ID: ${tid}`}>
-            <Tag
-              color="geekblue"
-              style={{ fontSize: 11, margin: 0, ...SANS_NUM_STYLE }}
-            >
+            <Tag color="geekblue" style={{ fontSize: 11, margin: 0, ...SANS_NUM_STYLE }}>
               {tid.length > 14 ? `${tid.slice(0, 14)}...` : tid}
             </Tag>
           </Tooltip>
@@ -167,7 +174,21 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
           >
             产物 JSON
           </Button>
-          <Button size="small" type="link" onClick={() => setManagedLocator({ kind: "checkpoint", group_id: item.group_id, date_str: item.date_str, stage_name: item.stage_name, trace_id: item.trace_id || "" })}>管理</Button>
+          <Button
+            size="small"
+            type="link"
+            onClick={() =>
+              setManagedLocator({
+                kind: "checkpoint",
+                group_id: item.group_id,
+                date_str: item.date_str,
+                stage_name: item.stage_name,
+                trace_id: item.trace_id || "",
+              })
+            }
+          >
+            管理
+          </Button>
           <Popconfirm
             title="确认删除该阶段快照？"
             description="删除后将无法基于此阶段进行断点续跑或零Token重绘。"
@@ -180,7 +201,7 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
                 item.group_id,
                 item.date_str,
                 item.stage_name,
-                item.trace_id
+                item.trace_id,
               )
             }
           >
@@ -210,9 +231,7 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
         title={
           <Space size={8}>
             <SaveOutlined style={{ color: "#2563eb" }} />
-            <span style={{ fontSize: 13, fontWeight: 600 }}>
-              阶段产物快照 (Checkpoint) 列表
-            </span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>阶段产物快照 (Checkpoint) 列表</span>
             <Tag color="blue" style={{ fontSize: 11 }}>
               共 {checkpointsTotal} 条记录
             </Tag>
@@ -220,12 +239,34 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
         }
       >
         <Space direction="vertical" style={{ width: "100%", marginBottom: 12 }}>
-        <RecordSelectionActions vm={selection} label="阶段快照" />
-      </Space>
-      <ManagedRecordDialog locator={managedLocator} onClose={() => { setManagedLocator(null); }} onChanged={() => { void vm.loadCheckpoints(); void vm.refreshCheckpointGroups(); }} />
-      <Table<CheckpointItem>
-          rowKey={item => recordKey({ kind: "checkpoint", group_id: item.group_id, date_str: item.date_str, stage_name: item.stage_name, trace_id: item.trace_id || "" })}
-          rowSelection={{ selectedRowKeys: selection.keys, onChange: selection.select, preserveSelectedRowKeys: true, getCheckboxProps: () => ({ disabled: selection.busy }) }}
+          <RecordSelectionActions vm={selection} label="阶段快照" />
+        </Space>
+        <ManagedRecordDialog
+          locator={managedLocator}
+          onClose={() => {
+            setManagedLocator(null);
+          }}
+          onChanged={() => {
+            void vm.loadCheckpoints();
+            void vm.refreshCheckpointGroups();
+          }}
+        />
+        <Table<CheckpointItem>
+          rowKey={(item) =>
+            recordKey({
+              kind: "checkpoint",
+              group_id: item.group_id,
+              date_str: item.date_str,
+              stage_name: item.stage_name,
+              trace_id: item.trace_id || "",
+            })
+          }
+          rowSelection={{
+            selectedRowKeys: selection.keys,
+            onChange: selection.select,
+            preserveSelectedRowKeys: true,
+            getCheckboxProps: () => ({ disabled: selection.busy }),
+          }}
           columns={ckptColumns}
           dataSource={checkpoints}
           loading={loadingCheckpoints}
@@ -240,13 +281,7 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({ vm }) => {
             pageSizeOptions: ["10", "20", "50", "100"],
             showTotal: (total) => `共 ${total} 条快照`,
             onChange: (page, pageSize) => {
-              vm.loadCheckpoints(
-                page,
-                pageSize,
-                ckptFilterGroup,
-                ckptFilterDate,
-                ckptFilterStage
-              );
+              vm.loadCheckpoints(page, pageSize, ckptFilterGroup, ckptFilterDate, ckptFilterStage);
             },
           }}
           locale={{

@@ -37,7 +37,7 @@ export async function fetchMetricsSummary(): Promise<MetricsSummary> {
 
 export async function fetchAnalyticsTrends(
   granularity: "day" | "hour" = "day",
-  rangeCount: number = 14
+  rangeCount: number = 14,
 ): Promise<AnalyticsTrendsResponse | null> {
   const res = await apiGet<AnalyticsTrendsResponse>("metrics/trends", {
     granularity,
@@ -49,4 +49,3 @@ export async function fetchAnalyticsTrends(
   }
   return null;
 }
-

@@ -16,7 +16,7 @@ describe("活跃任务看板小部件 (ActiveTaskBoard Widget)", () => {
         onCancelTask={handleCancel}
         onOpenTrigger={handleOpenTrigger}
         onViewTrace={handleViewTrace}
-      />
+      />,
     );
 
     expect(screen.getByText(/正在执行中的分析任务/i)).toBeInTheDocument();
@@ -36,7 +36,7 @@ describe("活跃任务看板小部件 (ActiveTaskBoard Widget)", () => {
         onCancelTask={handleCancel}
         onOpenTrigger={handleOpenTrigger}
         onViewTrace={handleViewTrace}
-      />
+      />,
     );
 
     const cancelButtons = screen.getAllByRole("button", { name: /中止|取消/i });

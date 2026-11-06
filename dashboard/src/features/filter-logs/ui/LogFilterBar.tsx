@@ -76,7 +76,10 @@ export const LogFilterBar: React.FC<LogFilterBarProps> = ({
             { label: "全部级别", value: undefined },
             {
               label: (
-                <Tag color="processing" style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px" }}>
+                <Tag
+                  color="processing"
+                  style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px" }}
+                >
                   INFO
                 </Tag>
               ),
@@ -84,7 +87,10 @@ export const LogFilterBar: React.FC<LogFilterBarProps> = ({
             },
             {
               label: (
-                <Tag color="warning" style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px" }}>
+                <Tag
+                  color="warning"
+                  style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px" }}
+                >
                   WARNING
                 </Tag>
               ),
@@ -92,7 +98,10 @@ export const LogFilterBar: React.FC<LogFilterBarProps> = ({
             },
             {
               label: (
-                <Tag color="error" style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px" }}>
+                <Tag
+                  color="error"
+                  style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px" }}
+                >
                   ERROR
                 </Tag>
               ),
@@ -100,7 +109,15 @@ export const LogFilterBar: React.FC<LogFilterBarProps> = ({
             },
             {
               label: (
-                <Tag style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px", color: isDark ? "#8c8c8c" : "#595959" }}>
+                <Tag
+                  style={{
+                    margin: 0,
+                    fontSize: 11,
+                    padding: "0 4px",
+                    lineHeight: "18px",
+                    color: isDark ? "#8c8c8c" : "#595959",
+                  }}
+                >
                   DEBUG
                 </Tag>
               ),
@@ -135,7 +152,14 @@ export const LogFilterBar: React.FC<LogFilterBarProps> = ({
                     >
                       {t.key}
                     </Tag>
-                    <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {t.label}
                     </span>
                   </div>
@@ -147,11 +171,7 @@ export const LogFilterBar: React.FC<LogFilterBarProps> = ({
         />
 
         <Space size={4}>
-          <Switch
-            size="small"
-            checked={autoRefresh}
-            onChange={onAutoRefreshChange}
-          />
+          <Switch size="small" checked={autoRefresh} onChange={onAutoRefreshChange} />
           <span style={{ fontSize: 12, color: isDark ? "#bfbfbf" : "#595959" }}>
             {autoRefresh ? (
               <span>
@@ -172,20 +192,11 @@ export const LogFilterBar: React.FC<LogFilterBarProps> = ({
           </Button>
         </Tooltip>
 
-        <Button
-          size="small"
-          icon={<ReloadOutlined spin={loading} />}
-          onClick={onRefresh}
-        >
+        <Button size="small" icon={<ReloadOutlined spin={loading} />} onClick={onRefresh}>
           刷新
         </Button>
 
-        <Button
-          size="small"
-          danger
-          icon={<DeleteOutlined />}
-          onClick={onClear}
-        >
+        <Button size="small" danger icon={<DeleteOutlined />} onClick={onClear}>
           清空
         </Button>
       </Space>

@@ -38,7 +38,12 @@ export function setDevBridgeMode(mode: DevBridgeMode) {
 /**
  * 将路由与参数解析分发至 Mock Handlers
  */
-function matchMockHandler(method: string, path: string, params?: Record<string, unknown>, body?: unknown) {
+function matchMockHandler(
+  method: string,
+  path: string,
+  params?: Record<string, unknown>,
+  body?: unknown,
+) {
   const cleanPath = path.replace(/^\/+/, "");
   const targetKey = `${method.toUpperCase()} ${cleanPath}`;
 
@@ -89,12 +94,14 @@ export async function devFetchContext(): Promise<AstrBotContext> {
 
 export async function devApiGet<T = unknown>(
   path: string,
-  params?: Record<string, unknown>
+  params?: Record<string, unknown>,
 ): Promise<ApiResponse<T> | null> {
   const mode = getDevBridgeMode();
   if (mode === "proxy") {
     try {
-      const search = params ? `?${new URLSearchParams(params as Record<string, string>).toString()}` : "";
+      const search = params
+        ? `?${new URLSearchParams(params as Record<string, string>).toString()}`
+        : "";
       const res = await fetch(`${PLUGIN_BASE_PATH}/${path.replace(/^\/+/, "")}${search}`);
       return (await res.json()) as ApiResponse<T>;
     } catch (err) {
@@ -111,7 +118,7 @@ export async function devApiGet<T = unknown>(
 
 export async function devApiPost<T = unknown>(
   path: string,
-  body?: unknown
+  body?: unknown,
 ): Promise<ApiResponse<T> | null> {
   const mode = getDevBridgeMode();
   if (mode === "proxy") {
@@ -132,13 +139,23 @@ export async function devApiPost<T = unknown>(
   await new Promise((resolve) => setTimeout(resolve, 50));
   // 下载保留可操作的等待窗口，让演示模式也能检查取消及部分完成状态。
   if (["config/typst-fonts/download", "config/template-resources/download"].includes(path)) {
-    const download = typeof body === "object" && body !== null ? body as Record<string, unknown> : {};
+    const download =
+      typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
     const id = typeof download.download_id === "string" ? download.download_id : "";
-    if (path === "config/typst-fonts/download" && id) mockFontDownloads.set(id, { name: String(download.name), source: String(download.source || "cdn"), started: Date.now() });
+    if (path === "config/typst-fonts/download" && id)
+      mockFontDownloads.set(id, {
+        name: String(download.name),
+        source: String(download.source || "cdn"),
+        started: Date.now(),
+      });
     try {
-      await new Promise(resolve => setTimeout(resolve, path === "config/typst-fonts/download" ? 1600 : 800));
+      await new Promise((resolve) =>
+        setTimeout(resolve, path === "config/typst-fonts/download" ? 1600 : 800),
+      );
       return matchMockHandler("POST", path, undefined, body) as ApiResponse<T>;
-    } finally { if (id) mockFontDownloads.delete(id); }
+    } finally {
+      if (id) mockFontDownloads.delete(id);
+    }
   }
   const res = matchMockHandler("POST", path, undefined, body);
   return res as ApiResponse<T>;
@@ -152,10 +169,14 @@ export async function devApiUpload(path: string, file: File): Promise<unknown> {
     const response = await fetch(`${PLUGIN_BASE_PATH}/${path}`, { method: "POST", body });
     return await response.json();
   }
-  await new Promise(resolve => setTimeout(resolve, 150));
+  await new Promise((resolve) => setTimeout(resolve, 150));
   const matched = /^plugin-data\/files\/upload\/([^/]+)\/(\d+)$/.exec(path);
   if (!matched) throw new Error("未知上传路径");
-  return matchMockHandler("POST", "plugin-data/files/upload", undefined, { download_id: matched[1], offset: Number(matched[2]), chunk_bytes: file.size });
+  return matchMockHandler("POST", "plugin-data/files/upload", undefined, {
+    download_id: matched[1],
+    offset: Number(matched[2]),
+    chunk_bytes: file.size,
+  });
 }
 
 export function devSubscribeSSE(handlers: {

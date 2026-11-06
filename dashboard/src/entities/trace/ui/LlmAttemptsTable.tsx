@@ -10,10 +10,10 @@ const AREA_NAME_MAP: Record<string, string> = {
   user_titles: "用户称号",
   golden_quotes: "金句",
   chat_quality: "聊天质量",
-  "话题分析": "话题",
-  "群友画像": "用户称号",
-  "群聊金句": "金句",
-  "聊天质量": "聊天质量",
+  话题分析: "话题",
+  群友画像: "用户称号",
+  群聊金句: "金句",
+  聊天质量: "聊天质量",
   group_sentiment: "情感分析",
   activity_prediction: "活跃预测",
   comic: "群漫画生成",
@@ -71,8 +71,8 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
           const badgeText = isFallback
             ? `降级 #${String(att.attempt || i + 1)}`
             : isRetry
-            ? `输出解析校正 #${retryIdx}`
-            : `调用 #${String(att.attempt || i + 1)}`;
+              ? `输出解析校正 #${retryIdx}`
+              : `调用 #${String(att.attempt || i + 1)}`;
 
           return (
             <div
@@ -80,9 +80,7 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
               style={{
                 padding: "6px 8px",
                 borderBottom:
-                  i < attempts.length - 1
-                    ? `1px solid ${isDark ? "#21262d" : "#f1f5f9"}`
-                    : "none",
+                  i < attempts.length - 1 ? `1px solid ${isDark ? "#21262d" : "#f1f5f9"}` : "none",
                 fontSize: 11,
               }}
             >
@@ -102,16 +100,30 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
                       fontSize: 10,
                       padding: "1px 5px",
                       borderRadius: 3,
-                      background: (isFallback || isRetry)
-                        ? (isDark ? "rgba(217, 119, 6, 0.15)" : "#fffbeb")
-                        : (isDark ? "rgba(37, 99, 235, 0.12)" : "#eff6ff"),
-                      color: (isFallback || isRetry)
-                        ? (isDark ? "#fbbf24" : "#b45309")
-                        : (isDark ? "#60a5fa" : "#1d4ed8"),
+                      background:
+                        isFallback || isRetry
+                          ? isDark
+                            ? "rgba(217, 119, 6, 0.15)"
+                            : "#fffbeb"
+                          : isDark
+                            ? "rgba(37, 99, 235, 0.12)"
+                            : "#eff6ff",
+                      color:
+                        isFallback || isRetry
+                          ? isDark
+                            ? "#fbbf24"
+                            : "#b45309"
+                          : isDark
+                            ? "#60a5fa"
+                            : "#1d4ed8",
                       border: `1px solid ${
-                        (isFallback || isRetry)
-                          ? (isDark ? "rgba(217, 119, 6, 0.3)" : "#fde68a")
-                          : (isDark ? "rgba(37, 99, 235, 0.25)" : "#bfdbfe")
+                        isFallback || isRetry
+                          ? isDark
+                            ? "rgba(217, 119, 6, 0.3)"
+                            : "#fde68a"
+                          : isDark
+                            ? "rgba(37, 99, 235, 0.25)"
+                            : "#bfdbfe"
                       }`,
                     }}
                   >
@@ -120,7 +132,10 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
                   <span style={{ fontWeight: 500, color: isDark ? "#c9d1d9" : "#1e293b" }}>
                     {areaName}
                   </span>
-                  <span className="font-mono" style={{ color: isDark ? "#8b949e" : "#64748b", fontSize: 11 }}>
+                  <span
+                    className="font-mono"
+                    style={{ color: isDark ? "#8b949e" : "#64748b", fontSize: 11 }}
+                  >
                     {String(att.provider_id || "default")}
                     {att.model &&
                     String(att.model) !== String(att.provider_id) &&
@@ -132,7 +147,10 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
 
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {att.duration_ms !== undefined && (
-                    <span className="font-mono" style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b" }}>
+                    <span
+                      className="font-mono"
+                      style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b" }}
+                    >
                       {Number(att.duration_ms) < 1000
                         ? `${att.duration_ms}ms`
                         : `${(Number(att.duration_ms) / 1000).toFixed(1)}s`}
@@ -145,15 +163,27 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
                       borderRadius: 3,
                       fontWeight: 500,
                       background: isSuccess
-                        ? (isDark ? "rgba(22, 163, 74, 0.12)" : "#f0fdf4")
-                        : (isDark ? "rgba(220, 38, 38, 0.12)" : "#fef2f2"),
+                        ? isDark
+                          ? "rgba(22, 163, 74, 0.12)"
+                          : "#f0fdf4"
+                        : isDark
+                          ? "rgba(220, 38, 38, 0.12)"
+                          : "#fef2f2",
                       color: isSuccess
-                        ? (isDark ? "#4ade80" : "#15803d")
-                        : (isDark ? "#f87171" : "#b91c1c"),
+                        ? isDark
+                          ? "#4ade80"
+                          : "#15803d"
+                        : isDark
+                          ? "#f87171"
+                          : "#b91c1c",
                       border: `1px solid ${
                         isSuccess
-                          ? (isDark ? "rgba(22, 163, 74, 0.25)" : "#bbf7d0")
-                          : (isDark ? "rgba(220, 38, 38, 0.25)" : "#fecaca")
+                          ? isDark
+                            ? "rgba(22, 163, 74, 0.25)"
+                            : "#bbf7d0"
+                          : isDark
+                            ? "rgba(220, 38, 38, 0.25)"
+                            : "#fecaca"
                       }`,
                     }}
                   >

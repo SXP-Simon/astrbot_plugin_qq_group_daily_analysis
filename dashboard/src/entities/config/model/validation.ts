@@ -24,10 +24,7 @@ const TIME_REGEX = /^([01]?\d|2[0-3]):[0-5]\d$/;
 /**
  * 为单个 Schema 字段构建对应的 Zod 校验器
  */
-export function buildFieldZodSchema(
-  fieldKey: string,
-  field: SchemaFieldItem
-): z.ZodType {
+export function buildFieldZodSchema(fieldKey: string, field: SchemaFieldItem): z.ZodType {
   if (fieldKey === "cdn_base_url") {
     return cdnBaseUrlSchema.optional();
   }
@@ -228,7 +225,7 @@ export function buildFieldZodSchema(
 export function validateSingleFieldWithZod(
   fieldKey: string,
   field: SchemaFieldItem,
-  value: unknown
+  value: unknown,
 ): string | null {
   const validator = buildFieldZodSchema(fieldKey, field);
   const result = validator.safeParse(value);
@@ -243,7 +240,7 @@ export function validateSingleFieldWithZod(
  */
 export function validateConfigWithZod(
   formData: Record<string, Record<string, unknown>>,
-  schema: PluginSchema
+  schema: PluginSchema,
 ): ConfigValidationResult {
   const errors: ConfigValidationError[] = [];
   const errorMap: Record<string, Record<string, string>> = {};
@@ -258,8 +255,7 @@ export function validateConfigWithZod(
       if (field.invisible || field.hidden) return;
 
       const fieldLabel = field.description || fieldKey;
-      const value =
-        groupData[fieldKey] !== undefined ? groupData[fieldKey] : field.default;
+      const value = groupData[fieldKey] !== undefined ? groupData[fieldKey] : field.default;
       const domId = `cfg-field-${groupKey}-${fieldKey}`;
 
       // 递归处理嵌套 object 字段
@@ -270,7 +266,10 @@ export function validateConfigWithZod(
         !Array.isArray(field.items)
       ) {
         const subItems = field.items as Record<string, SchemaFieldItem>;
-        const objVal = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+        const objVal = (typeof value === "object" && value !== null ? value : {}) as Record<
+          string,
+          unknown
+        >;
 
         Object.entries(subItems).forEach(([subKey, subField]) => {
           if (subField.invisible || subField.hidden) return;

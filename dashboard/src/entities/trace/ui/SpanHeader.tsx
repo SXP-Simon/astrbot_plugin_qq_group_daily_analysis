@@ -1,11 +1,6 @@
 import React from "react";
 import { Tag, Progress, Space, Tooltip, theme } from "antd";
-import {
-  SyncOutlined,
-  WarningOutlined,
-  DownOutlined,
-  RightOutlined,
-} from "@ant-design/icons";
+import { SyncOutlined, WarningOutlined, DownOutlined, RightOutlined } from "@ant-design/icons";
 import { resolveSpanOutcome } from "../model/spanOutcome";
 import { getStageSlaThreshold } from "../model/sla";
 import { formatDuration, formatStageName } from "../../../shared/lib/formatters";
@@ -48,9 +43,8 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   const durationPct = isRunning
     ? 100
     : Math.min(100, Math.max(0, (duration / Math.max(1, totalDurationMs)) * 100));
-  const durationPercentLabel = durationPct > 0 && durationPct < 0.1
-    ? "<0.1"
-    : durationPct.toFixed(1).replace(/\.0$/, "");
+  const durationPercentLabel =
+    durationPct > 0 && durationPct < 0.1 ? "<0.1" : durationPct.toFixed(1).replace(/\.0$/, "");
 
   const { thresholdMs, description: slaDesc } = getStageSlaThreshold(stageName);
   const isSlaExceeded = !isRunning && !isCancelled && duration > thresholdMs;
@@ -97,7 +91,9 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           )}
           <span style={{ fontWeight: 600, fontSize: 13, color: token.colorText }}>
             {formatStageName(stageName)}
-            {stageName === "IMAGE_RENDER_ATTEMPT" && typeof payload?.strategy_name === "string" && <span style={{ fontWeight: 400 }}> · {payload.strategy_name}</span>}
+            {stageName === "IMAGE_RENDER_ATTEMPT" && typeof payload?.strategy_name === "string" && (
+              <span style={{ fontWeight: 400 }}> · {payload.strategy_name}</span>
+            )}
           </span>
           {hasChildren && <Tag style={{ margin: 0, fontSize: 10 }}>含子阶段</Tag>}
           {isSlaExceeded && (
@@ -115,7 +111,13 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
 
         <Space size={6}>
           {!isRunning && (
-            <Tooltip title={parentStageName ? `相对于「${formatStageName(parentStageName)}」的耗时，父子阶段不能重复累加` : "相对于本次任务的总耗时"}>
+            <Tooltip
+              title={
+                parentStageName
+                  ? `相对于「${formatStageName(parentStageName)}」的耗时，父子阶段不能重复累加`
+                  : "相对于本次任务的总耗时"
+              }
+            >
               <span style={{ fontSize: 11, color: token.colorTextSecondary, whiteSpace: "nowrap" }}>
                 {parentStageName ? "占父阶段" : "占总耗时"} {durationPercentLabel}%
               </span>
@@ -134,12 +136,12 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
             {isCancelled
               ? `已取消 (${formatDuration(durationMs ?? 0)})`
               : isRunning
-              ? `执行中 (${formatDuration(duration)})`
-              : isWarning
-              ? `警告 (${formatDuration(durationMs ?? 0)})`
-              : isFailed
-              ? `失败 (${formatDuration(durationMs ?? 0)})`
-              : formatDuration(durationMs ?? 0)}
+                ? `执行中 (${formatDuration(duration)})`
+                : isWarning
+                  ? `警告 (${formatDuration(durationMs ?? 0)})`
+                  : isFailed
+                    ? `失败 (${formatDuration(durationMs ?? 0)})`
+                    : formatDuration(durationMs ?? 0)}
           </Tag>
         </Space>
       </div>

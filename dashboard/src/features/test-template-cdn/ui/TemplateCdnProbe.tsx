@@ -19,15 +19,19 @@ export function TemplateCdnProbe({ baseUrl }: { baseUrl: string }) {
         <Alert
           type={result.usable ? "success" : "warning"}
           showIcon
-          message={result.usable
-            ? "测试链接都能访问，可以保存后试生成报告了"
-            : `${passed} / ${result.checks.length} 个链接确认可访问，其他结果请看下方说明`}
+          message={
+            result.usable
+              ? "测试链接都能访问，可以保存后试生成报告了"
+              : `${passed} / ${result.checks.length} 个链接确认可访问，其他结果请看下方说明`
+          }
           description={
             <div style={{ overflowWrap: "anywhere" }}>
               <div>这次测试的地址：{result.base_url}</div>
               {result.checks.map((check) => (
                 <div key={check.id} style={{ marginTop: 12 }}>
-                  <strong>{check.label}：{check.success ? "可访问" : "未确认可访问"}</strong>
+                  <strong>
+                    {check.label}：{check.success ? "可访问" : "未确认可访问"}
+                  </strong>
                   <div>{check.description}</div>
                   {check.error && <div>{check.error}</div>}
                   <details style={{ marginTop: 4 }}>
@@ -36,7 +40,9 @@ export function TemplateCdnProbe({ baseUrl }: { baseUrl: string }) {
                       用时 {(check.elapsed_ms / 1000).toFixed(2)} 秒
                       {check.status_code !== null && ` · HTTP ${check.status_code}`}
                     </div>
-                    <a href={check.url} target="_blank" rel="noreferrer">{check.url}</a>
+                    <a href={check.url} target="_blank" rel="noreferrer">
+                      {check.url}
+                    </a>
                   </details>
                 </div>
               ))}

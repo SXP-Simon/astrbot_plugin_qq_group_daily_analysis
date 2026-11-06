@@ -38,9 +38,7 @@ export const IncrementalCursorCards: React.FC<IncrementalCursorCardsProps> = ({
         <MetricCard
           title="最新包含消息时间"
           value={
-            cursor.last_message_timestamp > 0
-              ? formatTimestamp(cursor.last_message_timestamp)
-              : "-"
+            cursor.last_message_timestamp > 0 ? formatTimestamp(cursor.last_message_timestamp) : "-"
           }
           prefix={<CheckCircleOutlined style={{ color: "#52c41a" }} />}
           subTitle="最近批次涵盖的最新消息戳"

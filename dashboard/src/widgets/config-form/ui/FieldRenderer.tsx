@@ -26,7 +26,10 @@ import {
   ExclamationCircleFilled,
 } from "@ant-design/icons";
 import { resolveOptionLabel } from "../../../entities/config/model/optionLabel";
-import { CUSTOM_RESOURCE_OPTION, TEMPLATE_CDN_PRESETS } from "../../../entities/config/model/renderingConfig";
+import {
+  CUSTOM_RESOURCE_OPTION,
+  TEMPLATE_CDN_PRESETS,
+} from "../../../entities/config/model/renderingConfig";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
 import {
   AvailableProvider,
@@ -174,16 +177,31 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   // 渲染不同的表单控件
   const renderControl = () => {
     if (fieldKey === "service_token") {
-      return <Input.Password aria-label={title} value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" />;
+      return (
+        <Input.Password
+          aria-label={title}
+          value={value === undefined ? "" : String(value)}
+          onChange={(event) => onChange(event.target.value)}
+          autoComplete="new-password"
+        />
+      );
     }
     if (["cdn_base_url", "google_fonts", "gstatic"].includes(fieldKey)) {
-      const currentValue = value === undefined
-        ? typeof defaultValue === "string" ? defaultValue : ""
-        : String(value);
+      const currentValue =
+        value === undefined
+          ? typeof defaultValue === "string"
+            ? defaultValue
+            : ""
+          : String(value);
       const isCdn = fieldKey !== "google_fonts" && fieldKey !== "gstatic";
-      const options = fieldSchema.options?.map((option, index) => ({
-        value: String(option), label: fieldSchema.labels?.[index] || String(option),
-      })).filter((option) => option.value !== CUSTOM_RESOURCE_OPTION) || (isCdn ? TEMPLATE_CDN_PRESETS : []);
+      const options =
+        fieldSchema.options
+          ?.map((option, index) => ({
+            value: String(option),
+            label: fieldSchema.labels?.[index] || String(option),
+          }))
+          .filter((option) => option.value !== CUSTOM_RESOURCE_OPTION) ||
+        (isCdn ? TEMPLATE_CDN_PRESETS : []);
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <AutoComplete
@@ -192,15 +210,16 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
             onChange={onChange}
             status={error ? "error" : undefined}
           >
-            <Input
-              aria-label={title}
-              placeholder="选择一个预设地址，也可以自己填写"
-              allowClear
-            />
+            <Input aria-label={title} placeholder="选择一个预设地址，也可以自己填写" allowClear />
           </AutoComplete>
-          {isCdn && (currentValue.trim()
-            ? <TemplateCdnProbe baseUrl={currentValue} />
-            : <Typography.Text type="secondary">先选择或填写地址，即可检测 CDN；留空使用当前资源环境的预设。</Typography.Text>)}
+          {isCdn &&
+            (currentValue.trim() ? (
+              <TemplateCdnProbe baseUrl={currentValue} />
+            ) : (
+              <Typography.Text type="secondary">
+                先选择或填写地址，即可检测 CDN；留空使用当前资源环境的预设。
+              </Typography.Text>
+            ))}
         </div>
       );
     }
@@ -229,9 +248,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     ) {
       const subItems = fieldSchema.items as Record<string, SchemaFieldItem>;
       const objVal =
-        typeof value === "object" && value !== null
-          ? (value as Record<string, unknown>)
-          : {};
+        typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 
       return (
         <div
@@ -244,11 +261,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         >
           {Object.entries(subItems).map(([subKey, subField]) => {
             if (subField.invisible) return null;
-            const subValue =
-              objVal[subKey] !== undefined ? objVal[subKey] : subField.default;
+            const subValue = objVal[subKey] !== undefined ? objVal[subKey] : subField.default;
             const subKeyPath = `${fullKeyPath || fieldKey}.${subKey}`;
-            const subErrorMsg =
-              subErrors?.[subKey] || subErrors?.[subKeyPath] || undefined;
+            const subErrorMsg = subErrors?.[subKey] || subErrors?.[subKeyPath] || undefined;
 
             return (
               <FieldRenderer
@@ -277,11 +292,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     // 1. Provider 智能选择输入框 (支持选择已装配的 AstrBot Provider 或自由手输)
     if (isProviderField) {
       const currentVal =
-        typeof value === "string"
-          ? value
-          : typeof defaultValue === "string"
-          ? defaultValue
-          : "";
+        typeof value === "string" ? value : typeof defaultValue === "string" ? defaultValue : "";
       const providerOptions = [
         {
           value: "",
@@ -310,9 +321,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           }
         >
           <Input
-            prefix={
-              <ApartmentOutlined style={{ color: "#2563eb", marginRight: 6 }} />
-            }
+            prefix={<ApartmentOutlined style={{ color: "#2563eb", marginRight: 6 }} />}
             placeholder="从下拉列表选择已有 Provider，或直接输入 ID"
             allowClear
             status={error ? "error" : undefined}
@@ -325,11 +334,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     // 2. Persona 人设智能选择输入框 (支持选择 AstrBot 内部已定义人设或手输)
     if (isPersonaField) {
       const currentVal =
-        typeof value === "string"
-          ? value
-          : typeof defaultValue === "string"
-          ? defaultValue
-          : "";
+        typeof value === "string" ? value : typeof defaultValue === "string" ? defaultValue : "";
       const personaOptions = [
         {
           value: "",
@@ -358,9 +363,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           }
         >
           <Input
-            prefix={
-              <UserOutlined style={{ color: "#7c3aed", marginRight: 6 }} />
-            }
+            prefix={<UserOutlined style={{ color: "#7c3aed", marginRight: 6 }} />}
             placeholder="从下拉列表选择已有 Persona 人设，或直接输入人设 ID"
             allowClear
             status={error ? "error" : undefined}
@@ -372,8 +375,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
     // 3. 布尔类型开关 Switch
     if (type === "bool") {
-      const boolVal =
-        typeof value === "boolean" ? value : Boolean(defaultValue);
+      const boolVal = typeof value === "boolean" ? value : Boolean(defaultValue);
       return (
         <div
           style={{
@@ -383,10 +385,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
             minHeight: 32,
           }}
         >
-          <Switch
-            checked={boolVal}
-            onChange={(checked) => onChange(checked)}
-          />
+          <Switch checked={boolVal} onChange={(checked) => onChange(checked)} />
           <Text
             style={{
               fontSize: 12,
@@ -419,9 +418,18 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
     // 4. 单选下拉框保留字符串或数值选项的原始类型。
     if (["string", "int", "float"].includes(type) && Array.isArray(options) && options.length > 0) {
-      const currentVal = type === "string"
-        ? typeof value === "string" ? value : typeof defaultValue === "string" ? defaultValue : ""
-        : typeof value === "number" ? value : typeof defaultValue === "number" ? defaultValue : Number(options[0]);
+      const currentVal =
+        type === "string"
+          ? typeof value === "string"
+            ? value
+            : typeof defaultValue === "string"
+              ? defaultValue
+              : ""
+          : typeof value === "number"
+            ? value
+            : typeof defaultValue === "number"
+              ? defaultValue
+              : Number(options[0]);
       // 显示名走官方键 labels（与 options 顺序一一对应）；缺标签时回退显示原始值
       const labels = fieldSchema.labels;
       return (
@@ -443,13 +451,12 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     }
 
     // 5. 纯文本 / 提示词模板 (text 或 multiline)
-    if (type === "text" || (type === "string" && (fieldKey.includes("template") || fieldKey.includes("prompt")))) {
+    if (
+      type === "text" ||
+      (type === "string" && (fieldKey.includes("template") || fieldKey.includes("prompt")))
+    ) {
       const currentVal =
-        typeof value === "string"
-          ? value
-          : typeof defaultValue === "string"
-          ? defaultValue
-          : "";
+        typeof value === "string" ? value : typeof defaultValue === "string" ? defaultValue : "";
       return (
         <TextArea
           value={currentVal}
@@ -469,11 +476,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     // 6. 数值类型 InputNumber (int / float)
     if (type === "int" || type === "float") {
       const numVal =
-        typeof value === "number"
-          ? value
-          : typeof defaultValue === "number"
-          ? defaultValue
-          : 0;
+        typeof value === "number" ? value : typeof defaultValue === "number" ? defaultValue : 0;
       return (
         <InputNumber
           value={numVal}
@@ -491,31 +494,23 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       Array.isArray(options) && options.length > 0
         ? options.map(String)
         : fieldSchema.items &&
-          typeof fieldSchema.items === "object" &&
-          Array.isArray(
-            (fieldSchema.items as Record<string, unknown>).options
-          )
-        ? (
-            (fieldSchema.items as Record<string, unknown>)
-              .options as unknown[]
-          ).map(String)
-        : fieldSchema.items &&
-          typeof fieldSchema.items === "object" &&
-          Array.isArray((fieldSchema.items as Record<string, unknown>).enum)
-        ? (
-            (fieldSchema.items as Record<string, unknown>)
-              .enum as unknown[]
-          ).map(String)
-        : null;
+            typeof fieldSchema.items === "object" &&
+            Array.isArray((fieldSchema.items as Record<string, unknown>).options)
+          ? ((fieldSchema.items as Record<string, unknown>).options as unknown[]).map(String)
+          : fieldSchema.items &&
+              typeof fieldSchema.items === "object" &&
+              Array.isArray((fieldSchema.items as Record<string, unknown>).enum)
+            ? ((fieldSchema.items as Record<string, unknown>).enum as unknown[]).map(String)
+            : null;
 
     if (type === "list" && listOptions && listOptions.length > 0) {
       const selectedVals: string[] = Array.isArray(value)
         ? (value as unknown[]).map(String)
         : Array.isArray(defaultValue)
-        ? (defaultValue as unknown[]).map(String)
-        : typeof value === "string" && value
-        ? [value]
-        : [];
+          ? (defaultValue as unknown[]).map(String)
+          : typeof value === "string" && value
+            ? [value]
+            : [];
 
       return (
         <Select
@@ -548,8 +543,8 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       const listVal: string[] = Array.isArray(value)
         ? (value as string[])
         : Array.isArray(defaultValue)
-        ? (defaultValue as string[])
-        : [];
+          ? (defaultValue as string[])
+          : [];
 
       const handleRemoveTag = (removedTag: string) => {
         const nextList = listVal.filter((tag) => tag !== removedTag);
@@ -620,8 +615,8 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       const fileList: string[] = Array.isArray(value)
         ? (value as string[]).filter((x) => typeof x === "string" && x.trim().length > 0)
         : typeof value === "string" && value.trim().length > 0
-        ? [value.trim()]
-        : [];
+          ? [value.trim()]
+          : [];
 
       const handleRemoveFile = (indexToRemove: number) => {
         const nextList = fileList.filter((_, idx) => idx !== indexToRemove);
@@ -662,9 +657,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         const uploadedPaths = (await Promise.all(uploadPromises)).filter(Boolean) as string[];
         if (uploadedPaths.length > 0) {
           // 清理历史中残存的旧 Base64 Data URL，防止原生格式校验失败
-          const cleanExisting = fileList.filter(
-            (item) => !item.startsWith("data:image/")
-          );
+          const cleanExisting = fileList.filter((item) => !item.startsWith("data:image/"));
           const nextList = [...cleanExisting, ...uploadedPaths];
           onChange(Array.isArray(defaultValue) ? nextList : nextList[0] || "");
           message.success(`成功添加 ${uploadedPaths.length} 个参考文件`);
@@ -737,7 +730,14 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                       </div>
                     )}
 
-                    <div style={{ display: "flex", flexDirection: "column", minWidth: 0, marginRight: 4 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        minWidth: 0,
+                        marginRight: 4,
+                      }}
+                    >
                       <span
                         style={{
                           fontSize: 12,
@@ -846,8 +846,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
     // 8. 普通单行字符串输入 (string)
     if (type === "string") {
-      const currentVal =
-        value !== undefined ? String(value) : String(defaultValue ?? "");
+      const currentVal = value !== undefined ? String(value) : String(defaultValue ?? "");
       return (
         <Input
           aria-label={title}
@@ -871,9 +870,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
     // 9. 复杂对象兜底 (JSON 格式化输入)
     const jsonStr =
-      typeof value === "object"
-        ? JSON.stringify(value, null, 2)
-        : String(value ?? "");
+      typeof value === "object" ? JSON.stringify(value, null, 2) : String(value ?? "");
     return (
       <TextArea
         value={jsonStr}
@@ -893,12 +890,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   };
 
   const isDifferentFromDefault =
-    defaultValue !== undefined &&
-    JSON.stringify(value) !== JSON.stringify(defaultValue);
+    defaultValue !== undefined && JSON.stringify(value) !== JSON.stringify(defaultValue);
 
-  const containerDomId = `cfg-field-${
-    fullKeyPath ? fullKeyPath.replace(/\./g, "-") : fieldKey
-  }`;
+  const containerDomId = `cfg-field-${fullKeyPath ? fullKeyPath.replace(/\./g, "-") : fieldKey}`;
 
   return (
     <div
@@ -1006,9 +1000,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
             fontWeight: 500,
           }}
         >
-          <ExclamationCircleFilled
-            style={{ fontSize: 13, color: "#ff4d4f", flexShrink: 0 }}
-          />
+          <ExclamationCircleFilled style={{ fontSize: 13, color: "#ff4d4f", flexShrink: 0 }} />
           <span>{error}</span>
         </div>
       )}
