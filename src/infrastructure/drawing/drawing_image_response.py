@@ -17,6 +17,10 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
+from ...shared.type_guards import (
+    is_object_list,
+    is_string_mapping,
+)
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -58,19 +62,19 @@ class DrawingImageResponseService:
         self, data: object, proxy: str | None = None
     ) -> bytes | None:
         """递归提取绘图响应中的图片数据。"""
-        if isinstance(data, dict) and "candidates" in data:
+        if is_string_mapping(data) and "candidates" in data:
             # Google 响应仅接受最终图片字段，不能回退到思考签名或中间图片。
             candidates = data["candidates"]
-            for candidate in candidates if isinstance(candidates, list) else []:
-                if not isinstance(candidate, dict):
+            for candidate in candidates if is_object_list(candidates) else []:
+                if not is_string_mapping(candidate):
                     continue
                 content = candidate.get("content")
-                parts = content.get("parts") if isinstance(content, dict) else None
-                for part in parts if isinstance(parts, list) else []:
-                    if not isinstance(part, dict) or part.get("thought") is True:
+                parts = content.get("parts") if is_string_mapping(content) else None
+                for part in parts if is_object_list(parts) else []:
+                    if not is_string_mapping(part) or part.get("thought") is True:
                         continue
                     inline_data = part.get("inlineData", part.get("inline_data"))
-                    if not isinstance(inline_data, dict):
+                    if not is_string_mapping(inline_data):
                         continue
                     mime = inline_data.get("mimeType", inline_data.get("mime_type"))
                     encoded_image = inline_data.get("data")
@@ -93,10 +97,10 @@ class DrawingImageResponseService:
         fallback_urls: list[tuple[str, str]] = []
 
         def collect(value: object, path: tuple[str, ...] = ()) -> None:
-            if isinstance(value, dict):
+            if is_string_mapping(value):
                 for name, item in value.items():
                     collect(item, (*path, name.lower()))
-            elif isinstance(value, list):
+            elif is_object_list(value):
                 for item in value:
                     collect(item, path)
             elif isinstance(value, str):
@@ -319,7 +323,7 @@ class DrawingImageResponseService:
                 return f"<str len={len(value)}>"
             if depth >= 3:
                 return type(value).__name__
-            if isinstance(value, dict):
+            if is_string_mapping(value):
                 items = list(value.items())[:10]
                 body = ", ".join(
                     f"{str(key)[:64]}: {summarize(item, depth + 1)}"
@@ -327,7 +331,7 @@ class DrawingImageResponseService:
                 )
                 suffix = ", ..." if len(value) > len(items) else ""
                 return f"{{{body}{suffix}}}"
-            if isinstance(value, list):
+            if is_object_list(value):
                 items = value[:3]
                 body = ", ".join(summarize(item, depth + 1) for item in items)
                 suffix = ", ..." if len(value) > len(items) else ""

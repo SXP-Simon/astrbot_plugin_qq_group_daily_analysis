@@ -7,8 +7,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
+from typing import TypedDict
+
+
+class AnalysisTextMessage(TypedDict):
+    """交给提示词构建器的文本消息。"""
+
+    time: str
+    sender: str
+    content: str
+    user_id: str
 
 
 class MessageContentType(Enum):
@@ -37,7 +46,7 @@ class MessageContent:
     值对象：消息内容段
 
     表示消息链中的一个组成部分（如文本、图片、表情等）。
-    该对象是不可变的，用于保证数据流的纯净。
+    仅保存明确的不可变字段，平台原始数据在接入边界完成解析。
 
     Attributes:
         type (MessageContentType): 内容类型
@@ -46,7 +55,7 @@ class MessageContent:
         emoji_id (str): 表情 ID
         emoji_name (str): 表情名称
         at_user_id (str): 被 @ 的用户 ID
-        raw_data (object): 平台原始数据，用于扩展
+        is_sticker (bool): 图片是否为已确认的贴纸或表情包
     """
 
     type: MessageContentType
@@ -55,24 +64,17 @@ class MessageContent:
     emoji_id: str = ""
     emoji_name: str = ""
     at_user_id: str = ""
-    raw_data: object = None
-
-    def is_text(self) -> bool:
-        """检查是否为文本内容。"""
-        return self.type == MessageContentType.TEXT
+    is_sticker: bool = False
 
     def is_emoji(self) -> bool:
-        """检查是否为表情内容。"""
-        return self.type == MessageContentType.EMOJI
+        """判断是否属于表情，平台标记由接入边界预先归一化。
 
-    @property
-    def target_id(self) -> str:
+        Returns:
+            明确的表情段或已确认的图片表情返回 True。
         """
-        获取被 @ 的用户 ID（兼容旧代码）。
-
-        Alias for at_user_id.
-        """
-        return self.at_user_id
+        return self.type == MessageContentType.EMOJI or (
+            self.type == MessageContentType.IMAGE and self.is_sticker
+        )
 
 
 @dataclass(frozen=True)
@@ -84,11 +86,11 @@ class UnifiedMessage:
     采用“只读”设计，确保分析逻辑的一致性。
 
     Attributes:
-        message_id (str): 消息唯一标识符
+        message_id (str): 来源会话内的消息标识，不保证跨平台全局唯一
         sender_id (str): 发送者唯一 ID
         sender_name (str): 发送者昵称
         group_id (str): 群组/会话唯一 ID
-        text_content (str): 经过清洗后的纯文本内容，主要用于 LLM 分析
+        text_content (str): 当前阶段的纯文本；适配器提取，清洗服务同步更新
         contents (tuple[MessageContent, ...]): 结构化消息链
         timestamp (int): Unix 时间戳（秒）
         platform (str): 来源平台名称（如 onebot, discord 等）
@@ -117,24 +119,20 @@ class UnifiedMessage:
     sender_card: str | None = None
 
     # 分析辅助方法
-    def has_text(self) -> bool:
-        """
-        判断消息是否包含非空文本。
-
-        Returns:
-            bool: 包含有效文本则返回 True
-        """
-        return bool(self.text_content.strip())
-
-    def get_display_name(self) -> str:
+    def get_display_name(self, *, use_card: bool = True) -> str:
         """
         获取用户显示名称。
-        优先级：群名片 > 昵称 > 用户 ID。
+        默认优先群名片；关闭名片优先时先用昵称，最后回退到用户 ID。
+
+        Args:
+            use_card: 是否优先使用群名片。
 
         Returns:
             str: 格式化后的显示名称
         """
-        return self.sender_card or self.sender_name or self.sender_id
+        if use_card:
+            return self.sender_card or self.sender_name or self.sender_id
+        return self.sender_name or self.sender_card or self.sender_id
 
     def get_emoji_count(self) -> int:
         """
@@ -153,26 +151,3 @@ class UnifiedMessage:
             int: 字符数
         """
         return len(self.text_content)
-
-    def get_datetime(self) -> datetime:
-        """
-        将 Unix 时间戳转换为 datetime 对象。
-
-        Returns:
-            datetime: 本地化后的时间对象
-        """
-        return datetime.fromtimestamp(self.timestamp)
-
-    def to_analysis_format(self) -> str:
-        """
-        转换为供 LLM 消费的分析格式。
-
-        Returns:
-            str: 格式如 "[用户名]: 消息内容" 的字符串
-        """
-        name = self.get_display_name()
-        return f"[{name}]: {self.text_content}"
-
-
-# 类型别名
-MessageList = list[UnifiedMessage]

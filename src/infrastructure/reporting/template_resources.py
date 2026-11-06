@@ -133,7 +133,7 @@ class TemplateResourceStore:
                         # 有界小块写入，避免取消后线程仍使用已经关闭的文件。
                         output.write(chunk)
             validation = asyncio.create_task(
-                asyncio.to_thread(self._validate, temporary, name)
+                asyncio.to_thread(self.validate, temporary, name)
             )
             try:
                 await asyncio.shield(validation)
@@ -154,7 +154,7 @@ class TemplateResourceStore:
             temporary.unlink(missing_ok=True)
 
     @staticmethod
-    def _validate(path: Path, name: str) -> None:
+    def validate(path: Path, name: str) -> None:
         """校验图片格式与预算，避免将 CDN 错误页面存成长期本地资源。
 
         Args:

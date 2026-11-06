@@ -9,6 +9,7 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from ....shared.type_guards import is_string_mapping
 from ...persistence.managed_files import MAX_FILE_BYTES
 from ..download_control import DownloadCancelled, DownloadControl
 from ..web_compat import WebApiResponse, error_response, json_response, request
@@ -239,8 +240,8 @@ class ManagedUploadRoutes:
         result = await self.downloads.api_cancel()
         status = (
             result.get("status_code", 200)
-            if isinstance(result, dict)
-            else result.status_code
+            if is_string_mapping(result)
+            else getattr(result, "status_code", 200)
         )
         if isinstance(status, int) and status < 400 and isinstance(upload_id, str):
             self._discard(upload_id)

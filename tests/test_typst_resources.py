@@ -293,7 +293,7 @@ async def test_oversized_image_falls_back_and_download_validation_rejects(
     downloaded = tmp_path / "oversized.png"
     downloaded.write_bytes(base64.b64decode(oversized_avatar_uri.split(",", 1)[1]))
     with pytest.raises(ValueError, match="像素预算"):
-        TemplateResourceStore._validate(downloaded, "scrapbook/assistant.jpg")
+        TemplateResourceStore.validate(downloaded, "scrapbook/assistant.jpg")
 
 
 @pytest.mark.asyncio

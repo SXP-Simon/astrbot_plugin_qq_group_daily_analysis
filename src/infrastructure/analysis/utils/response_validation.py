@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
+from ....shared.type_guards import is_object_list
+
 
 class TopicItemModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -18,7 +20,7 @@ class TopicItemModel(BaseModel):
     @field_validator("contributors", mode="before")
     @classmethod
     def _normalize_contributors(cls, value: object) -> list[str]:
-        if not isinstance(value, list):
+        if not is_object_list(value):
             return []
         contributors: list[str] = []
         for item in value:
@@ -84,8 +86,8 @@ class QualityReviewModel(BaseModel):
 
 
 def validate_topic_items(
-    data_list: list[dict],
-) -> tuple[bool, list[dict] | None, str | None]:
+    data_list: list[dict[str, object]],
+) -> tuple[bool, list[dict[str, object]] | None, str | None]:
     try:
         normalized = [
             TopicItemModel.model_validate(item).model_dump() for item in data_list
@@ -96,8 +98,8 @@ def validate_topic_items(
 
 
 def validate_user_title_items(
-    data_list: list[dict],
-) -> tuple[bool, list[dict] | None, str | None]:
+    data_list: list[dict[str, object]],
+) -> tuple[bool, list[dict[str, object]] | None, str | None]:
     try:
         normalized = [
             UserTitleItemModel.model_validate(item).model_dump() for item in data_list
@@ -108,8 +110,8 @@ def validate_user_title_items(
 
 
 def validate_golden_quote_items(
-    data_list: list[dict],
-) -> tuple[bool, list[dict] | None, str | None]:
+    data_list: list[dict[str, object]],
+) -> tuple[bool, list[dict[str, object]] | None, str | None]:
     try:
         normalized = [
             GoldenQuoteItemModel.model_validate(item).model_dump() for item in data_list
@@ -119,7 +121,9 @@ def validate_golden_quote_items(
         return False, None, str(e)
 
 
-def validate_quality_review_item(data: dict) -> tuple[bool, dict | None, str | None]:
+def validate_quality_review_item(
+    data: dict[str, object],
+) -> tuple[bool, dict[str, object] | None, str | None]:
     try:
         normalized = QualityReviewModel.model_validate(data).model_dump()
         return True, normalized, None

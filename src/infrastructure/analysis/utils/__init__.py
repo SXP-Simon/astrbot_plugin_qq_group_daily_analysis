@@ -3,7 +3,6 @@
 包含JSON处理和LLM API请求处理工具
 """
 
-from .info_utils import InfoUtils
 from .json_utils import (
     extract_golden_quotes_with_regex,
     extract_quality_with_regex,
@@ -20,8 +19,6 @@ from .llm_utils import (
 )
 
 __all__ = [
-    # Info utilities
-    "InfoUtils",
     # LLM utilities
     "call_provider_with_retry",
     "extract_golden_quotes_with_regex",

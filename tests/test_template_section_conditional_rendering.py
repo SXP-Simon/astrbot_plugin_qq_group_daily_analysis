@@ -133,7 +133,7 @@ async def test_template_hides_empty_sections_when_no_content(
     try:
         analysis_result = create_analysis_result(empty=True)
 
-        render_data = await generator._prepare_render_data(
+        render_data = await generator.prepare_render_data(
             analysis_result,
             avatar_url_getter=fake_avatar,
             nickname_getter=lambda uid: "Nick",
@@ -187,7 +187,7 @@ async def test_template_shows_sections_when_content_present(
     try:
         analysis_result = create_analysis_result(empty=False)
 
-        render_data = await generator._prepare_render_data(
+        render_data = await generator.prepare_render_data(
             analysis_result,
             avatar_url_getter=fake_avatar,
             nickname_getter=lambda uid: "Nick",

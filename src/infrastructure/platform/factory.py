@@ -34,10 +34,12 @@ class PlatformAdapterFactory:
     根据平台名称动态按需加载并创建适配器实例，避免未启用平台的 SDK 占用内存。
     """
 
-    _adapters: ClassVar[dict[str, type[PlatformAdapter]]] = {}
+    _adapters: ClassVar[dict[str, type[PlatformAdapter[object]]]] = {}
 
     @classmethod
-    def register(cls, platform_name: str, adapter_class: type[PlatformAdapter]) -> None:
+    def register(
+        cls, platform_name: str, adapter_class: type[PlatformAdapter[object]]
+    ) -> None:
         """注册新适配器类。
 
         Args:
@@ -47,7 +49,9 @@ class PlatformAdapterFactory:
         cls._adapters[platform_name.lower().strip()] = adapter_class
 
     @classmethod
-    def get_adapter_class(cls, platform_name: str) -> type[PlatformAdapter] | None:
+    def get_adapter_class(
+        cls, platform_name: str
+    ) -> type[PlatformAdapter[object]] | None:
         """按需获取或动态加载平台适配器类。
 
         Args:
@@ -87,7 +91,7 @@ class PlatformAdapterFactory:
         platform_name: str,
         bot_instance: object,
         config: Mapping[str, object] | None = None,
-    ) -> PlatformAdapter | None:
+    ) -> PlatformAdapter[object] | None:
         """创建平台适配器实例。
 
         Args:

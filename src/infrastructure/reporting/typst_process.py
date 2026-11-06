@@ -12,8 +12,9 @@ from typing import TYPE_CHECKING
 from weakref import WeakValueDictionary
 
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_string_mapping
 from .render_trace import render_span
-from .typst_worker import _collect_peak
+from .typst_worker import collect_peak
 
 if TYPE_CHECKING:
     from .typst_worker import TypstWorkerMetrics
@@ -80,7 +81,7 @@ async def run_typst_worker(
         next(
             (
                 span
-                for span in reversed(trace._spans)
+                for span in reversed(trace.spans)
                 if span["stage_name"] in ("TYPST_COMPILE", "TYPST_RECOVERY")
                 and span["status"] == "running"
             ),
@@ -155,7 +156,7 @@ async def _execute_typst_worker(
     except BaseException as error:
         sampled: TypstWorkerMetrics = {}
         if isinstance(error, TimeoutError) and collect_metrics:
-            _collect_peak(sampled, pid=process.pid)
+            collect_peak(sampled, pid=process.pid)
         if process.returncode is None:
             try:
                 process.kill()
@@ -217,7 +218,7 @@ def _parse_worker_metrics(stdout: bytes | None) -> TypstWorkerMetrics | None:
             raw: object = json.loads(line)
         except (ValueError, UnicodeDecodeError):
             continue
-        if isinstance(raw, dict):
+        if is_string_mapping(raw):
             break
     else:
         return None

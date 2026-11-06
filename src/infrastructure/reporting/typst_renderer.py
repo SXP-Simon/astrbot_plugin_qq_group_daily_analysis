@@ -92,7 +92,7 @@ class TypstReportRenderer:
         config: ConfigManager,
         data_dir: Path,
         avatars: AvatarService,
-        profile_manifest: dict[str, dict],
+        profile_manifest: dict[str, dict[str, dict[str, object]]],
     ) -> None:
         self.config = config
         self.data_dir = data_dir

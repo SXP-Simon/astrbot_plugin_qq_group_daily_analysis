@@ -36,7 +36,7 @@ class DrawingApiRequestService:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None,
-        provider: dict,
+        provider: dict[str, object],
     ) -> bytes | None:
         return await call_google_api(self.context, prompt, images_data, provider)
 
@@ -44,7 +44,7 @@ class DrawingApiRequestService:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None,
-        provider: dict,
+        provider: dict[str, object],
         provider_type: str,
     ) -> bytes | None:
         return await call_preset_api(
@@ -58,7 +58,7 @@ class DrawingApiRequestService:
         payload: dict[str, object],
         timeout: int | float,
         provider_name: str,
-        provider: dict,
+        provider: dict[str, object],
     ) -> bytes | None:
         return await post_json_for_image(
             self.context,
@@ -74,7 +74,7 @@ class DrawingApiRequestService:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None,
-        provider: dict,
+        provider: dict[str, object],
         api_key: str,
         model: str,
         timeout: int | float,
@@ -87,7 +87,7 @@ class DrawingApiRequestService:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None = None,
-        provider: dict | None = None,
+        provider: dict[str, object] | None = None,
     ) -> bytes | None:
         return await call_images_api(self.context, prompt, images_data, provider)
 
@@ -95,7 +95,7 @@ class DrawingApiRequestService:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None = None,
-        provider: dict | None = None,
+        provider: dict[str, object] | None = None,
     ) -> bytes | None:
         return await call_grok_api(self.context, prompt, images_data, provider)
 
@@ -103,7 +103,7 @@ class DrawingApiRequestService:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None = None,
-        provider: dict | None = None,
+        provider: dict[str, object] | None = None,
     ) -> bytes | None:
         return await call_gemini_api(self.context, prompt, images_data, provider)
 
@@ -111,6 +111,6 @@ class DrawingApiRequestService:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None = None,
-        provider: dict | None = None,
+        provider: dict[str, object] | None = None,
     ) -> bytes | None:
         return await call_chat_api(self.context, prompt, images_data, provider)

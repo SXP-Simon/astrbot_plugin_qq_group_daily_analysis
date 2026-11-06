@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 
 from ...domain.repositories.bot_client_protocol import OneBotClientProtocol
+from ...shared.type_guards import is_string_mapping
 from ...utils.logger import logger
 
 
@@ -67,7 +68,7 @@ async def upload_file_stream(
                     filename=path.name,
                     file_retention=30_000,
                 )
-                if isinstance(response, dict) and (
+                if is_string_mapping(response) and (
                     response.get("status") == "failed"
                     or response.get("retcode") not in (None, 0)
                 ):
@@ -76,10 +77,10 @@ async def upload_file_stream(
         response = await bot.call_action(
             "upload_file_stream", stream_id=stream_id, is_complete=True
         )
-        if not isinstance(response, dict):
+        if not is_string_mapping(response):
             return None
         data = response.get("data")
-        payload = data if isinstance(data, dict) else response
+        payload = data if is_string_mapping(data) else response
         for key in ("file_path", "file", "path"):
             uploaded_path = payload.get(key)
             if isinstance(uploaded_path, str) and uploaded_path.strip():

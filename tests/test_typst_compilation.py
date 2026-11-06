@@ -342,8 +342,8 @@ async def test_only_exhausted_recovery_uses_explicit_host_fallback(compiler, tmp
             {"__template_key": "strategy", "priority": 2},
         )
     host = AsyncMock(return_value=png)
-    prepare_html = AsyncMock(wraps=generator._prepare_render_data)
-    monkeypatch.setattr(generator, "_prepare_render_data", prepare_html)
+    prepare_html = AsyncMock(wraps=generator.prepare_render_data)
+    monkeypatch.setattr(generator, "prepare_render_data", prepare_html)
     image, html = await generator.generate_image_report(create_analysis_result(), "test", host)
     assert worker.await_count == 2
     assert host.await_count == prepare_html.await_count == int(fallback)
@@ -394,7 +394,7 @@ async def test_real_failure_recovers_complete_report_and_dispatches_image(compil
     sender.send_image_smart = AsyncMock(return_value=True)
     dispatcher = ReportDispatcher(config, generator, sender)
     dispatcher._dispatch_text = AsyncMock(side_effect=AssertionError("应发送恢复后的图片报告"))
-    dispatcher._try_upload_image = AsyncMock()
+    dispatcher.try_upload_image = AsyncMock()
     data = create_analysis_result()
     data["chat_quality_review"] = QualityReview(
         title="今日交流", subtitle="讨论记录", summary="所有结论都应保留。",

@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Iterable
 from typing import TYPE_CHECKING, TypedDict
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
+from ....shared.type_guards import is_object_collection, is_string_mapping
 from ....utils.logger import logger
 from ...platform.factory import PlatformAdapterFactory
 from ..web_compat import (
@@ -163,7 +163,7 @@ class TraceRoutes:
         """获取当前 AstrBot 中已注册并就绪的所有聊天平台列表（基于 AstrBot 原生 PlatformMetadata）"""
         try:
             platforms: list[PlatformMetadataDTO] = []
-            seen_ids = set()
+            seen_ids: set[str] = set()
             type_display_map = {
                 "aiocqhttp": "OneBot v11",
                 "qq_official": "QQ 官方机器人",
@@ -269,7 +269,7 @@ class TraceRoutes:
         """获取当前 AstrBot 中已就绪的所有 LLM Provider 列表"""
         try:
             providers: list[ProviderMetadataDTO] = []
-            seen_ids = set()
+            seen_ids: set[str] = set()
             provider_getter = getattr(self.context, "get_all_providers", None)
             if not callable(provider_getter):
                 provider_mgr: ProviderManager | None = getattr(
@@ -284,7 +284,7 @@ class TraceRoutes:
             if callable(provider_getter):
                 raw_list = provider_getter()
                 provider_list: list[object] = (
-                    list(raw_list) if isinstance(raw_list, Iterable) else []
+                    list(raw_list) if is_object_collection(raw_list) else []
                 )
                 for p in provider_list:
                     try:
@@ -330,16 +330,16 @@ class TraceRoutes:
         """获取当前 AstrBot 中配置的所有人格 (Persona) 列表"""
         try:
             personas: list[PersonaMetadataDTO] = []
-            seen_ids = set()
+            seen_ids: set[str] = set()
             pm: PersonaManager | None = getattr(self.context, "persona_manager", None)
             if pm:
                 for p in getattr(pm, "personas_v3", []) or []:
                     p_name = (
                         p.get("name")
-                        if isinstance(p, dict)
+                        if is_string_mapping(p)
                         else getattr(p, "name", None)
                     )
-                    if p_name and p_name not in seen_ids:
+                    if isinstance(p_name, str) and p_name and p_name not in seen_ids:
                         seen_ids.add(p_name)
                         personas.append(
                             {
@@ -407,11 +407,9 @@ class TraceRoutes:
                         else AnalysisStage.FETCH_MESSAGES.value
                     )
                 )
-                spans = list(active_trace._spans) if active_trace else []
-                context_metrics = (
-                    active_trace._context_metrics if active_trace else None
-                )
-                token_usage = active_trace._token_usage if active_trace else None
+                spans = list(active_trace.spans) if active_trace else []
+                context_metrics = active_trace.context_metrics if active_trace else None
+                token_usage = active_trace.token_usage if active_trace else None
 
                 group_id_val = (active_trace.group_id if active_trace else "") or (
                     str(task_info.get("group_id", "")) if task_info else ""

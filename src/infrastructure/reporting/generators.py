@@ -27,6 +27,7 @@ from ...shared.constants import (
     AnalysisStage,
 )
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 from ..visualization.activity_charts import ActivityVisualizer
 from .avatar_service import (
@@ -70,7 +71,6 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     import aiohttp
-    from diskcache import Cache
     from markupsafe import Markup
 
     from ...domain.value_objects import AnalysisResultPayload
@@ -80,6 +80,7 @@ if TYPE_CHECKING:
         RenderingResourceConfig,
         ScreenshotOptions,
     )
+    from ..persistence.kv_contracts import CacheAccess
 
 
 class ReportGenerator(IReportGenerator):
@@ -90,8 +91,8 @@ class ReportGenerator(IReportGenerator):
     activity_visualizer: ActivityVisualizer
     html_templates: HTMLTemplates | None
     _render_semaphore: asyncio.Semaphore
-    _avatar_cache: Cache | None = None
-    _profile_asset_manifest: dict[str, dict]
+    _avatar_cache: CacheAccess | None = None
+    _profile_asset_manifest: dict[str, dict[str, dict[str, object]]]
     _preparer: RenderDataPreparer
     _markdown_generator_inst: MarkdownReportGenerator | None = None
     _avatar_service_inst: AvatarService | None = None
@@ -121,7 +122,7 @@ class ReportGenerator(IReportGenerator):
         )
 
         self._avatar_service_inst = AvatarService(self.data_dir)
-        self._avatar_cache = self._avatar_service_inst._avatar_cache
+        self._avatar_cache = self._avatar_service_inst.avatar_cache
         self._profile_asset_manifest = load_profile_asset_manifest()
         self._preparer = RenderDataPreparer(
             config_manager=self.config_manager,
@@ -131,11 +132,11 @@ class ReportGenerator(IReportGenerator):
             profile_asset_manifest=self._profile_asset_manifest,
         )
 
-    def _load_profile_asset_manifest(self) -> dict[str, dict]:
+    def _load_profile_asset_manifest(self) -> dict[str, dict[str, dict[str, object]]]:
         """加载人格资源清单（委托 profile_mappings 模块）。"""
         return load_profile_asset_manifest()
 
-    def _get_profile_mapping_overrides(self) -> dict[str, dict]:
+    def _get_profile_mapping_overrides(self) -> dict[str, dict[str, dict[str, object]]]:
         """解析用户配置的人格映射覆盖项。"""
         raw = self.config_manager.get_profile_mapping_config()
         if not raw:
@@ -143,8 +144,16 @@ class ReportGenerator(IReportGenerator):
 
         try:
             data = json.loads(raw)
-            if isinstance(data, dict):
-                return data
+            if is_string_mapping(data):
+                return {
+                    mode: {
+                        code: item
+                        for code, item in entries.items()
+                        if is_string_mapping(item)
+                    }
+                    for mode, entries in data.items()
+                    if is_string_mapping(entries)
+                }
         except Exception as e:
             logger.warning(f"人格映射配置 JSON 解析失败，已回退到默认映射: {e}")
         return {}
@@ -159,7 +168,7 @@ class ReportGenerator(IReportGenerator):
 
     def _get_manifest_profile_item_by_mbti(
         self, profile_mode: str, mbti: str
-    ) -> dict | None:
+    ) -> dict[str, object] | None:
         """按 MBTI 从 manifest 中寻找可用资源。"""
         return get_manifest_profile_item_by_mbti(
             self._profile_asset_manifest, profile_mode, mbti
@@ -169,7 +178,7 @@ class ReportGenerator(IReportGenerator):
         self,
         mbti: str,
         profile_mode: str,
-        overrides: dict[str, dict],
+        overrides: dict[str, dict[str, dict[str, object]]],
     ) -> dict[str, str | float]:
         """根据展示模式解析人格信息字典。"""
         return resolve_profile_info(
@@ -238,13 +247,13 @@ class ReportGenerator(IReportGenerator):
         )
 
     @staticmethod
-    def _resolve_t2i_viewport_options(
+    def resolve_t2i_viewport_options(
         html_content: str, image_options: ScreenshotOptions
     ) -> tuple[ScreenshotOptions, str]:
         """解析 T2I 渲染视口选项。"""
         return resolve_t2i_viewport_options(html_content, image_options)
 
-    def _render_prepared_html(
+    def render_prepared_html(
         self,
         template_file: str,
         template_theme: str | None,
@@ -279,7 +288,7 @@ class ReportGenerator(IReportGenerator):
         """诊断非图片响应并提取排查信息。"""
         return diagnose_non_image_payload(data)
 
-    def _inspect_render_result(
+    def inspect_render_result(
         self, image_data: object, response_info: RenderAttemptRecord
     ) -> tuple[bool, str, int, str | None]:
         """校验外部渲染响应并读取文件诊断信息，供工作线程执行。
@@ -359,8 +368,7 @@ class ReportGenerator(IReportGenerator):
         analysis_result: AnalysisResultPayload,
         group_id: str,
         html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
-        avatar_url_getter: Callable[[str, int | None], Awaitable[str | None]]
-        | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
         nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
@@ -429,8 +437,8 @@ class ReportGenerator(IReportGenerator):
         self,
         analysis_result: AnalysisResultPayload,
         group_id: str,
-        avatar_url_getter: Callable | None = None,
-        nickname_getter: Callable | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
+        nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
@@ -491,7 +499,7 @@ class ReportGenerator(IReportGenerator):
 
             html_path.parent.mkdir(parents=True, exist_ok=True)
 
-            render_data = await self._prepare_render_data(
+            render_data = await self.prepare_render_data(
                 analysis_result,
                 template_theme=template_theme,
                 chart_template="activity_chart.html",
@@ -504,7 +512,7 @@ class ReportGenerator(IReportGenerator):
             logger.debug(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
             try:
-                html_content = self._render_prepared_html(
+                html_content = self.render_prepared_html(
                     "html_template.html", template_theme, render_data
                 )
                 logger.debug("使用 html_template.html 渲染成功")
@@ -512,7 +520,7 @@ class ReportGenerator(IReportGenerator):
                 logger.warning(
                     f"html_template.html 不存在或渲染失败，回退到 image_template.html: {e}"
                 )
-                html_content = self._render_prepared_html(
+                html_content = self.render_prepared_html(
                     "image_template.html", template_theme, render_data
                 )
                 logger.debug("使用 image_template.html 渲染成功")
@@ -532,7 +540,7 @@ class ReportGenerator(IReportGenerator):
 
             trace_ctx = TraceContext.current()
             if trace_ctx:
-                for s in reversed(trace_ctx._spans):
+                for s in reversed(trace_ctx.spans):
                     if s.get("stage_name") == AnalysisStage.RENDER_REPORT.value:
                         topics_rendered = analysis_result.get("topics") or []
                         titles_rendered = analysis_result.get("user_titles") or []
@@ -556,8 +564,8 @@ class ReportGenerator(IReportGenerator):
                         break
 
                 rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                if isinstance(rfiles, list) and not any(
-                    isinstance(rf, dict) and rf.get("filename") == html_path.name
+                if is_object_list(rfiles) and not any(
+                    is_string_mapping(rf) and rf.get("filename") == html_path.name
                     for rf in rfiles
                 ):
                     rfiles.append(
@@ -660,7 +668,7 @@ class ReportGenerator(IReportGenerator):
     async def generate_markdown_report(
         self,
         analysis_result: AnalysisResultPayload,
-        html_render_func: Callable | None = None,
+        html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
         mention_style: str = "name",
         summary_image_uploader: Callable[[bytes], Awaitable[str | None]] | None = None,
     ) -> tuple[str, str]:
@@ -713,19 +721,19 @@ class ReportGenerator(IReportGenerator):
         new_inst = AvatarService(data_dir)
         avatar_cache = getattr(self, "_avatar_cache", None)
         if avatar_cache is not None:
-            new_inst._avatar_cache = avatar_cache
+            new_inst.avatar_cache = avatar_cache
         avatar_failure_cache = getattr(self, "_avatar_failure_cache", None)
         if avatar_failure_cache is not None:
-            new_inst._avatar_failure_cache = avatar_failure_cache
+            new_inst.avatar_failure_cache = avatar_failure_cache
         avatar_session = getattr(self, "_avatar_session", None)
         if avatar_session is not None:
-            new_inst._avatar_session = avatar_session
+            new_inst.avatar_session = avatar_session
         avatar_session_lock = getattr(self, "_avatar_session_lock", None)
         if avatar_session_lock is not None:
-            new_inst._avatar_session_lock = avatar_session_lock
+            new_inst.avatar_session_lock = avatar_session_lock
         avatar_semaphore = getattr(self, "_avatar_session_concurrent_semaphore", None)
         if avatar_semaphore is not None:
-            new_inst._avatar_session_concurrent_semaphore = avatar_semaphore
+            new_inst.avatar_session_concurrent_semaphore = avatar_semaphore
         self._avatar_service_inst = new_inst
         return new_inst
 
@@ -783,13 +791,13 @@ class ReportGenerator(IReportGenerator):
             value, analysis_result
         )
 
-    async def _prepare_render_data(
+    async def prepare_render_data(
         self,
         analysis_result: AnalysisResultPayload,
         template_theme: str | None = None,
         chart_template: str = "activity_chart.html",
-        avatar_url_getter: Callable | None = None,
-        nickname_getter: Callable | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
+        nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
@@ -835,7 +843,7 @@ class ReportGenerator(IReportGenerator):
     async def _render_avatar_only_ids(
         self,
         user_ids: list[str],
-        avatar_url_getter: Callable | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
         avatar_reuse_registry: dict[str, str] | None = None,
         avatar_reuse_aliases: dict[str, str] | None = None,
@@ -852,9 +860,9 @@ class ReportGenerator(IReportGenerator):
     async def _render_mentions(
         self,
         text: str,
-        avatar_url_getter: Callable | None = None,
-        nickname_getter: Callable | None = None,
-        user_analysis: dict | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
+        nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
+        user_analysis: dict[str, object] | None = None,
         avatar_cache_namespace: str | None = None,
         avatar_reuse_registry: dict[str, str] | None = None,
         avatar_reuse_aliases: dict[str, str] | None = None,
@@ -914,15 +922,17 @@ class ReportGenerator(IReportGenerator):
         return AvatarService.b64_with_mime(raw_bytes)
 
     async def _get_user_avatar_bytes(
-        self, user_id: str, avatar_url_getter: Callable | None = None
+        self,
+        user_id: str,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
     ) -> bytes | None:
         """获取头像原始字节流。"""
         if self._avatar_session is not None:
-            self._avatar_service._avatar_session = self._avatar_session
+            self._avatar_service.avatar_session = self._avatar_session
         if self._avatar_session_lock is not None:
-            self._avatar_service._avatar_session_lock = self._avatar_session_lock
+            self._avatar_service.avatar_session_lock = self._avatar_session_lock
         if self._avatar_session_concurrent_semaphore is not None:
-            self._avatar_service._avatar_session_concurrent_semaphore = (
+            self._avatar_service.avatar_session_concurrent_semaphore = (
                 self._avatar_session_concurrent_semaphore
             )
         return await self._avatar_service.get_user_avatar_bytes(
@@ -932,14 +942,14 @@ class ReportGenerator(IReportGenerator):
     async def _get_user_avatar(
         self,
         avatar_id: str,
-        avatar_url_getter: Callable | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
     ) -> str:
         """获取用户头像 Base64（委托 AvatarService）。"""
         if self._avatar_cache is not None:
-            self._avatar_service._avatar_cache = self._avatar_cache
+            self._avatar_service.avatar_cache = self._avatar_cache
         if self._avatar_failure_cache is not None:
-            self._avatar_service._avatar_failure_cache = self._avatar_failure_cache
+            self._avatar_service.avatar_failure_cache = self._avatar_failure_cache
 
         if "_get_user_avatar_bytes" in self.__dict__:
             orig = self._avatar_service.get_user_avatar_bytes

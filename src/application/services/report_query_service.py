@@ -12,6 +12,10 @@ import re
 from typing import TYPE_CHECKING
 
 from ...shared.constants import AnalysisStage
+from ...shared.type_guards import (
+    is_object_list,
+    is_string_mapping,
+)
 
 if TYPE_CHECKING:
     from ...infrastructure.config.config_manager import ConfigManager
@@ -288,7 +292,7 @@ class ReportQueryService:
             return {"topics", "golden_quotes", "user_titles", "chat_quality_review"}
 
         tokens = re.split(r"[,，、| +]+", raw)
-        result = set()
+        result: set[str] = set()
         for tok in tokens:
             t = tok.strip().lower()
             if t in {"话题", "topic", "topics", "主题"}:
@@ -461,7 +465,7 @@ class ReportQueryService:
         for r in reports:
             d_str = str(r.get("date_str", "未知日期"))
             data_obj = r.get("data")
-            if not isinstance(data_obj, dict):
+            if not is_string_mapping(data_obj):
                 continue
 
             day_block = [f"#### 📅 报告日期: {d_str}"]
@@ -469,15 +473,16 @@ class ReportQueryService:
             # 建立本报告中的 user_id -> 昵称映射字典，用于替换话题正文中的裸数字 ID 引用
             id_to_name: dict[str, str] = {}
             user_analysis = data_obj.get("user_analysis")
-            if isinstance(user_analysis, dict):
+            if is_string_mapping(user_analysis):
                 for uid, udata in user_analysis.items():
-                    if isinstance(udata, dict):
+                    if is_string_mapping(udata):
                         for k in ("nickname", "name", "card"):
                             if udata.get(k):
                                 id_to_name[str(uid).strip()] = str(udata[k]).strip()
                                 break
-            for ut in data_obj.get("user_titles") or []:
-                if isinstance(ut, dict):
+            raw_titles = data_obj.get("user_titles")
+            for ut in raw_titles if is_object_list(raw_titles) else []:
+                if is_string_mapping(ut):
                     uid = str(ut.get("user_id") or "").strip()
                     uname = str(
                         ut.get("name")
@@ -487,8 +492,9 @@ class ReportQueryService:
                     ).strip()
                     if uid and uname and uname != uid:
                         id_to_name.setdefault(uid, uname)
-            for gq in data_obj.get("golden_quotes") or []:
-                if isinstance(gq, dict):
+            raw_quotes = data_obj.get("golden_quotes")
+            for gq in raw_quotes if is_object_list(raw_quotes) else []:
+                if is_string_mapping(gq):
                     uid = str(gq.get("user_id") or "").strip()
                     uname = str(gq.get("sender") or gq.get("author") or "").strip()
                     if uid and uname and uname != uid:
@@ -497,10 +503,10 @@ class ReportQueryService:
             # 1. 话题提取
             if "topics" in sections:
                 topics_raw = data_obj.get("topics")
-                if isinstance(topics_raw, list) and topics_raw:
+                if is_object_list(topics_raw) and topics_raw:
                     day_block.append("\n**【讨论话题】**")
                     for idx, t in enumerate(topics_raw, 1):
-                        if isinstance(t, dict):
+                        if is_string_mapping(t):
                             t_title = t.get("topic", "") or t.get("title", "")
                             t_desc = t.get("detail", "") or t.get("description", "")
                             t_heat = t.get("heat") or t.get("hot", "")
@@ -517,15 +523,16 @@ class ReportQueryService:
 
             # 2. 金句提取
             if "golden_quotes" in sections:
+                statistics = data_obj.get("statistics")
                 quotes_raw = data_obj.get("golden_quotes") or (
-                    data_obj.get("statistics", {}).get("golden_quotes")
-                    if isinstance(data_obj.get("statistics"), dict)
+                    statistics.get("golden_quotes")
+                    if is_string_mapping(statistics)
                     else None
                 )
-                if isinstance(quotes_raw, list) and quotes_raw:
-                    formatted_quotes = []
+                if is_object_list(quotes_raw) and quotes_raw:
+                    formatted_quotes: list[str] = []
                     for q in quotes_raw:
-                        if isinstance(q, dict):
+                        if is_string_mapping(q):
                             quote_text = str(
                                 q.get("quote", "")
                                 or q.get("content", "")
@@ -554,10 +561,10 @@ class ReportQueryService:
             # 3. 用户称号
             if "user_titles" in sections:
                 titles_raw = data_obj.get("user_titles")
-                if isinstance(titles_raw, list) and titles_raw:
-                    formatted_titles = []
+                if is_object_list(titles_raw) and titles_raw:
+                    formatted_titles: list[str] = []
                     for ut in titles_raw:
-                        if isinstance(ut, dict):
+                        if is_string_mapping(ut):
                             uname = (
                                 str(
                                     ut.get("user_name", "")
@@ -585,7 +592,7 @@ class ReportQueryService:
             # 4. 聊天质量分析
             if "chat_quality_review" in sections:
                 quality_raw = data_obj.get("chat_quality_review")
-                if isinstance(quality_raw, dict) and quality_raw:
+                if is_string_mapping(quality_raw) and quality_raw:
                     summary = quality_raw.get("summary", "")
                     atmosphere = quality_raw.get("atmosphere", "")
                     depth = quality_raw.get("depth", "")

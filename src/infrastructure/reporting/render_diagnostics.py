@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Literal, Required, TypedDict
 import ulid
 
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.template_utils import render_template
 
 if TYPE_CHECKING:
@@ -100,9 +101,9 @@ def diagnose_non_image_payload(data: bytes) -> str:
         payload = json.loads(text)
     except ValueError:
         payload = None
-    if isinstance(payload, (dict, list)):
+    if is_string_mapping(payload) or is_object_list(payload):
         response_kind = "JSON"
-        if isinstance(payload, dict):
+        if is_string_mapping(payload):
             detail = (
                 payload.get("detail") or payload.get("error") or payload.get("message")
             )
@@ -160,7 +161,7 @@ def resolve_t2i_viewport_options(
     """
     resolved_options = image_options.copy()
     head_snippet = html_content[:4096]
-    descriptions = []
+    descriptions: list[str] = []
     for dimension, option_key in (
         ("width", "viewport_width"),
         ("height", "viewport_height"),
@@ -240,7 +241,7 @@ def build_safe_report_path(
         raise ValueError("文件名格式不得为绝对路径")
 
     relative_path = Path(formatted)
-    sanitized_parts = []
+    sanitized_parts: list[str] = []
     for part in relative_path.parts:
         if part in {".", ".."}:
             raise ValueError("路径中不得包含 '.' 或 '..'。")

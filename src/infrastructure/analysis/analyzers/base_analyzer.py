@@ -10,6 +10,7 @@ from collections.abc import Sized
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from ....domain.value_objects import TokenUsage
+from ....shared.type_guards import is_string_mapping
 from ....utils.logger import logger
 from ..utils.json_utils import parse_json_response
 from ..utils.llm_utils import (
@@ -53,7 +54,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         self.context = context
         self.config_manager = config_manager
         # 增量分析模式下的最大数量覆盖值，为 None 时使用配置默认值
-        self._incremental_max_count: int | None = None
+        self.incremental_max_count: int | None = None
 
     def get_provider_id_key(self) -> str | None:
         """
@@ -111,7 +112,9 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         return self.build_prompt(data)
 
     @abstractmethod
-    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
+    def extract_with_regex(
+        self, result_text: str, max_count: int
+    ) -> list[dict[str, object]]:
         """
         使用正则表达式提取数据
 
@@ -124,7 +127,9 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         """
 
     @abstractmethod
-    def create_data_objects(self, data_list: list[dict]) -> list[TDataObject]:
+    def create_data_objects(
+        self, data_list: list[dict[str, object]]
+    ) -> list[TDataObject]:
         """
         创建数据对象列表
 
@@ -202,13 +207,13 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             return None
 
         provider_config_obj = getattr(provider, "provider_config", None)
-        if not isinstance(provider_config_obj, dict):
+        if not is_string_mapping(provider_config_obj):
             return None
 
         raw_temperature = provider_config_obj.get("temperature")
         if raw_temperature is None:
             custom_extra_body = provider_config_obj.get("custom_extra_body")
-            if isinstance(custom_extra_body, dict):
+            if is_string_mapping(custom_extra_body):
                 raw_temperature = custom_extra_body.get("temperature")
 
         if isinstance(raw_temperature, bool):
@@ -230,7 +235,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
 
     def parse_structured_response(
         self, result_text: str
-    ) -> tuple[bool, list[dict] | None, str | None]:
+    ) -> tuple[bool, list[dict[str, object]] | None, str | None]:
         """
         解析结构化响应（默认 JSON 数组解析）。
         子类可重写此方法定制对象解析逻辑。
@@ -262,7 +267,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
 
     def _try_parse_with_fallback(
         self, result_text: str
-    ) -> tuple[bool, list[dict] | None, str | None]:
+    ) -> tuple[bool, list[dict[str, object]] | None, str | None]:
         """
         先尝试结构化 JSON 解析（含修复逻辑），失败后立即尝试正则降级。
         """
@@ -290,8 +295,8 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         return False, None, error_msg
 
     def validate_parsed_data(
-        self, data_list: list[dict]
-    ) -> tuple[bool, list[dict] | None, str | None]:
+        self, data_list: list[dict[str, object]]
+    ) -> tuple[bool, list[dict[str, object]] | None, str | None]:
         """
         解析结果的本地二次校验（默认直接通过）。
         子类可重写为 Pydantic 校验。
@@ -398,7 +403,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             trace = TraceContext.current()
             if trace:
                 prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                if isinstance(prompts_map, dict):
+                if is_string_mapping(prompts_map):
                     prompts_map[self.get_data_type()] = {
                         "prompt": prompt,
                         "system_prompt": system_prompt,
@@ -434,12 +439,13 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             result_text = extract_response_text(response)
             logger.debug(f"{self.get_data_type()}分析原始响应: {result_text[:500]}...")
 
-            slot: dict | None = None
+            slot: dict[str, object] | None = None
             if trace:
                 prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                if isinstance(prompts_map, dict):
-                    slot = prompts_map.setdefault(self.get_data_type(), {})
-                    if isinstance(slot, dict):
+                if is_string_mapping(prompts_map):
+                    raw_slot = prompts_map.setdefault(self.get_data_type(), {})
+                    if is_string_mapping(raw_slot):
+                        slot = raw_slot
                         slot["prompt"] = prompt
                         slot["initial_prompt"] = prompt
                         slot["system_prompt"] = system_prompt
@@ -494,7 +500,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                         success = True
                         parsed_data = retry_parsed_data
                         error_msg = None
-                        if trace and isinstance(slot, dict):
+                        if trace and is_string_mapping(slot):
                             slot["completion"] = retry_result_text
                             slot["corrected_completion"] = retry_result_text
                             slot["prompt"] = retry_prompt
@@ -502,8 +508,9 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                             slot["retry_count"] = idx
                             retry_token_dict = extract_token_usage(retry_response)
                             slot["tokens"] = (
-                                slot.get("tokens", 0) or 0
-                            ) + retry_token_dict["total_tokens"]
+                                (token_usage_dict["total_tokens"])
+                                + retry_token_dict["total_tokens"]
+                            )
                             slot["completion_tokens"] = retry_token_dict[
                                 "completion_tokens"
                             ]
@@ -596,14 +603,16 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                     scope="umo",
                     scope_id=str(umo),
                     key="session_service_config",
-                    default={},
+                    default=None,
                 )
-                persona_id = (
+                raw_persona_id = (
                     session_service_config.get("persona_id")
-                    if session_service_config
+                    if is_string_mapping(session_service_config)
                     else None
                 )
 
+                if isinstance(raw_persona_id, str):
+                    persona_id = raw_persona_id
                 if persona_id and persona_id != "[%None]":
                     persona_obj = await persona_mgr.get_persona(persona_id)
                     persona_prompt = (
@@ -644,7 +653,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                 # 2.3 若仍无结果，尝试获取 UMO 设定的默认人格
                 if not persona_prompt:
                     personality = await persona_mgr.get_default_persona_v3(umo)
-                    if isinstance(personality, dict):
+                    if is_string_mapping(personality):
                         persona_prompt = personality.get("prompt")
                     else:
                         persona_prompt = getattr(personality, "prompt", None)

@@ -14,38 +14,38 @@ if TYPE_CHECKING:
 
     from astrbot.api.star import Context
 
-    from ...application.handlers.analysis_command_handler import (
+    from ..application.handlers.analysis_command_handler import (
         AnalysisCommandHandler,
     )
-    from ...application.handlers.comic_command_handler import ComicCommandHandler
-    from ...application.handlers.settings_command_handler import (
+    from ..application.handlers.comic_command_handler import ComicCommandHandler
+    from ..application.handlers.settings_command_handler import (
         SettingsCommandHandler,
     )
-    from ...application.services.analysis_application_service import (
+    from ..application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
-    from ...application.services.comic_application_service import (
+    from ..application.services.comic_application_service import (
         ComicApplicationService,
     )
-    from ...application.services.template_command_service import (
+    from ..application.services.template_command_service import (
         TemplateCommandService,
     )
-    from ...domain.services.incremental_merge_service import (
+    from ..domain.services.incremental_merge_service import (
         IncrementalMergeService,
     )
-    from ...infrastructure.config.config_manager import ConfigManager
-    from ...infrastructure.persistence.checkpoint_store import CheckpointStore
-    from ...infrastructure.persistence.history_manager import HistoryManager
-    from ...infrastructure.persistence.incremental_store import IncrementalStore
-    from ...infrastructure.persistence.platform_group_registry import (
+    from ..infrastructure.config.config_manager import ConfigManager
+    from ..infrastructure.persistence.checkpoint_store import CheckpointStore
+    from ..infrastructure.persistence.history_manager import HistoryManager
+    from ..infrastructure.persistence.incremental_store import IncrementalStore
+    from ..infrastructure.persistence.platform_group_registry import (
         PlatformGroupRegistry,
     )
-    from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
-    from ...infrastructure.platform.bot_manager import BotManager
-    from ...infrastructure.platform.template_preview import TemplatePreviewRouter
-    from ...infrastructure.reporting.generators import ReportGenerator
-    from ...infrastructure.scheduler.auto_scheduler import AutoScheduler
-    from ...infrastructure.webui.active_task_manager import ActiveTaskManager
+    from ..infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+    from ..infrastructure.platform.bot_manager import BotManager
+    from ..infrastructure.platform.template_preview import TemplatePreviewRouter
+    from ..infrastructure.reporting.generators import ReportGenerator
+    from ..infrastructure.scheduler.auto_scheduler import AutoScheduler
+    from ..infrastructure.webui.active_task_manager import ActiveTaskManager
 
 
 @runtime_checkable
@@ -121,5 +121,12 @@ class PluginHostProtocol(Protocol):
     async def put_kv_data(
         self,
         key: str,
-        value: int | float | str | bytes | bool | dict | list | None,
+        value: int
+        | float
+        | str
+        | bytes
+        | bool
+        | dict[str, object]
+        | list[object]
+        | None,
     ) -> None: ...

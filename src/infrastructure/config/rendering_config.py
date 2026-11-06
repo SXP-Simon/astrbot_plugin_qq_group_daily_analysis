@@ -6,6 +6,10 @@ from typing import Literal, NotRequired, TypedDict
 from urllib.parse import urlsplit
 
 from ...shared.constants import DEFAULT_CDN_HOST
+from ...shared.type_guards import (
+    is_object_list,
+    is_string_mapping,
+)
 from ...utils.cdn_utils import normalize_cdn_base_url
 
 CUSTOM_RESOURCE_OPTION = "__custom__"
@@ -164,11 +168,11 @@ def parse_rendering_strategies(
     Raises:
         ValueError: 列表、方案字段或参数范围无效。
     """
-    if not isinstance(value, list):
+    if not is_object_list(value):
         raise ValueError("渲染方案必须是列表")
     result: list[RenderingStrategyConfig] = []
     for index, item in enumerate(value, 1):
-        if not isinstance(item, dict):
+        if not is_string_mapping(item):
             raise ValueError(f"第 {index} 个渲染方案必须是配置对象")
         name = item.get("name", "渲染方案")
         environment = item.get(
@@ -214,7 +218,12 @@ def parse_rendering_strategies(
             raise ValueError(f"第 {index} 个渲染方案请选择 PNG 或 JPEG 格式")
         if scale not in ("normal", "high", "ultra"):
             raise ValueError(f"第 {index} 个渲染方案的分辨率等级无效")
-        defaults = DEFAULT_RENDERING_RESOURCES[environment]
+        preset = DEFAULT_RENDERING_RESOURCES[environment]
+        defaults = {
+            "cdn_base_url": preset["cdn_base_url"],
+            "google_fonts": preset["google_fonts"],
+            "gstatic": preset["gstatic"],
+        }
         resources: dict[str, str] = {}
         for key, label in (
             ("cdn_base_url", "模板资源 CDN"),

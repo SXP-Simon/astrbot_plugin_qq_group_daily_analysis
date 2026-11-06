@@ -25,13 +25,12 @@ if TYPE_CHECKING:
 class ImagePreparationSource(Protocol):
     """Existing preparation and external-result inspection boundaries."""
 
-    async def _prepare_render_data(
+    async def prepare_render_data(
         self,
         analysis_result: AnalysisResultPayload,
         template_theme: str | None = None,
         chart_template: str = "activity_chart.html",
-        avatar_url_getter: Callable[[str, int | None], Awaitable[str | None]]
-        | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
         nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
@@ -41,18 +40,18 @@ class ImagePreparationSource(Protocol):
         font_mode: FontMode = "network",
     ) -> RenderTemplateContext: ...
 
-    def _render_prepared_html(
+    def render_prepared_html(
         self,
         template_file: str,
         template_theme: str | None,
         payload: RenderTemplateContext,
     ) -> str: ...
 
-    def _resolve_t2i_viewport_options(
+    def resolve_t2i_viewport_options(
         self, html_content: str, image_options: ScreenshotOptions
     ) -> tuple[ScreenshotOptions, str]: ...
 
-    def _inspect_render_result(
+    def inspect_render_result(
         self, image_data: object, response_info: RenderAttemptRecord
     ) -> tuple[bool, str, int, str | None]: ...
 
@@ -111,7 +110,7 @@ class ImageHtmlPreparation:
             {"template": self.request.theme, "resource_environment": environment},
         ):
             identity = self.request.identity
-            payload = await self.source._prepare_render_data(
+            payload = await self.source.prepare_render_data(
                 self.request.result,
                 template_theme=self.request.theme,
                 avatar_url_getter=identity.avatar_getter,
@@ -124,7 +123,7 @@ class ImageHtmlPreparation:
                 font_mode=font_mode,
             )
             started = time.perf_counter()
-            content = self.source._render_prepared_html(
+            content = self.source.render_prepared_html(
                 "image_template.html", self.request.theme, payload
             )
             if not content:

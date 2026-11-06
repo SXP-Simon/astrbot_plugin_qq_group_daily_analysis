@@ -23,8 +23,7 @@ class IReportGenerator(ABC):
         analysis_result: AnalysisResultPayload,
         group_id: str,
         html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
-        avatar_url_getter: Callable[[str, int | None], Awaitable[str | None]]
-        | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
         nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
@@ -38,8 +37,7 @@ class IReportGenerator(ABC):
         self,
         analysis_result: AnalysisResultPayload,
         group_id: str,
-        avatar_url_getter: Callable[[str, int | None], Awaitable[str | None]]
-        | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
         nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,

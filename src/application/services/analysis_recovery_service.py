@@ -20,11 +20,17 @@ from ...domain.value_objects import (
     GroupStatistics,
     TokenUsage,
 )
-from ...domain.value_objects.unified_message import UnifiedMessage
+from ...domain.value_objects.analysis_results import (
+    ActivityVisualization,
+    UserActivityRanking,
+    parse_user_activity,
+)
+from ...infrastructure.persistence.unified_message_codec import restore_unified_messages
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
 from ...infrastructure.reporting.report_image import save_report_image
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 from .analysis_serializer import AnalysisResultSerializer
 from .pipeline_context import PipelineContext
@@ -35,7 +41,7 @@ if TYPE_CHECKING:
     from ...domain.repositories.analysis_repository import IAnalysisProvider
     from ...domain.repositories.persistence_repository import ICheckpointStore
     from ...domain.repositories.report_repository import IReportGenerator
-    from ...domain.services.statistics_service import StatisticsService
+    from ...domain.value_objects.unified_message import UnifiedMessage
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.history_manager import HistoryManager
     from ...infrastructure.platform.bot_manager import BotManager
@@ -50,7 +56,6 @@ class AnalysisRecoveryService:
     history_manager: HistoryManager
     report_generator: IReportGenerator
     llm_analyzer: IAnalysisProvider
-    statistics_service: StatisticsService
     task_guard: TaskGuard
     checkpoint_store: ICheckpointStore | None
     html_render: Callable[..., Awaitable[str | bytes | None]] | None
@@ -63,7 +68,6 @@ class AnalysisRecoveryService:
         history_manager: HistoryManager,
         report_generator: IReportGenerator,
         llm_analyzer: IAnalysisProvider,
-        statistics_service: StatisticsService,
         task_guard: TaskGuard,
         checkpoint_store: ICheckpointStore | None = None,
         html_render: Callable[..., Awaitable[str | bytes | None]] | None = None,
@@ -76,7 +80,6 @@ class AnalysisRecoveryService:
             history_manager: 历史持久化管理器。
             report_generator: 报表生成器。
             llm_analyzer: LLM 分析器。
-            statistics_service: 统计领域服务。
             task_guard: 任务排他锁守卫。
             checkpoint_store: 检查点持久化仓储。
             html_render: HTML 渲染回调。
@@ -86,7 +89,6 @@ class AnalysisRecoveryService:
         self.history_manager = history_manager
         self.report_generator = report_generator
         self.llm_analyzer = llm_analyzer
-        self.statistics_service = statistics_service
         self.task_guard = task_guard
         self.checkpoint_store = checkpoint_store
         self.html_render = html_render
@@ -126,7 +128,7 @@ class AnalysisRecoveryService:
                 AnalysisStage.LLM_ANALYSIS.value,
                 trace_id=trace_id,
             )
-            if isinstance(cached_data, dict) and isinstance(
+            if is_string_mapping(cached_data) and isinstance(
                 cached_data.get("statistics"), (dict, GroupStatistics)
             ):
                 analysis_result = AnalysisResultSerializer.deserialize(cached_data)
@@ -136,7 +138,7 @@ class AnalysisRecoveryService:
                 hist_data = await self.history_manager.get_analysis(group_id, date_str)
                 # 旧 KV 记录只有摘要，不能作为可恢复的完整分析产物。
                 if (
-                    isinstance(hist_data, dict)
+                    is_string_mapping(hist_data)
                     and isinstance(hist_data.get("statistics"), (dict, GroupStatistics))
                     and (not trace_id or hist_data.get("trace_id") == trace_id)
                 ):
@@ -154,7 +156,7 @@ class AnalysisRecoveryService:
                 "LLM_ANALYSIS",
                 trace_id=trace_id or "",
             )
-            if isinstance(cached_data, dict) and isinstance(
+            if is_string_mapping(cached_data) and isinstance(
                 cached_data.get("statistics"), (dict, GroupStatistics)
             ):
                 analysis_result = AnalysisResultSerializer.deserialize(cached_data)
@@ -360,7 +362,7 @@ class AnalysisRecoveryService:
             else None
         )
 
-        if not clean_checkpoint or not isinstance(clean_checkpoint, dict):
+        if not clean_checkpoint or not is_string_mapping(clean_checkpoint):
             logger.info(f"未找到群 {group_id} 的前置清洗快照，回退到全量重新分析")
             if trace:
                 trace.metadata["fallback_to_fresh_run"] = True
@@ -417,7 +419,7 @@ class AnalysisRecoveryService:
                 "statistics": statistics,
                 "topics": topics,
                 "user_titles": user_titles,
-                "user_analysis": user_activity,
+                "user_analysis": dict(user_activity),
                 "chat_quality_review": chat_quality_review,
             }
             analysis_result = await self._complete_missing_sections(
@@ -477,7 +479,7 @@ class AnalysisRecoveryService:
     def _restore_clean_checkpoint(
         clean_checkpoint: dict[str, object], group_id: str
     ) -> tuple[
-        AnalysisResultPayload, list[UnifiedMessage], list[dict[str, object]] | None
+        AnalysisResultPayload, list[UnifiedMessage], list[UserActivityRanking] | None
     ]:
         """在恢复边界还原清洗阶段统计、消息和活跃成员候选。
 
@@ -491,46 +493,22 @@ class AnalysisRecoveryService:
         stats_data = clean_checkpoint.get("statistics")
         deserialized = AnalysisResultSerializer.deserialize(
             {
-                "statistics": stats_data if isinstance(stats_data, dict) else {},
+                "statistics": stats_data if is_string_mapping(stats_data) else {},
                 "user_analysis": clean_checkpoint.get("user_activity", {}),
                 "user_titles": clean_checkpoint.get("top_users", []),
             }
         )
         top_users_raw = clean_checkpoint.get("top_users")
-        top_users: list[dict[str, object]] | None = (
-            top_users_raw if isinstance(top_users_raw, list) else None
+        top_users: list[UserActivityRanking] | None = (
+            ActivityVisualization.from_dict(
+                {"user_activity_ranking": top_users_raw}
+            ).user_activity_ranking
+            if is_object_list(top_users_raw)
+            else None
         )
-        unified_messages_raw = clean_checkpoint.get("unified_messages")
-        unified_messages: list[UnifiedMessage] = []
-        if isinstance(unified_messages_raw, list):
-            for message in unified_messages_raw:
-                if isinstance(message, UnifiedMessage):
-                    unified_messages.append(message)
-                elif isinstance(message, dict):
-                    # 续跑 LLM 只读取已清洗文本和发送者信息，无须恢复原始附件。
-                    timestamp = message.get("timestamp", 0)
-                    try:
-                        restored_timestamp = (
-                            int(timestamp)
-                            if isinstance(timestamp, (int, float, str))
-                            else 0
-                        )
-                    except (ValueError, OverflowError):
-                        # 时间戳不参与文本续跑，旧值无效时保留消息正文并使用零值。
-                        restored_timestamp = 0
-                    unified_messages.append(
-                        UnifiedMessage(
-                            message_id=str(message.get("message_id", "")),
-                            sender_id=str(message.get("sender_id", "")),
-                            sender_name=str(message.get("sender_name", "")),
-                            group_id=str(message.get("group_id", group_id)),
-                            text_content=str(message.get("text_content", "")),
-                            timestamp=restored_timestamp,
-                            sender_card=str(message["sender_card"])
-                            if message.get("sender_card")
-                            else None,
-                        )
-                    )
+        unified_messages = restore_unified_messages(
+            clean_checkpoint.get("unified_messages"), group_id
+        )
 
         return deserialized, unified_messages, top_users
 
@@ -562,7 +540,7 @@ class AnalysisRecoveryService:
             try:
                 history = await self.history_manager.get_analysis(group_id, date_str)
                 if (
-                    isinstance(history, dict)
+                    is_string_mapping(history)
                     and isinstance(history.get("statistics"), (dict, GroupStatistics))
                     and history.get("trace_id") == checkpoint_trace_id
                 ):
@@ -571,7 +549,7 @@ class AnalysisRecoveryService:
                 cached = None
         return (
             AnalysisResultSerializer.deserialize(cached)
-            if isinstance(cached, dict)
+            if is_string_mapping(cached)
             else None
         )
 
@@ -580,7 +558,7 @@ class AnalysisRecoveryService:
         pipeline: PipelineContext,
         analysis_result: AnalysisResultPayload,
         unified_messages: list[UnifiedMessage],
-        top_users: list[dict[str, object]] | None,
+        top_users: list[UserActivityRanking] | None,
         platform_id: str | None,
     ) -> AnalysisResultPayload | None:
         """补齐缺失的 LLM 子任务，并保留已成功生成的内容和 Token 用量。
@@ -600,7 +578,7 @@ class AnalysisRecoveryService:
         statistics = analysis_result["statistics"]
         topics = analysis_result["topics"]
         user_titles = analysis_result["user_titles"]
-        user_activity = analysis_result["user_analysis"]
+        user_activity = parse_user_activity(analysis_result["user_analysis"])
         chat_quality_review = analysis_result.get("chat_quality_review")
         golden_quotes = statistics.golden_quotes
         total_token_usage = statistics.token_usage
@@ -613,9 +591,6 @@ class AnalysisRecoveryService:
         run_golden_quote = golden_quote_enabled and not bool(golden_quotes)
         run_chat_quality = chat_quality_enabled and not bool(chat_quality_review)
 
-        legacy_messages = self.statistics_service._convert_to_legacy_dict(
-            unified_messages
-        )
         unified_msg_origin = (
             f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
         )
@@ -630,7 +605,7 @@ class AnalysisRecoveryService:
                         new_tokens,
                         new_chat_quality,
                     ) = await self.llm_analyzer.analyze_all_concurrent(
-                        legacy_messages,
+                        unified_messages,
                         user_activity,
                         umo=unified_msg_origin,
                         top_users=top_users,
@@ -698,6 +673,6 @@ class AnalysisRecoveryService:
             "statistics": statistics,
             "topics": topics,
             "user_titles": user_titles,
-            "user_analysis": user_activity,
+            "user_analysis": dict(user_activity),
             "chat_quality_review": chat_quality_review,
         }

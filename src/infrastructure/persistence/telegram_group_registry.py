@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+from ...shared.type_guards import is_string_mapping
 
 if TYPE_CHECKING:
     from astrbot.api.star import Star
+
+    from .kv_contracts import KeyValueWriter
 
 
 class TelegramGroupRegistry:
@@ -37,12 +41,12 @@ class TelegramGroupRegistry:
         if not self.plugin:
             return
         async with self._lock:
-            registry = await self.plugin.get_kv_data(self._KV_KEY, {})
-            if not isinstance(registry, dict):
+            registry = await self.plugin.get_kv_data(self._KV_KEY, None)
+            if not is_string_mapping(registry):
                 registry = {}
 
             platforms = registry.get("platforms")
-            if not isinstance(platforms, dict):
+            if not is_string_mapping(platforms):
                 platforms = {}
                 registry["platforms"] = platforms
 
@@ -50,14 +54,14 @@ class TelegramGroupRegistry:
             group_key = str(group_id).strip()
 
             platform_map = platforms.get(platform_key)
-            if not isinstance(platform_map, dict):
+            if not is_string_mapping(platform_map):
                 platform_map = {}
                 platforms[platform_key] = platform_map
 
             now_iso = datetime.now(UTC).isoformat()
 
             entry = platform_map.get(group_key)
-            if not isinstance(entry, dict):
+            if not is_string_mapping(entry):
                 entry = {}
 
             first_seen = entry.get("first_seen")
@@ -76,31 +80,33 @@ class TelegramGroupRegistry:
             platform_map[group_key] = entry
 
             registry["updated_at"] = now_iso
-            await self.plugin.put_kv_data(self._KV_KEY, registry)
+            await cast("KeyValueWriter", self.plugin).put_kv_data(
+                self._KV_KEY, registry
+            )
 
     async def get_all_group_ids(self, platform_id: str | None = None) -> list[str]:
         """读取 Telegram 已见群/话题列表。"""
         if not self.plugin:
             return []
         async with self._lock:
-            registry = await self.plugin.get_kv_data(self._KV_KEY, {})
-            if not isinstance(registry, dict):
+            registry = await self.plugin.get_kv_data(self._KV_KEY, None)
+            if not is_string_mapping(registry):
                 return []
 
             platforms = registry.get("platforms")
-            if not isinstance(platforms, dict):
+            if not is_string_mapping(platforms):
                 return []
 
             groups: set[str] = set()
             if platform_id:
                 platform_map = platforms.get(str(platform_id).strip(), {})
-                if isinstance(platform_map, dict):
+                if is_string_mapping(platform_map):
                     groups.update(
                         str(gid).strip() for gid in platform_map if str(gid).strip()
                     )
             else:
                 for platform_map in platforms.values():
-                    if not isinstance(platform_map, dict):
+                    if not is_string_mapping(platform_map):
                         continue
                     groups.update(
                         str(gid).strip() for gid in platform_map if str(gid).strip()

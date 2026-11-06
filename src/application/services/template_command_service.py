@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from astrbot.api.message_components import (
     BaseMessageComponent,
@@ -19,6 +19,7 @@ from ...shared.constants import DEFAULT_ASSETS_CDN_URL
 
 if TYPE_CHECKING:
     from ...domain.repositories.config_repository import IConfigProvider
+    from ...infrastructure.platform.host_images import ImageFactory
 
 
 class TemplateCommandService:
@@ -206,14 +207,16 @@ class TemplateCommandService:
             # 拒绝目录内的符号链接主模板文件（文件级 symlink 会跟随读外部内容）
             if template_dir_has_symlink_entries(Path(candidate_dir)):
                 continue
-            valid = await asyncio.to_thread(
-                lambda base=candidate_dir: (
-                    os.path.isfile(os.path.join(base, "html_template.html"))
-                    or os.path.isfile(os.path.join(base, "image_template.html"))
-                    or os.path.isfile(os.path.join(base, "template.html"))
-                    or os.path.isfile(os.path.join(base, "report.typ"))
+            candidates = [
+                Path(candidate_dir) / name
+                for name in (
+                    "html_template.html",
+                    "image_template.html",
+                    "template.html",
+                    "report.typ",
                 )
-            )
+            ]
+            valid = await asyncio.to_thread(any, map(Path.is_file, candidates))
             if valid:
                 return True
         return False
@@ -273,9 +276,9 @@ class TemplateCommandService:
             ]
             if source:
                 node_content.append(
-                    Image.fromURL(source)
+                    cast("ImageFactory", Image).fromURL(source)
                     if source.startswith(("http://", "https://"))
-                    else Image.fromFileSystem(source)
+                    else cast("ImageFactory", Image).fromFileSystem(source)
                 )
             else:
                 node_content.append(Plain("未提供预览图"))

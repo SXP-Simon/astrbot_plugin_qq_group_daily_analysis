@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 from ...utils.logger import logger
 from ..entities.incremental_state import IncrementalBatch, IncrementalState
@@ -27,7 +28,11 @@ from ..value_objects import (
     QualityReview,
     SummaryTopic,
     TokenUsage,
+    UserTitle,
 )
+
+if TYPE_CHECKING:
+    from ..value_objects.analysis_results import AnalysisResultPayload
 
 
 class IncrementalMergeService:
@@ -151,9 +156,7 @@ class IncrementalMergeService:
                         # 此时保留字典，忽略数字或记录错误，这里选择保留字典
                         continue
 
-                    current_int = current_val if isinstance(current_val, int) else 0
-                    count_int = count if isinstance(count, int) else 0
-                    state.emoji_counts[emoji_key] = current_int + count_int
+                    state.emoji_counts[emoji_key] = current_val + count
 
             # 合并话题（去重）
             for topic in batch.topics:
@@ -209,7 +212,7 @@ class IncrementalMergeService:
             GroupStatistics: 与传统分析格式一致的统计数据
         """
         # 构建 24 小时活跃度分布
-        hourly_activity = {}
+        hourly_activity: dict[int, int] = {}
         for hour in range(24):
             hour_key = str(hour)
             hourly_activity[hour] = state.hourly_message_counts.get(hour_key, 0)
@@ -225,7 +228,7 @@ class IncrementalMergeService:
             hourly_activity=hourly_activity,
             daily_activity={state.get_window_date_str(): state.total_message_count},
             user_activity_ranking=user_ranking,
-            peak_hours=peak_hours,
+            peak_hours=[*peak_hours],
             activity_heatmap_data={},
         )
 
@@ -256,7 +259,6 @@ class IncrementalMergeService:
                     color=str(d.get("color", "#607d8b")),
                 )
                 for d in dimensions_list
-                if isinstance(d, dict)
             ]
             chat_quality_review = QualityReview(
                 title=str(review_dict.get("title", "聊天质量锐评") or "聊天质量锐评"),
@@ -306,7 +308,7 @@ class IncrementalMergeService:
         Returns:
             list[SummaryTopic]: 话题列表，格式与传统分析结果一致
         """
-        topics = []
+        topics: list[SummaryTopic] = []
         for topic_dict in state.topics:
             topic = SummaryTopic(
                 topic=topic_dict.get("topic", "未知话题"),
@@ -331,7 +333,7 @@ class IncrementalMergeService:
         Returns:
             list[GoldenQuote]: 金句列表，格式与传统分析结果一致
         """
-        quotes = []
+        quotes: list[GoldenQuote] = []
         for quote_dict in state.golden_quotes:
             quote = GoldenQuote(
                 content=quote_dict.get("content", ""),
@@ -347,8 +349,8 @@ class IncrementalMergeService:
     def build_analysis_result(
         self,
         state: IncrementalState,
-        user_titles: list | None = None,
-    ) -> dict:
+        user_titles: list[UserTitle] | None = None,
+    ) -> AnalysisResultPayload:
         """
         从增量状态构建完整的 analysis_result 字典。
 
@@ -369,11 +371,11 @@ class IncrementalMergeService:
         # 将金句回填到 statistics 中（与传统流程一致）
         statistics.golden_quotes = golden_quotes
 
-        analysis_result = {
+        analysis_result: AnalysisResultPayload = {
             "statistics": statistics,
             "topics": topics,
             "user_titles": user_titles or [],
-            "user_analysis": state.user_activities,
+            "user_analysis": dict(state.user_activities),
             "chat_quality_review": statistics.chat_quality_review,
         }
 
@@ -405,9 +407,7 @@ class IncrementalMergeService:
         # 显式提取并检查类型，辅助 Pylance 类型推断
         face_details_raw = emoji_counts.get("face_details")
         face_details = (
-            {k: v for k, v in face_details_raw.items() if isinstance(v, int)}
-            if isinstance(face_details_raw, dict)
-            else {}
+            dict(face_details_raw) if isinstance(face_details_raw, dict) else {}
         )
 
         def _get_int(key: str) -> int:

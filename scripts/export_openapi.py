@@ -10,7 +10,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -21,7 +21,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 
-def _load_generator() -> Callable[[], dict[str, Any]]:
+def _load_generator() -> Callable[[], dict[str, object]]:
     """加载 openapi_spec 中的规范生成器函数。"""
     spec_path = ROOT_DIR / "src" / "infrastructure" / "webui" / "openapi_spec.py"
     if spec_path.exists():

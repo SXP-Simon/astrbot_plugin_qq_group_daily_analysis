@@ -25,7 +25,7 @@ async def call_preset_api(
     context: DrawingRequestContext,
     prompt: str,
     images_data: list[tuple[bytes, str]] | None,
-    provider: dict,
+    provider: dict[str, object],
     provider_type: str,
 ) -> bytes | None:
     """调用使用专有请求格式的绘图供应商预设。
@@ -170,7 +170,10 @@ async def call_preset_api(
             )
             resolved_sensenova_size = "2752x1536"
         try:
-            sensenova_n = max(1, min(4, int(provider.get("n", 1))))
+            raw_number = provider.get("n", 1)
+            if not isinstance(raw_number, (str, int, float)):
+                raise TypeError("配置值必须是数字")
+            sensenova_n = max(1, min(4, int(raw_number)))
         except (TypeError, ValueError):
             sensenova_n = 1
         payload = {
@@ -213,7 +216,7 @@ async def call_stepfun_api(
     context: DrawingRequestContext,
     prompt: str,
     images_data: list[tuple[bytes, str]] | None,
-    provider: dict,
+    provider: dict[str, object],
     api_key: str,
     model: str,
     timeout: int | float,

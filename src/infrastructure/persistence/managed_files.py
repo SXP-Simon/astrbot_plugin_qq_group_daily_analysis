@@ -405,7 +405,7 @@ class ManagedFiles:
             temporary.write_bytes(payload)
             if suffix in IMAGE_SUFFIXES:
                 try:
-                    TemplateResourceStore._validate(temporary, name)
+                    TemplateResourceStore.validate(temporary, name)
                 except (UnidentifiedImageError, Image.DecompressionBombError) as error:
                     raise ValueError("图片内容无效或超出像素预算") from error
             if operation == "create":

@@ -1,6 +1,6 @@
 """
 LLM 异步任务调用栈与长时间阻塞诊断模块
-负责从正在执行的 asyncio.Task 中提取调用链路、识别具体阻塞阶段（限流排队、退避重试、网络握手、上游推理等）。
+负责从正在执行的 asyncio.Task[object] 中提取调用链路、识别具体阻塞阶段（限流排队、退避重试、网络握手、上游推理等）。
 """
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from dataclasses import dataclass
+from typing import cast
 
 _LLM_REQUEST_STACK_MAX_DEPTH = 32
 
@@ -44,7 +45,7 @@ class _TaskAwaitFrame:
 
 
 def extract_task_await_frames(
-    task: asyncio.Task,
+    task: asyncio.Task[object],
     max_depth: int = _LLM_REQUEST_STACK_MAX_DEPTH,
 ) -> list[_TaskAwaitFrame]:
     """提取异步任务当前 await 链路的结构化调用帧列表。
@@ -60,7 +61,7 @@ def extract_task_await_frames(
         调用帧元数据列表。
     """
     frames: list[_TaskAwaitFrame] = []
-    current = task.get_coro()
+    current: object = task.get_coro()
     seen: set[int] = set()
 
     for _ in range(max_depth):
@@ -74,7 +75,7 @@ def extract_task_await_frames(
 
         frame = None
         code = None
-        next_awaitable = None
+        next_awaitable: object = None
 
         if inspect.iscoroutine(current):
             frame = current.cr_frame
@@ -89,13 +90,13 @@ def extract_task_await_frames(
             code = current.ag_code
             next_awaitable = current.ag_await
         elif isinstance(current, asyncio.Task):
-            next_awaitable = current.get_coro()
+            next_awaitable = cast("asyncio.Task[object]", current).get_coro()
             frames.append(
                 _TaskAwaitFrame(
                     filename="<Task>",
                     lineno=None,
                     func_name="Task",
-                    target_type=type(current).__name__,
+                    target_type="Task",
                 )
             )
             current = next_awaitable
@@ -126,7 +127,7 @@ def extract_task_await_frames(
 
 
 def format_task_await_chain(
-    task: asyncio.Task,
+    task: asyncio.Task[object],
     max_depth: int = _LLM_REQUEST_STACK_MAX_DEPTH,
 ) -> str:
     """格式化异步任务当前 await 链路。
@@ -154,7 +155,7 @@ def format_task_await_chain(
 
 
 def diagnose_llm_task_block(
-    task: asyncio.Task | None,
+    task: asyncio.Task[object] | None,
     elapsed_seconds: float,
     default_block_point: str = "context.llm_generate",
     is_timeout_aborted: bool = False,

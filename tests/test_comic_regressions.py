@@ -118,6 +118,11 @@ def load_main_method(name: str):
                 bot_manager=getattr(plugin, "bot_manager", None),
                 context=getattr(plugin, "context", None),
             )
+        if not hasattr(plugin, "config_manager") or plugin.config_manager is None:
+            plugin.config_manager = _comic_config_manager()
+        for key, value in _comic_config_manager().__dict__.items():
+            if not hasattr(plugin.config_manager, key):
+                setattr(plugin.config_manager, key, value)
         if not hasattr(plugin, "comic_command_handler"):
             plugin.comic_command_handler = ComicCommandHandler(
                 config_manager=getattr(plugin, "config_manager", None),
@@ -126,8 +131,9 @@ def load_main_method(name: str):
                 analysis_service=getattr(plugin, "analysis_service", None),
                 active_task_manager=getattr(plugin, "active_task_manager", None),
                 plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
-                plugin_instance=plugin,
             )
+        if hasattr(plugin, "try_upload_image"):
+            plugin.comic_command_handler.try_upload_image = plugin.try_upload_image
         if not hasattr(plugin, "analysis_command_handler"):
             plugin.analysis_command_handler = AnalysisCommandHandler(
                 config_manager=getattr(plugin, "config_manager", None),
@@ -140,7 +146,6 @@ def load_main_method(name: str):
                 message_sender=getattr(plugin, "message_sender", None),
                 comic_handler=plugin.comic_command_handler,
                 plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
-                plugin_instance=plugin,
             )
 
     if inspect.iscoroutinefunction(target_func):
@@ -181,6 +186,10 @@ def load_comic_service_method(name: str):
     """
     from src.application.services.comic_application_service import ComicApplicationService
 
+    from src.infrastructure.drawing.external_drawing_adapter import ExternalDrawingAdapter
+    migrated = {"_generate_via_big_banana": "generate_big_banana", "_generate_via_general_plugin": "generate_general", "_import_big_banana_image_resource": "_import_big_banana_image_resource"}
+    if name in migrated:
+        return getattr(ExternalDrawingAdapter, migrated[name])
     return getattr(ComicApplicationService, name)
 
 
@@ -212,8 +221,11 @@ def load_config_manager_class(plugin_data_dir: Path):
         "refresh_rendering_schema_options",
         "save_config",
         "__init__",
-        "_get_group",
-        "_get_plugin_root",
+        "get_group",
+        "_get_scalar",
+        "_get_number",
+        "_get_string_list",
+        "get_plugin_root",
         "_get_plugin_version",
         "_get_schema_fingerprint",
         "_migrate_daily_comic_characters",
@@ -282,6 +294,10 @@ def load_config_manager_class(plugin_data_dir: Path):
         "__name__": "src.infrastructure.config.config_manager",
         "__package__": "src.infrastructure.config",
         "AstrBotConfig": object,
+        "cast": __import__("typing").cast,
+        "is_string_mapping": __import__("src.shared.type_guards", fromlist=["is_string_mapping"]).is_string_mapping,
+        "is_object_list": __import__("src.shared.type_guards", fromlist=["is_object_list"]).is_object_list,
+        "parse_rendering_strategies": __import__("src.infrastructure.config.rendering_config", fromlist=["parse_rendering_strategies"]).parse_rendering_strategies,
         "StarTools": SimpleNamespace(get_data_dir=Mock(return_value=plugin_data_dir)),
         "PLUGIN_NAME": "test_plugin",
         "__file__": str(config_path),
@@ -646,7 +662,7 @@ def test_upgrade_config_backup_requires_schema_change(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    config_manager_class._get_plugin_root = staticmethod(lambda: plugin_root)
+    config_manager_class.get_plugin_root = staticmethod(lambda: plugin_root)
 
     class Config(dict):
         save_config = Mock()
@@ -716,7 +732,7 @@ def test_t2i_rendering_strategies_explicitly_set_desktop_viewport():
 
 def test_t2i_viewport_fallback_respects_numeric_template_meta():
     """固定数字 meta 应优先于插件兜底视口。"""
-    options, description = ReportGenerator._resolve_t2i_viewport_options(
+    options, description = ReportGenerator.resolve_t2i_viewport_options(
         '<meta name="viewport" content="width=980, height=590">',
         {"viewport_width": 1440, "viewport_height": 900},
     )
@@ -728,7 +744,7 @@ def test_t2i_viewport_fallback_respects_numeric_template_meta():
 
 def test_t2i_viewport_fallback_only_fills_missing_meta_dimension():
     """模板只指定宽度时，插件只补充高度兜底。"""
-    options, description = ReportGenerator._resolve_t2i_viewport_options(
+    options, description = ReportGenerator.resolve_t2i_viewport_options(
         '<meta name="viewport" content="width=980, initial-scale=1">',
         {"viewport_width": 1440, "viewport_height": 900},
     )
@@ -774,15 +790,15 @@ def test_comic_is_skipped_without_valid_topics():
     plugin = SimpleNamespace(
         _terminating=False,
         config_manager=SimpleNamespace(get_enable_daily_comic=Mock(return_value=True)),
-        _comic_group_tasks={},
+        comic_group_tasks={},
         _background_tasks=set(),
-        _trigger_comic_generation=AsyncMock(),
+        trigger_comic_generation=AsyncMock(),
     )
 
     trigger_comic(plugin, "123456", "onebot-main", {"topics": [{"topic": ""}]})
 
-    plugin._trigger_comic_generation.assert_not_called()
-    assert plugin._comic_group_tasks == {}
+    plugin.trigger_comic_generation.assert_not_called()
+    assert plugin.comic_group_tasks == {}
     assert plugin._background_tasks == set()
 
 
@@ -795,9 +811,9 @@ def test_comic_generation_observes_comic_group_filter():
             get_enable_daily_comic=Mock(return_value=True),
             is_comic_group_allowed=Mock(return_value=False),
         ),
-        _comic_group_tasks={},
+        comic_group_tasks={},
         _background_tasks=set(),
-        _trigger_comic_generation=AsyncMock(),
+        trigger_comic_generation=AsyncMock(),
     )
 
     status = trigger_comic(
@@ -811,8 +827,8 @@ def test_comic_generation_observes_comic_group_filter():
     plugin.config_manager.is_comic_group_allowed.assert_called_once_with(
         "onebot-main:GroupMessage:123456", True
     )
-    plugin._trigger_comic_generation.assert_not_called()
-    assert plugin._comic_group_tasks == {}
+    plugin.trigger_comic_generation.assert_not_called()
+    assert plugin.comic_group_tasks == {}
     assert plugin._background_tasks == set()
 
 
@@ -826,9 +842,9 @@ def test_auto_comic_switch_skips_report_trigger():
             get_enable_auto_daily_comic=Mock(return_value=False),
             is_comic_group_allowed=Mock(return_value=True),
         ),
-        _comic_group_tasks={},
+        comic_group_tasks={},
         _background_tasks=set(),
-        _trigger_comic_generation=AsyncMock(),
+        trigger_comic_generation=AsyncMock(),
     )
 
     status = trigger_comic(
@@ -840,7 +856,7 @@ def test_auto_comic_switch_skips_report_trigger():
 
     assert status == "auto_disabled"
     plugin.config_manager.is_comic_group_allowed.assert_not_called()
-    plugin._trigger_comic_generation.assert_not_called()
+    plugin.trigger_comic_generation.assert_not_called()
 
 
 def test_standalone_comic_command_is_decoupled_from_analysis_permission():
@@ -1064,6 +1080,11 @@ def _comic_config_manager(**overrides):
     """构造 generate_comic 所需的配置替身。"""
     defaults = {
         "get_enable_daily_comic": Mock(return_value=True),
+        "get_enable_auto_daily_comic": Mock(return_value=True),
+        "is_comic_group_allowed": Mock(return_value=True),
+        "get_report_template": Mock(return_value="default"),
+        "get_show_report_caption": Mock(return_value=True),
+        "get_t2i_max_concurrent": Mock(return_value=1),
         "get_selected_comic_character": Mock(return_value=None),
         "get_comic_character_persona_id": Mock(return_value=""),
         "get_comic_character_storyboard_prompt": Mock(return_value=""),
@@ -1092,6 +1113,7 @@ def _comic_service(config_manager, drawing_client, **methods):
         "_generate_via_general_plugin": AsyncMock(return_value=None),
     }
     service.update(methods)
+    service["external_drawing"] = SimpleNamespace(generate_big_banana=service.pop("_generate_via_big_banana"), generate_general=service.pop("_generate_via_general_plugin"))
     from src.application.services.comic_application_service import ComicApplicationService
 
     instance = object.__new__(ComicApplicationService)
@@ -1261,8 +1283,8 @@ def test_generate_comic_prefers_big_banana_backend():
 
         assert comic_bytes == b"comic-bytes"
         assert fallback_url is None
-        service._generate_via_big_banana.assert_awaited_once()
-        service._generate_via_general_plugin.assert_not_called()
+        service.external_drawing.generate_big_banana.assert_awaited_once()
+        service.external_drawing.generate_general.assert_not_called()
         drawing_client.generate_image.assert_not_called()
 
     asyncio.run(scenario())
@@ -1292,8 +1314,8 @@ def test_generate_comic_prefers_general_plugin_backend():
 
         assert comic_bytes == b"comic-bytes"
         assert fallback_url is None
-        service._generate_via_general_plugin.assert_awaited_once()
-        service._generate_via_big_banana.assert_not_called()
+        service.external_drawing.generate_general.assert_awaited_once()
+        service.external_drawing.generate_big_banana.assert_not_called()
         drawing_client.generate_image.assert_not_called()
 
     asyncio.run(scenario())
@@ -1433,7 +1455,7 @@ def test_comic_delivery_sniffs_cached_file_extension_after_generation(tmp_path):
     发送、相册上传的完整路径，确保 JPEG 不会因旧的 ``get_drawing_output_format``
     回退逻辑触发 AttributeError 或被错误保存为 PNG。
     """
-    trigger_comic = load_main_method("_trigger_comic_generation")
+    trigger_comic = load_main_method("trigger_comic_generation")
     detect_image_ext = load_main_method("_detect_image_ext")
     trigger_comic.__globals__["StarTools"] = SimpleNamespace(
         get_data_dir=Mock(return_value=tmp_path)
@@ -1448,7 +1470,7 @@ def test_comic_delivery_sniffs_cached_file_extension_after_generation(tmp_path):
             generate_comic=AsyncMock(return_value=(comic_bytes, None))
         ),
         bot_manager=SimpleNamespace(get_adapter=Mock(return_value=adapter)),
-        _try_upload_image=AsyncMock(),
+        try_upload_image=AsyncMock(),
     )
 
     asyncio.run(trigger_comic(plugin, [{"topic": "测试"}], "123456", "onebot", "umo"))
@@ -1456,14 +1478,14 @@ def test_comic_delivery_sniffs_cached_file_extension_after_generation(tmp_path):
     sent_path = adapter.send_image.await_args.args[1]
     assert sent_path.endswith(".jpg")
     assert Path(sent_path).exists()
-    plugin._try_upload_image.assert_awaited_once_with(
+    plugin.try_upload_image.assert_awaited_once_with(
         "123456", sent_path, "onebot", is_comic=True
     )
 
 
 def test_comic_album_upload_sniffs_local_cached_image_extension(tmp_path):
     """漫画相册上传应从本地缓存内容识别格式，而不是默认标记为 PNG。"""
-    upload_image = load_main_method("_try_upload_image")
+    upload_image = load_main_method("try_upload_image")
     detect_image_ext = load_main_method("_detect_image_ext")
     image_path = tmp_path / "comic_cache" / "comic.jpg"
     image_path.parent.mkdir()
@@ -1471,6 +1493,8 @@ def test_comic_album_upload_sniffs_local_cached_image_extension(tmp_path):
     adapter = SimpleNamespace(
         get_group_info=AsyncMock(return_value=None),
         upload_group_album=AsyncMock(),
+        find_album_id=AsyncMock(),
+        get_group_album_list=AsyncMock(),
     )
     plugin = SimpleNamespace(
         config_manager=SimpleNamespace(

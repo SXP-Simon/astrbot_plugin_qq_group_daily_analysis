@@ -75,6 +75,19 @@
 
 > **注**：领域层中严禁设立模糊的 `models/` 目录，所有不可变数据载体统一归位为 `value_objects/`。
 
+### 统一消息的分析链路
+
+平台适配器将原始消息转换成 `UnifiedMessage`，清洗、统计、活动图表、普通分析、增量分析和断点续跑都传递这一类型。不要再将消息压平成只有正文的协议字典，否则会丢失提及、回复和表情信息。
+
+- `contents` 保存消息段及顺序；`text_content` 是当前阶段的纯文本，由适配器提取、清洗服务同步更新，不表示构造对象时就已完成清洗。
+- `MessageContent.is_emoji()` 统一表情识别口径，供群统计、用户统计和小时分布使用。它只读取明确类型与 `is_sticker`。平台图片标记由 `message_normalization.py` 识别，旧快照由 `unified_message_codec.py` 在读取时转换，不把协议字段传入领域。
+- 话题、金句和聊天质量通过 `infrastructure/analysis/utils/analysis_messages.py` 提取 `AnalysisTextMessage`。提及写成 `@[用户ID]`，回复写成 `[回复:消息ID]`，本批次被引用的消息加上 `[消息:消息ID]`；未采集到的原文不会补造。
+- ID 保留字符串，不按 QQ 号解析；消息所属的平台与会话由分析任务限定。显示名统一通过 `get_display_name(use_card=...)` 选择，身份关联始终使用 ID。
+- 检查点保存结构化消息，恢复时还原内容段、平台和回复关系；只有文本的旧快照按已有文本继续分析，不要求用户迁移配置。
+- `frozen=True` 禁止字段重新赋值，清洗使用 `dataclasses.replace()` 生成新对象。消息段仅包含枚举、字符串和布尔值，不携带可变原始字典。旧 `raw_data` 只在快照读取边界使用，新快照只保存明确字段。
+
+只保留有生产调用的消息方法。提示词格式由分析模块处理，不在值对象内保留另一套格式化入口。
+
 ### 2.2 仓储与能力契约 (Repositories)
 位于 `src/domain/repositories/`，以抽象基类（`ABC`）形式定义外部技术能力契约：
 - `IAnalysisProvider`：多维度语义分析接口契约；
@@ -137,13 +150,17 @@ src/application/services/
 
 ### 4.4 平台适配与消息转换 (`infrastructure/platform/`)
 - `OneBotAdapter`：处理与 OneBot 协议端（NapCat、LLOneBot 等）的 API 交互；
-- `onebot/message_converter.py` (`OneBotMessageConverter`)：专职负责 OneBot CQ 码/消息段与统一 `UnifiedMessage` 的双向转换；
+- `onebot/message_converter.py` (`OneBotMessageConverter`)：专职将 OneBot 消息段转换为统一 `UnifiedMessage`；
 - `telegram_message_converter.py` (`TelegramMessageConverter`)：专职负责 Telegram 历史记录转换、占位昵称自愈与话题群 ID 解析；
 - `group_file_manager.py` (`GroupFileManager`)：专职负责群文件上传与归档管理；
-- `QQOfficialAdapter`, `TelegramAdapter`, `DiscordAdapter`：跨平台协议独立实现。
+- `QQOfficialAdapter`, `TelegramAdapter`, `DiscordAdapter`：跨平台协议独立实现；统一提供 `at_user_id`、`reply_to_id` 和明确的表情属性。无真实消费者的 `convert_to_raw_format()` 反向转换已移除。
+- `AstrBotEventReader`：解析宿主事件与平台字段，生成历史存储输入；`MessageProcessingService` 负责范围检查、去重、存储编排和群组注册，不解释 SDK 原始字段。
+- `AstrBotHistoryWriter`：封装宿主历史接口及旧版 `max_messages` 差异；兼容失败不能吞掉实际存储异常。
+- `ExternalDrawingAdapter`：封装外部绘图插件发现、请求及返回值检查，应用服务只读取图片字节或失败结果，并按配置回退。取消异常继续向上传递。
 
 ### 4.5 LLM 语义分析器与可观测性 (`infrastructure/analysis/`)
 - `LLMAnalyzer`：作为 IAnalysisProvider 门面协调器；
+- `utils/token_usage.py`：将宿主及供应商响应中的用量转换为 `TokenUsage`，领域对象不再反射读取外部 SDK。
 - 各独立 Analyzer（`TopicAnalyzer`, `UserTitleAnalyzer`, `GoldenQuoteAnalyzer`, `ChatQualityAnalyzer`, `ComicStoryboardAnalyzer`）继承自泛型基类 `BaseAnalyzer[TDataObject, TInputData]`，实现标准化重试、结构化 Schema 校验与 Token 统计；
 - `utils/llm_diagnostics.py`：专职负责 Python 异步协程帧栈深度反查、超时卡死链路追踪与长耗时诊断。
 
@@ -172,7 +189,7 @@ dashboard/src/
 
 任何提交合并均需严格通过以下质量门禁：
 
-1. **类型安全**：`npx pyright` 严格模式 **0 错误、0 警告**；
-2. **代码风格与导入**：`uv run ruff check .` 与 `uv run ruff format --check .` 全量通过；
+1. **类型安全**：`uv run python scripts/check_python.py typecheck` 严格模式 **0 错误、0 警告**；
+2. **代码风格与导入**：`uv run python scripts/check_python.py lint .` 与 `uv run python scripts/check_python.py format . --check` 全量通过；
 3. **自动化测试**：`uv run pytest` 全量自动化测试套件 **100% 通过**；
 4. **前端规范**：`pnpm lint` 与 `pnpm typecheck` **0 错误**。

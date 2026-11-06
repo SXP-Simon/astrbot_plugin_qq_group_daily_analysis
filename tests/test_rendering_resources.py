@@ -25,14 +25,14 @@ async def test_scrapbook_character_follows_the_current_cdn(rendering):
         title="今日交流", subtitle="讨论记录", summary="保留群聊结论。", dimensions=[],
     )
     for cdn in ("https://one.example", "https://two.example"):
-        data = await generator._prepare_render_data(
+        data = await generator.prepare_render_data(
             result, template_theme="scrapbook", resources={
                 "cdn_base_url": cdn,
                 "google_fonts": "https://fonts.example",
                 "gstatic": "https://static.example",
             },
         )
-        html = generator._render_prepared_html("image_template.html", "scrapbook", data)
+        html = generator.render_prepared_html("image_template.html", "scrapbook", data)
         assert f'{data["cdn_assets_base"]}/scrapbook/assistant.jpg' in html
         assert cdn in data["cdn_assets_base"]
         assert "data:image/jpeg;base64," not in html
@@ -111,7 +111,7 @@ async def test_round_snapshot_reaches_npm_and_atri_without_changing_custom_overr
     for override in (None, "https://custom.example/ATRI"):
         if override:
             manager.config["t2i_rendering"]["t2i_atri_font_mirror"] = override
-        data = await generator._prepare_render_data(
+        data = await generator.prepare_render_data(
             create_analysis_result(), resources=resources
         )
         assert data["t2i_npm_mirror"] == "https://round.example/npm"

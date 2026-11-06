@@ -616,7 +616,7 @@ def test_qq_official_html_sidecar_uses_identity_sanitizer(tmp_path):
     async def fake_prepare_render_data(*args, **kwargs):
         return {}
 
-    generator._prepare_render_data = fake_prepare_render_data
+    generator.prepare_render_data = fake_prepare_render_data
     openid = "A1B2C3D4_OPENID"
     analysis_result = {
         "statistics": {

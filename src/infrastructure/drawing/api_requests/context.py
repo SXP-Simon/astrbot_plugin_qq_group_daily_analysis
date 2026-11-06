@@ -17,21 +17,21 @@ if TYPE_CHECKING:
 class DrawingRequestHooks(Protocol):
     """描述绘图请求服务依赖的宿主能力。"""
 
-    def _build_target_url(self, raw_url: str, protocol: str) -> str: ...
+    def build_target_url(self, raw_url: str, protocol: str) -> str: ...
 
-    def _get_provider_value(self, name: str, provider: dict[str, object]) -> object: ...
+    def get_provider_value(self, name: str, provider: dict[str, object]) -> object: ...
 
-    def _get_request_proxy(
+    def get_request_proxy(
         self, provider: dict[str, object] | None = None
     ) -> str | None: ...
 
-    def _resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str: ...
+    def resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str: ...
 
-    def _sanitize_url(self, url: str) -> str: ...
+    def sanitize_url(self, url: str) -> str: ...
 
-    def _summarize_response(self, data: object) -> str: ...
+    def summarize_response(self, data: object) -> str: ...
 
-    def _decode_base64(self, encoded: str) -> bytes: ...
+    def decode_base64(self, encoded: str) -> bytes: ...
 
 
 @dataclass(slots=True)
@@ -47,15 +47,15 @@ class DrawingRequestContext:
     extract_image: Callable[[object, str | None], Awaitable[bytes | None]]
 
     def build_target_url(self, raw_url: str, protocol: str) -> str:
-        return self.hooks._build_target_url(raw_url, protocol)
+        return self.hooks.build_target_url(raw_url, protocol)
 
     def get_provider_value(self, name: str, provider: dict[str, object]) -> object:
-        return self.hooks._get_provider_value(name, provider)
+        return self.hooks.get_provider_value(name, provider)
 
     def get_request_proxy(
         self, provider: dict[str, object] | None = None
     ) -> str | None:
-        return self.hooks._get_request_proxy(provider)
+        return self.hooks.get_request_proxy(provider)
 
     def resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str:
         """按当前供应商条目的宽高比解析尺寸别名。
@@ -67,13 +67,13 @@ class DrawingRequestContext:
         Returns:
             对应的 ``宽x高`` 尺寸字符串。
         """
-        return self.hooks._resolve_size(size_or_ratio, aspect_ratio)
+        return self.hooks.resolve_size(size_or_ratio, aspect_ratio)
 
     def sanitize_url(self, url: str) -> str:
-        return self.hooks._sanitize_url(url)
+        return self.hooks.sanitize_url(url)
 
     def summarize_response(self, data: object) -> str:
-        return self.hooks._summarize_response(data)
+        return self.hooks.summarize_response(data)
 
     def decode_base64(self, encoded: str) -> bytes:
-        return self.hooks._decode_base64(encoded)
+        return self.hooks.decode_base64(encoded)

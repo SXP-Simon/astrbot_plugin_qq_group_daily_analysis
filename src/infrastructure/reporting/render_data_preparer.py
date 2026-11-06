@@ -26,12 +26,17 @@ from ...shared.report_language import (
     format_report_date,
     resolve_report_language,
 )
+from ...shared.type_guards import (
+    is_object_collection,
+    is_object_list,
+    is_string_mapping,
+)
 from ...utils.logger import logger
 from .display_names import normalize_display_name
 from .profile_mappings import resolve_profile_info
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from ...domain.value_objects import (
         AnalysisResultPayload,
@@ -94,7 +99,7 @@ class RenderDataPreparer:
         avatar_service: AvatarService,
         html_templates: HTMLTemplates,
         activity_visualizer: ActivityVisualizer,
-        profile_asset_manifest: dict[str, dict] | None = None,
+        profile_asset_manifest: dict[str, dict[str, dict[str, object]]] | None = None,
     ):
         """初始化渲染数据准备器。
 
@@ -111,7 +116,7 @@ class RenderDataPreparer:
         self.activity_visualizer = activity_visualizer
         self.profile_asset_manifest = profile_asset_manifest or {}
 
-    def get_profile_mapping_overrides(self) -> dict[str, dict]:
+    def get_profile_mapping_overrides(self) -> dict[str, dict[str, dict[str, object]]]:
         """解析用户配置的人格映射覆盖项。"""
         raw = self.config_manager.get_profile_mapping_config() or ""
         if not raw:
@@ -119,8 +124,16 @@ class RenderDataPreparer:
 
         try:
             data = json.loads(raw)
-            if isinstance(data, dict):
-                return data
+            if is_string_mapping(data):
+                return {
+                    mode: {
+                        code: item
+                        for code, item in entries.items()
+                        if is_string_mapping(item)
+                    }
+                    for mode, entries in data.items()
+                    if is_string_mapping(entries)
+                }
         except Exception as e:
             logger.warning(f"人格映射配置 JSON 解析失败，已回退到默认映射: {e}")
         return {}
@@ -138,39 +151,39 @@ class RenderDataPreparer:
         """
         raw_sanitized = self.to_plain_export_data(copy.deepcopy(analysis_result))
         sanitized: dict[str, object] = (
-            raw_sanitized if isinstance(raw_sanitized, dict) else {}
+            raw_sanitized if is_string_mapping(raw_sanitized) else {}
         )
         sanitized["user_analysis"] = {}
         topics = sanitized.get("topics")
-        if isinstance(topics, list):
+        if is_object_list(topics):
             for topic in topics:
-                if not isinstance(topic, dict):
+                if not is_string_mapping(topic):
                     continue
                 topic["contributors"] = []
                 topic["contributor_ids"] = []
         user_titles = sanitized.get("user_titles")
-        if isinstance(user_titles, list):
+        if is_object_list(user_titles):
             for title in user_titles:
-                if not isinstance(title, dict):
+                if not is_string_mapping(title):
                     continue
                 title["name"] = ""
                 title["user_id"] = ""
         stats = sanitized.get("statistics")
-        if isinstance(stats, dict):
+        if is_string_mapping(stats):
             quotes = stats.get("golden_quotes")
-            if isinstance(quotes, list):
+            if is_object_list(quotes):
                 for golden_quote in quotes:
-                    if not isinstance(golden_quote, dict):
+                    if not is_string_mapping(golden_quote):
                         continue
                     golden_quote["sender"] = ""
                     golden_quote["user_id"] = ""
 
             activity_visualization = stats.get("activity_visualization")
-            if isinstance(activity_visualization, dict):
+            if is_string_mapping(activity_visualization):
                 activity_visualization["user_activity_ranking"] = []
 
         sanitized_data = self.sanitize_export_identity_text(sanitized, analysis_result)
-        if isinstance(sanitized_data, dict):
+        if is_string_mapping(sanitized_data):
             return sanitized_data
         return sanitized
 
@@ -189,9 +202,9 @@ class RenderDataPreparer:
             return cls.to_plain_export_data(to_dict_fn())
         if is_dataclass(value) and not isinstance(value, type):
             return cls.to_plain_export_data(asdict(value))
-        if isinstance(value, dict):
+        if is_string_mapping(value):
             return {key: cls.to_plain_export_data(item) for key, item in value.items()}
-        if isinstance(value, (list, tuple, set)):
+        if is_object_collection(value):
             return [cls.to_plain_export_data(item) for item in value]
         return value
 
@@ -209,12 +222,12 @@ class RenderDataPreparer:
         """
         if isinstance(value, str):
             return self.sanitize_identity_text(value, analysis_result, True)
-        if isinstance(value, dict):
+        if is_string_mapping(value):
             return {
                 key: self.sanitize_export_identity_text(item, analysis_result)
                 for key, item in value.items()
             }
-        if isinstance(value, list):
+        if is_object_list(value):
             return [
                 self.sanitize_export_identity_text(item, analysis_result)
                 for item in value
@@ -338,10 +351,8 @@ class RenderDataPreparer:
                             str(dimension.get("comment", "")), analysis_result, True
                         ),
                     }
-                    for dimension in (
-                        dimensions if isinstance(dimensions, list) else []
-                    )
-                    if isinstance(dimension, dict)
+                    for dimension in (dimensions if is_object_list(dimensions) else [])
+                    if is_string_mapping(dimension)
                 ],
             }
         rendered = self.html_templates.render_template(
@@ -387,7 +398,7 @@ class RenderDataPreparer:
             user_id = str(golden_quote.user_id or "").strip()
             if user_id:
                 avatar_user_ids.add(user_id)
-        mention_sources = []
+        mention_sources: list[str] = []
         for topic in topics:
             if hide_user_names:
                 avatar_user_ids.update(
@@ -414,8 +425,8 @@ class RenderDataPreparer:
         analysis_result: AnalysisResultPayload,
         template_theme: str | None = None,
         chart_template: str = "activity_chart.html",
-        avatar_url_getter: Callable | None = None,
-        nickname_getter: Callable | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None = None,
+        nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
@@ -455,7 +466,7 @@ class RenderDataPreparer:
         activity_viz = stats.activity_visualization
 
         max_topics = self.config_manager.get_max_topics()
-        topics_list = []
+        topics_list: list[dict[str, object]] = []
         user_analysis = analysis_result.get("user_analysis")
         avatar_reuse_registry: dict[str, str] = {}
         avatar_reuse_aliases: dict[str, str] = {}
@@ -528,7 +539,7 @@ class RenderDataPreparer:
         )
         logger.debug(f"话题HTML生成完成，长度: {len(topics_html)}")
 
-        titles_list = []
+        titles_list: list[dict[str, object]] = []
         profile_mode = self.config_manager.get_profile_display_mode()
         profile_mapping_overrides = self.get_profile_mapping_overrides()
         for title in user_titles[:max_user_titles]:
@@ -565,7 +576,7 @@ class RenderDataPreparer:
                     hide_user_names=True,
                     allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                 )
-            title_data = {
+            title_data: dict[str, object] = {
                 "name": "" if hide_user_names else normalize_display_name(title.name),
                 "title": title.title,
                 "mbti": title.mbti,
@@ -587,7 +598,7 @@ class RenderDataPreparer:
         )
         logger.debug(f"用户称号HTML生成完成，长度: {len(titles_html)}")
 
-        quotes_list = []
+        quotes_list: list[dict[str, object]] = []
         for golden_quote in stats.golden_quotes[:max_golden_quotes]:
             quote_user_id = str(golden_quote.user_id) if golden_quote.user_id else None
             avatar_url = (
@@ -697,7 +708,7 @@ class RenderDataPreparer:
     async def render_avatar_only_ids(
         self,
         user_ids: list[str],
-        avatar_url_getter: Callable | None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None,
         avatar_cache_namespace: str | None,
         avatar_reuse_registry: dict[str, str] | None,
         avatar_reuse_aliases: dict[str, str] | None,
@@ -755,9 +766,9 @@ class RenderDataPreparer:
     async def render_mentions(
         self,
         text: str,
-        avatar_url_getter: Callable | None,
-        nickname_getter: Callable | None = None,
-        user_analysis: dict | None = None,
+        avatar_url_getter: Callable[[str], Awaitable[str | None]] | None,
+        nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
+        user_analysis: Mapping[str, object] | None = None,
         avatar_cache_namespace: str | None = None,
         avatar_reuse_registry: dict[str, str] | None = None,
         avatar_reuse_aliases: dict[str, str] | None = None,
@@ -818,9 +829,10 @@ class RenderDataPreparer:
             name = None
             if user_analysis and uid in user_analysis:
                 stats = user_analysis[uid]
-                name = normalize_display_name(
-                    str(stats.get("nickname") or stats.get("name") or "")
-                )
+                if is_string_mapping(stats):
+                    name = normalize_display_name(
+                        str(stats.get("nickname") or stats.get("name") or "")
+                    )
                 if self.is_placeholder_display_name(name, uid):
                     name = None
 
@@ -914,9 +926,9 @@ class RenderDataPreparer:
         known_ids = {
             str(user_id).strip() for user_id in user_analysis if str(user_id).strip()
         }
-        known_names = set()
+        known_names: set[str] = set()
         for stats in user_analysis.values():
-            if not isinstance(stats, dict):
+            if not is_string_mapping(stats):
                 continue
             for key in ("nickname", "name"):
                 value = str(stats.get(key, "") or "").strip()

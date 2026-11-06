@@ -11,7 +11,7 @@ async def call_google_api(
     context: DrawingRequestContext,
     prompt: str,
     images_data: list[tuple[bytes, str]] | None,
-    provider: dict,
+    provider: dict[str, object],
 ) -> bytes | None:
     """调用 Google Gemini generateContent 官方接口。"""
     api_base = str(context.get_provider_value("api_url", provider)).rstrip("/")

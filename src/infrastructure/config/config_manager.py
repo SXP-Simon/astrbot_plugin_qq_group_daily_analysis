@@ -9,7 +9,7 @@ import json
 import os
 import random
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.api.star import StarTools
@@ -21,8 +21,9 @@ from ...shared.constants import (
     GITHUB_REPO_OWNER,
     PLUGIN_NAME,
 )
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
-from .config_migrator import ConfigMigrator
+from .config_migrator import ConfigMigrator, UpgradeProtectionState
 from .rendering_config import (
     DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS,
     DEFAULT_RENDERING_STRATEGY_PRESETS,
@@ -38,6 +39,17 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from astrbot.api import AstrBotConfig
+
+    from ...domain.value_objects.analysis_results import ComicCharacterConfig
+
+
+_ConfigScalar = TypeVar("_ConfigScalar", str, int, float, bool)
+
+
+class ConfigWriter(Protocol):
+    """宿主配置的无参保存接口，隔离旧版签名中的未标注替换参数。"""
+
+    def save_config(self) -> None: ...
 
 
 class ConfigManager:
@@ -68,15 +80,15 @@ class ConfigManager:
 
     def refresh_rendering_schema_options(self) -> None:
         """同步宿主内存中的资源选项，兼容不带 Schema 的离线配置桩。"""
-        schema: dict | None = getattr(self.config, "schema", None)
-        sync_rendering_schema_options(schema, self._get_group("t2i_rendering"))
+        schema: object = getattr(self.config, "schema", None)
+        sync_rendering_schema_options(schema, self.get_group("t2i_rendering"))
 
     def _protect_upgrade_data(self) -> None:
         """在插件升级且配置结构发生变更时备份旧配置（委托 ConfigMigrator）。"""
         self._migrator.protect_upgrade_data()
 
     @staticmethod
-    def _get_plugin_root() -> Path:
+    def get_plugin_root() -> Path:
         """获取插件根目录（委托 ConfigMigrator）。"""
         return ConfigMigrator.get_plugin_root()
 
@@ -91,16 +103,20 @@ class ConfigManager:
         return ConfigMigrator.get_schema_fingerprint(plugin_root)
 
     @staticmethod
-    def _read_upgrade_protection_state(state_path: Path) -> dict:
+    def _read_upgrade_protection_state(state_path: Path) -> UpgradeProtectionState:
         """读取上一次正常启动记录的升级保护状态（委托 ConfigMigrator）。"""
         return ConfigMigrator.read_upgrade_protection_state(state_path)
 
     @staticmethod
-    def _save_upgrade_protection_state(state_path: Path, state: dict) -> None:
+    def _save_upgrade_protection_state(
+        state_path: Path, state: UpgradeProtectionState
+    ) -> None:
         """原子保存升级保护状态（委托 ConfigMigrator）。"""
         ConfigMigrator.save_upgrade_protection_state(state_path, state)
 
-    def _write_upgrade_config_backup(self, config: dict, version: str) -> bool:
+    def _write_upgrade_config_backup(
+        self, config: dict[str, object], version: str
+    ) -> bool:
         """保存旧版本配置快照（委托 ConfigMigrator）。
 
         Args:
@@ -140,7 +156,7 @@ class ConfigManager:
         """自动将旧版默认漫画分镜提示词升级（委托 ConfigMigrator）。"""
         self._migrator.migrate_legacy_comic_storyboard_prompts()
 
-    def _write_comic_config_backup(self, data: dict) -> bool:
+    def _write_comic_config_backup(self, data: dict[str, object]) -> bool:
         """写入漫画配置迁移备份（委托 ConfigMigrator）。
 
         Args:
@@ -164,25 +180,84 @@ class ConfigManager:
             references, star_tools=StarTools
         )
 
-    def _get_group(self, group: str) -> dict:
+    def get_group(self, group: str) -> dict[str, object]:
         """获取配置分组，不存在或不是字典时按空分组读取"""
-        value = self.config.get(group, {})
+        # 宿主配置继承未标注泛型的 dict；仅补充键类型，字段值仍需校验。
+        config_values = cast("dict[str, object]", self.config)
+        value = config_values.get(group, {})
         # 异常分组按缺省值读取，保留原始配置以便管理员修正。
-        return value if isinstance(value, dict) else {}
+        return value if is_string_mapping(value) else {}
 
-    def _ensure_group(self, group: str) -> dict:
+    def ensure_group(self, group: str) -> dict[str, object]:
         """确保指定分组存在并返回其字典引用"""
-        if group not in self.config:
-            self.config[group] = {}
-        return self.config[group]
+        # 宿主配置继承未标注泛型的 dict；仅补充键类型，字段值仍需校验。
+        config_values = cast("dict[str, object]", self.config)
+        value = config_values.get(group)
+        if not is_string_mapping(value):
+            value = {}
+            config_values[group] = value
+        return value
+
+    def _get_scalar(
+        self, group: str, key: str, default: _ConfigScalar
+    ) -> _ConfigScalar:
+        """在配置入口校验标量类型，异常时使用该字段原有的默认值。
+
+        Args:
+            group: 配置分组名称。
+            key: 配置字段名称。
+            default: 字段默认值，同时确定预期的标量类型。
+
+        Returns:
+            类型匹配时返回配置值，否则返回默认值。
+        """
+        value = self.get_group(group).get(key, default)
+        return value if isinstance(value, type(default)) else default
+
+    def _get_number(
+        self, group: str, key: str, default: int | float
+    ) -> str | int | float:
+        """读取可供数值转换的配置，保留旧配置中的数字字符串。
+
+        Args:
+            group: 配置分组。
+            key: 数值字段。
+            default: 未配置时的默认值。
+
+        Returns:
+            数值或可转换的字符串，格式异常仍由调用处处理。
+
+        Raises:
+            TypeError: 配置值既不是数字，也不是字符串。
+        """
+        value = self.get_group(group).get(key, default)
+        if not isinstance(value, (str, int, float)):
+            raise TypeError(f"配置 {group}.{key} 必须是数值")
+        return value
+
+    def _get_string_list(self, group: str, key: str, default: list[str]) -> list[str]:
+        """读取字符串列表，避免异常配置值流入业务用例。
+
+        Args:
+            group: 配置分组名称。
+            key: 配置字段名称。
+            default: 配置值不是列表时使用的默认值。
+
+        Returns:
+            配置中的字符串条目，或字段默认列表。
+        """
+        value = self.get_group(group).get(key)
+        if not is_object_list(value):
+            return default
+        return [item for item in value if isinstance(item, str)]
 
     def get_group_list_mode(self) -> str:
         """获取群组列表模式 (whitelist/blacklist/none)"""
-        return self._get_group("basic").get("group_list_mode", "none")
+        return self._get_scalar("basic", "group_list_mode", "none")
 
     def get_group_list(self) -> list[str]:
         """获取群组列表（用于黑白名单）"""
-        return self._get_group("basic").get("group_list", [])
+        return self._get_string_list("basic", "group_list", [])
 
     def is_group_allowed(self, group_id_or_umo: str) -> bool:
         """
@@ -252,7 +327,7 @@ class ConfigManager:
 
     def get_max_messages(self) -> int:
         """获取最大消息数量"""
-        return self._get_group("basic").get("max_messages", 1000)
+        return self._get_scalar("basic", "max_messages", 1000)
 
     def get_local_history_max_messages(self) -> int:
         """获取本地群消息历史缓存保留上限（单群最大保留条数）。
@@ -260,8 +335,10 @@ class ConfigManager:
         Returns:
             int: 保留上限条数，约束在 10,000 至 100,000 条之间，默认 10,000。
         """
-        raw = self._get_group("basic").get("local_history_max_messages", 10000)
+        raw = self.get_group("basic").get("local_history_max_messages", 10000)
         try:
+            if not isinstance(raw, (str, int, float)):
+                raise TypeError("本地消息保留上限必须是数值")
             val = int(raw)
         except (TypeError, ValueError):
             val = 10000
@@ -273,36 +350,40 @@ class ConfigManager:
         Returns:
             bool: 是否开启仅持久化白名单/允许群，默认 False（全量缓存入库）。
         """
-        raw = self._get_group("basic").get("persist_only_allowed_groups", False)
+        raw = self.get_group("basic").get("persist_only_allowed_groups", False)
         if isinstance(raw, str):
             return raw.strip().lower() in ("true", "1", "yes", "on")
         return bool(raw)
 
     def get_analysis_days(self) -> int:
         """获取分析天数"""
-        return self._get_group("basic").get("analysis_days", 1)
+        return self._get_scalar("basic", "analysis_days", 1)
 
     def get_enable_runtime_metrics(self) -> bool:
         """获取是否开启全链路性能指标与资源监控。"""
-        return self._get_group("basic").get("enable_runtime_metrics", True)
+        return self._get_scalar("basic", "enable_runtime_metrics", True)
 
     def get_auto_analysis_time(self) -> list[str]:
         """获取自动分析时间列表"""
-        group = self._get_group("auto_analysis")
+        group = self.get_group("auto_analysis")
         val = group.get("auto_analysis_time", ["09:00"])
         # 兼容旧版本字符串配置
         if isinstance(val, str):
             val_list = [val]
             # 自动修复配置格式
             try:
-                auto_group = self._ensure_group("auto_analysis")
+                auto_group = self.ensure_group("auto_analysis")
                 auto_group["auto_analysis_time"] = val_list
                 self.save_config()
                 logger.info(f"自动修复配置格式 auto_analysis_time: {val} -> {val_list}")
             except Exception as e:
                 logger.warning(f"修复配置格式失败: {e}")
             return val_list
-        return val if isinstance(val, list) else ["09:00"]
+        return (
+            [item for item in val if isinstance(item, str)]
+            if is_object_list(val)
+            else ["09:00"]
+        )
 
     def get_enable_auto_analysis(self) -> bool:
         """
@@ -315,83 +396,87 @@ class ConfigManager:
 
     def get_output_format(self) -> list[str]:
         """获取输出格式"""
-        val = self._get_group("basic").get("output_format", ["image"])
-        return val if isinstance(val, list) else [val]
+        val = self.get_group("basic").get("output_format", ["image"])
+        if is_object_list(val):
+            return [item for item in val if isinstance(item, str)]
+        return [val] if isinstance(val, str) else ["image"]
 
     def get_qq_official_t2i_summary_dashboard_enabled(self) -> bool:
         """是否启用 QQ 官方群聊概览图。"""
-        group = self._get_group("qq_official")
+        group = self.get_group("qq_official")
         if "enable_t2i_summary_dashboard" in group:
             return bool(group["enable_t2i_summary_dashboard"])
         return bool(group.get("enable_t2i_activity_histogram", True))
 
     def get_min_messages_threshold(self) -> int:
         """获取最小消息阈值"""
-        return self._get_group("basic").get("min_messages_threshold", 50)
+        return self._get_scalar("basic", "min_messages_threshold", 50)
 
     def get_topic_analysis_enabled(self) -> bool:
         """获取是否启用话题分析"""
-        return self._get_group("analysis_features").get("topic_analysis_enabled", True)
+        return self._get_scalar("analysis_features", "topic_analysis_enabled", True)
 
     def get_user_title_analysis_enabled(self) -> bool:
         """获取是否启用用户称号分析"""
-        return self._get_group("analysis_features").get(
-            "user_title_analysis_enabled", True
+        return self._get_scalar(
+            "analysis_features", "user_title_analysis_enabled", True
         )
 
     def get_golden_quote_analysis_enabled(self) -> bool:
         """获取是否启用金句分析"""
-        return self._get_group("analysis_features").get(
-            "golden_quote_analysis_enabled", True
+        return self._get_scalar(
+            "analysis_features", "golden_quote_analysis_enabled", True
         )
 
     def get_chat_quality_analysis_enabled(self) -> bool:
         """获取是否启用聊天质量分析"""
-        return self._get_group("analysis_features").get(
-            "chat_quality_analysis_enabled", False
+        return self._get_scalar(
+            "analysis_features", "chat_quality_analysis_enabled", False
         )
 
     def get_max_topics(self) -> int:
         """获取最大话题数量"""
-        return self._get_group("analysis_features").get("max_topics", 5)
+        return self._get_scalar("analysis_features", "max_topics", 5)
 
     def get_max_user_titles(self) -> int:
         """获取最大用户称号数量"""
-        return self._get_group("analysis_features").get("max_user_titles", 8)
+        return self._get_scalar("analysis_features", "max_user_titles", 8)
 
     def get_max_golden_quotes(self) -> int:
         """获取最大金句数量"""
-        return self._get_group("analysis_features").get("max_golden_quotes", 5)
+        return self._get_scalar("analysis_features", "max_golden_quotes", 5)
 
     def get_llm_retries(self) -> int:
         """获取LLM请求重试次数"""
-        return self._get_group("llm").get("llm_retries", 2)
+        return self._get_scalar("llm", "llm_retries", 2)
 
     def get_llm_backoff(self) -> int:
         """获取LLM请求重试退避基值（秒），实际退避会乘以尝试次数"""
-        return self._get_group("llm").get("llm_backoff", 2)
+        return self._get_scalar("llm", "llm_backoff", 2)
 
     def get_llm_hard_timeout(self) -> int:
         """获取 LLM 单次请求硬超时时间（秒），<=0 表示自动遵循 Provider 配置。"""
-        return int(self._get_group("llm").get("llm_hard_timeout", 0))
+        return int(self._get_number("llm", "llm_hard_timeout", 0))
 
     def set_llm_hard_timeout(self, timeout_seconds: int) -> None:
         """设置 LLM 单次请求硬超时时间（秒）。"""
-        self._ensure_group("llm")["llm_hard_timeout"] = max(0, int(timeout_seconds))
+        self.ensure_group("llm")["llm_hard_timeout"] = max(0, int(timeout_seconds))
         self.save_config()
 
     def get_enable_streaming_llm_call(self) -> bool:
         """获取是否启用流式 LLM 调用"""
-        return self._get_group("llm").get("enable_streaming_llm_call", False)
+        return self._get_scalar("llm", "enable_streaming_llm_call", False)
 
     def get_enable_base64_image(self) -> bool:
         """获取是否启用 Base64 图片传输"""
-        return self._get_group("basic").get("enable_base64_image", False)
+        return self._get_scalar("basic", "enable_base64_image", False)
 
     def get_napcat_stream_threshold_mb(self) -> float:
         """获取可触发 NapCat 流式上传兜底的本地图片最小大小。"""
-        value = self._get_group("basic").get("napcat_stream_threshold_mb", 2.0)
+        value = self.get_group("basic").get("napcat_stream_threshold_mb", 2.0)
         try:
+            if not isinstance(value, (str, int, float)):
+                raise TypeError("配置值必须是数值")
             return max(0.0, float(value))
         except (TypeError, ValueError):
             return 0.0
@@ -408,7 +493,7 @@ class ConfigManager:
         Raises:
             无。无效配置会记录警告并回退默认方案。
         """
-        group = self._get_group("t2i_rendering")
+        group = self.get_group("t2i_rendering")
         raw = group.get("t2i_rendering_strategies", [])
         if raw:
             try:
@@ -419,7 +504,6 @@ class ConfigManager:
 
     def get_t2i_rendering_strategies(self) -> list[RenderingStrategyOptions]:
         """将方案转换为T2I参数，资源环境由插件消费，不传给 T2I。"""
-        group = self._get_group("t2i_rendering")
         plans: list[RenderingStrategyOptions] = []
         for item in self.get_t2i_rendering_strategy_config():
             plan: RenderingStrategyOptions = {
@@ -446,8 +530,22 @@ class ConfigManager:
                 plan.update(
                     full_page=True,
                     device_scale_factor_level=item["device_scale"],
-                    viewport_width=max(1, int(group.get("t2i_viewport_width", 1440))),
-                    viewport_height=max(1, int(group.get("t2i_viewport_height", 900))),
+                    viewport_width=max(
+                        1,
+                        int(
+                            self._get_number(
+                                "t2i_rendering", "t2i_viewport_width", 1440
+                            )
+                        ),
+                    ),
+                    viewport_height=max(
+                        1,
+                        int(
+                            self._get_number(
+                                "t2i_rendering", "t2i_viewport_height", 900
+                            )
+                        ),
+                    ),
                 )
             else:
                 plan["raster_ppi"] = item.get("raster_ppi", 144)
@@ -472,10 +570,10 @@ class ConfigManager:
         （当前仅 HatsuneMiku）时才出现并生效。auto 表示不干预：模板骨架与 LLM 输出语言
         均保持历史行为。为兼容曾把该项存放在 t2i_rendering 组的旧配置，读取时做一次回退。
         """
-        value = self._get_group("basic").get("report_language")
+        value = self.get_group("basic").get("report_language")
         if value is None:
-            value = self._get_group("t2i_rendering").get("report_language", "auto")
-        return value
+            value = self.get_group("t2i_rendering").get("report_language", "auto")
+        return value if isinstance(value, str) else "auto"
 
     def get_t2i_resource_config(
         self, environment: str | None = None
@@ -548,7 +646,7 @@ class ConfigManager:
         Returns:
             显式指定的 ATRI 镜像或对应环境中的素材目录。
         """
-        mirror = self._get_group("t2i_rendering").get("t2i_atri_font_mirror", "")
+        mirror = self.get_group("t2i_rendering").get("t2i_atri_font_mirror", "")
         if isinstance(mirror, str):
             mirror = mirror.strip().rstrip("/")
             if mirror and mirror != DEFAULT_ATRI_ASSETS_CDN_URL:
@@ -557,102 +655,110 @@ class ConfigManager:
 
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""
-        return self._get_group("llm").get("llm_provider_id", "")
+        return self._get_scalar("llm", "llm_provider_id", "")
 
     def get_topic_provider_id(self) -> str:
         """获取话题分析专用 Provider ID"""
-        return self._get_group("llm").get("topic_provider_id", "")
+        return self._get_scalar("llm", "topic_provider_id", "")
 
     def get_user_title_provider_id(self) -> str:
         """获取用户称号分析专用 Provider ID"""
-        return self._get_group("llm").get("user_title_provider_id", "")
+        return self._get_scalar("llm", "user_title_provider_id", "")
 
     def get_golden_quote_provider_id(self) -> str:
         """获取金句分析专用 Provider ID"""
-        return self._get_group("llm").get("golden_quote_provider_id", "")
+        return self._get_scalar("llm", "golden_quote_provider_id", "")
 
     def get_quality_provider_id(self) -> str:
         """获取聊天质量分析专用 Provider ID"""
-        return self._get_group("llm").get("quality_provider_id", "")
+        return self._get_scalar("llm", "quality_provider_id", "")
 
     def get_drawing_prompt_provider_id(self) -> str:
         """获取画图提示词专用 Provider ID"""
-        return self._get_group("llm").get("drawing_prompt_provider_id", "")
+        return self._get_scalar("llm", "drawing_prompt_provider_id", "")
 
     def get_keep_original_persona(self) -> bool:
         """获取是否继承会话原始人格设定"""
-        return self._get_group("analysis_features").get("keep_original_persona", False)
+        return self._get_scalar("analysis_features", "keep_original_persona", False)
 
     def get_use_plugin_specific_persona(self) -> bool:
         """获取是否强制使用插件指定的人格设定"""
-        return self._get_group("analysis_features").get(
-            "use_plugin_specific_persona", False
+        return self._get_scalar(
+            "analysis_features", "use_plugin_specific_persona", False
         )
 
     def get_plugin_specific_persona_id(self) -> str:
         """获取插件指定的全局人格 ID (通过 select_persona 接口选择)"""
-        return self._get_group("analysis_features").get(
-            "plugin_specific_persona_id", ""
-        )
+        return self._get_scalar("analysis_features", "plugin_specific_persona_id", "")
 
-    def get_bot_self_ids(self) -> list:
+    def get_bot_self_ids(self) -> list[str]:
         """获取机器人自身的 ID 列表 (兼容 bot_qq_ids)"""
-        basic = self._get_group("basic")
+        basic = self.get_group("basic")
         ids = basic.get("bot_self_ids", [])
         if not ids:
             ids = basic.get("bot_qq_ids", [])
-        return ids
+        return (
+            [str(item) for item in ids if isinstance(item, (str, int))]
+            if is_object_list(ids)
+            else []
+        )
 
     def get_filter_bot_messages(self) -> bool:
         """获取是否过滤机器人自己的消息。"""
-        return self._get_group("basic").get("filter_bot_messages", True)
+        return self._get_scalar("basic", "filter_bot_messages", True)
 
     def set_filter_bot_messages(self, enabled: bool):
         """设置是否过滤机器人自己的消息。"""
-        self._ensure_group("basic")["filter_bot_messages"] = enabled
+        self.ensure_group("basic")["filter_bot_messages"] = enabled
         self.save_config()
 
     def get_html_output_dir(self) -> str:
         """获取HTML输出目录"""
 
         default_path = StarTools.get_data_dir(PLUGIN_NAME) / "self_hosted_html_reports"
-        val = self._get_group("html").get("html_output_dir")
-        return val if val else str(default_path)
+        val = self.get_group("html").get("html_output_dir")
+        return val if isinstance(val, str) and val else str(default_path)
 
     def get_html_base_url(self) -> str:
         """获取HTML外链Base URL"""
-        return self._get_group("html").get("html_base_url", "")
+        return self._get_scalar("html", "html_base_url", "")
 
     def get_html_only_url(self) -> bool:
         """获取是否仅输出外链而不发送文件本体"""
-        return self._get_group("html").get("html_only_url", False)
+        return self._get_scalar("html", "html_only_url", False)
 
     def set_html_only_url(self, enabled: bool):
         """设置是否仅输出外链而不发送文件本体"""
-        self._ensure_group("html")["html_only_url"] = enabled
+        self.ensure_group("html")["html_only_url"] = enabled
         self.save_config()
 
     def get_html_filename_format(self) -> str:
         """获取HTML文件名格式"""
-        return self._get_group("html").get(
-            "html_filename_format", "群聊分析报告_${group_id}_${date}_${ulid}.html"
+        return self._get_scalar(
+            "html",
+            "html_filename_format",
+            "群聊分析报告_${group_id}_${date}_${ulid}.html",
         )
 
     def get_topic_analysis_prompt(self, style: str = "topic_prompt") -> str:
         """获取话题分析提示词模板"""
-        prompts_config = self._get_group("prompts").get("topic_analysis_prompts", {})
-        prompt = prompts_config.get(style, "")
-        if prompt:
+        prompts_config = self.get_group("prompts").get("topic_analysis_prompts", {})
+        prompt = (
+            prompts_config.get(style, "") if is_string_mapping(prompts_config) else ""
+        )
+        if isinstance(prompt, str) and prompt:
             return prompt
         return ""
 
     def get_user_title_analysis_prompt(self, style: str = "user_title_prompt") -> str:
         """获取用户称号分析提示词模板"""
-        prompts_config = self._get_group("prompts").get(
+        prompts_config = self.get_group("prompts").get(
             "user_title_analysis_prompts", {}
         )
-        prompt = prompts_config.get(style, "")
-        if prompt:
+        prompt = (
+            prompts_config.get(style, "") if is_string_mapping(prompts_config) else ""
+        )
+        if isinstance(prompt, str) and prompt:
             return prompt
         return ""
 
@@ -660,28 +766,34 @@ class ConfigManager:
         self, style: str = "golden_quote_v2_prompt"
     ) -> str:
         """获取金句分析提示词模板"""
-        prompts_config = self._get_group("prompts").get(
+        prompts_config = self.get_group("prompts").get(
             "golden_quote_analysis_prompts", {}
         )
-        prompt = prompts_config.get(style, "")
-        if prompt:
+        prompt = (
+            prompts_config.get(style, "") if is_string_mapping(prompts_config) else ""
+        )
+        if isinstance(prompt, str) and prompt:
             return prompt
         return ""
 
     def get_quality_analysis_prompt(self, style: str = "quality_v2_prompt") -> str:
         """获取聊天质量分析提示词模板"""
-        prompts_config = self._get_group("prompts").get("quality_analysis_prompts", {})
-        prompt = prompts_config.get(style, "")
-        if prompt:
+        prompts_config = self.get_group("prompts").get("quality_analysis_prompts", {})
+        prompt = (
+            prompts_config.get(style, "") if is_string_mapping(prompts_config) else ""
+        )
+        if isinstance(prompt, str) and prompt:
             return prompt
         return ""
 
     def set_quality_analysis_prompt(self, prompt: str):
         """设置聊天质量分析提示词模板"""
-        prompts = self._ensure_group("prompts")
-        if "quality_analysis_prompts" not in prompts:
-            prompts["quality_analysis_prompts"] = {}
-        prompts["quality_analysis_prompts"]["quality_v2_prompt"] = prompt
+        prompts = self.ensure_group("prompts")
+        group = prompts.get("quality_analysis_prompts")
+        if not is_string_mapping(group):
+            group = {}
+            prompts["quality_analysis_prompts"] = group
+        group["quality_v2_prompt"] = prompt
         self.save_config()
 
     def _upgrade_config_item(
@@ -700,50 +812,62 @@ class ConfigManager:
 
     def get_quality_summary_prompt(self, style: str = "quality_summary_prompt") -> str:
         """获取聊天质量汇总分析提示词模板"""
-        prompts_config = self._get_group("prompts").get("quality_analysis_prompts", {})
-        prompt = prompts_config.get(style, "")
-        if prompt:
+        prompts_config = self.get_group("prompts").get("quality_analysis_prompts", {})
+        prompt = (
+            prompts_config.get(style, "") if is_string_mapping(prompts_config) else ""
+        )
+        if isinstance(prompt, str) and prompt:
             return prompt
         return ""
 
     def set_topic_analysis_prompt(self, prompt: str):
         """设置话题分析提示词模板"""
-        prompts = self._ensure_group("prompts")
-        if "topic_analysis_prompts" not in prompts:
-            prompts["topic_analysis_prompts"] = {}
-        prompts["topic_analysis_prompts"]["topic_prompt"] = prompt
+        prompts = self.ensure_group("prompts")
+        group = prompts.get("topic_analysis_prompts")
+        if not is_string_mapping(group):
+            group = {}
+            prompts["topic_analysis_prompts"] = group
+        group["topic_prompt"] = prompt
         self.save_config()
 
     def set_quality_summary_prompt(self, prompt: str):
         """设置聊天质量汇总分析提示词模板"""
-        prompts = self._ensure_group("prompts")
-        if "quality_analysis_prompts" not in prompts:
-            prompts["quality_analysis_prompts"] = {}
-        prompts["quality_analysis_prompts"]["quality_summary_prompt"] = prompt
+        prompts = self.ensure_group("prompts")
+        group = prompts.get("quality_analysis_prompts")
+        if not is_string_mapping(group):
+            group = {}
+            prompts["quality_analysis_prompts"] = group
+        group["quality_summary_prompt"] = prompt
         self.save_config()
 
     def set_user_title_analysis_prompt(self, prompt: str):
         """设置用户称号分析提示词模板"""
-        prompts = self._ensure_group("prompts")
-        if "user_title_analysis_prompts" not in prompts:
-            prompts["user_title_analysis_prompts"] = {}
-        prompts["user_title_analysis_prompts"]["user_title_prompt"] = prompt
+        prompts = self.ensure_group("prompts")
+        group = prompts.get("user_title_analysis_prompts")
+        if not is_string_mapping(group):
+            group = {}
+            prompts["user_title_analysis_prompts"] = group
+        group["user_title_prompt"] = prompt
         self.save_config()
 
     def set_golden_quote_analysis_prompt(self, prompt: str):
         """设置金句分析提示词模板"""
-        prompts = self._ensure_group("prompts")
-        if "golden_quote_analysis_prompts" not in prompts:
-            prompts["golden_quote_analysis_prompts"] = {}
-        prompts["golden_quote_analysis_prompts"]["golden_quote_v2_prompt"] = prompt
+        prompts = self.ensure_group("prompts")
+        group = prompts.get("golden_quote_analysis_prompts")
+        if not is_string_mapping(group):
+            group = {}
+            prompts["golden_quote_analysis_prompts"] = group
+        group["golden_quote_v2_prompt"] = prompt
         self.save_config()
 
     def set_comic_storyboard_prompt(self, prompt: str):
         """设置漫画场景分析提示词模板"""
-        prompts = self._ensure_group("prompts")
-        if "comic_analysis_prompts" not in prompts:
-            prompts["comic_analysis_prompts"] = {}
-        prompts["comic_analysis_prompts"]["comic_storyboard_prompt"] = prompt
+        prompts = self.ensure_group("prompts")
+        group = prompts.get("comic_analysis_prompts")
+        if not is_string_mapping(group):
+            group = {}
+            prompts["comic_analysis_prompts"] = group
+        group["comic_storyboard_prompt"] = prompt
         self.save_config()
 
     def set_output_format(self, format_types: str | list[str]):
@@ -756,43 +880,43 @@ class ConfigManager:
             if f not in ("image", "text", "html"):
                 raise ValueError(f"无效格式: {f}。有效: image, text, html")
 
-        self._ensure_group("basic")["output_format"] = format_types
+        self.ensure_group("basic")["output_format"] = format_types
         self.save_config()
 
     def set_group_list_mode(self, mode: str):
         """设置群组列表模式"""
-        self._ensure_group("basic")["group_list_mode"] = mode
+        self.ensure_group("basic")["group_list_mode"] = mode
         self.save_config()
 
     def set_group_list(self, groups: list[str]):
         """设置群组列表"""
-        self._ensure_group("basic")["group_list"] = groups
+        self.ensure_group("basic")["group_list"] = groups
         self.save_config()
 
     def get_max_concurrent_tasks(self) -> int:
         """获取自动分析最大并发群数"""
-        return self._get_group("performance").get("max_concurrent_groups", 3)
+        return self._get_scalar("performance", "max_concurrent_groups", 3)
 
     def get_llm_max_concurrent(self) -> int:
         """获取全局 LLM 最大并发请求数"""
-        return self._get_group("performance").get("max_concurrent_llm", 3)
+        return self._get_scalar("performance", "max_concurrent_llm", 3)
 
     def get_t2i_max_concurrent(self) -> int:
         """获取全局图片渲染（T2I）最大并发数"""
-        return self._get_group("performance").get("max_concurrent_t2i", 1)
+        return self._get_scalar("performance", "max_concurrent_t2i", 1)
 
     def get_stagger_seconds(self) -> int:
         """获取多群分析任务启动时的交错间隔（秒）"""
-        return self._get_group("performance").get("stagger_seconds", 2)
+        return self._get_scalar("performance", "stagger_seconds", 2)
 
     def set_max_concurrent_tasks(self, count: int):
         """设置自动分析最大并发数"""
-        self._ensure_group("performance")["max_concurrent_groups"] = count
+        self.ensure_group("performance")["max_concurrent_groups"] = count
         self.save_config()
 
     def set_max_messages(self, count: int):
         """设置最大消息数量"""
-        self._ensure_group("basic")["max_messages"] = count
+        self.ensure_group("basic")["max_messages"] = count
         self.save_config()
 
     def set_local_history_max_messages(self, count: int) -> None:
@@ -801,19 +925,19 @@ class ConfigManager:
         Args:
             count: 目标保留条数，约束在 10,000 至 100,000 条之间。
         """
-        self._ensure_group("basic")["local_history_max_messages"] = max(
+        self.ensure_group("basic")["local_history_max_messages"] = max(
             10000, min(100000, int(count))
         )
         self.save_config()
 
     def set_analysis_days(self, days: int):
         """设置分析天数"""
-        self._ensure_group("basic")["analysis_days"] = days
+        self.ensure_group("basic")["analysis_days"] = days
         self.save_config()
 
     def set_auto_analysis_time(self, time_val: str | list[str]):
         """设置自动分析时间点"""
-        self._ensure_group("auto_analysis")["auto_analysis_time"] = time_val
+        self.ensure_group("auto_analysis")["auto_analysis_time"] = time_val
         self.save_config()
 
     def is_auto_analysis_enabled(self) -> bool:
@@ -834,7 +958,7 @@ class ConfigManager:
     def get_scheduled_group_list_mode(self) -> str:
         """获取定时分析名单模式 (inherit/whitelist/blacklist)。"""
         mode = str(
-            self._get_group("auto_analysis").get(
+            self.get_group("auto_analysis").get(
                 "scheduled_group_list_mode", "whitelist"
             )
         ).lower()
@@ -844,16 +968,16 @@ class ConfigManager:
 
     def set_scheduled_group_list_mode(self, mode: str):
         """设置定时分析名单模式"""
-        self._ensure_group("auto_analysis")["scheduled_group_list_mode"] = mode
+        self.ensure_group("auto_analysis")["scheduled_group_list_mode"] = mode
         self.save_config()
 
     def get_scheduled_group_list(self) -> list[str]:
         """获取定时分析目标群列表"""
-        return self._get_group("auto_analysis").get("scheduled_group_list", [])
+        return self._get_string_list("auto_analysis", "scheduled_group_list", [])
 
     def set_scheduled_group_list(self, groups: list[str]):
         """设置定时分析目标群列表"""
-        self._ensure_group("auto_analysis")["scheduled_group_list"] = groups
+        self.ensure_group("auto_analysis")["scheduled_group_list"] = groups
         self.save_config()
 
     def is_scheduled_group_allowed(self, group_umo_or_id: str) -> bool:
@@ -876,7 +1000,7 @@ class ConfigManager:
         )
 
     def is_group_in_filtered_list(
-        self, group_umo_or_id: str, mode: str, group_list: list
+        self, group_umo_or_id: str, mode: str, group_list: list[str]
     ) -> bool:
         """
         通用的名单判定逻辑。
@@ -905,98 +1029,100 @@ class ConfigManager:
 
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""
-        self._ensure_group("basic")["min_messages_threshold"] = threshold
+        self.ensure_group("basic")["min_messages_threshold"] = threshold
         self.save_config()
 
     def set_topic_analysis_enabled(self, enabled: bool):
         """设置是否启用话题分析"""
-        self._ensure_group("analysis_features")["topic_analysis_enabled"] = enabled
+        self.ensure_group("analysis_features")["topic_analysis_enabled"] = enabled
         self.save_config()
 
     def set_user_title_analysis_enabled(self, enabled: bool):
         """设置是否启用用户称号分析"""
-        self._ensure_group("analysis_features")["user_title_analysis_enabled"] = enabled
+        self.ensure_group("analysis_features")["user_title_analysis_enabled"] = enabled
         self.save_config()
 
     def set_golden_quote_analysis_enabled(self, enabled: bool):
         """设置是否启用金句分析"""
-        self._ensure_group("analysis_features")["golden_quote_analysis_enabled"] = (
+        self.ensure_group("analysis_features")["golden_quote_analysis_enabled"] = (
             enabled
         )
         self.save_config()
 
     def set_chat_quality_analysis_enabled(self, enabled: bool):
         """设置是否启用聊天质量分析"""
-        self._ensure_group("analysis_features")["chat_quality_analysis_enabled"] = (
+        self.ensure_group("analysis_features")["chat_quality_analysis_enabled"] = (
             enabled
         )
         self.save_config()
 
     def set_max_topics(self, count: int):
         """设置最大话题数量"""
-        self._ensure_group("analysis_features")["max_topics"] = count
+        self.ensure_group("analysis_features")["max_topics"] = count
         self.save_config()
 
     def set_max_user_titles(self, count: int):
         """设置最大用户称号数量"""
-        self._ensure_group("analysis_features")["max_user_titles"] = count
+        self.ensure_group("analysis_features")["max_user_titles"] = count
         self.save_config()
 
     def set_max_golden_quotes(self, count: int):
         """设置最大金句数量"""
-        self._ensure_group("analysis_features")["max_golden_quotes"] = count
+        self.ensure_group("analysis_features")["max_golden_quotes"] = count
         self.save_config()
 
     def set_html_filename_format(self, format_str: str):
         """设置HTML文件名格式"""
-        self._ensure_group("html")["html_filename_format"] = format_str
+        self.ensure_group("html")["html_filename_format"] = format_str
         self.save_config()
 
     def get_report_template(self) -> str:
         """获取报告模板名称"""
-        val = self._get_group("basic").get("report_template")
+        val = self.get_group("basic").get("report_template")
         if not val:
-            val = self.config.get("report_template")
+            val = cast("dict[str, object]", self.config).get("report_template")
         return str(val).strip() if val else "HatsuneMiku"
 
     def set_report_template(self, template_name: str):
         """设置报告模板名称"""
-        self._ensure_group("basic")["report_template"] = template_name
+        self.ensure_group("basic")["report_template"] = template_name
         self.save_config()
 
     def get_enable_user_card(self) -> bool:
         """获取是否使用用户群名片"""
-        return self._get_group("basic").get("enable_user_card", False)
+        return self._get_scalar("basic", "enable_user_card", False)
 
     def get_enable_analysis_reply(self) -> bool:
         """获取是否在群分析完成后发送文本回复"""
-        return self._get_group("basic").get("enable_analysis_reply", False)
+        return self._get_scalar("basic", "enable_analysis_reply", False)
 
     def set_enable_analysis_reply(self, enabled: bool):
         """设置是否在群分析完成后发送文本回复"""
-        self._ensure_group("basic")["enable_analysis_reply"] = enabled
+        self.ensure_group("basic")["enable_analysis_reply"] = enabled
         self.save_config()
 
     def get_show_report_caption(self) -> bool:
         """获取是否发送 \"📊 每日群聊分析报告已生成\" 前缀文字。"""
-        return self._get_group("basic").get("show_report_caption", True)
+        return self._get_scalar("basic", "show_report_caption", True)
 
     def set_show_report_caption(self, enabled: bool):
         """设置是否发送 \"📊 每日群聊分析报告已生成\" 前缀文字。"""
-        self._ensure_group("basic")["show_report_caption"] = enabled
+        self.ensure_group("basic")["show_report_caption"] = enabled
         self.save_config()
 
     def get_profile_display_mode(self) -> str:
         """获取人格标签展示模式。"""
-        mode = str(self._get_group("basic").get("profile_display_mode", "mbti")).lower()
+        mode = str(self.get_group("basic").get("profile_display_mode", "mbti")).lower()
         if mode not in {"mbti", "sbti", "acgti"}:
             return "mbti"
         return mode
 
     def get_profile_image_opacity(self) -> float:
         """获取人格背景图透明度。"""
-        value = self._get_group("basic").get("profile_image_opacity", 0.12)
+        value = self.get_group("basic").get("profile_image_opacity", 0.12)
         try:
+            if not isinstance(value, (str, int, float)):
+                raise TypeError("配置值必须是数值")
             return max(0.0, min(1.0, float(value)))
         except (TypeError, ValueError):
             return 0.12
@@ -1004,7 +1130,7 @@ class ConfigManager:
     def get_profile_image_size_mode(self) -> str:
         """获取人格背景图尺寸模式。"""
         mode = str(
-            self._get_group("basic").get("profile_image_size_mode", "contain")
+            self.get_group("basic").get("profile_image_size_mode", "contain")
         ).lower()
         if mode not in {"contain", "cover"}:
             return "contain"
@@ -1012,37 +1138,35 @@ class ConfigManager:
 
     def get_profile_mapping_config(self) -> str:
         """获取人格映射配置(JSON 文本)。"""
-        return str(self._get_group("basic").get("profile_mapping_config", "")).strip()
+        return str(self.get_group("basic").get("profile_mapping_config", "")).strip()
 
     # ========== 群文件/群相册上传配置 ==========
 
     def get_enable_group_file_upload(self) -> bool:
         """获取是否启用群文件上传"""
-        return self._get_group("qq_group_upload").get("enable_group_file_upload", False)
+        return self._get_scalar("qq_group_upload", "enable_group_file_upload", False)
 
     def get_group_file_folder(self) -> str:
         """获取群文件上传目录名，空字符串表示根目录"""
-        return self._get_group("qq_group_upload").get("group_file_folder", "")
+        return self._get_scalar("qq_group_upload", "group_file_folder", "")
 
     def get_enable_group_album_upload(self) -> bool:
         """获取是否启用群相册上传（仅 NapCat）"""
-        return self._get_group("qq_group_upload").get(
-            "enable_group_album_upload", False
-        )
+        return self._get_scalar("qq_group_upload", "enable_group_album_upload", False)
 
     def get_group_album_name(self) -> str:
         """获取目标群相册名称，空字符串表示默认相册"""
-        return self._get_group("qq_group_upload").get("group_album_name", "")
+        return self._get_scalar("qq_group_upload", "group_album_name", "")
 
     def get_group_album_strict_mode(self) -> bool:
         """获取群相册上传严格模式开关。"""
         return bool(
-            self._get_group("qq_group_upload").get("group_album_strict_mode", True)
+            self.get_group("qq_group_upload").get("group_album_strict_mode", True)
         )
 
     def set_group_album_strict_mode(self, enabled: bool):
         """设置群相册上传严格模式"""
-        self._ensure_group("qq_group_upload")["group_album_strict_mode"] = enabled
+        self.ensure_group("qq_group_upload")["group_album_strict_mode"] = enabled
         self.save_config()
 
     # ========== 增量分析配置 ==========
@@ -1060,7 +1184,7 @@ class ConfigManager:
     def get_incremental_group_list_mode(self) -> str:
         """获取增量分析名单模式 (inherit/whitelist/blacklist)。"""
         mode = str(
-            self._get_group("incremental").get(
+            self.get_group("incremental").get(
                 "incremental_group_list_mode", "whitelist"
             )
         ).lower()
@@ -1070,7 +1194,7 @@ class ConfigManager:
 
     def get_incremental_group_list(self) -> list[str]:
         """获取增量分析群列表"""
-        return self._get_group("incremental").get("incremental_group_list", [])
+        return self._get_string_list("incremental", "incremental_group_list", [])
 
     def is_incremental_group_allowed(self, group_umo_or_id: str) -> bool:
         """判断当前群是否应使用增量分析。
@@ -1093,41 +1217,39 @@ class ConfigManager:
 
     def get_incremental_fallback_enabled(self) -> bool:
         """获取增量分析失败回退到全量分析的开关（默认启用）"""
-        return self._get_group("incremental").get("incremental_fallback_enabled", True)
+        return self._get_scalar("incremental", "incremental_fallback_enabled", True)
 
     def get_incremental_report_immediately(self) -> bool:
         """获取是否启用增量分析立即发送报告（调试用）"""
-        return self._get_group("incremental").get(
-            "incremental_report_immediately", False
-        )
+        return self._get_scalar("incremental", "incremental_report_immediately", False)
 
     def set_incremental_report_immediately(self, enabled: bool):
         """设置增量分析是否立即发送报告"""
-        self._ensure_group("incremental")["incremental_report_immediately"] = enabled
+        self.ensure_group("incremental")["incremental_report_immediately"] = enabled
         self.save_config()
 
     def get_incremental_min_messages(self) -> int:
         """获取触发增量分析的最小消息数阈值"""
-        value = self._get_group("incremental").get("incremental_min_messages", 300)
+        value = self._get_number("incremental", "incremental_min_messages", 300)
         return max(1, int(value))
 
     def get_incremental_topics_per_batch(self) -> int:
         """获取单次增量分析提取的最大话题数"""
-        return self._get_group("incremental").get("incremental_topics_per_batch", 3)
+        return self._get_scalar("incremental", "incremental_topics_per_batch", 3)
 
     def get_incremental_quotes_per_batch(self) -> int:
         """获取单次增量分析提取的最大金句数"""
-        return self._get_group("incremental").get("incremental_quotes_per_batch", 3)
+        return self._get_scalar("incremental", "incremental_quotes_per_batch", 3)
 
     # ========== 每日群漫画配置 ==========
 
     def get_enable_daily_comic(self) -> bool:
         """获取漫画功能总开关。"""
-        return self._get_group("daily_comic").get("enable_daily_comic", False)
+        return self._get_scalar("daily_comic", "enable_daily_comic", False)
 
     def get_enable_auto_daily_comic(self) -> bool:
         """获取是否在分析完成后自动生成漫画。"""
-        return self._get_group("daily_comic").get("enable_auto_daily_comic", True)
+        return self._get_scalar("daily_comic", "enable_auto_daily_comic", True)
 
     def get_comic_group_list_mode(self) -> str:
         """获取漫画生成名单模式。
@@ -1137,7 +1259,7 @@ class ConfigManager:
             避免同一批群需要在多个配置里重复填写。
         """
         mode = str(
-            self._get_group("daily_comic").get("comic_group_list_mode", "inherit")
+            self.get_group("daily_comic").get("comic_group_list_mode", "inherit")
         ).lower()
         if mode not in ("inherit", "whitelist", "blacklist"):
             return "inherit"
@@ -1149,10 +1271,7 @@ class ConfigManager:
         Returns:
             配置的群 UMO 或纯群号列表。配置格式异常时按空列表处理。
         """
-        group_list = self._get_group("daily_comic").get("comic_group_list", [])
-        if not isinstance(group_list, list):
-            return []
-        return group_list
+        return self._get_string_list("daily_comic", "comic_group_list", [])
 
     def is_comic_group_allowed(
         self, group_umo_or_id: str, inherit_allowed: bool | None = None
@@ -1182,16 +1301,16 @@ class ConfigManager:
 
     def get_drawing_backend(self) -> str:
         """获取漫画绘图后端 (builtin/general_plugin/big_banana)。"""
-        group = self._get_group("daily_comic")
+        group = self.get_group("daily_comic")
         return str(group.get("drawing_backend", "builtin")).strip() or "builtin"
 
     def get_drawing_external_fallback(self) -> bool:
         """外部绘图后端失败时是否回退内置后端。"""
         return bool(
-            self._get_group("daily_comic").get("drawing_external_fallback", True)
+            self.get_group("daily_comic").get("drawing_external_fallback", True)
         )
 
-    def get_drawing_provider_configs(self) -> list[dict]:
+    def get_drawing_provider_configs(self) -> list[dict[str, object]]:
         """获取按优先级排序的已启用绘图供应商候选。
 
         空条目或格式错误的条目会被忽略。绘图供应商配置表是唯一的连接配置
@@ -1200,8 +1319,8 @@ class ConfigManager:
         Returns:
             已启用供应商的配置字典列表。
         """
-        providers = self._get_group("daily_comic").get("drawing_provider_overrides", [])
-        if not isinstance(providers, list):
+        providers = self.get_group("daily_comic").get("drawing_provider_overrides", [])
+        if not is_object_list(providers):
             return []
 
         template_protocols = {
@@ -1220,9 +1339,9 @@ class ConfigManager:
             "dashscope": "dashscope",
         }
         valid_protocols = {"images", "chat", "grok", "gemini", *template_protocols}
-        candidates = []
+        candidates: list[tuple[int, int, dict[str, object]]] = []
         for index, provider in enumerate(providers):
-            if not isinstance(provider, dict) or not provider.get("enable", True):
+            if not is_string_mapping(provider) or not provider.get("enable", True):
                 continue
             template_key = str(provider.get("__template_key", "")).strip().lower()
             name_val = str(provider.get("name", "")).strip().lower()
@@ -1270,50 +1389,52 @@ class ConfigManager:
             candidate["api_key"] = api_key
             candidate["_index"] = index
             try:
-                candidate["_priority"] = int(provider.get("priority", 0))
+                raw_priority = provider.get("priority", 0)
+                if not isinstance(raw_priority, (str, int, float)):
+                    raise TypeError("供应商优先级必须是数值")
+                priority = int(raw_priority)
             except (TypeError, ValueError):
-                candidate["_priority"] = 0
-            candidates.append(candidate)
+                priority = 0
+            candidate["_priority"] = priority
+            candidates.append((priority, index, candidate))
 
-        return sorted(
-            candidates,
-            key=lambda item: (-item["_priority"], item["_index"]),
-        )
+        return [
+            item[2] for item in sorted(candidates, key=lambda item: (-item[0], item[1]))
+        ]
 
     def get_drawing_output_exception_retries(self) -> int:
-        group = self._get_group("daily_comic")
-        return int(group.get("drawing_output_exception_retries", 3))
+        return int(
+            self._get_number("daily_comic", "drawing_output_exception_retries", 3)
+        )
 
     def get_drawing_output_exception_retry_keywords(self) -> list[str]:
-        group = self._get_group("daily_comic")
+        group = self.get_group("daily_comic")
         keywords = group.get("drawing_output_exception_retry_keywords", [])
-        if not isinstance(keywords, list):
+        if not is_object_list(keywords):
             keywords = []
         return [str(k) for k in keywords if str(k).strip()]
 
     def get_drawing_retry_delay(self) -> int:
-        group = self._get_group("daily_comic")
-        return int(group.get("drawing_retry_delay", 2))
+        return int(self._get_number("daily_comic", "drawing_retry_delay", 2))
 
     def get_drawing_network_retries(self) -> int:
-        group = self._get_group("daily_comic")
-        return int(group.get("drawing_network_retries", 2))
+        return int(self._get_number("daily_comic", "drawing_network_retries", 2))
 
     def get_drawing_download_proxy(self) -> str:
-        group = self._get_group("daily_comic")
-        return group.get("drawing_download_proxy", "").strip()
+        group = self.get_group("daily_comic")
+        return str(group.get("drawing_download_proxy", "")).strip()
 
     def get_drawing_proxy(self) -> str:
         """获取漫画生图 API 的全局代理地址。"""
-        return str(self._get_group("daily_comic").get("drawing_proxy", "")).strip()
+        return str(self.get_group("daily_comic").get("drawing_proxy", "")).strip()
 
     def get_enable_comic_album_upload(self) -> bool:
-        group = self._get_group("qq_group_upload")
+        group = self.get_group("qq_group_upload")
         return bool(group.get("enable_comic_album_upload", False))
 
     def get_comic_album_name(self) -> str:
         return str(
-            self._get_group("qq_group_upload").get("comic_album_name", "daily_analysis")
+            self.get_group("qq_group_upload").get("comic_album_name", "daily_analysis")
         ).strip()
 
     def get_drawing_reference_image(self) -> str:
@@ -1326,32 +1447,28 @@ class ConfigManager:
         reference_images = character.get("reference_images", []) if character else []
         if isinstance(reference_images, str):
             reference_images = [reference_images]
-        if not isinstance(reference_images, list):
-            return ""
         for reference_image in reversed(reference_images):
             if reference_image.strip():
                 return reference_image.strip()
         return ""
 
     def get_drawing_reference_images(self) -> list[str]:
-        """Get every valid reference image for the selected comic character.
+        """获取当前漫画角色的全部有效参考图。
 
         Returns:
-            Relative image paths in their configured order.
+            按配置顺序排列的参考图相对路径。
         """
         character = self.get_selected_comic_character()
         reference_images = character.get("reference_images", []) if character else []
         if isinstance(reference_images, str):
             reference_images = [reference_images]
-        if not isinstance(reference_images, list):
-            return []
         return [
             reference_image.strip()
             for reference_image in reference_images
-            if isinstance(reference_image, str) and reference_image.strip()
+            if reference_image.strip()
         ]
 
-    def get_selected_comic_character(self) -> dict | None:
+    def get_selected_comic_character(self) -> ComicCharacterConfig | None:
         """获取本次漫画应使用的角色方案。
 
         开启随机后，同一运行环境自然日内固定选择同一个已启用方案；关闭时始终使用
@@ -1360,22 +1477,31 @@ class ConfigManager:
         Returns:
             角色方案配置；没有可用方案时返回 None。
         """
-        characters = self._get_group("daily_comic").get("comic_characters", [])
-        enabled_characters = (
-            [
-                character
-                for character in characters
-                if isinstance(character, dict) and character.get("enable", True)
-            ]
-            if isinstance(characters, list)
-            else []
-        )
+        characters = self.get_group("daily_comic").get("comic_characters", [])
+        enabled_characters: list[ComicCharacterConfig] = []
+        for raw_character in characters if is_object_list(characters) else []:
+            if not is_string_mapping(raw_character) or not raw_character.get(
+                "enable", True
+            ):
+                continue
+            character: ComicCharacterConfig = {}
+            for key in ("__template_key", "name", "persona_id", "storyboard_prompt"):
+                if key in raw_character:
+                    character[key] = str(raw_character[key])
+            if "enable" in raw_character:
+                character["enable"] = bool(raw_character["enable"])
+            references = raw_character.get("reference_images")
+            if isinstance(references, str):
+                character["reference_images"] = references
+            elif is_object_list(references):
+                character["reference_images"] = [
+                    item for item in references if isinstance(item, str)
+                ]
+            enabled_characters.append(character)
         if not enabled_characters:
             return None
 
-        if not self._get_group("daily_comic").get(
-            "random_daily_comic_character", False
-        ):
+        if not self.get_group("daily_comic").get("random_daily_comic_character", False):
             return enabled_characters[0]
 
         timezone_name = os.environ.get("TZ", "").strip()
@@ -1393,9 +1519,10 @@ class ConfigManager:
         today = current_time.date().isoformat()
         state_path = self._get_comic_character_state_path()
         state = self._read_comic_character_state(state_path)
-        selected_character = state.get("selected_character")
-        if state.get("date") == today and selected_character in enabled_characters:
-            return selected_character
+        if state.get("date") == today:
+            for character in enabled_characters:
+                if state.get("selected_character") == character:
+                    return character
 
         selected_character = random.choice(enabled_characters)
         self._save_comic_character_state(
@@ -1406,7 +1533,9 @@ class ConfigManager:
         logger.info(f"今日漫画角色已随机选择: {character_name}")
         return selected_character
 
-    def get_comic_character_persona_id(self, character: dict | None) -> str:
+    def get_comic_character_persona_id(
+        self, character: ComicCharacterConfig | None
+    ) -> str:
         """获取角色方案绑定的漫画专用人格 ID。
 
         Args:
@@ -1415,11 +1544,13 @@ class ConfigManager:
         Returns:
             人格 ID；未配置时为空字符串。
         """
-        if not isinstance(character, dict):
+        if character is None:
             return ""
         return str(character.get("persona_id", "")).strip()
 
-    def get_comic_character_storyboard_prompt(self, character: dict | None) -> str:
+    def get_comic_character_storyboard_prompt(
+        self, character: ComicCharacterConfig | None
+    ) -> str:
         """获取角色专属分镜提示词，未配置时回退全局默认模板。
 
         Args:
@@ -1428,7 +1559,7 @@ class ConfigManager:
         Returns:
             本次漫画分镜应使用的提示词模板。
         """
-        if isinstance(character, dict):
+        if character is not None:
             prompt = str(character.get("storyboard_prompt", "")).strip()
             if prompt:
                 return prompt
@@ -1440,7 +1571,7 @@ class ConfigManager:
         return StarTools.get_data_dir(PLUGIN_NAME) / "comic_character_daily_state.json"
 
     @staticmethod
-    def _read_comic_character_state(state_path: Path) -> dict:
+    def _read_comic_character_state(state_path: Path) -> dict[str, object]:
         """读取每日随机角色状态。
 
         Args:
@@ -1451,12 +1582,12 @@ class ConfigManager:
         """
         try:
             state = json.loads(state_path.read_text(encoding="utf-8"))
-            return state if isinstance(state, dict) else {}
+            return state if is_string_mapping(state) else {}
         except (OSError, json.JSONDecodeError):
             return {}
 
     @staticmethod
-    def _save_comic_character_state(state_path: Path, state: dict) -> None:
+    def _save_comic_character_state(state_path: Path, state: dict[str, object]) -> None:
         """原子写入每日随机角色状态。
 
         Args:
@@ -1477,8 +1608,11 @@ class ConfigManager:
         self, style: str = "comic_storyboard_prompt"
     ) -> str:
         """获取分镜生成提示词模板"""
-        prompts_config = self._get_group("prompts").get("comic_analysis_prompts", {})
-        return prompts_config.get(style, "")
+        prompts_config = self.get_group("prompts").get("comic_analysis_prompts", {})
+        prompt = (
+            prompts_config.get(style, "") if is_string_mapping(prompts_config) else ""
+        )
+        return prompt if isinstance(prompt, str) else ""
 
     def save_config(self) -> None:
         """保存配置到 AstrBot 配置系统，失败时交由调用方处理。
@@ -1487,18 +1621,23 @@ class ConfigManager:
             Exception: AstrBot 保存配置时发生的原始异常。
         """
         try:
-            strategies = self._get_group("t2i_rendering").get(
-                "t2i_rendering_strategies"
-            )
-            if isinstance(strategies, list):
+            strategies = self.get_group("t2i_rendering").get("t2i_rendering_strategies")
+            if is_object_list(strategies):
                 try:
                     parse_rendering_strategies(strategies)
                 except ValueError:
                     # 其他设置仍可保存；无效方案保持原样，交给配置页修正。
                     pass
                 else:
-                    strategies.sort(key=lambda item: item.get("priority", 10))
-            self.config.save_config()
+                    # 解析器已校验优先级；只重排原始条目，保留未知扩展字段。
+                    ordered = sorted(
+                        strategies,
+                        key=lambda item: parse_rendering_strategies([item])[0][
+                            "priority"
+                        ],
+                    )
+                    strategies[:] = ordered
+            cast("ConfigWriter", self.config).save_config()
             self.refresh_rendering_schema_options()
             if self._upgrade_tracking_active:
                 self._migrator.protect_upgrade_data()

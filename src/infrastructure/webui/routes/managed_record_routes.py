@@ -17,11 +17,17 @@ from diskcache import Cache
 from ....application.services.task_guard import DuplicateGroupTaskError
 from ....domain.entities.incremental_state import IncrementalBatch
 from ....shared.constants import PLUGIN_NAME
+from ....shared.type_guards import is_object_list, is_string_mapping
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
+    )
+    from ...persistence.kv_contracts import (
+        CacheAccess,
+        KeyValueWriter,
+        StoredPreference,
     )
     from ..active_task_manager import ActiveTaskManager
 
@@ -127,7 +133,7 @@ def validate_batch(data: dict[str, object], locator: RecordLocator) -> Increment
             raise ValueError(f"{key} 必须为整数")
     for key in ("hourly_msg_counts", "hourly_char_counts", "token_usage"):
         values = data.get(key, {})
-        if not isinstance(values, dict) or any(
+        if not is_string_mapping(values) or any(
             not isinstance(value, int) or isinstance(value, bool) or value < 0
             for value in values.values()
         ):
@@ -136,18 +142,18 @@ def validate_batch(data: dict[str, object], locator: RecordLocator) -> Increment
         if not isinstance(data.get(key, {}), dict):
             raise ValueError(f"{key} 必须为对象")
     users = data.get("user_stats", {})
-    if isinstance(users, dict) and any(
-        not isinstance(value, dict) for value in users.values()
+    if is_string_mapping(users) and any(
+        not is_string_mapping(value) for value in users.values()
     ):
         raise ValueError("用户统计值必须为对象")
     for key in ("topics", "golden_quotes"):
         values = data.get(key, [])
-        if not isinstance(values, list) or any(
-            not isinstance(value, dict) for value in values
+        if not is_object_list(values) or any(
+            not is_string_mapping(value) for value in values
         ):
             raise ValueError(f"{key} 必须为对象列表")
     participants = data.get("participant_ids", [])
-    if not isinstance(participants, list) or any(
+    if not is_object_list(participants) or any(
         not isinstance(value, str) for value in participants
     ):
         raise ValueError("参与者 ID 必须为字符串列表")
@@ -183,8 +189,9 @@ class ManagedRecordRoutes:
         preferences = await sp.range_get_async("plugin", plugin.plugin_id)
         result: dict[str, dict[str, object]] = {}
         for item in preferences:
-            value = cast("object", item.value.get("val"))
-            if HISTORY_KEY.fullmatch(item.key) and isinstance(value, dict):
+            raw_value = cast("StoredPreference", item).value
+            value = raw_value.get("val") if is_string_mapping(raw_value) else None
+            if HISTORY_KEY.fullmatch(item.key) and is_string_mapping(value):
                 result[item.key] = value
         return result
 
@@ -196,8 +203,8 @@ class ManagedRecordRoutes:
             if not directory.exists():
                 return None
             with Cache(str(directory)) as cache:
-                value = cast(
-                    "object", await asyncio.to_thread(cache.get, locator["key"])
+                value = await asyncio.to_thread(
+                    cast("CacheAccess", cache).get, locator["key"]
                 )
                 return {"data_uri": value} if isinstance(value, str) else None
         service = self.service
@@ -208,7 +215,7 @@ class ManagedRecordRoutes:
                 "object",
                 await service.history_manager.plugin.get_kv_data(locator["key"], None),
             )
-            return value if isinstance(value, dict) else None
+            return value if is_string_mapping(value) else None
         if kind == "batch":
             if not service.incremental_store:
                 raise ValueError("增量存储尚未初始化")
@@ -329,7 +336,7 @@ class ManagedRecordRoutes:
             if type(body) is not dict:
                 raise ValueError("无效请求")
             raw = body.get("locator")
-            if not isinstance(raw, dict):
+            if not is_string_mapping(raw):
                 raise ValueError("缺少记录定位字段")
             locator = parse_locator(raw)
             operation = body.get("operation")
@@ -398,12 +405,14 @@ class ManagedRecordRoutes:
             if operation != "delete":
                 raise ValueError("头像是自动生成的缓存，只支持查看、导出和删除重取")
             with Cache(str(StarTools.get_data_dir(PLUGIN_NAME) / "avatar")) as cache:
-                await asyncio.to_thread(cache.delete, locator["key"])
+                await asyncio.to_thread(
+                    cast("CacheAccess", cache).delete, locator["key"]
+                )
             return
         service = self.service
         if not service:
             raise ValueError("分析服务尚未初始化")
-        if operation != "delete" and not isinstance(data, dict):
+        if operation != "delete" and not is_string_mapping(data):
             raise ValueError("业务记录必须为 JSON 对象")
         if kind == "batch":
             store = service.incremental_store
@@ -414,7 +423,7 @@ class ManagedRecordRoutes:
                     locator["group_id"], locator["batch_id"]
                 ):
                     raise FileExistsError("批次删除失败，请刷新后重试")
-            elif isinstance(data, dict) and not await store.save_batch(
+            elif is_string_mapping(data) and not await store.save_batch(
                 validate_batch(data, locator)
             ):
                 raise RuntimeError("批次未保存")
@@ -440,7 +449,7 @@ class ManagedRecordRoutes:
             raise ValueError("快照存储尚未初始化")
         if operation == "create":
             raise ValueError("阶段快照由分析任务创建；可修订或导出已有快照")
-        if not isinstance(current, dict):
+        if not is_string_mapping(current):
             raise ValueError("快照格式无效")
         if operation == "delete":
             await asyncio.to_thread(
@@ -450,7 +459,7 @@ class ManagedRecordRoutes:
                 locator["stage_name"],
                 locator["trace_id"],
             )
-        elif isinstance(data, dict):
+        elif is_string_mapping(data):
             if any(
                 data.get(key) != value
                 for key, value in current.items()
@@ -489,10 +498,12 @@ class ManagedRecordRoutes:
                     if key.startswith(daily_key + "_")
                 )
                 if candidates:
-                    await plugin.put_kv_data(daily_key, candidates[-1])
+                    await cast("KeyValueWriter", plugin).put_kv_data(
+                        daily_key, candidates[-1]
+                    )
                 else:
                     await plugin.delete_kv_data(daily_key)
-        elif isinstance(data, dict):
+        elif is_string_mapping(data):
             if "analysis" in data and (
                 not isinstance(data["analysis"], dict)
                 or not isinstance(data.get("summary"), dict)
@@ -500,7 +511,7 @@ class ManagedRecordRoutes:
                 raise ValueError("历史记录需要完整的 summary 与 analysis 对象")
             if not data:
                 raise ValueError("不能保存空的历史记录")
-            await plugin.put_kv_data(locator["key"], data)
+            await cast("KeyValueWriter", plugin).put_kv_data(locator["key"], data)
             daily_key = f"analysis_{locator['group_id']}_{locator['date_str']}"
             pointer = cast("object", await plugin.get_kv_data(daily_key, None))
             if locator["key"] != daily_key and (
@@ -511,4 +522,6 @@ class ManagedRecordRoutes:
                     and locator["key"] > pointer
                 )
             ):
-                await plugin.put_kv_data(daily_key, locator["key"])
+                await cast("KeyValueWriter", plugin).put_kv_data(
+                    daily_key, locator["key"]
+                )

@@ -16,6 +16,10 @@ from astrbot.api.provider import LLMResponse
 from ....shared.constants import AnalysisStage
 from ....shared.report_language import apply_report_language
 from ....shared.trace_context import TraceContext
+from ....shared.type_guards import (
+    is_object_list,
+    is_string_mapping,
+)
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
 from .llm_diagnostics import (
@@ -24,9 +28,10 @@ from .llm_diagnostics import (
     extract_task_await_frames,
     format_task_await_chain,
 )
+from .token_usage import parse_token_usage
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from astrbot.api.star import Context
 
@@ -110,12 +115,12 @@ class ProviderMetadata:
                 timeout=None,
             )
 
-        prov_cfg = (
+        prov_cfg: object = (
             getattr(provider_inst, "provider_config", None)
             or getattr(provider_inst, "config", None)
             or {}
         )
-        if isinstance(prov_cfg, dict):
+        if is_string_mapping(prov_cfg):
             raw_model = (
                 prov_cfg.get("model")
                 or getattr(provider_inst, "model", None)
@@ -136,7 +141,7 @@ class ProviderMetadata:
             raw_timeout = getattr(provider_inst, "timeout", None)
 
         parsed_timeout: float | None = None
-        if raw_timeout is not None:
+        if isinstance(raw_timeout, (str, int, float)):
             try:
                 t_val = float(raw_timeout)
                 if t_val > 0:
@@ -386,8 +391,8 @@ async def get_provider_id_with_fallback(
         logger.debug(f"[Provider 选择] 开始为 {task_desc} 选择 Provider...")
 
         # 定义回退策略列表
-        strategies = []
-        strategy_names = []
+        strategies: list[Callable[[], Awaitable[str | None]]] = []
+        strategy_names: list[str] = []
 
         # 0. 显式覆盖 Provider (续跑或手动调试时通过 TraceContext 传入)
         trace = TraceContext.current()
@@ -509,7 +514,7 @@ async def call_provider_with_retry(
     observation_area = observation_label or provider_id_key or "未标注"
 
     # 1. 确定我们要尝试的 Provider 队列
-    attempt_queue = []
+    attempt_queue: list[tuple[str, bool]] = []
 
     # 尝试获取指定的 Provider
     specific_provider_id = provider_id
@@ -618,9 +623,9 @@ async def call_provider_with_retry(
                     if actual_model:
                         trace.metadata["model"] = str(actual_model)
                     prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                    if isinstance(prompts_map, dict) and observation_label:
+                    if is_string_mapping(prompts_map) and observation_label:
                         slot = prompts_map.setdefault(observation_label, {})
-                        if isinstance(slot, dict):
+                        if is_string_mapping(slot):
                             slot["provider_id"] = pid
                             if actual_model:
                                 slot["model"] = str(actual_model)
@@ -809,13 +814,13 @@ async def call_provider_with_retry(
                     "duration_ms": round(duration_ms, 1),
                     "is_fallback": is_fallback_request,
                 }
-                if isinstance(attempts_list, list):
+                if is_object_list(attempts_list):
                     attempts_list.append(attempt_item)
-                for s in reversed(trace._spans):
+                for s in reversed(trace.spans):
                     if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         payload = s.setdefault("payload", {})
                         span_attempts = payload.setdefault("llm_attempts", [])
-                        if isinstance(span_attempts, list):
+                        if is_object_list(span_attempts):
                             span_attempts.append(attempt_item)
                         break
             return resp
@@ -833,13 +838,13 @@ async def call_provider_with_retry(
                     "is_fallback": is_fallback_request,
                     "error": str(err),
                 }
-                if isinstance(attempts_list, list):
+                if is_object_list(attempts_list):
                     attempts_list.append(attempt_item)
-                for s in reversed(trace._spans):
+                for s in reversed(trace.spans):
                     if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         payload = s.setdefault("payload", {})
                         span_attempts = payload.setdefault("llm_attempts", [])
-                        if isinstance(span_attempts, list):
+                        if is_object_list(span_attempts):
                             span_attempts.append(attempt_item)
                         break
             if r_format is not None and _is_response_format_unsupported_error(err):
@@ -991,9 +996,8 @@ def extract_token_usage(response: object) -> dict[str, int]:
     Returns:
         Token使用统计字典，包含prompt_tokens, completion_tokens, total_tokens
     """
-    from ....domain.value_objects import TokenUsage
 
-    usage_vo = TokenUsage.from_llm_response(response)
+    usage_vo = parse_token_usage(response)
     return {
         "prompt_tokens": usage_vo.prompt_tokens,
         "completion_tokens": usage_vo.completion_tokens,

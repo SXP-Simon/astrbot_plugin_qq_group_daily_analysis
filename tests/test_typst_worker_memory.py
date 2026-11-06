@@ -46,7 +46,7 @@ def test_linux_peak_ignores_inherited_resource_high_water_mark(monkeypatch):
     monkeypatch.setitem(sys.modules, "resource", SimpleNamespace(getrusage=inherited, RUSAGE_SELF=0))
     monkeypatch.setattr(Path, "read_text", lambda *_args, **_kwargs: "VmHWM:\t102400 kB\nVmRSS:\t25600 kB\n")
     metrics = {}
-    worker._collect_peak(metrics)
+    worker.collect_peak(metrics)
     assert metrics["worker_peak_rss_mb"] == 100
     inherited.assert_not_called()
 
@@ -56,8 +56,8 @@ def test_linux_peak_growth_uses_worker_startup_rss(monkeypatch):
     values = iter(["VmHWM: 10240 kB\nVmRSS: 10240 kB\n", "VmHWM: 102400 kB\nVmRSS: 25600 kB\n"])
     monkeypatch.setattr(Path, "read_text", lambda *_args, **_kwargs: next(values))
     metrics = {}
-    worker._collect_peak(metrics, baseline=True)
-    worker._collect_peak(metrics)
+    worker.collect_peak(metrics, baseline=True)
+    worker.collect_peak(metrics)
     assert metrics == {"worker_start_rss_mb": 10, "worker_peak_rss_mb": 100, "worker_peak_delta_mb": 90, "worker_rss_source": "linux_proc_status"}
 
 
@@ -66,7 +66,7 @@ def test_unavailable_linux_metrics_never_abort_report_or_fall_back_to_inherited_
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(Path, "read_text", Mock(side_effect=error))
     metrics = {}
-    worker._collect_peak(metrics)
+    worker.collect_peak(metrics)
     assert metrics == {}
 
 

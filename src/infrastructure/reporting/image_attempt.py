@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_list
 
 if TYPE_CHECKING:
     from ...shared.trace_context import SpanRecord
@@ -98,12 +99,12 @@ class ImageRenderTelemetry:
 
     def __init__(self) -> None:
         self.trace = TraceContext.current()
-        self.start = len(self.trace._spans) if self.trace else 0
+        self.start = len(self.trace.spans) if self.trace else 0
         self.parent: SpanRecord | None = (
             next(
                 (
                     span
-                    for span in reversed(self.trace._spans)
+                    for span in reversed(self.trace.spans)
                     if span["stage_name"] == "RENDER_REPORT"
                     and span["status"] == "running"
                 ),
@@ -119,7 +120,7 @@ class ImageRenderTelemetry:
         payload = self.parent["payload"]
         payload["render_service"] = attempt.info
         attempts = payload.setdefault("render_attempts", [])
-        if isinstance(attempts, list):
+        if is_object_list(attempts):
             attempts.append(attempt.record)
 
     def success(
@@ -140,7 +141,7 @@ class ImageRenderTelemetry:
             dimensions: 已验证的成品尺寸。
         """
         if self.trace:
-            for span in self.trace._spans[self.start :]:
+            for span in self.trace.spans[self.start :]:
                 if span["status"] == "failed" and (
                     span["stage_name"].startswith("TYPST_")
                     or span["stage_name"]

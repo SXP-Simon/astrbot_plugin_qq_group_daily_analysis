@@ -97,9 +97,7 @@ async def test_faces_survive_storage_fetch_clean_statistics_and_incremental_merg
     )
     assert len(messages) == 1
     assert messages[0].text_content == readable_text
-    raw_message = adapter.convert_to_raw_format(messages)[0]["message"]
-    assert raw_message[0]["data"]["text"] == readable_text
-    assert len(raw_message) == 2
+    assert messages[0].contents[0].text == readable_text
     stats = statistics_for(messages)
     assert stats.emoji_count == 3
     assert stats.emoji_statistics.face_count == 3

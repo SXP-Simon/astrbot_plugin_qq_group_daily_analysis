@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from runpy import run_path
-from typing import Any, cast
+from typing import cast
 
 if __package__:
     from .managed_data_spec import FILE_PATHS as _file_paths
@@ -23,11 +23,11 @@ else:
     _record_schemas = cast("dict[str, object]", _managed_specs["RECORD_SCHEMAS"])
 
 
-def generate_openapi_spec() -> dict[str, Any]:
+def generate_openapi_spec() -> dict[str, object]:
     """生成插件 Web API 的 OpenAPI 3.1 契约规范字典。
 
     Returns:
-        dict[str, Any]: 完整的 OpenAPI 3.1 契约规范字典对象。
+        dict[str, object]: 完整的 OpenAPI 3.1 契约规范字典对象。
     """
     return {
         "openapi": "3.1.0",

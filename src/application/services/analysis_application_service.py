@@ -54,9 +54,13 @@ if TYPE_CHECKING:
         GroupStatistics,
         QualityReview,
         SummaryTopic,
+        UserActivityPayload,
+        UserActivityRanking,
         UserTitle,
     )
-    from ...domain.value_objects.unified_message import UnifiedMessage
+    from ...domain.value_objects.unified_message import (
+        UnifiedMessage,
+    )
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.history_manager import HistoryManager
     from ...infrastructure.platform.bot_manager import BotManager
@@ -178,7 +182,6 @@ class AnalysisApplicationService:
             history_manager=self.history_manager,
             report_generator=self.report_generator,
             llm_analyzer=self.llm_analyzer,
-            statistics_service=self.statistics_service,
             task_guard=self._task_guard,
             checkpoint_store=self.checkpoint_store,
             html_render=self.html_render,
@@ -187,12 +190,12 @@ class AnalysisApplicationService:
     @property
     def _active_tasks(self):
         """兼容层：活跃任务集合。"""
-        return self._task_guard._active_tasks
+        return self._task_guard.active_tasks
 
     @property
     def _locks(self):
         """兼容层：任务锁字典。"""
-        return self._task_guard._locks
+        return self._task_guard.locks
 
     def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
         """检查指定群的特定任务是否正在执行中。
@@ -415,10 +418,6 @@ class AnalysisApplicationService:
 
             sections = self._resolve_daily_analysis_sections(analysis_sections)
 
-            legacy_messages = self.statistics_service._convert_to_legacy_dict(
-                unified_messages
-            )
-
             unified_msg_origin = (
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
@@ -428,7 +427,7 @@ class AnalysisApplicationService:
                 pipeline,
                 group_id,
                 analysis_stage,
-                legacy_messages,
+                unified_messages,
                 user_activity,
                 top_users,
                 unified_msg_origin,
@@ -445,7 +444,7 @@ class AnalysisApplicationService:
             statistics.golden_quotes = llm_result.golden_quotes
             statistics.token_usage = llm_result.token_usage
 
-            analysis_result = {
+            analysis_result: dict[str, object] = {
                 "statistics": statistics,
                 "topics": llm_result.topics,
                 "user_titles": llm_result.user_titles,
@@ -482,7 +481,7 @@ class AnalysisApplicationService:
         trace_id: str,
         statistics: GroupStatistics,
         user_activity: dict[str, UserActivityStats],
-        top_users: list[dict[str, object]],
+        top_users: list[UserActivityRanking],
         unified_messages: list[UnifiedMessage],
     ) -> None:
         """持久化统计阶段之后供恢复流程使用的清洗快照。
@@ -749,9 +748,9 @@ class AnalysisApplicationService:
         pipeline: PipelineContext,
         group_id: str,
         analysis_stage: str,
-        legacy_messages: list[dict[str, object]],
+        unified_messages: list[UnifiedMessage],
         user_activity: dict[str, UserActivityStats],
-        top_users: list[dict[str, object]],
+        top_users: list[UserActivityRanking],
         unified_msg_origin: str,
         sections: AnalysisSections,
         trace: TraceContext | None,
@@ -762,7 +761,7 @@ class AnalysisApplicationService:
             pipeline: 当前分析的阶段与快照上下文。
             group_id: 目标群组 ID。
             analysis_stage: LLM 并发槽位使用的任务类型。
-            legacy_messages: 转换后的兼容消息结构。
+            unified_messages: 保留消息段与提及、回复关系的清洗结果。
             user_activity: Stats 阶段产出的用户活跃数据。
             top_users: 限定人数后的活跃用户列表。
             unified_msg_origin: LLM 分析所使用的平台消息源标识。
@@ -802,7 +801,7 @@ class AnalysisApplicationService:
                     result.token_usage,
                     result.chat_quality_review,
                 ) = await self.llm_analyzer.analyze_all_concurrent(
-                    legacy_messages,
+                    unified_messages,
                     user_activity,
                     umo=unified_msg_origin,
                     top_users=top_users,
@@ -960,16 +959,13 @@ class AnalysisApplicationService:
             if not unified_messages:
                 return {"success": False, "reason": "no_messages"}
 
-            legacy_messages = self.statistics_service._convert_to_legacy_dict(
-                unified_messages
-            )
             unified_msg_origin = (
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
 
             async with self._llm_slot(group_id, "comic_manual"):
                 topics, token_usage = await self.llm_analyzer.analyze_topics(
-                    legacy_messages, unified_msg_origin
+                    unified_messages, unified_msg_origin
                 )
 
             if not topics:
@@ -982,7 +978,7 @@ class AnalysisApplicationService:
                 "messages_count": len(unified_messages),
                 "adapter": adapter,
                 "group_id": group_id,
-                "platform_id": getattr(adapter, "platform_id", platform_id),
+                "platform_id": adapter.platform_id,
             }
 
     async def execute_incremental_analysis(
@@ -1032,6 +1028,6 @@ class AnalysisApplicationService:
     def _convert_user_activity_for_merge(
         user_activity: Mapping[str, UserActivityStats],
         messages: list[UnifiedMessage],
-    ) -> dict[str, dict]:
+    ) -> dict[str, UserActivityPayload]:
         """转换用户活跃数据为增量批次结构。"""
         return convert_user_activity_for_merge(user_activity, messages)

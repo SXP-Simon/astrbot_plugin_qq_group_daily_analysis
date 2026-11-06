@@ -109,7 +109,7 @@ async def test_analyzer_keeps_result_count_without_prompt_and_parse_noise(llm_se
     analyzer = TopicAnalyzer(context, config)
     monkeypatch.setattr(config, "get_topic_analysis_prompt", lambda: "请提取 ${max_topics} 个话题：${messages_text}")
     monkeypatch.setattr(analyzer, "_build_system_prompt", AsyncMock(return_value="测试人格"))
-    messages = [{"sender": {"user_id": "1", "nickname": "甲"}, "time": 0, "message": [{"type": "text", "data": {"text": "今天讨论一个测试话题"}}]}]
+    messages = [{"sender": "甲", "user_id": "1", "time": "10:00", "content": "今天讨论一个测试话题"}]
     topics, _ = await analyzer.analyze(messages)
     assert len(topics) == 1
     info = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]

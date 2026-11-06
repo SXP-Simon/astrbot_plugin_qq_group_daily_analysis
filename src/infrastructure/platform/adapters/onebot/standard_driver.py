@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from .....shared.type_guards import is_object_list, is_string_mapping
 from .....utils.logger import logger
 from .driver_base import OneBotDriver
 
@@ -97,26 +98,26 @@ class StandardOneBotDriver(OneBotDriver):
         """
 
         def extract_list(payload: object) -> list[OneBotAlbumPayload]:
-            if isinstance(payload, list):
+            if is_object_list(payload):
                 return [
                     cast("OneBotAlbumPayload", item)
                     for item in payload
-                    if isinstance(item, dict)
+                    if is_string_mapping(item)
                 ]
-            if not isinstance(payload, dict):
+            if not is_string_mapping(payload):
                 logger.debug(
                     f"[OneBot:{self.name}] 提取相册列表失败: payload 非字典/列表类型 ({type(payload)})"
                 )
                 return []
 
             data = payload.get("data")
-            if isinstance(data, list):
+            if is_object_list(data):
                 return [
                     cast("OneBotAlbumPayload", item)
                     for item in data
-                    if isinstance(item, dict)
+                    if is_string_mapping(item)
                 ]
-            if isinstance(data, dict):
+            if is_string_mapping(data):
                 album_list = (
                     data.get("album_list")
                     or data.get("albumList")
@@ -124,11 +125,11 @@ class StandardOneBotDriver(OneBotDriver):
                     or data.get("albums")
                     or data.get("album")
                 )
-                if isinstance(album_list, list):
+                if is_object_list(album_list):
                     return [
                         cast("OneBotAlbumPayload", item)
                         for item in album_list
-                        if isinstance(item, dict)
+                        if is_string_mapping(item)
                     ]
                 logger.debug(
                     f"[OneBot:{self.name}] 在 data 字段中未找到列表: data={data}"
@@ -141,11 +142,11 @@ class StandardOneBotDriver(OneBotDriver):
                 or payload.get("albums")
                 or payload.get("album")
             )
-            if isinstance(album_list, list):
+            if is_object_list(album_list):
                 return [
                     cast("OneBotAlbumPayload", item)
                     for item in album_list
-                    if isinstance(item, dict)
+                    if is_string_mapping(item)
                 ]
 
             logger.debug(

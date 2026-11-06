@@ -446,7 +446,7 @@ class ReportRoutes:
             safe_filename = Path(query_dto["filename"]).name
             target_file: Path | None = None
 
-            search_dirs = []
+            search_dirs: list[Path] = []
             if self.report_output_dir and self.report_output_dir.exists():
                 search_dirs.append(self.report_output_dir)
             cfg_mgr = (

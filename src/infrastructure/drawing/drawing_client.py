@@ -74,7 +74,7 @@ class DrawingClient:
             )
         )
 
-    def _build_target_url(self, raw_url: str, protocol: str) -> str:
+    def build_target_url(self, raw_url: str, protocol: str) -> str:
         """智能解析补全用户配置的 API URL。"""
         url = (raw_url or "").strip().rstrip("/")
         if not url:
@@ -167,11 +167,11 @@ class DrawingClient:
         prompt: str,
         images_data: list[tuple[bytes, str]] | None,
         disable_retry: bool,
-        provider: dict,
+        provider: dict[str, object],
     ) -> tuple[bytes | None, str | None]:
         """使用一个已配置供应商执行生成并处理重试。"""
         api_protocol = str(
-            self._get_provider_value("api_protocol", provider) or "images"
+            self.get_provider_value("api_protocol", provider) or "images"
         )
         max_retries = self.config_manager.get_drawing_network_retries()
         output_exception_retries = (
@@ -258,7 +258,7 @@ class DrawingClient:
         logger.debug("[Comic] 画图重试次数耗尽或请求失败，任务终止。")
         return None, last_error_msg
 
-    def _get_provider_value(self, name: str, provider: dict[str, object]) -> object:
+    def get_provider_value(self, name: str, provider: dict[str, object]) -> object:
         """读取供应商条目字段，并为缺失字段提供安全默认值。
 
         绘图连接参数只允许来自当前条目，避免删除面板外层字段后仍出现不可见的
@@ -269,7 +269,9 @@ class DrawingClient:
             return value
         return DRAWING_PROVIDER_DEFAULTS.get(name, "")
 
-    def _get_request_proxy(self, provider: dict | None = None) -> str | None:
+    def get_request_proxy(
+        self, provider: dict[str, object] | None = None
+    ) -> str | None:
         """获取当前绘图请求的代理，供应商配置优先于全局配置。"""
         provider_proxy = str((provider or {}).get("proxy", "")).strip()
         if provider_proxy:
@@ -278,7 +280,7 @@ class DrawingClient:
         global_proxy = getter() if callable(getter) else ""
         return str(global_proxy).strip() or None
 
-    def _resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str:
+    def resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str:
         """按当前供应商条目的比例解析 API 支持的 WxH 尺寸。"""
         size = (size_or_ratio or "").strip().lower()
         aspect_ratio = (aspect_ratio or "").strip().lower()
@@ -326,7 +328,10 @@ class DrawingClient:
         return f"{width}x{height}"
 
     async def _call_google_api(
-        self, prompt: str, images_data: list[tuple[bytes, str]] | None, provider: dict
+        self,
+        prompt: str,
+        images_data: list[tuple[bytes, str]] | None,
+        provider: dict[str, object],
     ) -> bytes | None:
         return await self._request_service.call_google_api(
             prompt, images_data, provider
@@ -336,7 +341,7 @@ class DrawingClient:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None,
-        provider: dict,
+        provider: dict[str, object],
         provider_type: str,
     ) -> bytes | None:
         return await self._request_service.call_preset_api(
@@ -347,7 +352,7 @@ class DrawingClient:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None,
-        provider: dict,
+        provider: dict[str, object],
         api_key: str,
         model: str,
         timeout: int | float,
@@ -363,7 +368,7 @@ class DrawingClient:
         payload: dict[str, object],
         timeout: int | float,
         provider_name: str,
-        provider: dict,
+        provider: dict[str, object],
     ) -> bytes | None:
         return await self._request_service.post_json_for_image(
             target_url, headers, payload, timeout, provider_name, provider
@@ -376,7 +381,7 @@ class DrawingClient:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None = None,
-        provider: dict | None = None,
+        provider: dict[str, object] | None = None,
     ) -> bytes | None:
         return await self._request_service.call_images_api(
             prompt, images_data, provider
@@ -386,7 +391,7 @@ class DrawingClient:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None = None,
-        provider: dict | None = None,
+        provider: dict[str, object] | None = None,
     ) -> bytes | None:
         return await self._request_service.call_grok_api(prompt, images_data, provider)
 
@@ -394,7 +399,7 @@ class DrawingClient:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None = None,
-        provider: dict | None = None,
+        provider: dict[str, object] | None = None,
     ) -> bytes | None:
         return await self._request_service.call_gemini_api(
             prompt, images_data, provider
@@ -404,7 +409,7 @@ class DrawingClient:
         self,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None = None,
-        provider: dict | None = None,
+        provider: dict[str, object] | None = None,
     ) -> bytes | None:
         return await self._request_service.call_chat_api(prompt, images_data, provider)
 
@@ -420,7 +425,7 @@ class DrawingClient:
         return DrawingImageResponseService.decode_data_uri(data_uri)
 
     @staticmethod
-    def _decode_base64(encoded: str) -> bytes:
+    def decode_base64(encoded: str) -> bytes:
         return DrawingImageResponseService.decode_base64(encoded)
 
     @staticmethod
@@ -433,9 +438,9 @@ class DrawingClient:
         return await self._image_response_service.download_public_image(url, proxy)
 
     @staticmethod
-    def _sanitize_url(url: str) -> str:
+    def sanitize_url(url: str) -> str:
         return DrawingImageResponseService.sanitize_url(url)
 
     @staticmethod
-    def _summarize_response(data: object) -> str:
+    def summarize_response(data: object) -> str:
         return DrawingImageResponseService.summarize_response(data)

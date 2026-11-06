@@ -16,10 +16,15 @@ from ...domain.value_objects import (
     UserTitle,
 )
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from astrbot.api.star import Star
+
+    from .kv_contracts import KeyValueWriter
 
 
 class HistoryManager:
@@ -43,7 +48,7 @@ class HistoryManager:
     async def save_analysis(
         self,
         group_id: str,
-        analysis_result: dict[str, object],
+        analysis_result: Mapping[str, object],
         date_str: str | None = None,
         time_str: str | None = None,
     ) -> bool:
@@ -74,13 +79,13 @@ class HistoryManager:
             # 从分析结果中剥离非持久化字段，提取核心统计元数据
             stats = analysis_result.get("statistics")
             topics_raw = analysis_result.get("topics")
-            topics = topics_raw if isinstance(topics_raw, list) else []
+            topics = topics_raw if is_object_list(topics_raw) else []
             user_titles_raw = analysis_result.get("user_titles")
-            user_titles = user_titles_raw if isinstance(user_titles_raw, list) else []
+            user_titles = user_titles_raw if is_object_list(user_titles_raw) else []
 
-            topics_summary = []
+            topics_summary: list[dict[str, str]] = []
             for t in topics:
-                if isinstance(t, dict):
+                if is_string_mapping(t):
                     topics_summary.append(
                         {
                             "topic": str(t.get("topic", "")),
@@ -129,11 +134,13 @@ class HistoryManager:
                 else quality,
                 "generated_at": summary["generated_at"],
             }
-            await self.plugin.put_kv_data(
+            await cast("KeyValueWriter", self.plugin).put_kv_data(
                 key, {"summary": summary, "analysis": snapshot}
             )
             # 时间点保留独立版本，日期键只指向最近一次成功保存的记录。
-            await self.plugin.put_kv_data(f"analysis_{group_id}_{date_str}", key)
+            await cast("KeyValueWriter", self.plugin).put_kv_data(
+                f"analysis_{group_id}_{date_str}", key
+            )
 
             logger.info(
                 f"已保存群 {group_id} 在 {date_str} {time_str} 的分析摘要到历史记录 (Key: {key})"
@@ -164,10 +171,10 @@ class HistoryManager:
             f"analysis_{group_id}_{date_str}_"
         ):
             record = cast("object", await self.plugin.get_kv_data(record, None))
-        if not isinstance(record, dict):
+        if not is_string_mapping(record):
             return None
         analysis = record.get("analysis")
-        return analysis if isinstance(analysis, dict) else record
+        return analysis if is_string_mapping(analysis) else record
 
     async def get_history(
         self, group_id: str, date_str: str, time_str: str
@@ -178,10 +185,10 @@ class HistoryManager:
         time_str = time_str.replace(":", "-")
         key = f"analysis_{group_id}_{date_str}_{time_str}"
         record = cast("object", await self.plugin.get_kv_data(key, None))
-        if not isinstance(record, dict):
+        if not is_string_mapping(record):
             return None
         summary = record.get("summary")
-        return summary if isinstance(summary, dict) else record
+        return summary if is_string_mapping(summary) else record
 
     async def has_history(self, group_id: str, date_str: str, time_str: str) -> bool:
         """

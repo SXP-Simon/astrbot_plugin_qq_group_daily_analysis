@@ -5,19 +5,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from ....domain.value_objects import GoldenQuote, TokenUsage
+from ....domain.value_objects.unified_message import (
+    AnalysisTextMessage,
+    UnifiedMessage,
+)
 from ....utils.logger import logger
 from ....utils.template_utils import render_template
-from ..utils import InfoUtils
+from ..utils.analysis_messages import extract_analysis_messages
 from ..utils.json_utils import extract_golden_quotes_with_regex
 from ..utils.response_validation import validate_golden_quote_items
 from ..utils.structured_output_schema import JSONObject, build_golden_quotes_schema
 from .base_analyzer import BaseAnalyzer
 
 
-class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
+class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[AnalysisTextMessage]]):
     """
     金句分析器
     专门处理群聊金句的提取和分析
@@ -33,8 +35,8 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
 
     def get_max_count(self) -> int:
         """获取最大金句数量，增量模式下使用覆盖值"""
-        if self._incremental_max_count is not None:
-            return self._incremental_max_count
+        if self.incremental_max_count is not None:
+            return self.incremental_max_count
         return self.config_manager.get_max_golden_quotes()
 
     def get_response_schema_name(self) -> str:
@@ -43,7 +45,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
     def get_response_schema(self) -> JSONObject:
         return build_golden_quotes_schema(self.get_max_count())
 
-    def build_prompt(self, data: list[dict]) -> str:
+    def build_prompt(self, data: list[AnalysisTextMessage]) -> str:
         """
         构建金句分析提示词
 
@@ -81,7 +83,9 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
         logger.warning("未找到有效的金句分析提示词配置，请检查配置文件")
         return ""
 
-    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
+    def extract_with_regex(
+        self, result_text: str, max_count: int
+    ) -> list[dict[str, object]]:
         """
         使用正则表达式提取金句信息
 
@@ -94,7 +98,9 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
         """
         return extract_golden_quotes_with_regex(result_text, max_count)
 
-    def create_data_objects(self, data_list: list[dict]) -> list[GoldenQuote]:
+    def create_data_objects(
+        self, data_list: list[dict[str, object]]
+    ) -> list[GoldenQuote]:
         """
         创建金句对象列表
 
@@ -105,14 +111,14 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
             GoldenQuote对象列表
         """
         try:
-            quotes = []
+            quotes: list[GoldenQuote] = []
             max_quotes = self.get_max_count()
 
             for quote_data in data_list[:max_quotes]:
                 # 确保数据格式正确
-                content = quote_data.get("content", "").strip()
-                sender = quote_data.get("sender", "").strip()
-                reason = quote_data.get("reason", "").strip()
+                content = str(quote_data.get("content", "") or "").strip()
+                sender = str(quote_data.get("sender", "") or "").strip()
+                reason = str(quote_data.get("reason", "") or "").strip()
 
                 # 验证必要字段
                 if not content or not sender or not reason:
@@ -130,13 +136,13 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
             return []
 
     def validate_parsed_data(
-        self, data_list: list[dict]
-    ) -> tuple[bool, list[dict] | None, str | None]:
+        self, data_list: list[dict[str, object]]
+    ) -> tuple[bool, list[dict[str, object]] | None, str | None]:
         return validate_golden_quote_items(data_list)
 
     async def analyze_golden_quotes(
         self,
-        messages: list[dict],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """分析群聊金句
@@ -160,7 +166,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
             quotes, usage = await self.analyze(interesting_messages, umo)
 
             # 建立 ID 到昵称的映射表用于恢复显示
-            id_to_nickname = {}
+            id_to_nickname: dict[str, str] = {}
             for msg in interesting_messages:
                 uid = str(msg.get("user_id", ""))
                 if uid:
@@ -186,36 +192,23 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
             logger.error(f"金句分析失败: {e}")
             raise
 
-    def extract_interesting_messages(self, messages: list[dict]) -> list[dict]:
+    def extract_interesting_messages(
+        self, messages: list[UnifiedMessage]
+    ) -> list[AnalysisTextMessage]:
         """
         根据清理后的消息提取可能有意义的消息片段用于金句分析。
 
         Args:
-            messages: 已由 MessageCleaner 处理过的 legacy 消息列表
+            messages: 已由 MessageCleaner 处理过的统一消息列表
 
         Returns:
             提取的文本消息列表
         """
-        interesting_messages = []
-
-        for msg in messages:
-            # 获取发送者显示名
-            sender = msg.get("sender", {})
-            nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
-            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
-
-            for content in msg.get("message", []):
-                if content.get("type") == "text":
-                    text = content.get("data", {}).get("text", "").strip()
-                    # 过滤掉过短或过长的噪音（已经在 cleaner 处理过一遍基本垃圾）
-                    if 2 <= len(text) <= 500:
-                        interesting_messages.append(
-                            {
-                                "sender": nickname,
-                                "time": msg_time,
-                                "content": text,
-                                "user_id": str(sender.get("user_id", "")),
-                            }
-                        )
-
-        return interesting_messages
+        messages_text = extract_analysis_messages(
+            messages,
+            use_card=self.config_manager.get_enable_user_card(),
+            bot_self_ids=self.config_manager.get_bot_self_ids(),
+        )
+        return [
+            message for message in messages_text if 2 <= len(message["content"]) <= 500
+        ]

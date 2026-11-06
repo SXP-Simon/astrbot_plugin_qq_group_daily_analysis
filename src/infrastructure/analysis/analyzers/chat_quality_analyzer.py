@@ -5,17 +5,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING
 
+from ....domain.value_objects.unified_message import UnifiedMessage
+
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 from ....domain.value_objects import QualityDimension, QualityReview, TokenUsage
 from ....shared.trace_context import TraceContext
+from ....shared.type_guards import is_object_list, is_string_mapping
 from ....utils.logger import logger
 from ....utils.template_utils import render_template
-from ..utils import InfoUtils
+from ..utils.analysis_messages import extract_analysis_messages
 from ..utils.json_utils import extract_quality_with_regex, parse_json_object_response
 from ..utils.llm_utils import (
     call_provider_with_retry,
@@ -28,7 +30,7 @@ from ..utils.structured_output_schema import JSONObject, build_chat_quality_sche
 from .base_analyzer import BaseAnalyzer
 
 
-class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[dict]]):
+class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[UnifiedMessage]]):
     """
     聊天质量分析器
     专门处理群聊质量的锐评和多维度分析
@@ -56,38 +58,24 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[dict]]):
     def get_response_schema(self) -> JSONObject:
         return build_chat_quality_schema(self.get_max_count())
 
-    def build_prompt(self, data: list[dict]) -> str:
+    def build_prompt(self, data: list[UnifiedMessage]) -> str:
         """
         构建聊天质量分析提示词
         """
         if not data:
             return ""
 
-        # 提取文本消息
-        text_messages = []
-        for msg in data:
-            sender = msg.get("sender", {})
-            user_id = str(sender.get("user_id", ""))
-            bot_self_ids = self.config_manager.get_bot_self_ids()
-            if bot_self_ids and user_id in [str(uid) for uid in bot_self_ids]:
-                continue
-
-            nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
-            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
-            message_list = msg.get("message", [])
-
-            text_parts = []
-            for content in message_list:
-                if content.get("type") == "text":
-                    text = content.get("data", {}).get("text", "").strip()
-                    if text:
-                        text_parts.append(text)
-
-            combined_text = "".join(text_parts).strip()
-            if combined_text and not combined_text.startswith("/"):
-                text_messages.append(f"[{msg_time}] [{nickname}]: {combined_text}")
-
-        messages_text = "\n".join(text_messages[:1000])
+        text_messages = extract_analysis_messages(
+            data,
+            use_card=self.config_manager.get_enable_user_card(),
+            bot_self_ids=self.config_manager.get_bot_self_ids(),
+        )
+        if not text_messages:
+            return ""
+        messages_text = "\n".join(
+            f"[{message['time']}] [{message['sender']}]: {message['content']}"
+            for message in text_messages[:1000]
+        )
 
         prompt_template = self.config_manager.get_quality_analysis_prompt()
 
@@ -132,7 +120,9 @@ ${messages_text}
 
         return render_template(prompt_template, messages_text=messages_text)
 
-    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
+    def extract_with_regex(
+        self, result_text: str, max_count: int
+    ) -> list[dict[str, object]]:
         """
         使用正则表达式提取质量分析数据（BaseAnalyzer 要求的接口）
 
@@ -142,14 +132,16 @@ ${messages_text}
         """
         return []
 
-    def create_data_objects(self, data_list: list[dict]) -> list[QualityReview]:
+    def create_data_objects(
+        self, data_list: list[dict[str, object]]
+    ) -> list[QualityReview]:
         """
         满足 BaseAnalyzer 抽象要求。
         聊天质量分析的数据对象创建在 analyze_quality 中完成。
         """
         return []
 
-    def _build_review_from_dict(self, data: dict) -> QualityReview:
+    def _build_review_from_dict(self, data: Mapping[str, object]) -> QualityReview:
         """
         从解析后的字典构建 QualityReview 对象
 
@@ -159,27 +151,27 @@ ${messages_text}
         Returns:
             QualityReview 数据对象
         """
+        review = QualityReview.from_dict(data)
         # 控制维度占比总和不超过100%
         total_percentage = sum(
-            max(0.0, min(100.0, float(d.get("percentage", 0))))
-            for d in data.get("dimensions", [])
+            max(0.0, min(100.0, d.percentage)) for d in review.dimensions
         )
 
         factor = 1.0
         if total_percentage > 100:
             factor = 100.0 / total_percentage
 
-        dimensions = []
-        for d in data.get("dimensions", []):
-            raw_p = float(d.get("percentage", 0))
+        dimensions: list[QualityDimension] = []
+        for d in review.dimensions:
+            raw_p = d.percentage
 
             final_p = round(max(0.0, min(100.0, raw_p)) * factor, 1)
 
             dimensions.append(
                 QualityDimension(
-                    name=d.get("name", "未知"),
+                    name=d.name,
                     percentage=final_p,
-                    comment=d.get("comment", ""),
+                    comment=d.comment,
                 )
             )
 
@@ -198,16 +190,16 @@ ${messages_text}
             d.color = colors[i % len(colors)]
 
         return QualityReview(
-            title=data.get("title", "聊天质量锐评"),
-            subtitle=data.get("subtitle", "今天的群里发生了什么？"),
+            title=str(data.get("title", "聊天质量锐评")),
+            subtitle=str(data.get("subtitle", "今天的群里发生了什么？")),
             dimensions=dimensions,
-            summary=data.get("summary", "今天也是充满活力的一天。"),
+            summary=str(data.get("summary", "今天也是充满活力的一天。")),
         )
 
     def _validate_review_payload(
-        self, data: dict
-    ) -> tuple[bool, dict | None, str | None]:
-        return validate_quality_review_item(data)
+        self, data: Mapping[str, object]
+    ) -> tuple[bool, dict[str, object] | None, str | None]:
+        return validate_quality_review_item(dict(data))
 
     async def _retry_parse_quality_object(
         self,
@@ -218,7 +210,7 @@ ${messages_text}
         umo: str | None,
         system_prompt: str | None,
         base_temperature: float | None,
-    ) -> dict | None:
+    ) -> dict[str, object] | None:
         response_format = self.get_response_format()
         if response_format is None:
             return None
@@ -266,9 +258,9 @@ ${messages_text}
                 if valid and normalized:
                     if trace:
                         prompts_map = trace.metadata.get("llm_prompts")
-                        if isinstance(prompts_map, dict):
+                        if is_string_mapping(prompts_map):
                             slot = prompts_map.get(self.get_data_type())
-                            if isinstance(slot, dict):
+                            if is_string_mapping(slot):
                                 slot["completion"] = retry_text
                                 slot["corrected_completion"] = retry_text
                                 slot["prompt"] = retry_prompt
@@ -282,9 +274,9 @@ ${messages_text}
                 if valid and normalized:
                     if trace:
                         prompts_map = trace.metadata.get("llm_prompts")
-                        if isinstance(prompts_map, dict):
+                        if is_string_mapping(prompts_map):
                             slot = prompts_map.get(self.get_data_type())
-                            if isinstance(slot, dict):
+                            if is_string_mapping(slot):
                                 slot["completion"] = retry_text
                                 slot["corrected_completion"] = retry_text
                                 slot["prompt"] = retry_prompt
@@ -296,7 +288,7 @@ ${messages_text}
 
     async def summarize_batch_reviews(
         self,
-        batch_reviews: Sequence[QualityReview] | Sequence[dict[str, object]],
+        batch_reviews: Sequence[QualityReview | Mapping[str, object]],
         umo: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """
@@ -327,8 +319,8 @@ ${messages_text}
                     raw_dims = rev.get("dimensions", [])
                     dims = ", ".join(
                         f"{d.get('name')}({d.get('percentage')}%)"
-                        for d in (raw_dims if isinstance(raw_dims, list) else [])
-                        if isinstance(d, dict)
+                        for d in (raw_dims if is_object_list(raw_dims) else [])
+                        if is_string_mapping(d)
                     )
                 reviews_text += f"\n批次 {i + 1} [{title}]:\n- 维度表现: {dims}\n- 核心摘要: {summary}\n"
 
@@ -404,9 +396,9 @@ ${messages_text}
             trace = TraceContext.current()
             if trace:
                 prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                if isinstance(prompts_map, dict):
+                if is_string_mapping(prompts_map):
                     slot = prompts_map.setdefault(self.get_data_type(), {})
-                    if isinstance(slot, dict):
+                    if is_string_mapping(slot):
                         slot["prompt"] = prompt
                         slot["initial_prompt"] = prompt
                         slot["system_prompt"] = system_prompt
@@ -468,7 +460,7 @@ ${messages_text}
 
     async def analyze_quality(
         self,
-        messages: list[dict],
+        messages: list[UnifiedMessage],
         umo: str | None = None,
         persona_id: str | None = None,
         prompt_override: str | None = None,
@@ -510,7 +502,7 @@ ${messages_text}
             trace = TraceContext.current()
             if trace:
                 prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                if isinstance(prompts_map, dict):
+                if is_string_mapping(prompts_map):
                     prompts_map[self.get_data_type()] = {
                         "prompt": prompt,
                         "system_prompt": system_prompt,
@@ -552,9 +544,9 @@ ${messages_text}
 
             if trace:
                 prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                if isinstance(prompts_map, dict):
+                if is_string_mapping(prompts_map):
                     slot = prompts_map.setdefault(self.get_data_type(), {})
-                    if isinstance(slot, dict):
+                    if is_string_mapping(slot):
                         slot["prompt"] = prompt
                         slot["system_prompt"] = system_prompt
                         slot["provider_id"] = resolved_provider_id or "default"
@@ -622,7 +614,7 @@ ${messages_text}
     # Override analyze to bridge the base class interface
     async def analyze(
         self,
-        data: list[dict],
+        data: list[UnifiedMessage],
         umo: str | None = None,
         persona_id: str | None = None,
         prompt_override: str | None = None,

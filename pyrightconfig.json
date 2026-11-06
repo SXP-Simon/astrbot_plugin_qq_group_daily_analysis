@@ -16,7 +16,7 @@
     "."
   ],
   "pythonVersion": "3.12",
-  "typeCheckingMode": "standard",
+  "typeCheckingMode": "strict",
   "reportMissingTypeStubs": false,
   "reportMissingImports": "error",
   "reportIncompatibleMethodOverride": "error",

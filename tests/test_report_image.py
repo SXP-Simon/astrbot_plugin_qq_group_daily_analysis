@@ -73,7 +73,7 @@ async def test_scheduled_delivery_saves_png_and_registers_only_existing_artifact
     sender.send_image_smart = AsyncMock(return_value=True)
     generator = SimpleNamespace(data_dir=tmp_path, generate_image_report=AsyncMock(return_value=(uri, None)))
     dispatcher = ReportDispatcher(config, generator, sender)
-    dispatcher._try_upload_image = AsyncMock()
+    dispatcher.try_upload_image = AsyncMock()
     trace = TraceContext(trace_id="scheduled-image", group_id="GROUP")
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
     monkeypatch.setattr(trace, "persist_snapshot_async", AsyncMock())

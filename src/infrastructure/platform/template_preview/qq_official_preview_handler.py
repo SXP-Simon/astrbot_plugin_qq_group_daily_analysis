@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from PIL import Image
 
+from ....shared.type_guards import is_string_mapping
 from ....utils.logger import logger
 from ..command_prefix import get_command_prefix
 from .qq_error_diagnostics import describe_preview_error as _describe_preview_error
@@ -369,9 +370,12 @@ class QQOfficialTemplatePreviewHandler:
                             mode,
                             message_id,
                         )
-                        reply: object = await bot.api._http.request(route, json=payload)
+                        http_client = getattr(bot.api, "_http", None)
+                        if http_client is None:
+                            raise RuntimeError("QQ 客户端未初始化 HTTP 通道")
+                        reply: object = await http_client.request(route, json=payload)
                         if (
-                            isinstance(reply, dict)
+                            is_string_mapping(reply)
                             and isinstance(reply.get("id"), str)
                             and reply["id"]
                         ):

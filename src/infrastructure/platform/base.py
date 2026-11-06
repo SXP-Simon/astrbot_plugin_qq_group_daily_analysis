@@ -15,6 +15,7 @@ from ...domain.repositories.message_repository import (
     IMessageSender,
 )
 from ...domain.repositories.platform_adapter_repository import PlatformAdapterProtocol
+from ...shared.type_guards import is_string_mapping
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -22,10 +23,9 @@ if TYPE_CHECKING:
     from astrbot.api.star import Context
 
     from ...domain.value_objects.platform_capabilities import PlatformCapabilities
-    from ...domain.value_objects.unified_message import UnifiedMessage
 
 
-TBot = TypeVar("TBot")
+TBot = TypeVar("TBot", covariant=True)
 
 
 class PlatformAdapter(
@@ -47,7 +47,7 @@ class PlatformAdapter(
         config (dict): 针对该平台的特定配置
     """
 
-    bot: TBot
+    _bot: TBot
     config: dict[str, object]
     _platform_id: str
     bot_self_ids: list[str]
@@ -65,11 +65,16 @@ class PlatformAdapter(
             bot_instance: 后端机器人实例。
             config: 平台特定配置项。
         """
-        self.bot = bot_instance
+        self._bot = bot_instance
         self.config: dict[str, object] = dict(config) if config is not None else {}
         self._platform_id: str = str(self.config.get("platform_id", "")).strip()
         self.bot_self_ids: list[str] = []
         self._capabilities: PlatformCapabilities | None = None
+
+    @property
+    def bot(self) -> TBot:
+        """只读访问平台客户端，外部组件不能替换适配器绑定的实例。"""
+        return self._bot
 
     @staticmethod
     def calculate_effective_start_timestamp(
@@ -171,25 +176,10 @@ class PlatformAdapter(
         """获取当前适配器的平台标识名称。"""
         return self.capabilities.platform_name
 
-    @abstractmethod
-    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
-        """
-        将平台无关的统一消息列表转换回当前平台的原生字典格式。
-
-        此方法主要用于向后兼容，使新的统一接口能与依赖原生数据结构的旧版分析逻辑协同工作。
-
-        Args:
-            messages (list[UnifiedMessage]): 待转换的统一消息列表
-
-        Returns:
-            list[dict]: 转换后的平台原生消息字典列表
-        """
-        raise NotImplementedError
-
     async def send_forward_msg(
         self,
         group_id: str,
-        nodes: list[dict],
+        nodes: list[dict[str, object]],
     ) -> bool:
         """
         发送合并转发消息（基类默认实现：转换为格式化文本分段发送）。
@@ -199,9 +189,11 @@ class PlatformAdapter(
             return True
 
         # 万能回退：将节点重新组合成易读的长文本
-        lines = []
+        lines: list[str] = []
         for node in nodes:
             data = node.get("data", node)
+            if not is_string_mapping(data):
+                continue
             name = data.get("name", "Daily Analysis")
             content = data.get("content", "")
             if content:
@@ -213,7 +205,7 @@ class PlatformAdapter(
         max_chunk_size = 1800
         if len(full_text) > max_chunk_size:
             # 尝试在换行处拆分
-            chunks = []
+            chunks: list[str] = []
             curr = full_text
             while len(curr) > max_chunk_size:
                 # 寻找最近的换行符
@@ -268,7 +260,7 @@ class PlatformAdapter(
             # 2. 切分文本为逻辑段落（按标题、空行切分）
             raw_content = str(content)
             sections = re.split(r"\n+(?=[🎯📊💬🏆])|\n{2,}", raw_content.strip())
-            nodes = []
+            nodes: list[dict[str, object]] = []
 
             for sec in sections:
                 if not sec.strip():

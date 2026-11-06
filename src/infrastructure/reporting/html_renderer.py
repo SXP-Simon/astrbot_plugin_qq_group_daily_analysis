@@ -7,6 +7,8 @@ from inspect import Parameter, ismethod, signature
 from typing import TYPE_CHECKING, TypedDict, TypeVar
 from urllib.parse import urlsplit, urlunsplit
 
+from ...shared.type_guards import is_string_mapping
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
@@ -57,7 +59,7 @@ def describe_html_renderer(
         info["config_lookup"] = (
             "按群聊会话查询，未绑定时由宿主回退默认配置" if session else "默认配置"
         )
-        endpoint = config.get("t2i_endpoint")
+        endpoint = config.get("t2i_endpoint") if is_string_mapping(config) else None
         if not endpoint:
             info["configured_endpoint"] = (
                 "未单独配置，使用宿主默认地址池；实际请求地址由宿主选择"

@@ -131,7 +131,7 @@ def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch, t
         (job / "report.png").write_bytes(png_bytes())
         assert fonts == directory
     monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
-    native._prepare_render_data = AsyncMock(side_effect=AssertionError("不应准备 HTML"))
+    native.prepare_render_data = AsyncMock(side_effect=AssertionError("不应准备 HTML"))
     host = AsyncMock(side_effect=AssertionError("不应调用宿主"))
     result = create_analysis_result()
     result["user_analysis"] = {"123456": {"nickname": "张三"}}
@@ -152,7 +152,7 @@ def test_typst_never_prepares_html_and_sanitizes_snapshot(native, monkeypatch, t
         assert [dim["color"] for dim in captured["review"]["dimensions"]] == ["#12aBcF", "#abc", "#607d8b"]
         assert not list((native.data_dir / "typst/jobs").iterdir())
         host.assert_not_called()
-        native._prepare_render_data.assert_not_called()
+        native.prepare_render_data.assert_not_called()
         if theme == "BlueArchive":
             sources = {call.args[0] for call in TypstAssets.localize.await_args_list}
             assert any(source.endswith("/BlueArchive/arona.png") for source in sources)

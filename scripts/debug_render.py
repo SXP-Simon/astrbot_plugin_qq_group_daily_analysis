@@ -486,8 +486,8 @@ async def debug_render(
     generator = ReportGenerator(config_manager, data_dir)
 
     # 4. Prepare Render Data
-    # Note: _prepare_render_data handles converting Entities to template-friendly dicts
-    render_payload = await generator._prepare_render_data(
+    # prepare_render_data 将领域实体转换为模板可读取的数据。
+    render_payload = await generator.prepare_render_data(
         analysis_result,
         template_theme=template_name,
         avatar_url_getter=mock_get_user_avatar,

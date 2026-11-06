@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ...shared.report_language import format_report_date, resolve_report_language
+from ...shared.type_guards import is_string_mapping
 from .display_names import normalize_display_name
 from .profile_mappings import resolve_profile_info
 from .typst_identity import TypstIdentityResolver
@@ -51,7 +52,10 @@ class TypstDataPreparer:
         self.result = self.identity.result
 
     async def prepare(
-        self, profile_manifest: dict[str, dict], cdn_base_url: str, theme: str = ""
+        self,
+        profile_manifest: dict[str, dict[str, dict[str, object]]],
+        cdn_base_url: str,
+        theme: str = "",
     ) -> TypstReportData:
         """按已有展示上限准备各主题共有的数据。
 
@@ -106,10 +110,7 @@ class TypstDataPreparer:
             "characters": stats.total_characters,
             "emoji_count": stats.emoji_count,
             "peak": self.identity.plain(stats.most_active_period),
-            "hours": [
-                max(0, int(hourly.get(hour, hourly.get(str(hour), 0))))
-                for hour in range(24)
-            ],
+            "hours": [max(0, int(hourly.get(hour, 0))) for hour in range(24)],
             "topics": topics,
             "portraits": portraits,
             "quotes": quotes,
@@ -123,7 +124,10 @@ class TypstDataPreparer:
         }
 
     async def _prepare_portraits(
-        self, profile_manifest: dict[str, dict], cdn_base_url: str, theme: str
+        self,
+        profile_manifest: dict[str, dict[str, dict[str, object]]],
+        cdn_base_url: str,
+        theme: str,
     ) -> list[TypstPortrait]:
         """解析人格映射并本地化画像资源，保留主题固定的裁切和水印。
 
@@ -137,11 +141,15 @@ class TypstDataPreparer:
         """
         config = self.config
         raw_overrides = config.get_profile_mapping_config()
-        overrides = (
-            {str(k): v for k, v in raw_overrides.items() if isinstance(v, dict)}
-            if isinstance(raw_overrides, dict)
-            else {}
-        )
+        overrides: dict[str, dict[str, dict[str, object]]] = {}
+        if is_string_mapping(raw_overrides):
+            for mode, raw_entries in raw_overrides.items():
+                if is_string_mapping(raw_entries):
+                    overrides[mode] = {
+                        key: value
+                        for key, value in raw_entries.items()
+                        if is_string_mapping(value)
+                    }
         portraits: list[TypstPortrait] = []
         for portrait in self.result["user_titles"][: config.get_max_user_titles()]:
             profile = resolve_profile_info(

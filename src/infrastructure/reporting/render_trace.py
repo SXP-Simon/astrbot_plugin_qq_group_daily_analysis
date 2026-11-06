@@ -38,7 +38,7 @@ async def render_span(
     parent = next(
         (
             span
-            for span in reversed(trace._spans)
+            for span in reversed(trace.spans)
             if span["stage_name"] in ("IMAGE_RENDER_ATTEMPT", "RENDER_REPORT")
             and span["status"] == "running"
         ),
@@ -76,7 +76,7 @@ def publish_typst_memory(span: SpanRecord | None) -> None:
     if not trace or not span:
         return
     payload = span["payload"]
-    measurements = {}
+    measurements: dict[str, float] = {}
     for source, target in (
         ("worker_peak_rss_mb", "typst_peak_rss_mb"),
         ("worker_peak_delta_mb", "typst_peak_delta_mb"),
@@ -91,7 +91,7 @@ def publish_typst_memory(span: SpanRecord | None) -> None:
             measurements[target] = value
     if not measurements:
         return
-    by_id = {record["span_id"]: record for record in trace._spans}
+    by_id = {record["span_id"]: record for record in trace.spans}
     parent_id = payload.get("parent_span_id")
     visited = {span["span_id"]}
     while isinstance(parent_id, str) and parent_id not in visited:

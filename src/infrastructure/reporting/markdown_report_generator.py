@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ...shared.trace_context import TraceContext
+from ...shared.type_guards import is_object_mapping, is_string_mapping
 from ...utils.logger import logger
 from .render_trace import render_span
 from .summary_dashboard import SummaryBar, SummaryMetric, render_native_summary
@@ -54,7 +55,7 @@ class MarkdownReportGenerator:
     async def generate_markdown_report(
         self,
         analysis_result: AnalysisResultPayload,
-        html_render_func: Callable[..., Awaitable[str | None]] | None = None,
+        html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
         mention_style: str = MENTION_STYLE_NAME,
         summary_image_uploader: Callable[[bytes], Awaitable[str | None]] | None = None,
     ) -> tuple[str, str]:
@@ -96,7 +97,7 @@ class MarkdownReportGenerator:
     async def _generate_summary_dashboard(
         self,
         analysis_result: AnalysisResultPayload,
-        html_render_func: Callable[..., Awaitable[str | None]] | None,
+        html_render_func: Callable[..., Awaitable[str | bytes | None]] | None,
         summary_image_uploader: Callable[[bytes], Awaitable[str | None]] | None,
     ) -> str | None:
         """准备概览图，失败时保留对应的文字统计。
@@ -258,7 +259,7 @@ class MarkdownReportGenerator:
 
         user_analysis = analysis_result.get("user_analysis") or {}
         for user_id, user_data in user_analysis.items():
-            if isinstance(user_data, dict):
+            if is_string_mapping(user_data):
                 for key in ("nickname", "name", "card"):
                     if user_data.get(key):
                         remember(user_id, user_data.get(key))
@@ -268,7 +269,7 @@ class MarkdownReportGenerator:
             remember(getattr(title, "user_id", None), getattr(title, "name", None))
 
         stats = analysis_result.get("statistics")
-        for golden_quote in getattr(stats, "golden_quotes", None) or []:
+        for golden_quote in stats.golden_quotes:
             remember(
                 getattr(golden_quote, "user_id", None),
                 getattr(golden_quote, "sender", None),
@@ -468,7 +469,7 @@ class MarkdownReportGenerator:
         if activity_viz is None:
             return [0] * 24
         raw_activity = getattr(activity_viz, "hourly_activity", None)
-        if not isinstance(raw_activity, dict):
+        if not is_object_mapping(raw_activity):
             return [0] * 24
 
         hourly_counts: list[int] = []
@@ -513,7 +514,7 @@ class MarkdownReportGenerator:
             if not normalized_id:
                 continue
             names: set[str] = set()
-            if isinstance(user_data, dict):
+            if is_string_mapping(user_data):
                 for key in ("nickname", "name", "card"):
                     name = str(user_data.get(key, "") or "").strip()
                     if name and name != normalized_id:
