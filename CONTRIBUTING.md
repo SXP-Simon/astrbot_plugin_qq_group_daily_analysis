@@ -42,6 +42,48 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg
 # npm install -g @evilmartians/lefthook && lefthook install
 ```
 
+### 本地提交与完整检查分工
+
+Lefthook 的 `pre-commit` 只检查暂存的 Python 文件（Ruff 格式与 lint）和 `dashboard/src/` 下的 JS/TS 文件（带缓存的 ESLint）。检查不自动修改或暂存文件；提交信息检查仍然保留。文档、配置、依赖和构建产物不触发全量前端流水线。
+
+每次原子提交无需重新跑全量测试和构建。开发时按影响范围运行定向测试；准备 PR 或完成一组功能修改时，在插件根目录执行相关的完整检查：
+
+```bash
+npx lefthook run check-frontend  # 全量 lint、类型检查、测试和构建
+npx lefthook run check-python   # Ruff、Pyright 和完整 Python 测试
+npx lefthook run check-contract # OpenAPI 一致性与生成类型检查（会更新类型文件）
+```
+
+这些任务是手动入口，不绑定 `pre-push`，也不是 CI 调用入口。CI 独立执行完整验证，不使用本地 ESLint 缓存。修改 API 后显式导出 OpenAPI 并生成类型；修改正式前端后，在 PR 前构建并提交 `pages/` 产物。CI 仍检查契约及构建产物与源码的一致性。
+
+同一份代码已验证通过后，`git add`、拆分原子提交、修改提交说明或纯文档调整不要求重跑 pytest / Vitest。记录运行过的命令和覆盖范围；代码、测试、依赖、检查配置或运行环境发生相关变化后，重新运行受影响的检查。定向测试通过不代表全量测试通过，CI 不使用本地结果跳过验证。
+
+手动入口已拆分为 `lint`、`typecheck`、`test`（前端另有 `build`），默认顺序执行，任一步失败就停止。已经运行过完整 pytest 或 Vitest 时，只补缺少的步骤：
+
+```bash
+# pytest 已通过，只补后端静态检查
+npx lefthook run check-python --command lint --command typecheck
+# 只运行完整后端测试
+npx lefthook run check-python --command test
+# Vitest 已通过，只补前端静态检查与构建
+npx lefthook run check-frontend --command lint --command typecheck --command build
+```
+
+开发中直接运行 `uv run pytest tests/test_xxx.py` 等受影响用例；排查失败可用 `uv run pytest --lf tests/`，但这不是完整回归的替代。全量测试只需在相关改动完成后通过一次，不要在同一工作树上依次执行全量 pytest 和包含它的完整检查入口。
+
+ESLint 配置、依赖或构建配置变化时，请运行完整前端检查。只改 CSS 等样式也需要在浏览器检查并重新构建。Lefthook 与 Python 的 pre-commit 框架选择一种安装，避免重复挂钩；使用后者时仍按同样要求执行完整检查。
+
+| 日常场景 | 补充验证 |
+| --- | --- |
+| 单个业务函数或组件 | 相关测试；改动完成后补齐所属前端或后端的完整检查 |
+| 删除、移动文件或调整公共接口 | 类型检查及受影响调用方测试，不能仅依靠暂存文件 lint |
+| API / Schema 修改 | 契约检查、生成类型、前后端相关测试 |
+| 依赖、测试配置、构建配置修改 | 重新执行相关完整验证，旧结果不再直接适用 |
+| 纯样式修改 | 浏览器检查及构建；纯说明文档修改通常无需业务测试 |
+| 部分暂存、拆分提交 | 工作树测试通过不等于每个中间提交都独立通过；确保每个提交自洽，不把未提交的修复当作验证依据 |
+
+快速钩子只检查暂存路径对应的文件，不负责推断跨文件影响。手动完整检查没有自动“结果缓存”；选择 `--command` 时需确认省略步骤已有适用于当前代码的有效结果。
+
 ### 1.2 WebUI 控制台前端环境
 ```bash
 # 进入前端子工程
@@ -106,7 +148,7 @@ pnpm dev
      ```
    * 这一实践在保证插件运行期弹性解耦与容错的同时，实现了插件与 AstrBot 底层交互时 100% 强类型智能提示与源码直达跳转。
 8. **一键格式化、自动修复 Lint 与单元测试**：
-   * 强烈推荐使用一键格式化与自动修复指令（自动消除未使用的 import、调整 import 顺序及代码风格），提交前保证静态类型检查与测试全部通过：
+   * 强烈推荐使用一键格式化与自动修复指令（自动消除未使用的 import、调整 import 顺序及代码风格），准备后端 PR 时确认以下检查已通过；同一份代码已有通过结果时不要重复执行：
      ```bash
      uv run ruff format . ; uv run ruff check . --fix
      npx pyright
@@ -303,7 +345,7 @@ uv run scripts/debug_render.py -h
 
 1. **Fork 本仓库** 到个人 GitHub 账号；
 2. 从 `main` 分支切出特性分支（如 `feat/my-new-template` 或 `fix/onebot-retry`）；
-3. 本地编写代码，并运行全套质量检查流水线（需保证 0 错误、0 警告）：
+3. 开发时执行定向检查，准备 PR 时补齐相关完整验证（已通过且未受后续改动影响的检查无需重跑）：
    ```bash
    # 1. 自动格式化并修复 Lint 问题
    uv run ruff format . ; uv run ruff check . --fix
@@ -315,7 +357,7 @@ uv run scripts/debug_render.py -h
    uv run pytest tests/
 
    # 4. WebUI 前端静态检查与打包（若改动了 dashboard/ 源码）
-   cd dashboard && pnpm lint && pnpm typecheck && pnpm build
+   cd dashboard && pnpm lint && pnpm typecheck && pnpm test && pnpm build:no-typecheck
    ```
 4. 提交清晰规范的 Commit 并推送到你的 Remote 分支；
 5. 在 GitHub 上发起 Pull Request，在 Description 中简要说明改动意图及测试验证结论；

@@ -148,16 +148,20 @@ pnpm test:watch    # 开启 TDD 监听模式
 
 ## 7. 质量门禁与发布流程 (Quality Gates & Release)
 
-### 7.1 本地 Git 提交门禁 (Lefthook)
-在每次 `git commit` 时，Lefthook 将自动触发全套前端门禁，任何失败均会阻止提交：
-1. **类型检查**：`pnpm typecheck`（严格 0 报错）
-2. **代码规范**：`pnpm lint`（ESLint 严格检查）
-3. **自动化测试**：`pnpm test`（28 项单测与冒烟测试 100% 通过）
-4. **生产构建**：`pnpm build`（打包为单 Bundle 同步生成至 `../pages/daily-analysis/`）
-5. **提交信息规范**：`verify-commit.js`（原子化 Scope + 中文三点论门禁）
+### 7.1 日常提交与 PR 检查
 
-### 7.2 新版本发布流程
-与原本发布流程保持完全一致且更加自动化：
-* 日常开发提交时，Lefthook 门禁会自动执行 `pnpm build` 将最新的控制台静态页面更新至 `pages/daily-analysis/assets/`；
-* 插件发布新版本（例如修改 `metadata.yaml` 与版本号）时，直接提交代码并打 Tag 即可，无需额外手动构建打包前端。
+每次提交只运行暂存源码的 ESLint（使用本地内容缓存）和提交信息检查；不会自动运行全量测试、类型检查或构建，也不会生成和暂存发布产物。Python 文件由 Ruff 单独检查。
 
+开发时按改动运行定向测试。完成一组改动、准备 PR 前，在插件根目录运行：
+
+```bash
+npx lefthook run check-frontend
+```
+
+该手动任务依次执行全量 lint、类型检查、测试和构建，失败后立即停止。若同一份代码的测试已通过，可用 `npx lefthook run check-frontend --command lint --command typecheck --command build` 只补其他步骤；原子提交、纯文档修改无需重新运行未受影响的检查。它不是推送钩子，不会把提交的等待转移到 push。CI 独立运行完整检查，且继续校验 OpenAPI 和构建产物一致性。依赖、ESLint 配置、类型配置或构建配置修改后也应运行完整检查。
+
+### 7.2 构建产物与发布
+
+前端构建不再由每次 commit 自动执行。修改正式 WebUI 后，在准备 PR 时运行 `pnpm build`（已单独通过类型检查时可用 `pnpm build:no-typecheck`），审阅并提交 `pages/daily-analysis/` 产物。
+
+发布工作流继续执行类型检查和构建。日常本地预览使用 `pnpm dev`，无需为了每个小修改反复生成 release 文件。

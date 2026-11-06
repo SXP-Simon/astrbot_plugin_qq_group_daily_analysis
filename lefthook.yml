@@ -1,53 +1,56 @@
-# Lefthook Git hooks configuration
-# https://github.com/evilmartians/lefthook
-
+# 日常提交只做快速、只读检查；完整验证由 CI 或下方手动任务执行。
 pre-commit:
-  parallel: false
+  parallel: true
   commands:
-    # --- Python 后端门禁 (仅在 Python 业务源码及脚本变动时触发，排除测试与文档) ---
     ruff-format:
-      glob: "{main.py,src/**/*.py,scripts/**/*.py}"
-      exclude: "(^tests/|^docs/|.*\\.md$|metadata\\.yaml)"
-      run: uv run ruff format .
-      stage_fixed: true
+      glob: "*.{py,pyi}"
+      run: uv run ruff format --check {staged_files}
     ruff-check:
-      glob: "{main.py,src/**/*.py,scripts/**/*.py}"
-      exclude: "(^tests/|^docs/|.*\\.md$|metadata\\.yaml)"
-      run: uv run ruff check . --fix
-      stage_fixed: true
-    pyright:
-      glob: "{main.py,src/**/*.py}"
-      exclude: "(^tests/|^scripts/|^docs/|.*\\.md$|metadata\\.yaml)"
-      run: npx pyright main.py src/
-
-    # --- OpenAPI 契约与前端类型一致性同步门禁 (仅在 WebAPI 路由或导出脚本变动时触发) ---
-    openapi-sync:
-      glob: "{src/infrastructure/webui/**/*.py,scripts/export_openapi.py}"
-      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
-      run: uv run python scripts/export_openapi.py && pnpm --dir dashboard generate:types
-      stage_fixed: true
-
-    # --- WebUI / Dashboard 前端门禁 (仅在前端代码或涉及接口协议时触发) ---
-    webui-typecheck:
-      glob: "{dashboard/**/*.{ts,tsx,js,jsx,json,vue,html},openapi.json,src/infrastructure/webui/**/*.py}"
-      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
-      run: pnpm --dir dashboard typecheck
+      glob: "*.{py,pyi}"
+      run: uv run ruff check {staged_files}
     webui-lint:
-      glob: "dashboard/**/*.{ts,tsx,js,jsx}"
-      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
-      run: pnpm --dir dashboard lint
-    webui-test:
-      glob: "dashboard/**/*.{ts,tsx,js,jsx,json}"
-      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
-      run: pnpm --dir dashboard test
-    webui-build:
-      glob: "{dashboard/src/**/*.{ts,tsx,js,jsx,json,vue,html,css,scss},dashboard/index.html,dashboard/vite.config.ts,openapi.json,src/infrastructure/webui/**/*.py}"
-      exclude: "(.*\\.test\\.[jt]sx?$|.*\\.spec\\.[jt]sx?$|__tests__/|^docs/|.*\\.md$|metadata\\.yaml)"
-      run: pnpm --dir dashboard build
-      stage_fixed: true
+      root: dashboard/
+      glob: "dashboard/src/**.{ts,tsx,js,jsx}"
+      run: node node_modules/eslint/bin/eslint.js --cache --cache-strategy content --cache-location node_modules/.cache/eslint/ --max-warnings 0 {staged_files}
 
 commit-msg:
   commands:
     verify-commit:
       run: node scripts/verify-commit.js {1}
 
+# 手动运行：lefthook run check-frontend，不安装为提交或推送钩子。
+check-frontend:
+  piped: true
+  commands:
+    lint:
+      priority: 1
+      run: pnpm --dir dashboard lint
+    typecheck:
+      priority: 2
+      run: pnpm --dir dashboard typecheck
+    test:
+      priority: 3
+      run: pnpm --dir dashboard test
+    build:
+      priority: 4
+      run: pnpm --dir dashboard build:no-typecheck
+
+# 手动运行：lefthook run check-python。
+check-python:
+  piped: true
+  commands:
+    lint:
+      priority: 1
+      run: uv run ruff check . && uv run ruff format --check .
+    typecheck:
+      priority: 2
+      run: npx pyright
+    test:
+      priority: 3
+      run: uv run pytest tests/
+
+# 手动运行：lefthook run check-contract。类型生成会更新工作区，需审阅并提交。
+check-contract:
+  commands:
+    contract:
+      run: uv run python scripts/export_openapi.py --check && pnpm --dir dashboard generate:types && git diff --exit-code --ignore-space-at-eol -- dashboard/src/shared/api/generated/schema.d.ts

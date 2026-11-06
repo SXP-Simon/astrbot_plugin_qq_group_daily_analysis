@@ -37,7 +37,7 @@
    - 严格避免随意使用 `Any` 类型。使用具体模型、TypedDict、Protocol、Union 或 `object` 配合类型守卫（`isinstance` / `callable` 等）。
    - 杜绝非必要的 `# type: ignore`，优先通过精准的类型注解解决类型推导问题。
 2. **静态检查与格式化**：
-   - 提交前必须通过：
+   - 按改动范围验证；准备 PR 或完成一组改动时，相关静态检查必须通过：
      ```bash
      uv run ruff check .
      uv run ruff format . --check
@@ -45,10 +45,13 @@
      ```
    - 保持 **0 errors, 0 warnings**。
 3. **自动化测试**：
-   - 保持所有单元测试与集成测试（Pytest）100% 通过，添加新功能或重构时需补充相应测试用例，严禁测试回归：
+   - 开发时运行受影响的定向测试，新增功能或重构需补充相应测试。准备后端 PR 或完成一组后端改动时运行完整测试：
      ```bash
-     uv run pytest
+     uv run pytest tests/
      ```
+   - **避免重复验证**：同一份代码、测试、依赖及配置已经通过的检查，不得仅因 `git add`、原子提交、改提交说明或纯文档变更再运行。随后有影响相关结果的改动、失败或新的疑点时，才重新验证对应范围。仅跑定向测试不能代替完整测试；记录实际命令及结果，不宣称未执行的检查通过。
+   - 日常 commit 只运行 Lefthook 的暂存文件快速检查，push 不绑定完整检查。手动检查可按步骤执行，例如 `npx lefthook run check-python --command lint --command typecheck`，不会重复已完成的 pytest。
+   - CI 在独立环境完整验证，不依据本地“已通过”声明跳过；发布构建验证发布环境及产物，不视为本地重复工作。
 
 ---
 

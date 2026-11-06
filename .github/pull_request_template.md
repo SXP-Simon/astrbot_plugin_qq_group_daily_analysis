@@ -29,9 +29,9 @@
 ---
 
 ## 📋 提交前自检清单 (Checklist)
-<!-- 请在提交前逐一确认已完成自检 -->
+<!-- 记录已完成的相关检查；同一份代码已有有效结果时无需为提交再次运行。 -->
 - [ ] **提交规范**：Git Commit Message 与 PR 描述符合 Conventional Commits 标准（包含中文“背景(或问题)/方案/效果”三段论，且描述客观详实）
 - [ ] **跨端契约一致性**（若涉及后端 API 变更）：已运行 `python scripts/export_openapi.py` 并同步更新前端类型（`pnpm generate:types`）
 - [ ] **前端验证**（若涉及 WebUI）：已在 `dashboard/` 目录下运行 `pnpm test` 与 `pnpm build` 确认无报错
 - [ ] **后端质量**（若涉及 Python 代码）：已通过 `ruff check`、`ruff format` 与 `pytest` 校验
-- [ ] **本地门禁自检**：本地执行 `npx lefthook run pre-commit` 全项通过
+- [ ] **本地门禁自检**：日常提交快速检查通过；按改动执行 `npx lefthook run check-frontend` / `check-python` / `check-contract` 完整检查（不是仅运行 pre-commit）
