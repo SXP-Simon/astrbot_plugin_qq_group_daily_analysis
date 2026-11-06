@@ -1,127 +1,135 @@
-import React, { useEffect, useState } from "react";
-import { Modal, Form, Select, Radio, Alert, Space, Typography, message } from "antd";
-import { SkinOutlined } from "@ant-design/icons";
-import { ReportItem } from "../../../entities/report/model/types";
-import { rerenderReport } from "../../../entities/report/api/reportApi";
-import { formatTemplateOptions } from "../../../entities/report/model/templates";
-
-import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
-
-const { Text } = Typography;
+import { useId } from "react";
+import type { ReportItem } from "../../../entities/report/model/types";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
+import { Button } from "../../../shared/ui/button";
+import { NativeSelect } from "../../../shared/ui/native-select";
+import { useRerenderReport } from "../model/useRerenderReport";
 
 interface RerenderReportModalProps {
   open: boolean;
   report: ReportItem | null;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<unknown>;
 }
 
-export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
+export function RerenderReportModal({
   open,
   report,
   onClose,
   onSuccess,
-}) => {
-  const [form] = Form.useForm();
-  const renderFormat = Form.useWatch<"image" | "html">("render_format", form) || "image";
-  const [loading, setLoading] = useState(false);
-  const {
-    templates,
-    loading: loadingTemplates,
-    ready,
-    error,
-    refresh,
-  } = useReportTemplates(renderFormat, open);
-
-  useEffect(() => {
-    if (open && report)
-      form.setFieldsValue({
-        template_name: "HatsuneMiku",
-        render_format: report.is_html ? "html" : "image",
-      });
-  }, [open, report, form]);
-
-  const handleSubmit = async () => {
-    if (!report || !ready) return;
-    try {
-      const values = await form.validateFields();
-      setLoading(true);
-      if (!templates.some((item) => item.id === values.template_name)) {
-        message.warning("该主题不支持当前输出格式，请重新选择");
-        return;
-      }
-      const res = await rerenderReport({
-        group_id: report.group_id || "",
-        template_name: values.template_name,
-        render_format: values.render_format,
-        platform_id: report.platform ?? undefined,
-        trace_id: report.trace_id ?? undefined,
-      });
-      if (res && res.success) {
-        message.success("免 Token 切换主题渲染成功！新报告已生成");
-        onSuccess();
-        onClose();
-      } else {
-        message.error("重新渲染失败，可能未找到该群的分析快照");
-      }
-    } catch {
-      // Keep validation errors in the form; request errors are surfaced by the bridge.
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const templateOptions = formatTemplateOptions(templates, false);
-
+}: RerenderReportModalProps) {
+  const vm = useRerenderReport(open, report, onClose, onSuccess);
+  const id = useId();
   return (
-    <Modal
-      title={
-        <Space>
-          <SkinOutlined style={{ color: "#722ed1" }} />
-          <span>免 Token 切换主题模板重新渲染</span>
-        </Space>
-      }
+    <Dialog
       open={open}
-      onCancel={onClose}
-      onOk={handleSubmit}
-      confirmLoading={loading}
-      okButtonProps={{ disabled: !ready || !templates.length }}
-      okText="立即重新渲染"
-      cancelText="取消"
-      destroyOnClose
+      onOpenChange={(next) => {
+        if (!next) vm.close();
+      }}
     >
-      <Alert
-        type="info"
-        showIcon
-        message="基于已有分析快照（Checkpoint）重绘"
-        description="直接复用该群先前的聊天统计、话题总结与群友画像数据，无需再次调用大模型，消耗 0 Token。"
-        style={{ marginBottom: 16 }}
-      />
-      {error && (
-        <Alert type="error" message={error} action={<a onClick={() => void refresh()}>重试</a>} />
-      )}
-      <Form form={form} layout="vertical">
-        <Form.Item label="目标群聊">
-          <Text strong>{report?.group_name || report?.group_id || "-"}</Text>
-        </Form.Item>
-        <Form.Item
-          name="template_name"
-          label="视觉主题模板"
-          rules={[{ required: true, message: "请选择视觉主题模板" }]}
+      <DialogContent>
+        <DialogTitle>换模板重绘</DialogTitle>
+        <DialogDescription>
+          复用已保存的分析结果，不重新调用分析模型。新报告保存在插件中，不发送到群聊。
+        </DialogDescription>
+        <div className="min-w-0 space-y-1 text-sm">
+          <p className="m-0">{report?.group_name || report?.group_id || "未记录群聊"}</p>
+          <p className="m-0 break-all font-mono text-xs text-muted-foreground">
+            {report?.filename}
+          </p>
+        </div>
+        {!report?.group_id?.trim() && (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            这份报告没有群聊记录，暂时无法重绘。仍可预览或下载原文件。
+          </p>
+        )}
+        {vm.submitError && (
+          <p role="alert" className="m-0 whitespace-pre-wrap break-words text-sm text-destructive">
+            {vm.submitError}
+          </p>
+        )}
+        <form
+          aria-label="重绘报告"
+          className="grid gap-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void vm.submit();
+          }}
         >
-          <Select disabled={!ready} loading={loadingTemplates} options={templateOptions} />
-        </Form.Item>
-        <Form.Item
-          name="render_format"
-          label="输出格式"
-          rules={[{ required: true, message: "请选择输出格式" }]}
-        >
-          <Radio.Group>
-            <Radio value="image">长图海报 (.jpg)</Radio>
-            <Radio value="html">交互式网页 (.html)</Radio>
-          </Radio.Group>
-        </Form.Item>
-      </Form>
-    </Modal>
+          <div className="grid gap-2">
+            <label htmlFor={`${id}-format`}>输出格式</label>
+            <NativeSelect
+              id={`${id}-format`}
+              value={vm.renderFormat}
+              disabled={vm.submitting}
+              onChange={(event) =>
+                vm.setRenderFormat(event.target.value === "html" ? "html" : "image")
+              }
+            >
+              <option value="image">图片报告</option>
+              <option value="html">HTML 网页</option>
+            </NativeSelect>
+          </div>
+          <div className="grid gap-2">
+            <label htmlFor={`${id}-template`}>报告模板</label>
+            <NativeSelect
+              id={`${id}-template`}
+              value={vm.templateName}
+              disabled={!vm.templatesReady || vm.submitting}
+              onChange={(event) => vm.setTemplateName(event.target.value)}
+            >
+              {!vm.validTemplate && (
+                <option value={vm.templateName}>
+                  {vm.templateName
+                    ? `原选择：${vm.templateName}（当前格式不可用）`
+                    : "请选择可用模板"}
+                </option>
+              )}
+              {vm.templateOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </NativeSelect>
+            {vm.loadingTemplates && (
+              <span role="status" className="text-sm text-muted-foreground">
+                正在读取模板…
+              </span>
+            )}
+            {vm.templatesReady && !vm.templateOptions.length && (
+              <p role="status" className="m-0 text-sm text-muted-foreground">
+                没有支持该格式的模板，请切换输出格式。
+              </p>
+            )}
+            {vm.templatesReady && !!vm.templateOptions.length && !vm.validTemplate && (
+              <p role="alert" className="m-0 text-sm text-destructive">
+                原选模板不支持当前格式，请重新选择。
+              </p>
+            )}
+            {vm.templatesError && (
+              <div role="alert" className="space-y-2 text-sm">
+                <p className="m-0">{vm.templatesError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={vm.submitting}
+                  onClick={() => void vm.refreshTemplates()}
+                >
+                  重新加载模板
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={vm.submitting} onClick={vm.close}>
+              取消
+            </Button>
+            <Button type="submit" disabled={!vm.canSubmit}>
+              {vm.submitting ? "正在生成…" : "生成新报告"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
-};
+}
