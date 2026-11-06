@@ -35,14 +35,11 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
     const view = render(<App />);
     try {
       // 验证顶部标题栏
-      expect(screen.getByText(/群分析插件控制台/i)).toBeInTheDocument();
+      expect(screen.getByText("群聊分析")).toBeInTheDocument();
 
       // 验证核心导航 Tab 标签
-      expect(screen.getByText(/运行总览/i)).toBeInTheDocument();
-      expect(screen.getAllByText(/分析记录/i).length).toBeGreaterThan(0);
-      expect(screen.getByText(/历史报告/i)).toBeInTheDocument();
-      expect(screen.getByText(/运行日志/i)).toBeInTheDocument();
-      expect(screen.getByText(/配置中心/i)).toBeInTheDocument();
+      for (const name of ["总览", "分析记录", "统计", "报告", "配置", "数据", "日志"])
+        expect(screen.getByRole("tab", { name })).toBeInTheDocument();
 
       // 等待实际数据，而不只检查初始页面已有的静态标题。
       await act(async () => {

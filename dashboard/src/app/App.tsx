@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ConfigProvider, Tabs, theme } from "antd";
+import { ConfigProvider, theme } from "antd";
 import {
-  DashboardOutlined,
-  ApartmentOutlined,
-  ExperimentOutlined,
-  FolderOpenOutlined,
-  FileTextOutlined,
-  SettingOutlined,
-  HddOutlined,
-} from "@ant-design/icons";
+  IconLayoutDashboard,
+  IconStack2,
+  IconChartBar,
+  IconFileText,
+  IconSettings,
+  IconFolder,
+  IconTerminal2,
+} from "@tabler/icons-react";
+import { AppShell } from "./ui/AppShell";
+import { usePageNavigation } from "./model/usePageNavigation";
 import { subscribeSSE } from "../shared/api/bridge";
 import { useTheme } from "../shared/lib/useTheme";
-import { HeaderBar } from "../widgets/header-bar/HeaderBar";
 import { TraceDrawer } from "../widgets/trace-drawer/TraceDrawer";
 import { TriggerTaskModal } from "../features/trigger-task/ui/TriggerTaskModal";
 import { useTriggerTask } from "../features/trigger-task/model/useTriggerTask";
@@ -43,7 +44,7 @@ import { invalidateGroupsCache } from "../entities/group/api/groupApi";
 
 export const App: React.FC = () => {
   const { isDark } = useTheme();
-  const [activeTab, setActiveTab] = useState("overview");
+  const { page: activeTab, visited, navigate } = usePageNavigation("overview");
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [fontRequest, setFontRequest] = useState<FontManagementRequest | null>(null);
   const [fontVersion, setFontVersion] = useState(0);
@@ -62,7 +63,7 @@ export const App: React.FC = () => {
   const tracesVM = useTracesViewModel();
   const contextInsightVM = useContextInsightViewModel();
   const reportsVM = useReportsViewModel();
-  const logsVM = useLogsViewModel();
+  const logsVM = useLogsViewModel(activeTab === "logs");
   const configVM = useConfigViewModel(() => {
     handleRefreshAll();
   });
@@ -99,23 +100,6 @@ export const App: React.FC = () => {
     overviewVM.refresh(true);
     if (activeTabRef.current === "traces") tracesVM.refresh(true);
   });
-
-  // 当 activeTab 切换时，自动将选中的 Tab 元素平滑居中滚动至可视区域中央（防止移动端右侧 Tab 溢出不可见）
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const activeTabEl = document.querySelector<HTMLElement>(
-        `.ant-tabs-tab-active, [data-node-key="${activeTab}"]`,
-      );
-      if (activeTabEl && typeof activeTabEl.scrollIntoView === "function") {
-        activeTabEl.scrollIntoView({
-          behavior: "smooth",
-          inline: "center",
-          block: "nearest",
-        });
-      }
-    }, 60);
-    return () => clearTimeout(timer);
-  }, [activeTab]);
 
   // SSE 实时事件订阅：纯内存更新任务中间态 + 终态精准无死角同步
   useEffect(() => {
@@ -165,7 +149,8 @@ export const App: React.FC = () => {
   };
 
   const handleTabChange = (key: string) => {
-    setActiveTab(key);
+    activeTabRef.current = key;
+    navigate(key);
     // 标签页按需激活（Lazy Tab Sync）：切换到对应 Tab 时触发该 Tab 的静默刷新
     if (key === "overview") {
       overviewVM.refresh(true);
@@ -183,11 +168,8 @@ export const App: React.FC = () => {
   const tabItems = [
     {
       key: "overview",
-      label: (
-        <span>
-          <DashboardOutlined /> 运行总览
-        </span>
-      ),
+      label: "总览",
+      icon: <IconLayoutDashboard aria-hidden="true" />,
       children: (
         <OverviewPage
           viewModel={overviewVM}
@@ -198,56 +180,38 @@ export const App: React.FC = () => {
     },
     {
       key: "traces",
-      label: (
-        <span>
-          <ApartmentOutlined /> 分析记录
-        </span>
-      ),
+      label: "分析记录",
+      icon: <IconStack2 aria-hidden="true" />,
       children: <TracesPage viewModel={tracesVM} onViewTrace={handleViewTrace} />,
     },
     {
       key: "context",
-      label: (
-        <span>
-          <ExperimentOutlined /> 统计与消耗
-        </span>
-      ),
+      label: "统计",
+      icon: <IconChartBar aria-hidden="true" />,
       children: <ContextInsightPage viewModel={contextInsightVM} onViewTrace={handleViewTrace} />,
     },
     {
       key: "reports",
-      label: (
-        <span>
-          <FolderOpenOutlined /> 历史报告
-        </span>
-      ),
+      label: "报告",
+      icon: <IconFileText aria-hidden="true" />,
       children: <ReportsPage viewModel={reportsVM} onViewTrace={handleViewTrace} />,
     },
     {
       key: "logs",
-      label: (
-        <span>
-          <FileTextOutlined /> 运行日志
-        </span>
-      ),
+      label: "日志",
+      icon: <IconTerminal2 aria-hidden="true" />,
       children: <LogsPage viewModel={logsVM} onViewTrace={handleViewTrace} />,
     },
     {
       key: "config",
-      label: (
-        <span>
-          <SettingOutlined /> 配置中心
-        </span>
-      ),
+      label: "配置",
+      icon: <IconSettings aria-hidden="true" />,
       children: <ConfigPage viewModel={configVM} />,
     },
     {
       key: "plugin-data",
-      label: (
-        <span>
-          <HddOutlined /> 数据管理
-        </span>
-      ),
+      label: "数据",
+      icon: <IconFolder aria-hidden="true" />,
       children: (
         <PluginDataPage
           onNavigate={handleTabChange}
@@ -263,10 +227,10 @@ export const App: React.FC = () => {
       theme={{
         algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
-          colorPrimary: "#1677ff",
-          borderRadius: 4,
-          fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
+          colorPrimary: isDark ? "#b5ce85" : "#6a852e",
+          colorBgLayout: isDark ? "#161618" : "#fafbf7",
+          borderRadius: 12,
+          fontFamily: "'LXGW WenKai Screen', sans-serif",
           fontFamilyCode:
             "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
         },
@@ -294,35 +258,15 @@ export const App: React.FC = () => {
             version: resourceVersion,
           }}
         >
-          <div
-            style={{
-              minHeight: "100vh",
-              width: "100%",
-              maxWidth: "100vw",
-              overflowX: "hidden",
-              boxSizing: "border-box",
-              background: isDark ? "#000000" : "#f5f5f5",
-              padding: 12,
-              color: isDark ? "#ffffff" : "#000000",
-              fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
-            }}
-          >
-            {/* 顶部 HeaderBar 微件 */}
-            <HeaderBar
-              isDark={isDark}
+          <div>
+            <AppShell
+              activePage={activeTab}
+              visited={visited}
+              onNavigate={handleTabChange}
+              items={tabItems}
               onRefresh={handleRefreshAll}
               onOpenTrigger={triggerVM.handleOpen}
               loading={overviewVM.loading}
-            />
-
-            {/* 核心 Tab 导航与页面路由 */}
-            <Tabs
-              activeKey={activeTab}
-              onChange={handleTabChange}
-              items={tabItems}
-              type="card"
-              size="small"
             />
 
             {/* 触发任务模态框 (Feature) */}

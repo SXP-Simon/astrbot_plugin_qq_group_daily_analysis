@@ -96,7 +96,10 @@
   * **View (`*Page.tsx`)**：纯 JSX 声明式视图，仅接收 ViewModel 输出的属性与回调函数，严禁在 View 内部直接编写异步网络请求或复杂状态衍生逻辑。
 
 ### 2.6 `app/`（应用根层）
-* 负责 Ant Design 5 动态主题算法配置、明暗色彩自适应注入、Tab 路由布局切换与全局警告提示容器。
+* `AppShell` 使用 `shared/ui` 的 shadcn 标签页和按钮组织导航；`usePageNavigation` 管理已访问页面和滚动恢复。页面保留挂载以保存编辑值，日志 ViewModel 通过激活状态停止隐藏页订阅和轮询。
+* `useTheme` 接收 AstrBot 主题通知并同步根节点的 `dark` 类，正文和 Portal 弹层共用 CSS 变量。迟到的初始化结果不能覆盖新通知；Mock 不发送固定亮色通知。
+* 导航文字不参与整页 View Transition 快照。内容进入使用短暂过渡，减少动态效果设置关闭动画；键盘操作和焦点行为由基础控件维护。
+* 新组件使用 shadcn/ui 和 Tailwind CSS，基础组件源码放在 `shared/ui`，底层 Radix 交互不直接散布到业务页面。迁移中的旧页面暂时保留 Ant Design 主题适配，完成组件替换后移除。
 
 WebUI 手动触发的分析可通过「运行总览 → 正在执行中的分析任务 → 中止」取消。确认后按任务编号调用 `tasks/cancel`，明确显示请求是否成功；成功表示取消请求已接受，后台仍需完成资源回收。看板同时处理 `task_finished`、`task_canceled`、`task_timed_out`，移除对应任务并刷新指标，在途旧响应不得重新插入任务。Mock 中触发、活跃列表和中止后的历史终态也保持一致。
 
@@ -118,13 +121,11 @@ WebUI 手动触发的分析可通过「运行总览 → 正在执行中的分析
 
 ## 4. UI 视觉规范与排版准则 (Data-Dense Visual Standards)
 
-1. **去衬线体与现代等宽栈**：
-   * 所有代码、Prompt、Token 数量、TraceId、Provider 标识一律采用现代无衬线等宽字体栈：
-     `'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`
-   * 严禁使用系统默认衬线字体（如 Courier New）。
-2. **结构化卡片与清晰边界 (Crisp Hierarchy)**：
-   * 任何子模块（如提示词检视器、重试表格、产物明细）必须具备明确的容器边框（`border-[#e2e8f0]` / `border-[#30363d]`）与浅色顶栏（`bg-[#f8fafc]` / `bg-[#21262d]`）。
-   * 严禁纯白无边界扁平堆叠，确保在桌面端和深色模式下层次分明。
+1. **本地字体与等宽信息**：
+   * 正文使用本地霞鹜文楷屏幕阅读版，日志、代码和标识符使用 `--font-mono`。字体按 Unicode 范围分片请求，禁止全部内嵌进 CSS；发布产物同时保留 OFL 与包装许可。
+2. **主题与信息层级**：
+   * 浅色为温润底色与亮黄绿色强调色，深色为中性黑灰；统一使用 `src/app/styles.css` 中的语义变量。
+   * 通过排版、间距和少量分隔线组织层级，避免卡片套卡片。可点击项必须有明确入口，不能只靠悬停和颜色。
 3. **信息去重原则**：
    * 当 Provider 名称中已包含 Model 标识时，自动去重，避免出现 `deepseek/xxx (xxx)` 的重复冗余信息。
 
