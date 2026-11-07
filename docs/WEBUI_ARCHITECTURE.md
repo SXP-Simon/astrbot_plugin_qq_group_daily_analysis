@@ -93,6 +93,8 @@
   * `FieldRenderer.tsx` & `TemplateListRenderer.tsx`：动态配置表单渲染器（支持 Provider/Persona 自动点选与模板列表）。
 
 ### 2.5 `pages/`（页面与视图模型层）
+统计页由 `useContextInsightViewModel` 管理筛选防抖、选择与详情生命周期；列表、群聊和详情分别处理错误，切换任务立即隔离旧明细，手动刷新强制读取详情。缺失的 Token 明细不补零，上下文概要只补充已记录字段；`ContextFunnelWidget` 区分缺失、零值及不一致数量，留存比例不表示执行进度。任务选择与时间轴保留，查看详情使用现有诊断入口。
+
 * 全面实施 **MVVM 模式**：
   * **ViewModel (`use*ViewModel.ts`)**：负责状态机管理、远程接口轮询、防抖搜索、数据衍生计算与错误处理。
   * **View (`*Page.tsx`)**：纯 JSX 声明式视图，仅接收 ViewModel 输出的属性与回调函数，严禁在 View 内部直接编写异步网络请求或复杂状态衍生逻辑。

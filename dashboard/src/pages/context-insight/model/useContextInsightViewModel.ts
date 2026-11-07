@@ -1,129 +1,166 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchTraceList, fetchTraceDetail } from "../../../entities/trace/api/traceApi";
 import { fetchDistinctGroups } from "../../../entities/group/api/groupApi";
-import { TraceRecord, ContextMetrics, TokenUsage } from "../../../entities/trace/model/types";
-import { GroupItem } from "../../../entities/group/model/types";
+import type { TraceRecord, ContextMetrics } from "../../../entities/trace/model/types";
+import type { GroupItem } from "../../../entities/group/model/types";
+
+interface InsightFilters {
+  search: string;
+  selectedGroup?: string;
+  statusFilter?: string;
+  dateRange: [number, number] | null;
+}
+const INITIAL_FILTERS: InsightFilters = { search: "", dateRange: null };
 
 export function useContextInsightViewModel() {
+  const [filters, setFilters] = useState<InsightFilters>(INITIAL_FILTERS);
   const [traces, setTraces] = useState<TraceRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
-  const [selectedTraceDetail, setSelectedTraceDetail] = useState<TraceRecord | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  // 筛选状态
-  const [search, setSearch] = useState("");
-  const [selectedGroup, setSelectedGroup] = useState<string | undefined>(undefined);
-  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
-  const [dateRange, setDateRange] = useState<[number, number] | null>(null);
+  const [detail, setDetail] = useState<TraceRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [detailError, setDetailError] = useState("");
   const [groups, setGroups] = useState<GroupItem[]>([]);
+  const [groupsError, setGroupsError] = useState("");
+  const [refreshRequest, setRefreshRequest] = useState({ version: 0, silent: false });
+  const previousFilters = useRef<InsightFilters | null>(null);
+  const detailVersion = useRef(0);
 
-  const loadGroups = async () => {
-    try {
-      const gList = await fetchDistinctGroups();
-      setGroups(gList);
-    } catch {
-      // 忽略群组加载异常
-    }
-  };
-
-  const loadTraces = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const res = await fetchTraceList({
-        limit: 200,
-        group_id: selectedGroup || undefined,
-        search: search.trim() || undefined,
-        status: statusFilter || undefined,
-        start_time: dateRange ? dateRange[0] : undefined,
-        end_time: dateRange ? dateRange[1] : undefined,
-        sort_by: "started_at",
-        sort_order: "desc",
+  useEffect(() => {
+    let active = true;
+    setGroupsError("");
+    void fetchDistinctGroups()
+      .then((result) => {
+        if (active) setGroups(result);
+      })
+      .catch((reason: unknown) => {
+        if (active)
+          setGroupsError(
+            reason instanceof Error
+              ? `群聊列表加载失败：${reason.message}`
+              : "群聊列表加载失败，仍可使用搜索筛选。",
+          );
       });
-      setTraces(res.items);
-      setTotal(res.total);
+    return () => {
+      active = false;
+    };
+  }, [refreshRequest.version]);
 
-      if (res.items.length > 0) {
-        if (!selectedTraceId || !res.items.some((t) => t.trace_id === selectedTraceId)) {
-          setSelectedTraceId(res.items[0].trace_id);
-        }
-      } else {
-        setSelectedTraceId(null);
-        setSelectedTraceDetail(null);
+  useEffect(() => {
+    let active = true;
+    const delay =
+      previousFilters.current && previousFilters.current.search !== filters.search ? 250 : 0;
+    const silent = previousFilters.current === filters && refreshRequest.silent;
+    previousFilters.current = filters;
+    setLoading(!silent);
+    setError("");
+    const timer = setTimeout(async () => {
+      try {
+        const result = await fetchTraceList({
+          limit: 200,
+          group_id: filters.selectedGroup || undefined,
+          search: filters.search.trim() || undefined,
+          status: filters.statusFilter || undefined,
+          start_time: filters.dateRange?.[0],
+          end_time: filters.dateRange?.[1],
+          sort_by: "started_at",
+          sort_order: "desc",
+        });
+        if (!active) return;
+        setTraces(result.items);
+        setTotal(result.total);
+        setSelectedTraceId((current) =>
+          result.items.some((trace) => trace.trace_id === current)
+            ? current
+            : (result.items[0]?.trace_id ?? null),
+        );
+      } catch (reason) {
+        if (active)
+          setError(
+            reason instanceof Error
+              ? `分析记录加载失败：${reason.message}`
+              : "分析记录加载失败，请重试。",
+          );
+      } finally {
+        if (active) setLoading(false);
       }
-    } catch {
-      // 忽略加载异常
-    } finally {
-      if (!silent) setLoading(false);
+    }, delay);
+    // 输入变化立即废弃旧请求，搜索等待期间也不接收旧结果。
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [filters, refreshRequest]);
+
+  useEffect(() => {
+    let active = true;
+    const forceRefresh = detailVersion.current !== refreshRequest.version;
+    detailVersion.current = refreshRequest.version;
+    setDetailError("");
+    setDetailLoading(Boolean(selectedTraceId));
+    if (!selectedTraceId) {
+      setDetail(null);
+      return;
     }
-  };
-
-  useEffect(() => {
-    loadGroups();
-  }, []);
-
-  useEffect(() => {
-    loadTraces();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, selectedGroup, statusFilter, dateRange]);
-
-  useEffect(() => {
-    if (selectedTraceId) {
-      fetchTraceDetail(selectedTraceId).then((detail) => {
-        if (detail) setSelectedTraceDetail(detail);
+    void fetchTraceDetail(selectedTraceId, forceRefresh)
+      .then((result) => {
+        if (!active) return;
+        if (result && result.trace_id !== selectedTraceId)
+          throw new Error("返回的任务编号不一致，请刷新后重试。");
+        setDetail(result);
+        if (!result) setDetailError("未找到这项任务的详情，以下仅显示已读取的概要。");
+      })
+      .catch((reason: unknown) => {
+        if (active)
+          setDetailError(
+            reason instanceof Error
+              ? `任务详情加载失败：${reason.message}`
+              : "任务详情加载失败，请重试。",
+          );
+      })
+      .finally(() => {
+        if (active) setDetailLoading(false);
       });
-    } else {
-      setSelectedTraceDetail(null);
-    }
-  }, [selectedTraceId]);
+    return () => {
+      active = false;
+    };
+  }, [selectedTraceId, refreshRequest.version]);
 
-  const selectedSummary = traces.find((t) => t.trace_id === selectedTraceId) || selectedTraceDetail;
-
-  const defaultContextMetrics: ContextMetrics = {
-    trace_id: selectedTraceId || "",
-    raw_message_count: selectedSummary?.raw_message_count ?? 0,
-    cleaned_message_count: selectedSummary?.cleaned_message_count ?? 0,
-    compression_ratio: selectedSummary?.compression_ratio ?? 0,
-    incremental_batches: 0,
-    window_size: selectedSummary?.raw_message_count ?? 0,
+  // 选择变化后的首次渲染也不能借用上一项的明细，更不能把缺失字段补成零。
+  const currentDetail = detail?.trace_id === selectedTraceId ? detail : null;
+  const selectedTrace = traces.find((trace) => trace.trace_id === selectedTraceId) ?? null;
+  const contextMetrics: Partial<ContextMetrics> = currentDetail?.context_metrics ?? {
+    trace_id: selectedTraceId ?? "",
+    raw_message_count: selectedTrace?.raw_message_count ?? undefined,
+    cleaned_message_count: selectedTrace?.cleaned_message_count ?? undefined,
+    compression_ratio: selectedTrace?.compression_ratio ?? undefined,
   };
-
-  const defaultTokenUsage: TokenUsage = {
-    trace_id: selectedTraceId || "",
-    prompt_tokens: 0,
-    completion_tokens: 0,
-    total_tokens: selectedSummary?.total_tokens ?? 0,
-    estimated_cost: selectedSummary?.estimated_cost ?? 0,
-    per_analyzer: {},
-  };
-
-  const contextMetrics = selectedTraceDetail?.context_metrics || defaultContextMetrics;
-  const tokenUsage = selectedTraceDetail?.token_usage || defaultTokenUsage;
 
   return {
+    ...filters,
     traces,
     total,
-    selectedTrace: selectedSummary,
-    setSelectedTrace: (trace: TraceRecord | null) => setSelectedTraceId(trace?.trace_id || null),
+    selectedTrace,
     contextMetrics,
-    tokenUsage,
+    tokenUsage: currentDetail?.token_usage ?? null,
     loading,
-    search,
-    selectedGroup,
-    statusFilter,
-    dateRange,
+    detailLoading,
+    error,
+    detailError,
     groups,
-    setSearch,
-    setSelectedGroup,
-    setStatusFilter,
-    setDateRange,
-    refresh: (silent = true) => {
-      loadTraces(silent);
-      if (selectedTraceId) {
-        fetchTraceDetail(selectedTraceId, true).then((detail) => {
-          if (detail) setSelectedTraceDetail(detail);
-        });
-      }
-    },
+    groupsError,
+    setSelectedTrace: (trace: TraceRecord | null) => setSelectedTraceId(trace?.trace_id ?? null),
+    setSearch: (search: string) => setFilters((current) => ({ ...current, search })),
+    setSelectedGroup: (selectedGroup?: string) =>
+      setFilters((current) => ({ ...current, selectedGroup })),
+    setStatusFilter: (statusFilter?: string) =>
+      setFilters((current) => ({ ...current, statusFilter })),
+    setDateRange: (dateRange: [number, number] | null) =>
+      setFilters((current) => ({ ...current, dateRange })),
+    resetFilters: () => setFilters(INITIAL_FILTERS),
+    refresh: (silent = true) =>
+      setRefreshRequest((current) => ({ version: current.version + 1, silent })),
   };
 }
