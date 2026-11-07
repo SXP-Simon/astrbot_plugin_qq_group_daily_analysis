@@ -151,13 +151,19 @@ _MAX_GROUP_NAME_LEN = 10
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
-def sanitize_component(value: str) -> str:
-    """移除会破坏文件名的 C0/DEL 控制字符。
+def strip_control_characters(value: str) -> str:
+    """移除 C0/DEL 控制字符，保留其余文本和业务标识。
 
-    用于 legacy trace id、外部传入的名字等不受 generate() 保护的值。
+    Args:
+        value: 用于构建文件名片段的原始文本。
+
+    Returns:
+        不含 C0/DEL 的文本，不负责路径校验或长度限制。
     """
     return _CONTROL_CHARS.sub("", str(value))
 
+
+sanitize_component = strip_control_characters
 
 # 用于匹配报告 Caption 中去重 Token 的正则模式
 REPORT_CAPTION_PATTERN = re.compile(r"\| (\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
@@ -908,7 +914,7 @@ class TraceContext:
             parts.append(prefix)
         if group_name:
             safe_name = re.sub(
-                r'[\x00-\x1f\x7f\s/\\:*?"<>|\[\]{}]', "", str(group_name)
+                r'[\s/\\:*?"<>|\[\]{}]', "", strip_control_characters(group_name)
             )
             safe_name = safe_name[:_MAX_GROUP_NAME_LEN]
             if safe_name:

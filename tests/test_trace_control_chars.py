@@ -1,6 +1,6 @@
 """Trace id 与文件名组件的控制字符清洗回归。"""
 
-from src.shared.trace_context import TraceContext, sanitize_component
+from src.shared.trace_context import TraceContext, strip_control_characters
 
 
 def _has_control(value: str) -> bool:
@@ -13,6 +13,6 @@ def test_generate_strips_c0_and_del():
     assert "ABC" in trace_id
 
 
-def test_sanitize_component_strips_c0_and_del():
-    assert sanitize_component("a\x00b\x11c\x1fd\x7fe") == "abcde"
-    assert sanitize_component("正常群名") == "正常群名"
+def test_strip_control_characters_strips_c0_and_del():
+    assert strip_control_characters("a\x00b\x11c\x1fd\x7fe") == "abcde"
+    assert strip_control_characters("正常群名") == "正常群名"

@@ -15,7 +15,7 @@ from src.application.handlers.analysis_command_handler import AnalysisCommandHan
 from src.application.handlers.comic_command_handler import ComicCommandHandler
 from src.infrastructure.reporting.dispatcher import ReportDispatcher
 from src.shared import trace_context as trace_module
-from src.shared.trace_context import TraceContext, sanitize_component
+from src.shared.trace_context import TraceContext, strip_control_characters
 
 
 CONTROL_CHARACTERS = [
@@ -33,7 +33,7 @@ def test_trace_id_removes_every_c0_control_and_del(control):
 def test_legacy_component_sanitizer_removes_all_controls_without_changing_display_rules(
     control,
 ):
-    assert sanitize_component(f" 日常{control} [交流]🔥 ") == " 日常 [交流]🔥 "
+    assert strip_control_characters(f" 日常{control} [交流]🔥 ") == " 日常 [交流]🔥 "
 
 
 @pytest.mark.parametrize(
