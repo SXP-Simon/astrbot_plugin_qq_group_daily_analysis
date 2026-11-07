@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { message } from "antd";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import {
   fetchIncrementalGroups,
   fetchIncrementalBatches,
@@ -26,6 +26,26 @@ export function usePluginDataViewModel() {
   const [batchDetailModalOpen, setBatchDetailModalOpen] = useState(false);
   const [selectedBatchDetail, setSelectedBatchDetail] = useState<IncrementalBatchItem | null>(null);
   const [loadingBatchDetail, setLoadingBatchDetail] = useState(false);
+  const [batchDetailError, setBatchDetailError] = useState("");
+  const batchDetailRequest = useRef(0);
+  const incrementalRequest = useRef(0);
+  const groupsRequest = useRef(0);
+  const currentGroup = useRef("");
+  const mounted = useRef(true);
+  const mutationLock = useRef(false);
+  const [incrementalError, setIncrementalError] = useState("");
+  const [incrGroupsError, setIncrGroupsError] = useState("");
+  const [incrementalMutationError, setIncrementalMutationError] = useState("");
+  const [incrementalBusy, setIncrementalBusy] = useState(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      batchDetailRequest.current += 1;
+      incrementalRequest.current += 1;
+      groupsRequest.current += 1;
+    };
+  }, []);
 
   // 3. 阶段产物 Checkpoint 管理
   const [ckptGroups, setCkptGroups] = useState<string[]>([]);
@@ -43,94 +63,143 @@ export function usePluginDataViewModel() {
 
   // 刷新增量群列表
   const refreshIncrGroups = useCallback(async () => {
+    const request = ++groupsRequest.current;
+    setIncrGroupsError("");
     try {
       const groups = await fetchIncrementalGroups();
+      if (request !== groupsRequest.current) return;
       setIncrGroups(groups);
       setSelectedIncrGroup((current) => {
         if (current && groups.includes(current)) return current;
         return groups[0] || "";
       });
     } catch {
-      message.error("获取增量群列表失败");
+      if (request === groupsRequest.current) setIncrGroupsError("群聊列表读取失败，请刷新重试。");
     }
   }, []);
 
-  // 加载指定群的增量批次与游标
+  // 切群和卸载立即废弃旧请求，同群刷新失败时保留上次记录。
   const loadIncrementalData = useCallback(async (groupId: string) => {
-    if (!groupId) {
-      setIncrBatches([]);
-      setIncrCursor(null);
-      return;
-    }
+    if (!groupId || currentGroup.current !== groupId) return;
+    const request = ++incrementalRequest.current;
     setLoadingIncremental(true);
+    setIncrementalError("");
     try {
       const res = await fetchIncrementalBatches(groupId);
-      if (res) {
-        setIncrBatches(res.batches || []);
-        setIncrCursor(res.cursor || null);
-      } else {
-        setIncrBatches([]);
-        setIncrCursor(null);
-      }
+      if (request !== incrementalRequest.current || currentGroup.current !== groupId) return;
+      if (
+        res &&
+        (res.group_id !== groupId ||
+          res.cursor.group_id !== groupId ||
+          res.batches.some((batch) => batch.group_id !== groupId))
+      )
+        throw new Error("批次群聊不一致");
+      setIncrBatches(res?.batches ?? []);
+      setIncrCursor(res?.cursor ?? null);
     } catch {
-      message.error(`加载群 ${groupId} 增量批次失败`);
+      if (request === incrementalRequest.current)
+        setIncrementalError("增量批次读取失败，请刷新重试；已有记录保持不变。");
     } finally {
-      setLoadingIncremental(false);
+      if (request === incrementalRequest.current) setLoadingIncremental(false);
     }
   }, []);
 
-  // 切换选中的增量群
+  useEffect(() => {
+    currentGroup.current = selectedIncrGroup;
+    incrementalRequest.current += 1;
+    setIncrBatches([]);
+    setIncrCursor(null);
+    setIncrementalError("");
+    setLoadingIncremental(false);
+    if (selectedIncrGroup) void loadIncrementalData(selectedIncrGroup);
+  }, [selectedIncrGroup, loadIncrementalData]);
+
   const handleSelectIncrGroup = (groupId: string) => {
+    currentGroup.current = groupId;
+    incrementalRequest.current += 1;
     setSelectedIncrGroup(groupId);
-    loadIncrementalData(groupId);
   };
 
-  // 查看单条增量批次详情
+  // 请求编号同时隔离切换、关闭与卸载后的迟到响应。
   const handleOpenBatchDetail = async (item: IncrementalBatchItem) => {
+    const request = ++batchDetailRequest.current;
     setBatchDetailModalOpen(true);
     setSelectedBatchDetail(item);
     setLoadingBatchDetail(true);
+    setBatchDetailError("");
     try {
       const full = await fetchIncrementalBatchDetail(item.group_id, item.batch_id);
-      if (full) {
+      if (request !== batchDetailRequest.current) return;
+      if (!full) {
+        setBatchDetailError("这个批次已不存在，请刷新列表。");
+      } else if (full.group_id !== item.group_id || full.batch_id !== item.batch_id) {
+        setBatchDetailError("返回的批次与所选记录不一致，请重新读取。");
+      } else {
         setSelectedBatchDetail(full);
       }
     } catch {
-      message.error("获取批次详细数据失败");
+      if (request === batchDetailRequest.current)
+        setBatchDetailError("批次详情读取失败，请检查连接后重试。");
     } finally {
-      setLoadingBatchDetail(false);
+      if (request === batchDetailRequest.current) setLoadingBatchDetail(false);
     }
   };
 
   const handleCloseBatchDetail = () => {
+    batchDetailRequest.current += 1;
     setBatchDetailModalOpen(false);
     setSelectedBatchDetail(null);
+    setLoadingBatchDetail(false);
+    setBatchDetailError("");
   };
 
-  // 删除单条增量批次
+  // 确认弹窗持有操作目标；完成后只刷新仍在查看的群聊。
   const handleDeleteBatch = async (groupId: string, batchId: string) => {
+    if (mutationLock.current) return false;
+    mutationLock.current = true;
+    setIncrementalBusy(true);
+    setIncrementalMutationError("");
     try {
       const ok = await deleteIncrementalBatch(groupId, batchId);
-      if (ok) {
-        message.success(`已成功删除批次 ${batchId}`);
-        await loadIncrementalData(groupId);
-      } else {
-        message.error("删除批次失败：批次不存在或已被移除");
-      }
-    } catch {
-      message.error("删除批次异常");
+      if (!mounted.current) return false;
+      if (!ok) throw new Error("批次不存在或已被移除");
+      toast.success(`已删除批次 ${batchId}`);
+      if (currentGroup.current === groupId) await loadIncrementalData(groupId);
+      return true;
+    } catch (reason) {
+      if (mounted.current)
+        setIncrementalMutationError(
+          reason instanceof Error ? `删除失败：${reason.message}` : "删除失败，请稍后重试。",
+        );
+      return false;
+    } finally {
+      mutationLock.current = false;
+      if (mounted.current) setIncrementalBusy(false);
     }
   };
 
-  // 重置指定群的所有增量批次与游标
   const handleResetIncrGroup = async (groupId: string) => {
+    if (mutationLock.current) return false;
+    mutationLock.current = true;
+    setIncrementalBusy(true);
+    setIncrementalMutationError("");
     try {
       const res = await resetIncrementalGroup(groupId);
-      message.success(`已重置群 ${groupId} 增量状态，清理了 ${res.deleted_batches} 个批次`);
-      await loadIncrementalData(groupId);
+      if (!mounted.current) return false;
+      toast.success(`已重置群 ${groupId}，清理了 ${res.deleted_batches} 个批次`);
+      if (currentGroup.current === groupId) await loadIncrementalData(groupId);
+      if (!mounted.current) return false;
       await refreshIncrGroups();
-    } catch {
-      message.error("重置群增量状态异常");
+      return true;
+    } catch (reason) {
+      if (mounted.current)
+        setIncrementalMutationError(
+          reason instanceof Error ? `重置失败：${reason.message}` : "重置失败，请稍后重试。",
+        );
+      return false;
+    } finally {
+      mutationLock.current = false;
+      if (mounted.current) setIncrementalBusy(false);
     }
   };
 
@@ -140,7 +209,7 @@ export function usePluginDataViewModel() {
       const groups = await fetchCheckpointGroups();
       setCkptGroups(groups);
     } catch {
-      message.error("获取 Checkpoint 群号列表失败");
+      toast.error("获取 Checkpoint 群号列表失败");
     }
   }, []);
 
@@ -167,7 +236,7 @@ export function usePluginDataViewModel() {
         setCheckpointsPage(page);
         setCheckpointsPageSize(pageSize);
       } catch {
-        message.error("加载阶段快照列表失败");
+        toast.error("加载阶段快照列表失败");
       } finally {
         setLoadingCheckpoints(false);
       }
@@ -216,10 +285,10 @@ export function usePluginDataViewModel() {
           data: payloadData,
         });
       } else {
-        message.error("快照数据不存在或已过期");
+        toast.error("快照数据不存在或已过期");
       }
     } catch {
-      message.error("获取快照详情异常");
+      toast.error("获取快照详情异常");
     } finally {
       setLoadingCkptDetail(false);
     }
@@ -240,7 +309,7 @@ export function usePluginDataViewModel() {
     try {
       const ok = await deleteCheckpoint(groupId, dateStr, stageName, traceId);
       if (ok) {
-        message.success(
+        toast.success(
           stageName
             ? `已删除 ${groupId} (${dateStr}) 的阶段快照「${stageName}」`
             : `已清空 ${groupId} (${dateStr}) 的所有阶段快照`,
@@ -248,10 +317,10 @@ export function usePluginDataViewModel() {
         await loadCheckpoints();
         await refreshCheckpointGroups();
       } else {
-        message.error("删除快照失败");
+        toast.error("删除快照失败");
       }
     } catch {
-      message.error("删除快照异常");
+      toast.error("删除快照异常");
     }
   };
 
@@ -267,9 +336,15 @@ export function usePluginDataViewModel() {
     incrBatches,
     incrCursor,
     loadingIncremental,
+    incrementalError,
+    incrGroupsError,
+    incrementalMutationError,
+    incrementalBusy,
+    clearIncrementalMutationError: () => setIncrementalMutationError(""),
     batchDetailModalOpen,
     selectedBatchDetail,
     loadingBatchDetail,
+    batchDetailError,
     refreshIncrGroups,
     loadIncrementalData,
     handleSelectIncrGroup,
