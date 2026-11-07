@@ -174,22 +174,18 @@ export function BatchDetailModal({
                 </h3>
                 {batchDetail.topics.map((topic, index) => (
                   <div key={index} className="grid gap-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span>{topic.title || "未命名话题"}</span>
-                      {topic.heat_score !== undefined && (
-                        <span className="rounded-md bg-warning/10 px-2 py-0.5 text-xs text-warning">
-                          热度 {topic.heat_score}℃
-                        </span>
-                      )}
-                      {topic.category && (
-                        <span className="text-xs text-muted-foreground">
-                          {String(topic.category)}
-                        </span>
-                      )}
-                    </div>
-                    {(topic.description || topic.summary) && (
+                    <span>{topic.topic || "未命名话题"}</span>
+                    {topic.detail && (
                       <p className="m-0 whitespace-pre-wrap text-muted-foreground">
-                        {String(topic.description || topic.summary)}
+                        {topic.detail}
+                      </p>
+                    )}
+                    {!!(topic.contributors?.length || topic.contributor_ids?.length) && (
+                      <p className="m-0 text-sm text-muted-foreground">
+                        参与者：
+                        {topic.contributors?.length
+                          ? topic.contributors.join("、")
+                          : topic.contributor_ids?.join("、")}
                       </p>
                     )}
                   </div>
@@ -210,12 +206,13 @@ export function BatchDetailModal({
                     className="m-0 border-0 border-l-2 border-solid border-warning/40 pl-3"
                   >
                     <p className="m-0 whitespace-pre-wrap">
-                      {String(quote.content || quote.text || JSON.stringify(quote))}
+                      {String(quote.content || "未记录内容")}
                     </p>
-                    {(quote.sender_nickname || quote.sender_name || quote.author) && (
-                      <footer className="mt-1 text-muted-foreground">
-                        {String(quote.sender_nickname || quote.sender_name || quote.author)}
-                      </footer>
+                    {quote.reason && (
+                      <p className="m-0 mt-1 text-muted-foreground">{quote.reason}</p>
+                    )}
+                    {quote.sender && (
+                      <footer className="mt-1 text-muted-foreground">{String(quote.sender)}</footer>
                     )}
                   </blockquote>
                 ))}

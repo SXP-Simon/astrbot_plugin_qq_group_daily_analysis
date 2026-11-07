@@ -118,10 +118,44 @@ it("超过选择上限时全选最多 200 条，并可再次点击取消", () =>
       vm={{ ...result.current, selectedIncrGroup: "a", incrGroups: ["a"], incrBatches: batches }}
     />,
   );
-  const selectAll = screen.getByRole("checkbox", { name: "选择本群全部批次（最多 200）" });
+  const selectAll = screen.getByRole("checkbox", { name: "选择本页批次（最多 200）" });
   fireEvent.click(selectAll);
   expect(selectAll).toBeChecked();
   expect(screen.getAllByRole("checkbox", { checked: true })).toHaveLength(201);
   fireEvent.click(selectAll);
   expect(screen.queryAllByRole("checkbox", { checked: true })).toHaveLength(0);
+});
+
+it("分页选择保留其他页，取消本页全选不会清空其他页", () => {
+  const { result } = renderHook(usePluginDataViewModel);
+  const batch = (id: string) => ({
+    group_id: "a",
+    batch_id: id,
+    timestamp: 1,
+    messages_count: 1,
+    characters_count: 2,
+  });
+  const vm = {
+    ...result.current,
+    selectedIncrGroup: "a",
+    incrGroups: ["a"],
+    incrPagination: { page: 1, pageSize: 20, total: 21 },
+  };
+  const { rerender } = render(<IncrementalTab vm={{ ...vm, incrBatches: [batch("first")] }} />);
+  fireEvent.click(screen.getByLabelText("选择批次 first"));
+  rerender(
+    <IncrementalTab
+      vm={{
+        ...vm,
+        incrPagination: { ...vm.incrPagination, page: 2 },
+        incrBatches: [batch("last")],
+      }}
+    />,
+  );
+  fireEvent.click(screen.getByLabelText("选择本页批次（最多 200）"));
+  expect(screen.getByText(/已选 2 项/)).toBeVisible();
+  fireEvent.click(screen.getByLabelText("选择本页批次（最多 200）"));
+  expect(screen.getByText(/已选 1 项/)).toBeVisible();
+  rerender(<IncrementalTab vm={{ ...vm, incrBatches: [batch("first")] }} />);
+  expect(screen.getByLabelText("选择批次 first")).toBeChecked();
 });

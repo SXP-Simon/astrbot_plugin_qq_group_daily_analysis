@@ -21,7 +21,7 @@ export function IncrementalCursorCards({
     {
       label: "最新包含消息时间",
       value:
-        cursor.last_message_timestamp > 0
+        cursor.last_message_timestamp !== null && cursor.last_message_timestamp > 0
           ? formatTimestamp(cursor.last_message_timestamp)
           : "未记录",
       hint: "已保存批次涵盖的最新消息。",

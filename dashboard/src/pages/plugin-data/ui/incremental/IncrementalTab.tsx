@@ -8,6 +8,7 @@ import type { IncrementalBatchItem } from "../../../../entities/plugin-data/mode
 import type { usePluginDataViewModel } from "../../model/usePluginDataViewModel";
 import { formatTimestamp, formatTokens } from "../../../../shared/lib/formatters";
 import { Button } from "../../../../shared/ui/button";
+import { Pagination } from "../../../../shared/ui/pagination";
 import { NativeSelect } from "../../../../shared/ui/native-select";
 import {
   Dialog,
@@ -93,12 +94,12 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
         </p>
       )}
       {selectedIncrGroup && incrCursor && (
-        <IncrementalCursorCards cursor={incrCursor} batchCount={incrBatches.length} />
+        <IncrementalCursorCards cursor={incrCursor} batchCount={vm.incrPagination.total} />
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="m-0 text-base font-medium">
           增量批次{" "}
-          <span className="ml-2 text-sm text-muted-foreground">{incrBatches.length} 个</span>
+          <span className="ml-2 text-sm text-muted-foreground">{vm.incrPagination.total} 个</span>
         </h3>
         <Button variant="outline" disabled={busy} onClick={() => setImporting(true)}>
           导入 / 新建增量批次
@@ -124,7 +125,7 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                   <th className="w-10 p-3 font-medium">
                     <input
                       type="checkbox"
-                      aria-label="选择本群全部批次（最多 200）"
+                      aria-label="选择本页批次（最多 200）"
                       className="size-4 accent-primary focus-visible:outline-2 focus-visible:outline-ring"
                       checked={
                         allKeys.length > 0 &&
@@ -132,7 +133,13 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                           Math.min(allKeys.length, 200)
                       }
                       disabled={busy || loadingIncremental || !allKeys.length}
-                      onChange={(event) => selection.select(event.target.checked ? allKeys : [])}
+                      onChange={(event) =>
+                        selection.select(
+                          event.target.checked
+                            ? [...new Set([...selection.keys, ...allKeys])]
+                            : selection.keys.filter((key) => !allKeys.includes(key)),
+                        )
+                      }
                     />
                   </th>
                   {["批次编号", "生成时间", "消息与字符", "提炼话题", "模型消耗", "操作"].map(
@@ -192,11 +199,10 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                             item.topics.map((topic, index) => (
                               <span
                                 key={index}
-                                title={topic.title}
+                                title={topic.topic}
                                 className="max-w-56 truncate rounded-md bg-warning/10 px-2 py-1 text-xs text-warning"
                               >
-                                {topic.title || "未命名话题"}
-                                {topic.heat_score !== undefined ? ` · ${topic.heat_score}℃` : ""}
+                                {topic.topic || "未命名话题"}
                               </span>
                             ))
                           ) : (
@@ -263,6 +269,11 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
               </p>
             )}
           </div>
+          <Pagination
+            {...vm.incrPagination}
+            disabled={loadingIncremental || busy}
+            onChange={(page, pageSize) => void vm.changeIncrementalPage(page, pageSize)}
+          />
         </>
       ) : (
         !vm.incrGroupsError && (

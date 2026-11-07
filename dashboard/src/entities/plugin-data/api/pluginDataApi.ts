@@ -77,10 +77,14 @@ export async function fetchIncrementalGroups(): Promise<string[]> {
 
 export async function fetchIncrementalBatches(
   groupId: string,
+  page = 1,
+  pageSize = 20,
 ): Promise<IncrementalBatchesResponse | null> {
   if (!groupId) return null;
   const res = await apiGet<IncrementalBatchesResponse>("data/incremental/batches", {
     group_id: groupId,
+    page,
+    page_size: pageSize,
   });
   return extractData<IncrementalBatchesResponse>(res);
 }

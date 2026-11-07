@@ -15,6 +15,9 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 const response = (group: string): IncrementalBatchesResponse => ({
+  total: 1,
+  page: 1,
+  page_size: 20,
   group_id: group,
   cursor: {
     group_id: group,
@@ -49,7 +52,7 @@ it("群聊列表初次选中后自动读取批次，切换时旧响应不能串�
     .mockResolvedValueOnce(response("b"));
   const { result } = renderHook(usePluginDataViewModel);
   await act(async () => result.current.refreshIncrGroups());
-  expect(fetchIncrementalBatches).toHaveBeenCalledWith("a");
+  expect(fetchIncrementalBatches).toHaveBeenCalledWith("a", 1, 20);
   await act(async () => result.current.handleSelectIncrGroup("b"));
   expect(result.current.incrBatches).toEqual(response("b").batches);
   await act(async () => old.resolve(response("a")));
@@ -134,4 +137,29 @@ it("重置后的列表刷新期间卸载，不再发起群聊查询", async () =
     await request;
   });
   expect(fetchIncrementalGroups).not.toHaveBeenCalled();
+});
+
+it("分页采用服务端总数与修正页码，旧页响应不能覆盖新页", async () => {
+  vi.mocked(fetchIncrementalBatches).mockResolvedValueOnce({ ...response("a"), total: 45 });
+  const { result } = renderHook(usePluginDataViewModel);
+  await act(async () => result.current.handleSelectIncrGroup("a"));
+  const second = pending<IncrementalBatchesResponse>();
+  vi.mocked(fetchIncrementalBatches)
+    .mockReturnValueOnce(second.promise)
+    .mockResolvedValueOnce({ ...response("a"), page: 2, total: 40 });
+  act(() => {
+    void result.current.changeIncrementalPage(2, 20);
+  });
+  await act(async () => result.current.changeIncrementalPage(3, 20));
+  expect(fetchIncrementalBatches).toHaveBeenLastCalledWith("a", 3, 20);
+  expect(result.current.incrPagination).toEqual({ page: 2, pageSize: 20, total: 40 });
+  await act(async () => second.resolve({ ...response("a"), page: 2, total: 45 }));
+  expect(result.current.incrPagination.total).toBe(40);
+  vi.mocked(fetchIncrementalBatches).mockResolvedValueOnce({
+    ...response("a"),
+    page: 2,
+    total: 40,
+  });
+  await act(async () => result.current.loadIncrementalData("a"));
+  expect(fetchIncrementalBatches).toHaveBeenLastCalledWith("a", 2, 20);
 });

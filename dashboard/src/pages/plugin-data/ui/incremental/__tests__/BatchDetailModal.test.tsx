@@ -1,3 +1,4 @@
+import serializedBatch from "../../../model/__tests__/fixtures/incrementalBatch.json";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { BatchDetailModal } from "../BatchDetailModal";
@@ -22,9 +23,21 @@ const batch: IncrementalBatchItem = {
     dimensions: [{ name: "信息交流", percentage: 0, comment: "没有技术话题" }],
   },
   topics: [
-    { title: "周末出游", summary: "[alice] 分享了徒步路线", category: "日常", heat_score: 0 },
+    {
+      topic: "周末出游",
+      detail: "[alice] 分享了徒步路线",
+      contributors: ["小林"],
+      contributor_ids: ["alice"],
+    },
   ],
-  golden_quotes: [{ text: "出门才知道天气真好", author: "小林" }],
+  golden_quotes: [
+    {
+      content: "出门才知道天气真好",
+      sender: "小林",
+      user_id: "alice",
+      reason: "说出了出游的轻松心情",
+    },
+  ],
   extension: { preserved: true },
 };
 
@@ -36,6 +49,9 @@ it("批次详情保留评价、话题、金句、零消耗与完整扩展数据"
   expect(screen.getByText("信息交流 · 0%")).toBeVisible();
   expect(screen.getByText("[alice] 分享了徒步路线")).toBeVisible();
   expect(screen.getByText("出门才知道天气真好")).toBeVisible();
+  expect(screen.getByText("参与者：小林")).toBeVisible();
+  expect(screen.queryByText(/热度|℃/)).not.toBeInTheDocument();
+  expect(screen.getByText("说出了出游的轻松心情")).toBeVisible();
   expect(screen.getByText("0 / 0")).toBeVisible();
   fireEvent.click(screen.getByText("完整批次数据（JSON）"));
   expect(screen.getByText(/"preserved": true/)).toBeVisible();
@@ -124,4 +140,14 @@ it("旧评价字符串与未知结构仍可查看，关闭回调保留", () => {
   expect(screen.getAllByText(/"extra": "扩展评价"/)[0]).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
   expect(close).toHaveBeenCalledOnce();
+});
+
+it("真实批次序列化结构能展示话题摘要、参与者和金句作者", () => {
+  render(<BatchDetailModal open onClose={vi.fn()} batchDetail={serializedBatch} loading={false} />);
+  expect(screen.getByText("周末出游")).toBeVisible();
+  expect(screen.getByText("[alice] 分享了徒步路线")).toBeVisible();
+  expect(screen.getByText("参与者：小林")).toBeVisible();
+  expect(screen.getByText("出门才知道天气真好")).toBeVisible();
+  expect(screen.getByText("说出了出游的轻松心情")).toBeVisible();
+  expect(screen.queryByText(/热度|℃|未命名话题/)).not.toBeInTheDocument();
 });

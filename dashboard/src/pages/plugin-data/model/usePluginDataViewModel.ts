@@ -19,6 +19,8 @@ export function usePluginDataViewModel() {
   const [incrGroups, setIncrGroups] = useState<string[]>([]);
   const [selectedIncrGroup, setSelectedIncrGroup] = useState<string>("");
   const [incrBatches, setIncrBatches] = useState<IncrementalBatchItem[]>([]);
+  const [incrPagination, setIncrPagination] = useState({ page: 1, pageSize: 20, total: 0 });
+  const incrementalQuery = useRef({ page: 1, pageSize: 20 });
   const [incrCursor, setIncrCursor] = useState<IncrementalCursorInfo | null>(null);
   const [loadingIncremental, setLoadingIncremental] = useState(false);
   const [batchDetailModalOpen, setBatchDetailModalOpen] = useState(false);
@@ -63,34 +65,46 @@ export function usePluginDataViewModel() {
   }, []);
 
   // 切群和卸载立即废弃旧请求，同群刷新失败时保留上次记录。
-  const loadIncrementalData = useCallback(async (groupId: string) => {
-    if (!groupId || currentGroup.current !== groupId) return;
-    const request = ++incrementalRequest.current;
-    setLoadingIncremental(true);
-    setIncrementalError("");
-    try {
-      const res = await fetchIncrementalBatches(groupId);
-      if (request !== incrementalRequest.current || currentGroup.current !== groupId) return;
-      if (
-        res &&
-        (res.group_id !== groupId ||
-          res.cursor.group_id !== groupId ||
-          res.batches.some((batch) => batch.group_id !== groupId))
-      )
-        throw new Error("批次群聊不一致");
-      setIncrBatches(res?.batches ?? []);
-      setIncrCursor(res?.cursor ?? null);
-    } catch {
-      if (request === incrementalRequest.current)
-        setIncrementalError("增量批次读取失败，请刷新重试；已有记录保持不变。");
-    } finally {
-      if (request === incrementalRequest.current) setLoadingIncremental(false);
-    }
-  }, []);
+  const loadIncrementalData = useCallback(
+    async (
+      groupId: string,
+      page = incrementalQuery.current.page,
+      pageSize = incrementalQuery.current.pageSize,
+    ) => {
+      if (!groupId || currentGroup.current !== groupId) return;
+      incrementalQuery.current = { page, pageSize };
+      const request = ++incrementalRequest.current;
+      setLoadingIncremental(true);
+      setIncrementalError("");
+      try {
+        const res = await fetchIncrementalBatches(groupId, page, pageSize);
+        if (request !== incrementalRequest.current || currentGroup.current !== groupId) return;
+        if (
+          res &&
+          (res.group_id !== groupId ||
+            res.cursor.group_id !== groupId ||
+            res.batches.some((batch) => batch.group_id !== groupId))
+        )
+          throw new Error("批次群聊不一致");
+        incrementalQuery.current = { page: res?.page ?? 1, pageSize: res?.page_size ?? pageSize };
+        setIncrPagination({ ...incrementalQuery.current, total: res?.total ?? 0 });
+        setIncrBatches(res?.batches ?? []);
+        setIncrCursor(res?.cursor ?? null);
+      } catch {
+        if (request === incrementalRequest.current)
+          setIncrementalError("增量批次读取失败，请刷新重试；已有记录保持不变。");
+      } finally {
+        if (request === incrementalRequest.current) setLoadingIncremental(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     currentGroup.current = selectedIncrGroup;
     incrementalRequest.current += 1;
+    incrementalQuery.current = { page: 1, pageSize: incrementalQuery.current.pageSize };
+    setIncrPagination({ ...incrementalQuery.current, total: 0 });
     setIncrBatches([]);
     setIncrCursor(null);
     setIncrementalError("");
@@ -198,6 +212,9 @@ export function usePluginDataViewModel() {
     selectedIncrGroup,
     incrBatches,
     incrCursor,
+    incrPagination,
+    changeIncrementalPage: (page: number, pageSize: number) =>
+      loadIncrementalData(currentGroup.current, page, pageSize),
     loadingIncremental,
     incrementalError,
     incrGroupsError,
