@@ -49,3 +49,99 @@ it("分页保留每页数量，边界禁用，修改条数从第一页开始", (
   fireEvent.click(screen.getByRole("button", { name: "第 20 页" }));
   expect(change).toHaveBeenLastCalledWith(20, 15);
 });
+
+it("大量选项只渲染可见窗口，滚动、搜索和键盘可以访问末尾选项", async () => {
+  const change = vi.fn();
+  render(
+    <SearchSelect
+      label="模板"
+      value=""
+      virtual
+      options={Array.from({ length: 500 }, (_, index) => ({
+        value: `theme-${index}`,
+        label: `模板 ${index}`,
+        searchText: `说明 ${index}`,
+      }))}
+      onChange={change}
+    />,
+  );
+  const trigger = screen.getByRole("button", { name: "模板：请选择" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  expect(screen.getAllByRole("option").length).toBeLessThan(20);
+  const viewport = screen.getByRole("listbox").parentElement!;
+  fireEvent.scroll(viewport, { target: { scrollTop: 56 * 300 } });
+  expect(screen.getByRole("option", { name: "模板 300" })).toHaveAttribute("aria-posinset", "301");
+  const search = screen.getByRole("combobox", { name: "搜索模板" });
+  fireEvent.keyDown(search, { key: "End" });
+  await waitFor(() =>
+    expect(
+      document.getElementById(search.getAttribute("aria-activedescendant") || ""),
+    ).toHaveTextContent("模板 499"),
+  );
+  expect(screen.getAllByRole("option").length).toBeLessThan(20);
+  fireEvent.change(search, { target: { value: "说明 498" } });
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  fireEvent.keyDown(search, { key: "Enter" });
+  expect(change).toHaveBeenCalledWith("theme-498");
+  await waitFor(() => expect(trigger).toHaveFocus());
+});
+
+it("虚拟选择器关闭后保留当前值，禁用状态禁止继续选择", async () => {
+  const options = [
+    { value: "one", label: "模板一" },
+    { value: "two", label: "模板二" },
+  ];
+  const change = vi.fn();
+  const { rerender } = render(
+    <SearchSelect label="模板" value="two" options={options} onChange={change} virtual />,
+  );
+  const trigger = screen.getByRole("button", { name: "模板：模板二" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  expect(screen.getByRole("option", { name: "模板二" })).toHaveAttribute("aria-selected", "true");
+  fireEvent.keyDown(screen.getByRole("combobox"), { key: "Home" });
+  fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+  await waitFor(() => expect(trigger).toHaveFocus());
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.click(trigger);
+  rerender(
+    <SearchSelect label="模板" value="two" options={options} onChange={change} virtual disabled />,
+  );
+  expect(screen.getByRole("option", { name: "模板一" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("option", { name: "模板一" }));
+  expect(change).not.toHaveBeenCalled();
+});
+
+it("选项在后台重排时活动项跟随值，移除后不会误选新索引下的另一项", async () => {
+  const options = [
+    { value: "a", label: "模板甲" },
+    { value: "b", label: "模板乙" },
+  ];
+  const change = vi.fn();
+  const view = render(
+    <SearchSelect label="模板" value="" options={options} virtual onChange={change} />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "模板：请选择" }));
+  const input = screen.getByRole("combobox");
+  fireEvent.keyDown(input, { key: "End" });
+  view.rerender(
+    <SearchSelect
+      label="模板"
+      value=""
+      options={[options[1], options[0]]}
+      virtual
+      onChange={change}
+    />,
+  );
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(change).toHaveBeenCalledWith("b");
+  change.mockClear();
+  fireEvent.click(screen.getByRole("button", { name: "模板：请选择" }));
+  fireEvent.keyDown(screen.getByRole("combobox"), { key: "Home" });
+  view.rerender(
+    <SearchSelect label="模板" value="" options={[options[0]]} virtual onChange={change} />,
+  );
+  fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+  expect(change).not.toHaveBeenCalled();
+});
