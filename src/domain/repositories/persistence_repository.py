@@ -15,7 +15,7 @@ if TYPE_CHECKING:
         CheckpointGroupPayload,
         CheckpointSummaryPayload,
     )
-    from ..value_objects.incremental_session import IncrementalSession
+    from ..value_objects.group_session import GroupSession
 
 
 class IIncrementalStore(ABC):
@@ -26,7 +26,7 @@ class IIncrementalStore(ABC):
         """获取会话隔离的仓储；首次访问时接管尚未归属的旧数据。"""
 
     @abstractmethod
-    async def get_tracked_sessions(self) -> list[IncrementalSession]:
+    async def get_tracked_sessions(self) -> list[GroupSession]:
         """列出会话身份，尚未归属的旧数据以空平台保留。"""
 
     @abstractmethod
