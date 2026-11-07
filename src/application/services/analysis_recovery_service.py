@@ -29,7 +29,7 @@ from ...infrastructure.persistence.unified_message_codec import restore_unified_
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
 from ...infrastructure.reporting.report_image import save_report_image
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
-from ...shared.trace_context import TraceContext
+from ...shared.trace_context import TraceContext, strip_control_characters
 from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 from .analysis_serializer import AnalysisResultSerializer
@@ -170,7 +170,7 @@ class AnalysisRecoveryService:
 
         reports_dir = StarTools.get_data_dir(PLUGIN_NAME) / "reports"
         # 所有外部标识只参与文件名，不能改变报告目录。
-        components = [group_id, trace_id or "", template_name]
+        components = [group_id, strip_control_characters(trace_id or ""), template_name]
         safe_group, safe_trace, safe_template = [
             re.sub(r'[\s/\\:*?"<>|\x00-\x1f]', "_", value)[:64] for value in components
         ]

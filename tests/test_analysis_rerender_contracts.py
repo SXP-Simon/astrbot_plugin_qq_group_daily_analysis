@@ -10,6 +10,7 @@ import pytest
 from src.application.services.analysis_recovery_service import AnalysisRecoveryService
 from src.application.services.analysis_serializer import AnalysisResultSerializer
 from src.domain.value_objects import GroupStatistics, SummaryTopic
+from src.shared.trace_context import TraceContext
 
 
 @pytest.fixture
@@ -181,3 +182,42 @@ async def test_daily_rerender_inherits_history_source_trace(recovery):
     result = await service.rerender_report("123", "2026-10-29", "test")
     assert result["success"] is True
     assert result["trace_id"] == "daily-source"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fmt", ["image", "html"])
+@pytest.mark.parametrize("control", ["\x10", "\x7f"])
+async def test_rerender_cleans_only_filename_trace_and_preserves_artifact_owner(
+    recovery, tmp_path, long_png, monkeypatch, fmt, control
+):
+    service, generator = recovery
+    original_trace = f"legacy_{control}日常交流群_end"
+    service.checkpoint_store = None
+    service.history_manager.get_analysis.return_value["trace_id"] = original_trace
+    source = tmp_path / "source.html"
+    source.write_text("<html>历史报告</html>", encoding="utf-8")
+    generator.generate_html_report.return_value = (str(source), None)
+    generator.generate_image_report.return_value = (
+        "base64://" + base64.b64encode(long_png).decode(),
+        None,
+    )
+    register = AsyncMock()
+    monkeypatch.setattr(TraceContext, "register_report", register)
+
+    result = await service.rerender_report(
+        "123", "2026-11-07", "miku", render_format=fmt, trace_id=original_trace
+    )
+
+    assert result["success"] is True
+    dest = Path(result["report_path"])
+    assert "legacy_日常交流群_end" in dest.name
+    assert control not in dest.name
+    assert dest.parent == tmp_path / "reports"
+    assert dest.read_bytes() == (long_png if fmt == "image" else source.read_bytes())
+    assert result["trace_id"] == original_trace
+    register.assert_awaited_once_with(dest, "123", fmt, original_trace)
+    if fmt == "html":
+        assert (
+            generator.generate_html_report.await_args.kwargs["trace_id"]
+            == original_trace
+        )

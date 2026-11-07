@@ -16,6 +16,7 @@ from ...domain.services.task_state_machine import TaskStateMachine
 from ...domain.value_objects.task_event import TaskEvent
 from ...domain.value_objects.task_status import TaskStatus
 from ...shared.constants import PROCESS_BOOT_ID, PROCESS_PID, AnalysisStage
+from ...shared.trace_context import strip_control_characters
 from ...shared.type_guards import is_object_list, is_string_mapping
 
 if TYPE_CHECKING:
@@ -756,11 +757,15 @@ class TraceSQLiteStore:
                 seen.add(filename)
                 reports.append(report)
 
+        # 旧文件可能保留原标识，新文件则只清理文件名；数据库键始终保持原样。
+        filename_trace_ids = {trace_id, strip_control_characters(trace_id)} - {""}
         reports_dir = self.db_path.parent / "reports"
         try:
             if reports_dir.is_dir():
                 for path in reports_dir.iterdir():
-                    if trace_id not in path.name or path.name in seen:
+                    if path.name in seen or not any(
+                        candidate in path.name for candidate in filename_trace_ids
+                    ):
                         continue
                     try:
                         if not path.is_file():

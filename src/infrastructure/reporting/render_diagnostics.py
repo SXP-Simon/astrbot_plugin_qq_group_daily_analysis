@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Literal, Required, TypedDict
 
 import ulid
 
-from ...shared.trace_context import TraceContext
+from ...shared.trace_context import TraceContext, strip_control_characters
 from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.template_utils import render_template
 
@@ -229,7 +229,7 @@ def build_safe_report_path(
         "group_id": group_id,
         "date": date,
         "ulid": generated_ulid,
-        "trace_id": str(trace_id or TraceContext.get() or ""),
+        "trace_id": strip_control_characters(trace_id or TraceContext.get() or ""),
     }
 
     try:
