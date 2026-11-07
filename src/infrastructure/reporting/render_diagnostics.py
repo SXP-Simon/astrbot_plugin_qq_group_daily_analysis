@@ -256,7 +256,10 @@ def build_safe_report_path(
     except ValueError as e:
         raise ValueError("文件路径不在输出目录之内，可能包含路径穿越") from e
 
-    if target_path.exists():
+    # 未包含任务或随机身份的自定义格式也必须在文件写入前区分并发任务。
+    if target_path.exists() or (
+        generated_ulid not in target_path.name and "${trace_id}" not in filename_format
+    ):
         suffix = target_path.suffix
         stem = target_path.stem
         target_path = target_path.with_name(f"{stem}_{generated_ulid}{suffix}")
