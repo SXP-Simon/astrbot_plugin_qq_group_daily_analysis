@@ -179,6 +179,7 @@ class HistoryManager:
                     "platform_id": platform_id,
                     "group_id": group_id,
                     "date_str": date_str,
+                    "created_at": now.isoformat(),
                 },
             )
             if platform_id:
