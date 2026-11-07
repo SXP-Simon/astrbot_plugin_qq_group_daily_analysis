@@ -130,6 +130,7 @@ class ReportRoutes:
                 start_time,
                 end_time,
                 sort_order,
+                request.query.get("platform"),
             )
 
             # 响应数据：标准分页结构 { items, total }，同时顶层保留 items 键兼容部分直接读取
@@ -157,6 +158,7 @@ class ReportRoutes:
         start_time: float | None = None,
         end_time: float | None = None,
         sort_order: str = "desc",
+        platform: str | None = None,
     ) -> tuple[list[ReportHistoryItemDTO], int]:
         """在线程中完成历史产物查询和旧文件索引补录。
 
@@ -168,17 +170,22 @@ class ReportRoutes:
             start_time: 可选生成时间下界。
             end_time: 可选生成时间上界。
             sort_order: 全局生成时间排序方向。
+            platform: 平台标识，空字符串筛选未记录平台的产物。
 
         Returns:
             当前分页记录及过滤后的总数。
         """
-        group_info_map = {
-            str(g["group_id"]): {
-                "group_name": str(g.get("group_name", "")),
-                "platform": str(g.get("platform", "")),
-            }
-            for g in (self.trace_store.get_distinct_groups())
-        }
+        # 群名可参考唯一平台的历史；同号多平台不能套用最后一条分析的身份。
+        group_info_map: dict[str, dict[str, str]] = {}
+        ambiguous: set[str] = set()
+        for group in self.trace_store.get_distinct_groups(by_session=True):
+            group_id = group["group_id"]
+            if group_id in group_info_map:
+                ambiguous.add(group_id)
+            else:
+                group_info_map[group_id] = group
+        for group_id in ambiguous:
+            group_info_map[group_id] = {}
         candidate_dirs: list[Path] = []
         if self.report_output_dir:
             candidate_dirs.append(self.report_output_dir)
@@ -219,6 +226,7 @@ class ReportRoutes:
             start_time=start_time,
             end_time=end_time,
             sort_order=sort_order,
+            platform=platform,
         )
         reports = self._read_indexed_reports(artifacts, candidate_dirs, group_info_map)
         return reports[query_offset : query_offset + query_limit], len(reports)
@@ -311,8 +319,10 @@ class ReportRoutes:
                         if is_comic
                         else ("html" if is_html else "image"),
                         "group_id": g_id or stem,
-                        "group_name": g_info.get("group_name", ""),
-                        "platform": g_info.get("platform", ""),
+                        "group_name": str(
+                            art.get("group_name") or g_info.get("group_name", "")
+                        ),
+                        "platform": str(art.get("platform") or ""),
                         "trace_id": t_id,
                     }
                 )

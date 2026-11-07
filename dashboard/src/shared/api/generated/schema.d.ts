@@ -2317,6 +2317,8 @@ export interface operations {
     listTraces: {
         parameters: {
             query?: {
+                /** @description 按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台 */
+                platform?: string;
                 group_id?: string;
                 status?: string;
                 trigger_type?: string;
@@ -2479,6 +2481,8 @@ export interface operations {
     getReportHistory: {
         parameters: {
             query?: {
+                /** @description 按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台 */
+                platform?: string;
                 limit?: number;
                 offset?: number;
                 group_id?: string;

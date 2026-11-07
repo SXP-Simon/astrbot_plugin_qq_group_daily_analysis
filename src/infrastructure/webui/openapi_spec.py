@@ -689,6 +689,12 @@ def generate_openapi_spec() -> dict[str, object]:
                     "operationId": "listTraces",
                     "parameters": [
                         {
+                            "name": "platform",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                            "description": "按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台",
+                        },
+                        {
                             "name": "group_id",
                             "in": "query",
                             "schema": {"type": "string"},
@@ -938,6 +944,12 @@ def generate_openapi_spec() -> dict[str, object]:
                     "summary": "Get generated report image history",
                     "operationId": "getReportHistory",
                     "parameters": [
+                        {
+                            "name": "platform",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                            "description": "按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台",
+                        },
                         {
                             "name": "limit",
                             "in": "query",

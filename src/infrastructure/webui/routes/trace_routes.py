@@ -163,6 +163,7 @@ class TraceRoutes:
                 sort_order=query_dto.get("sort_order", "desc"),
                 before_time=before_time,
                 before_id=before_id,
+                platform=request.query.get("platform"),
             )
             return json_response(
                 {
