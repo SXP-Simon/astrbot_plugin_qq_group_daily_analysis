@@ -23,3 +23,25 @@ async def test_discovery_continues_after_failure_and_filters_groups():
     resolver = ScheduledTargetResolver(None, manager)
     assert await resolver.get_all_groups() == [("actual", "1")]
     adapters["registered"].get_group_list.assert_awaited_once()
+@pytest.mark.asyncio
+async def test_same_group_discovery_is_ambiguous_but_explicit_names_are_isolated():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+    from src.infrastructure.scheduler.target_resolver import ScheduledTargetResolver
+
+    adapters = {
+        name: SimpleNamespace(platform_id=name, get_group_info=AsyncMock(return_value=SimpleNamespace(group_name=f"群-{name}")))
+        for name in ("first", "second")
+    }
+    manager = Mock()
+    manager.get_all_adapters.return_value = adapters
+    manager.is_plugin_enabled.return_value = True
+    manager.get_adapter.side_effect = adapters.get
+    manager.get_adapter_platform_id.side_effect = lambda adapter: adapter.platform_id
+    resolver = ScheduledTargetResolver(Mock(), manager)
+    assert await resolver.get_platform_id_for_group("123") is None
+    assert await resolver.get_group_name_safe("123", "first") == "群-first"
+    assert await resolver.get_group_name_safe("123", "second") == "群-second"
+    assert await resolver.get_group_name_safe("123", "first") == "群-first"
+
+
