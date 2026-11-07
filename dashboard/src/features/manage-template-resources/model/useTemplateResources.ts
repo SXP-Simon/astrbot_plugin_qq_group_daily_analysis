@@ -64,17 +64,18 @@ export function useTemplateResources(cdnBaseUrl: string, refreshVersion = 0) {
     if (refreshVersion > 0) void refresh();
   }, [refreshVersion, refresh]);
 
-  const download = async (theme?: string) => {
-    if (!status || busy.current) return;
+  const download = async (theme?: string): Promise<boolean> => {
+    if (!status || busy.current) return false;
     const cdn = cdnBaseUrlSchema.safeParse(cdnBaseUrl);
     if (!cdn.success) {
       setError(cdn.error.issues[0].message);
-      return;
+      return false;
     }
     const queue = status.groups
       .filter((group) => !theme || group.theme === theme)
       .flatMap((group) => group.files.filter((file) => !file.available));
-    if (!queue.length) return;
+    if (!queue.length) return false;
+    let saved = 0;
     batch.current = new DownloadBatch();
     setCancelled(false);
     busy.current = true;
@@ -88,7 +89,10 @@ export function useTemplateResources(cdnBaseUrl: string, refreshVersion = 0) {
         if (!file) return;
         try {
           await batch.current.run((id) => downloadTemplateResource(file.name, cdn.data, id));
-          if (mounted.current) setProgress((value) => ({ ...value, done: value.done + 1 }));
+          if (mounted.current) {
+            saved++;
+            setProgress((value) => ({ ...value, done: value.done + 1 }));
+          }
           if (mounted.current)
             setStatus(
               (current) =>
@@ -124,6 +128,7 @@ export function useTemplateResources(cdnBaseUrl: string, refreshVersion = 0) {
       busy.current = false;
       if (mounted.current) setRunning(false);
     }
+    return mounted.current && saved > 0;
   };
 
   return {

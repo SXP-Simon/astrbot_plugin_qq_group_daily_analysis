@@ -58,7 +58,7 @@ describe("按主题下载素材", () => {
     });
     const { result } = renderHook(() => useTemplateResources("https://fastly.jsdelivr.net"));
     await waitFor(() => expect(result.current.status).not.toBeNull());
-    let running: Promise<void> | undefined;
+    let running: Promise<boolean> | undefined;
     act(() => {
       running = result.current.download();
     });
@@ -127,7 +127,7 @@ describe("按主题下载素材", () => {
       useTemplateResources("https://fastly.jsdelivr.net"),
     );
     await waitFor(() => expect(result.current.status).not.toBeNull());
-    let running: Promise<void> | undefined;
+    let running: Promise<boolean> | undefined;
     act(() => {
       running = result.current.download();
     });
