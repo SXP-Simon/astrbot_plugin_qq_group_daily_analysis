@@ -13,6 +13,8 @@ export interface ListTracesParams {
   end_time?: number;
   sort_by?: string;
   sort_order?: string;
+  before_time?: number;
+  before_id?: string;
   [key: string]: unknown;
 }
 
@@ -42,9 +44,12 @@ export function invalidateTraceCache(traceId?: string): void {
 
 export async function fetchTraceList(
   params: ListTracesParams,
-): Promise<{ items: TraceRecord[]; total: number }> {
-  const res = await apiGet<{ items: TraceRecord[]; total: number }>("traces", params);
-  const data = extractData<{ items: TraceRecord[]; total: number }>(res);
+): Promise<{ items: TraceRecord[]; total: number; has_more?: boolean }> {
+  const res = await apiGet<{ items: TraceRecord[]; total: number; has_more?: boolean }>(
+    "traces",
+    params,
+  );
+  const data = extractData<{ items: TraceRecord[]; total: number; has_more?: boolean }>(res);
   if (data && Array.isArray(data.items)) {
     return data;
   }

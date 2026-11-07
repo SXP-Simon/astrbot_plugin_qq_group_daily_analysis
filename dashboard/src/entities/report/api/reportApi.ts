@@ -7,6 +7,9 @@ export interface ListReportsParams {
   offset?: number;
   group_id?: string;
   search?: string;
+  start_time?: number;
+  end_time?: number;
+  sort_order?: "asc" | "desc";
   [key: string]: unknown;
 }
 
