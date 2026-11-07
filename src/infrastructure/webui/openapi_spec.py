@@ -1907,6 +1907,7 @@ def generate_openapi_spec() -> dict[str, object]:
                 "IncrementalCursorInfo": {
                     "type": "object",
                     "properties": {
+                        "timestamp": {"type": "number", "nullable": True},
                         "group_id": {"type": "string"},
                         "last_analyzed_timestamp": {"type": "number"},
                         "last_message_timestamp": {"type": "number"},

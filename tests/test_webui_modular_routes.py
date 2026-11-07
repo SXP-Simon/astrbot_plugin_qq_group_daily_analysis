@@ -640,3 +640,29 @@ async def test_rerender_date_does_not_guess_unrelated_latest_trace(
     )
     await ReportRoutes(mock_trace_store, service).api_rerender_report()
     assert service.rerender_report.call_args.kwargs["trace_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_incremental_cursor_contract_preserves_message_time(mock_trace_store):
+    from astrbot.api.web import PluginMultiDict
+    from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.web_compat import request as proxy_request
+
+    store = AsyncMock()
+    store.get_all_batches_with_details.return_value = [
+        {"timestamp": 999, "last_message_timestamp": 123},
+        {"timestamp": 1000, "last_message_timestamp": 456},
+        {"timestamp": 2000},
+    ]
+    store.get_last_analyzed_cursor.return_value = (120, {"one", "two"})
+    routes = DataManagementRoutes(mock_trace_store, MagicMock(incremental_store=store))
+    target = MagicMock(query=PluginMultiDict([("group_id", "telegram:-1001")]))
+    with patch.object(proxy_request, "_get_target", return_value=target):
+        result = await routes.api_get_incremental_batches()
+    body = result["data"] if "status" in result.get("data", {}) else result
+    assert body["data"]["cursor"] == {
+        "timestamp": 120,
+        "group_id": "telegram:-1001",
+        "last_analyzed_timestamp": 120,
+        "last_message_timestamp": 456,
+        "tracked_message_ids_count": 2,
+    }

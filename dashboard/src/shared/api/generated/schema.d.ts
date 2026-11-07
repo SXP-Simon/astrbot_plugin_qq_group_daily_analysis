@@ -1094,6 +1094,7 @@ export interface components {
             [key: string]: unknown;
         };
         IncrementalCursorInfo: {
+            timestamp?: number | null;
             group_id: string;
             last_analyzed_timestamp: number;
             last_message_timestamp: number;

@@ -3852,6 +3852,10 @@
       "IncrementalCursorInfo": {
         "type": "object",
         "properties": {
+          "timestamp": {
+            "type": "number",
+            "nullable": true
+          },
           "group_id": {
             "type": "string"
           },

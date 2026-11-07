@@ -363,6 +363,20 @@ class DataManagementRoutes:
                         "batches": batches,
                         "cursor": {
                             "timestamp": cursor_ts,
+                            "group_id": group_id,
+                            "last_analyzed_timestamp": cursor_ts or 0,
+                            "last_message_timestamp": max(
+                                (
+                                    value
+                                    for batch in batches
+                                    if isinstance(
+                                        value := batch.get("last_message_timestamp"),
+                                        (int, float),
+                                    )
+                                    and not isinstance(value, bool)
+                                ),
+                                default=0,
+                            ),
                             "tracked_message_ids_count": len(cursor_msg_ids),
                         },
                     },
