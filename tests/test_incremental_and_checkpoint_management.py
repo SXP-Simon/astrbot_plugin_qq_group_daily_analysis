@@ -788,3 +788,36 @@ async def test_incremental_final_report_aggregates_only_in_window_batches(
     assert "周一已结题旧话题" not in topic_titles
     # 验证消息量仅为周三当天的 40 条
     assert analysis_result["statistics"].message_count == 40
+
+
+def test_checkpoint_list_ties_and_read_snapshot(temp_db, monkeypatch):
+    from contextlib import contextmanager
+    store = CheckpointStore(temp_db)
+    writer = CheckpointStore(temp_db)
+    for trace in ["a", "c", "b"]:
+        store.save_checkpoint("group", "2026-11-07", "LLM_ANALYSIS", {}, trace_id=trace)
+    with store._get_connection() as conn:
+        conn.execute("UPDATE stage_checkpoints SET created_at = 100")
+    first, total = store.list_all_checkpoints(limit=2)
+    second, _ = store.list_all_checkpoints(limit=2, offset=2)
+    assert total == 3
+    assert [item["trace_id"] for item in first + second] == ["c", "b", "a"]
+    original = store._get_connection
+    inserted = False
+    @contextmanager
+    def interleaved_connection():
+        with original() as conn:
+            def before_select(sql):
+                nonlocal inserted
+                if "SELECT checkpoint_id," in sql and not inserted:
+                    inserted = True
+                    writer.save_checkpoint("group", "2026-11-07", "LLM_ANALYSIS", {}, trace_id="new")
+            conn.set_trace_callback(before_select)
+            yield conn
+    with monkeypatch.context() as patch:
+        patch.setattr(store, "_get_connection", interleaved_connection)
+        items, count = store.list_all_checkpoints(limit=10)
+    assert inserted
+    assert count == len(items) == 3
+    assert all(item["trace_id"] != "new" for item in items)
+    assert store.list_all_checkpoints()[1] == 4

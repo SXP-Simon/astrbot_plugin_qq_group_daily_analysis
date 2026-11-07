@@ -406,6 +406,7 @@ class CheckpointStore(ICheckpointStore):
         where_clause = " AND ".join(conditions)
 
         with self._get_connection() as conn:
+            conn.execute("BEGIN")
             count_row = conn.execute(
                 f"SELECT COUNT(*) as total FROM stage_checkpoints WHERE {where_clause}",
                 params,
@@ -416,7 +417,7 @@ class CheckpointStore(ICheckpointStore):
                 SELECT checkpoint_id, group_id, date_str, stage_name, created_at, expire_at, trace_id, LENGTH(data_json) as data_size
                 FROM stage_checkpoints
                 WHERE {where_clause}
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, checkpoint_id DESC
                 LIMIT ? OFFSET ?
             """
             rows = conn.execute(query_sql, [*params, limit, offset]).fetchall()
