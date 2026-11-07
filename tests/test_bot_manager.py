@@ -182,6 +182,17 @@ def test_get_adapter_platform_id(mock_config_manager):
     assert bm.get_adapter_platform_id(None) == ""
 
 
+def test_protocol_alias_does_not_choose_between_multiple_instances(mock_config_manager):
+    bm = BotManager(mock_config_manager)
+    for instance in ("first", "second"):
+        bot = Mock()
+        bot.call_action = Mock()
+        bm.set_bot_instance(bot, platform_id=instance, platform_name="aiocqhttp")
+    assert bm.get_adapter_platform_id(bm.get_adapter(" FIRST ")) == "first"
+    with pytest.raises(ValueError, match="准确的实例 ID"):
+        bm.get_adapter("aiocqhttp")
+
+
 # ==========================================
 # 4. 自动发现平台与懒加载测试
 # ==========================================

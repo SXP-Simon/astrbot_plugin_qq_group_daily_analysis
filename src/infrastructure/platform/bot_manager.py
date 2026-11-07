@@ -349,6 +349,9 @@ class BotManager:
         3. 标准协议类型名称匹配（如传入 'aiocqhttp'、'telegram' 时匹配对应协议适配器实例）
 
         若未指定 platform_id 或未精准匹配到任何有效适配器，返回 None。
+
+        Raises:
+            ValueError: 非精确标识匹配多个实例，无法唯一定位目标。
         """
         # 如果没有任何适配器，尝试全局刷新一次
         if not self._adapters:
@@ -374,9 +377,17 @@ class BotManager:
 
         # 2. 大小写与空格不敏感匹配
         clean_id_lower = clean_id.lower()
-        for k, adp in self._adapters.items():
-            if k.strip().lower() == clean_id_lower:
-                return adp
+        candidates = [
+            adp
+            for k, adp in self._adapters.items()
+            if k.strip().lower() == clean_id_lower
+        ]
+        if len(candidates) == 1:
+            return candidates[0]
+        if len(candidates) > 1:
+            raise ValueError(
+                f"平台标识 {platform_id} 对应多个实例，请选择准确的实例 ID"
+            )
 
         # 3. 通过 PlatformAdapterFactory 注册类型匹配（当调用方传入标准协议名如 aiocqhttp/telegram 时）
         if PlatformAdapterFactory.is_supported(clean_id_lower):
@@ -384,12 +395,17 @@ class BotManager:
                 clean_id_lower
             )
             if expected_adapter_cls:
-                for k, adp in self._adapters.items():
-                    if isinstance(adp, expected_adapter_cls):
-                        logger.info(
-                            f"[BotManager] 平台类型 '{platform_id}' 精准匹配到已注册适配器 '{k}'"
-                        )
-                        return adp
+                candidates = [
+                    adp
+                    for adp in self._adapters.values()
+                    if isinstance(adp, expected_adapter_cls)
+                ]
+                if len(candidates) == 1:
+                    return candidates[0]
+                if len(candidates) > 1:
+                    raise ValueError(
+                        f"存在多个 {platform_id} 接入，请选择准确的实例 ID"
+                    )
 
         logger.warning(
             f"[BotManager] 未找到匹配平台 '{platform_id}' 的适配器。当前已有适配器列表: {list(self._adapters.keys())}"
