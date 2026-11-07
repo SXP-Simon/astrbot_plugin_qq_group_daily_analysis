@@ -134,13 +134,15 @@ it("从抽屉新建源码与安装模板时，弹窗显示在抽屉上方", asyn
   fireEvent.click(await screen.findByText("新建模板源码"));
   const editor = await modalLayer("上传或新建文件");
   const drawer = document.querySelector<HTMLElement>(".ant-drawer")!;
-  const drawerLayer = Number(getComputedStyle(drawer).zIndex);
   expect(editor).toBeVisible();
   fireEvent.click(within(editor).getByText(/取.?消/));
   fireEvent.click(screen.getByText("安装模板包"));
-  const installTitle = await screen.findByText("安装自定义报告模板");
-  const install = installTitle.closest(".ant-modal-wrap")!;
-  expect(Number(getComputedStyle(install).zIndex)).toBeGreaterThan(drawerLayer);
+  const install = await screen.findByRole("dialog", { name: "安装自定义报告模板" });
+  expect(install).toBeVisible();
+  await waitFor(() => expect(install).toContainElement(document.activeElement as HTMLElement));
+  fireEvent.keyDown(install, { key: "Escape" });
+  await waitFor(() => expect(install).not.toBeVisible());
+  expect(drawer).toBeVisible();
 }, 20000);
 
 it("模板类型直接可见且筛选传给接口，报告区只提供相关类型", async () => {
