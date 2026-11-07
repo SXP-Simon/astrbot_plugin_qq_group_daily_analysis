@@ -156,11 +156,15 @@ it("删除只提交一次，失败保留原因，切换范围后不刷新旧筛�
   expect(result.current.ckptFilterGroup).toBe("b");
 });
 it("群聊选项读取失败保留旧选项，卸载时使未完成列表失效", async () => {
-  vi.mocked(fetchCheckpointGroups).mockResolvedValueOnce(["a"]).mockRejectedValueOnce(new Error());
+  vi.mocked(fetchCheckpointGroups)
+    .mockResolvedValueOnce([{ group_id: "a", group_name: "示例群", platform: "telegram" }])
+    .mockRejectedValueOnce(new Error());
   const { result, unmount } = renderHook(useCheckpointsViewModel);
   await act(async () => result.current.refreshCheckpointGroups());
   await act(async () => result.current.refreshCheckpointGroups());
-  expect(result.current.ckptGroups).toEqual(["a"]);
+  expect(result.current.ckptGroups).toEqual([
+    { group_id: "a", group_name: "示例群", platform: "telegram" },
+  ]);
   expect(result.current.checkpointGroupsError).not.toBe("");
   const pending = deferred<CheckpointsListResponse>();
   vi.mocked(fetchCheckpointsList).mockReturnValueOnce(pending.promise);
@@ -173,4 +177,22 @@ it("群聊选项读取失败保留旧选项，卸载时使未完成列表失效"
     pending.resolve({ items: [item], total: 1 });
     await request;
   });
+});
+
+it("平台筛选在页码修正后继续保留，切换平台立即隔离旧结果", async () => {
+  const { result } = renderHook(useCheckpointsViewModel);
+  vi.mocked(fetchCheckpointsList).mockResolvedValue({ items: [], total: 1 });
+  await act(async () =>
+    result.current.loadCheckpoints({ page: 5, group: "123", platform: "telegram" }),
+  );
+  expect(fetchCheckpointsList).toHaveBeenLastCalledWith(
+    expect.objectContaining({ offset: 0, group_id: "123", platform: "telegram" }),
+  );
+  await act(async () =>
+    result.current.loadCheckpoints({ page: 1, group: undefined, platform: "" }),
+  );
+  expect(result.current.ckptFilterPlatform).toBe("");
+  expect(fetchCheckpointsList).toHaveBeenLastCalledWith(
+    expect.objectContaining({ group_id: undefined, platform: "" }),
+  );
 });

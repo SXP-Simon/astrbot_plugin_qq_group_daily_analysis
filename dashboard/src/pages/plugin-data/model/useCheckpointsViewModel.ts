@@ -12,6 +12,7 @@ interface CheckpointQuery {
   page: number;
   pageSize: number;
   group?: string;
+  platform?: string;
   date?: string;
   stage?: string;
 }
@@ -24,7 +25,7 @@ export function useCheckpointsViewModel() {
   const groupRequest = useRef(0);
   const deleting = useRef(false);
   const mounted = useRef(true);
-  const [ckptGroups, setGroups] = useState<string[]>([]);
+  const [ckptGroups, setGroups] = useState<Awaited<ReturnType<typeof fetchCheckpointGroups>>>([]);
   const [checkpointGroupsError, setGroupsError] = useState("");
   const [checkpoints, setItems] = useState<CheckpointItem[]>([]);
   const [checkpointsTotal, setTotal] = useState(0);
@@ -79,6 +80,7 @@ export function useCheckpointsViewModel() {
         limit: next.pageSize,
         offset: (next.page - 1) * next.pageSize,
         group_id: next.group,
+        platform: next.platform,
         date_str: next.date,
         stage_name: next.stage,
       });
@@ -92,6 +94,7 @@ export function useCheckpointsViewModel() {
           limit: next.pageSize,
           offset: (lastPage - 1) * next.pageSize,
           group_id: next.group,
+          platform: next.platform,
           date_str: next.date,
           stage_name: next.stage,
         });
@@ -186,6 +189,7 @@ export function useCheckpointsViewModel() {
     checkpointsPage: query.page,
     checkpointsPageSize: query.pageSize,
     ckptFilterGroup: query.group,
+    ckptFilterPlatform: query.platform,
     ckptFilterDate: query.date,
     ckptFilterStage: query.stage,
     loadingCheckpoints,

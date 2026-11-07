@@ -126,16 +126,23 @@ export async function resetIncrementalGroup(
 
 // ---------------- 阶段产物 Checkpoint 管理 API ----------------
 
-export async function fetchCheckpointGroups(): Promise<string[]> {
-  const res = await apiGet<{ groups: string[] }>("data/checkpoints/groups");
-  const data = extractData<{ groups: string[] }>(res);
-  return data?.groups ?? [];
+export async function fetchCheckpointGroups() {
+  const res = await apiGet<unknown>("data/checkpoints/groups");
+  const data = z
+    .object({
+      sessions: z.array(
+        z.object({ group_id: z.string(), group_name: z.string(), platform: z.string() }),
+      ),
+    })
+    .parse(extractData<unknown>(res));
+  return data.sessions;
 }
 
 export async function fetchCheckpointsList(params?: {
   limit?: number;
   offset?: number;
   group_id?: string;
+  platform?: string;
   date_str?: string;
   stage_name?: string;
   trace_id?: string;

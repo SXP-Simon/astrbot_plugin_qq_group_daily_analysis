@@ -1,3 +1,4 @@
+import { GroupFilters } from "../../../../entities/group/ui/GroupFilters";
 import { IconRefresh } from "@tabler/icons-react";
 import { Button } from "../../../../shared/ui/button";
 import { Input } from "../../../../shared/ui/input";
@@ -24,24 +25,19 @@ export function CheckpointFilterBar({ vm }: { vm: ReturnType<typeof usePluginDat
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-end gap-3">
-        <label className="grid w-64 max-w-full gap-1 text-sm">
-          群聊
-          <NativeSelect
-            value={vm.ckptFilterGroup || ""}
-            onChange={(event) =>
-              void vm.loadCheckpoints({ page: 1, group: event.target.value || undefined })
+        <div className="grid w-full gap-3 sm:w-[36rem] sm:grid-cols-[1fr_2fr]">
+          <GroupFilters
+            groups={vm.ckptGroups}
+            selectedGroup={vm.ckptFilterGroup}
+            selectedPlatform={vm.ckptFilterPlatform}
+            onPlatformChange={(platform) =>
+              void vm.loadCheckpoints({ page: 1, platform, group: undefined })
             }
-          >
-            <option value="">全部群聊</option>
-            {[
-              ...new Set([...vm.ckptGroups, ...(vm.ckptFilterGroup ? [vm.ckptFilterGroup] : [])]),
-            ].map((group) => (
-              <option key={group} value={group}>
-                {group}
-              </option>
-            ))}
-          </NativeSelect>
-        </label>
+            onGroupChange={(group, platform) =>
+              void vm.loadCheckpoints({ page: 1, group, platform })
+            }
+          />
+        </div>
         <label className="grid w-48 max-w-full gap-1 text-sm">
           分析归属日期
           <Input
@@ -74,6 +70,7 @@ export function CheckpointFilterBar({ vm }: { vm: ReturnType<typeof usePluginDat
             void vm.loadCheckpoints({
               page: 1,
               group: undefined,
+              platform: undefined,
               date: undefined,
               stage: undefined,
             })

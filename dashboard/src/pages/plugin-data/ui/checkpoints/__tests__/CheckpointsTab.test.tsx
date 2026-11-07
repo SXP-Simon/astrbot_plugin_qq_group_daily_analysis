@@ -32,19 +32,21 @@ it("筛选清空与页码跳转使用明确参数，删除确认绑定原任务�
     ...result.current,
     checkpoints: [item],
     checkpointsTotal: 62,
-    ckptGroups: ["a", "b"],
+    ckptGroups: ["a", "b"].map((group_id) => ({ group_id, group_name: group_id, platform: "" })),
     ckptFilterGroup: "a",
     loadCheckpoints: load,
     handleDeleteCheckpoint: remove,
     handleOpenCkptDetail: detail,
   };
   const { rerender } = render(<CheckpointsTab vm={vm} />);
-  fireEvent.change(screen.getByLabelText("群聊"), { target: { value: "" } });
-  expect(load).toHaveBeenLastCalledWith({ page: 1, group: undefined });
+  fireEvent.click(screen.getByRole("button", { name: /选择群聊：/ }));
+  fireEvent.click(screen.getByRole("button", { name: "全部群聊" }));
+  expect(load).toHaveBeenLastCalledWith({ page: 1, group: undefined, platform: undefined });
   fireEvent.click(screen.getByRole("button", { name: "清空筛选" }));
   expect(load).toHaveBeenLastCalledWith({
     page: 1,
     group: undefined,
+    platform: undefined,
     date: undefined,
     stage: undefined,
   });
@@ -71,7 +73,7 @@ it("跨页选择保持，换筛选后清除选择", () => {
   const vm = {
     ...result.current,
     checkpoints: [item],
-    ckptGroups: ["a", "b"],
+    ckptGroups: ["a", "b"].map((group_id) => ({ group_id, group_name: group_id, platform: "" })),
     ckptFilterGroup: "a",
   };
   const { rerender } = render(<CheckpointsTab vm={vm} />);

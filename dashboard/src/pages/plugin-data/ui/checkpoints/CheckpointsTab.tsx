@@ -36,7 +36,7 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
   const clear = selection.clear;
   useEffect(() => {
     clear();
-  }, [vm.ckptFilterGroup, vm.ckptFilterDate, vm.ckptFilterStage, clear]);
+  }, [vm.ckptFilterPlatform, vm.ckptFilterGroup, vm.ckptFilterDate, vm.ckptFilterStage, clear]);
   const keys = locators.map(recordKey);
   const busy = selection.busy || vm.checkpointDeleting;
   return (
@@ -109,7 +109,12 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                       }
                     />
                   </td>
-                  <td className="max-w-40 break-all p-3 font-mono text-xs">{item.group_id}</td>
+                  <td className="max-w-56 break-words p-3">
+                    <span>{item.group_name || "未记录群名"}</span>
+                    <span className="mt-1 block break-all font-mono text-xs text-muted-foreground">
+                      {item.platform || "未记录平台"} · {item.group_id}
+                    </span>
+                  </td>
                   <td className="whitespace-nowrap p-3 text-xs tabular-nums">{item.date_str}</td>
                   <td className="p-3">
                     <span className="text-creative">{formatStageName(item.stage_name)}</span>
