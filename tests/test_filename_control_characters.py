@@ -37,9 +37,23 @@ def test_legacy_component_sanitizer_removes_all_controls_without_changing_displa
 
 
 @pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("a\x00b\x11c\x1fd\x7fe", "abcde"),
+        ("正常群名", "正常群名"),
+    ],
+)
+def test_control_stripping_handles_mixed_controls_and_unchanged_plain_text(
+    value, expected
+):
+    assert strip_control_characters(value) == expected
+
+
+@pytest.mark.parametrize(
     "group_name,expected",
     [
         ("", ""),
+        ("A\x11B\x7fC", "ABC"),
         ("\x00\x10\x11\x1f\x7f", ""),
         (' \t\n/\\:*?"<>|[]{}\r', ""),
         (" 日常 [交流]{摄影}🔥 ", "日常交流摄影🔥"),
