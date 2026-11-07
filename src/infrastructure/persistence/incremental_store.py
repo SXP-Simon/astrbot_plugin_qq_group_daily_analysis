@@ -26,7 +26,7 @@ from ...domain.entities.incremental_state import (
     IncrementalBatchPayload,
 )
 from ...domain.repositories.persistence_repository import IIncrementalStore
-from ...domain.value_objects.incremental_session import IncrementalSession
+from ...domain.value_objects.group_session import GroupSession
 from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 
@@ -68,7 +68,7 @@ class IncrementalStore(IIncrementalStore):
         self,
         star_instance: Star,
         *,
-        _scope: IncrementalSession | None = None,
+        _scope: GroupSession | None = None,
         _root: IncrementalStore | None = None,
     ) -> None:
         """
@@ -105,7 +105,7 @@ class IncrementalStore(IIncrementalStore):
                 )
                 raw = await self.plugin.get_kv_data(key, [])
                 if self._scope:
-                    sessions: set[IncrementalSession] = set()
+                    sessions: set[GroupSession] = set()
                     for item in raw if is_object_list(raw) else []:
                         if (
                             is_string_mapping(item)
@@ -113,7 +113,7 @@ class IncrementalStore(IIncrementalStore):
                             and isinstance(item.get("platform_id"), str)
                         ):
                             sessions.add(
-                                IncrementalSession(
+                                GroupSession(
                                     str(item["platform_id"]), str(item["group_id"])
                                 )
                             )
@@ -191,7 +191,7 @@ class IncrementalStore(IIncrementalStore):
             await root._assert_scope(group_id)
             return root
         scoped = IncrementalStore(
-            root.plugin, _scope=IncrementalSession(platform_id, group_id), _root=root
+            root.plugin, _scope=GroupSession(platform_id, group_id), _root=root
         )
         async with root._migration_locks.setdefault(group_id, asyncio.Lock()):
             owner = cast(
@@ -229,13 +229,13 @@ class IncrementalStore(IIncrementalStore):
                 raise RuntimeError("增量会话目录暂时无法保存，请重试；已复制的数据保留")
         return scoped
 
-    async def get_tracked_sessions(self) -> list[IncrementalSession]:
+    async def get_tracked_sessions(self) -> list[GroupSession]:
         """列出新会话及尚未归属的旧群号。
 
         Returns:
             去重会话身份列表，不将同号的多个平台合并。
         """
-        sessions: set[IncrementalSession] = set()
+        sessions: set[GroupSession] = set()
         raw = await self.plugin.get_kv_data("incr_tracked_sessions_v2", [])
         for item in raw if is_object_list(raw) else []:
             if (
@@ -244,7 +244,7 @@ class IncrementalStore(IIncrementalStore):
                 and isinstance(item.get("platform_id"), str)
             ):
                 sessions.add(
-                    IncrementalSession(str(item["platform_id"]), str(item["group_id"]))
+                    GroupSession(str(item["platform_id"]), str(item["group_id"]))
                 )
         for group_id in await self.get_tracked_groups():
             owner = cast(
@@ -252,7 +252,7 @@ class IncrementalStore(IIncrementalStore):
                 await self.plugin.get_kv_data(self._legacy_owner_key(group_id), None),
             )
             sessions.add(
-                IncrementalSession(owner if isinstance(owner, str) else "", group_id)
+                GroupSession(owner if isinstance(owner, str) else "", group_id)
             )
         return sorted(sessions)
 

@@ -6,7 +6,7 @@ from copy import deepcopy
 import pytest
 
 from src.domain.entities.incremental_state import IncrementalBatch
-from src.domain.value_objects.incremental_session import IncrementalSession
+from src.domain.value_objects.group_session import GroupSession
 from src.infrastructure.persistence.incremental_store import IncrementalStore
 
 
@@ -64,7 +64,7 @@ async def test_legacy_data_is_claimed_once_and_original_keys_remain_as_backup():
     assert star.data["incr_batch_123_legacy"]["messages_count"] == 7
     with pytest.raises(ValueError, match="指定平台"):
         await root.get_batch_detail("123", "legacy")
-    assert await root.get_tracked_sessions() == [IncrementalSession("onebot-main", "123"), IncrementalSession("telegram-main", "123")]
+    assert await root.get_tracked_sessions() == [GroupSession("onebot-main", "123"), GroupSession("telegram-main", "123")]
 
 
 @pytest.mark.asyncio
@@ -86,7 +86,7 @@ async def test_failed_migration_can_retry_without_losing_old_data_or_claiming_ow
 async def test_concurrent_sessions_do_not_lose_registry_entries():
     root = IncrementalStore(MemoryStar())
     await asyncio.gather(*(root.for_session(group, platform) for group in ("123", "456") for platform in ("first", "second")))
-    assert set(await root.get_tracked_sessions()) == {IncrementalSession(platform, group) for group in ("123", "456") for platform in ("first", "second")}
+    assert set(await root.get_tracked_sessions()) == {GroupSession(platform, group) for group in ("123", "456") for platform in ("first", "second")}
 
 
 @pytest.mark.asyncio
@@ -113,7 +113,7 @@ async def test_registry_failure_after_copy_does_not_duplicate_legacy_into_second
     star.put_kv_data = failing_write
     with pytest.raises(RuntimeError, match="目录"):
         await root.for_session("123", "first")
-    assert await root.get_tracked_sessions() == [IncrementalSession("first", "123")]
+    assert await root.get_tracked_sessions() == [GroupSession("first", "123")]
     star.put_kv_data = write
     second = await root.for_session("123", "second")
     assert await second.get_batch_count("123") == 0
