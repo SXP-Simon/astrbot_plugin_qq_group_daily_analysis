@@ -84,3 +84,24 @@ it("单批删除和整群重置同步到列表、详情及游标", () => {
     Object.assign(mockIncrementalBatches, original);
   }
 });
+
+it("多页示例按时间倒序，分页条目不重复且页码越界会修正", () => {
+  const get = (page: number) =>
+    extractData<IncrementalBatchesResponse>(
+      mockHandlers["GET data/incremental/batches"]({ group_id: "123456789", page, page_size: 20 }),
+    )!;
+  const first = get(1),
+    last = get(99);
+  expect(first.total).toBeGreaterThan(20);
+  expect(first.batches).toHaveLength(20);
+  expect(last.page).toBe(2);
+  expect(new Set([...first.batches, ...last.batches].map((item) => item.batch_id)).size).toBe(
+    first.total,
+  );
+  for (const batch of [...first.batches, ...last.batches]) {
+    for (const topic of batch.topics ?? []) {
+      expect(topic.topic).toBeTruthy();
+      expect(topic).not.toHaveProperty("heat_score");
+    }
+  }
+});

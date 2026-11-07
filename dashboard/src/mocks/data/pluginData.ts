@@ -16,6 +16,9 @@ export const mockPluginDataOverview: PluginDataOverview = {
 const incrementalNow = Math.floor(Date.now() / 1000);
 
 export const mockIncrementalBatches: IncrementalBatchesResponse = {
+  total: 27,
+  page: 1,
+  page_size: 20,
   group_id: "123456789",
   cursor: {
     timestamp: incrementalNow - 86400,
@@ -43,18 +46,25 @@ export const mockIncrementalBatches: IncrementalBatchesResponse = {
       },
       golden_quotes_count: 1,
       golden_quotes: [
-        { content: "先把问题复现出来，修复就有了方向。", sender_nickname: "示例小林" },
+        {
+          content: "先把问题复现出来，修复就有了方向。",
+          sender: "示例小林",
+          reason: "用简单的话说明排查方法",
+          user_id: "demo-lin",
+        },
       ],
       topics: [
         {
-          title: "React 19 特性讨论",
-          summary: "探讨了 Action 与 Server Component 在企业级开发中的应用",
-          heat_score: 88,
+          topic: "React 19 特性讨论",
+          detail: "探讨了 Action 与 Server Component 在企业级开发中的应用",
+          contributors: ["示例小林", "示例小夏"],
+          contributor_ids: ["demo-lin", "demo-xia"],
         },
         {
-          title: "LLM Agent 状态机架构",
-          summary: "探讨了断点续跑与快照恢复的设计模式",
-          heat_score: 92,
+          topic: "LLM Agent 状态机架构",
+          detail: "探讨了断点续跑与快照恢复的设计模式",
+          contributors: ["示例小林", "示例小夏"],
+          contributor_ids: ["demo-lin", "demo-xia"],
         },
       ],
     },
@@ -65,14 +75,20 @@ export const mockIncrementalBatches: IncrementalBatchesResponse = {
       created_at_iso: new Date((incrementalNow - 21600) * 1000).toISOString(),
       messages_count: 650,
       characters_count: 11200,
-      topics_count: 4,
+      topics_count: 2,
       topics: [
         {
-          title: "TypeScript 5.8 新类型语法",
-          summary: "深入分析了严格空安全与内联优化",
-          heat_score: 80,
+          topic: "TypeScript 5.8 新类型语法",
+          detail: "深入分析了严格空安全与内联优化",
+          contributors: ["示例小林", "示例小夏"],
+          contributor_ids: ["demo-lin", "demo-xia"],
         },
-        { title: "群友摸鱼技术交流", summary: "分享了开源键盘与显示器选购心得", heat_score: 75 },
+        {
+          topic: "群友摸鱼技术交流",
+          detail: "分享了开源键盘与显示器选购心得",
+          contributors: ["示例小林", "示例小夏"],
+          contributor_ids: ["demo-lin", "demo-xia"],
+        },
       ],
     },
     {
@@ -82,10 +98,31 @@ export const mockIncrementalBatches: IncrementalBatchesResponse = {
       created_at_iso: new Date((incrementalNow - 3600) * 1000).toISOString(),
       messages_count: 470,
       characters_count: 8900,
-      topics_count: 2,
+      topics_count: 0,
     },
   ],
 };
+
+// 多页示例使用真实话题字段；明确标注示例参与者。
+for (let index = 0; index < 24; index += 1) {
+  const timestamp = incrementalNow - 45000 - index * 600;
+  mockIncrementalBatches.batches.push({
+    group_id: "123456789",
+    batch_id: `demo-batch-${String(index + 1).padStart(2, "0")}`,
+    timestamp,
+    created_at_iso: new Date(timestamp * 1000).toISOString(),
+    messages_count: 30 + index,
+    characters_count: 300 + index * 10,
+    topics: [
+      {
+        topic: `示例：周末交流 ${index + 1}`,
+        detail: "分享出游安排与做饭心得。",
+        contributors: ["示例小林"],
+        contributor_ids: ["demo-lin"],
+      },
+    ],
+  });
+}
 
 export const mockCheckpoints: CheckpointsListResponse = {
   total: 4,

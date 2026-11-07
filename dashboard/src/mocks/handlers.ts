@@ -742,23 +742,36 @@ export const mockHandlers = {
       ],
     },
   }),
-  "GET data/incremental/batches": (params?: Record<string, unknown>) => ({
-    status: "ok",
-    data: {
-      group_id: params?.group_id,
-      cursor:
-        params?.group_id === mockIncrementalBatches.group_id
-          ? mockIncrementalBatches.cursor
-          : {
-              group_id: String(params?.group_id || ""),
-              timestamp: 0,
-              last_analyzed_timestamp: 0,
-              last_message_timestamp: 0,
-              tracked_message_ids_count: 0,
-            },
-      batches: mockIncrementalBatches.batches.filter((item) => item.group_id === params?.group_id),
-    },
-  }),
+  "GET data/incremental/batches": (params?: Record<string, unknown>) => {
+    const batches = mockIncrementalBatches.batches
+      .filter((item) => item.group_id === params?.group_id)
+      .sort((a, b) => b.timestamp - a.timestamp || b.batch_id.localeCompare(a.batch_id));
+    const pageSize = Math.min(100, Math.max(1, Number(params?.page_size) || 20));
+    const page = Math.min(
+      Math.max(1, Number(params?.page) || 1),
+      Math.max(1, Math.ceil(batches.length / pageSize)),
+    );
+    return {
+      status: "ok",
+      data: {
+        group_id: params?.group_id,
+        cursor:
+          params?.group_id === mockIncrementalBatches.group_id
+            ? mockIncrementalBatches.cursor
+            : {
+                group_id: String(params?.group_id || ""),
+                timestamp: 0,
+                last_analyzed_timestamp: 0,
+                last_message_timestamp: 0,
+                tracked_message_ids_count: 0,
+              },
+        total: batches.length,
+        page,
+        page_size: pageSize,
+        batches: batches.slice((page - 1) * pageSize, page * pageSize),
+      },
+    };
+  },
   "GET data/incremental/batch/detail": (params?: Record<string, unknown>) => {
     const response = managedRecordMockHandlers["GET plugin-data/records/detail"]({
       kind: "batch",
