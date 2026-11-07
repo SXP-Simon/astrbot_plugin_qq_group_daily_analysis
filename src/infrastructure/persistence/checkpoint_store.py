@@ -132,8 +132,7 @@ class CheckpointStore(ICheckpointStore):
     ) -> object | None:
         """读取有效的阶段产物快照。
 
-        若指定 trace_id 则优先匹配该任务的专属快照，杜绝跨任务脏读；
-        若未指定或专属快照未命中，可回退匹配按天快照。
+        指定 trace_id 时只匹配该任务；未指定时保留按群及日期的旧只读查询。
         """
         now = time.time()
 
@@ -154,20 +153,13 @@ class CheckpointStore(ICheckpointStore):
                         (str(group_id), str(date_str), str(trace_id), stage_name, now),
                     ).fetchone()
 
-            # 3. 回退查找通用快照：
-            # 若调用方显式指定了 trace_id，仅允许回退到老格式（trace_id = ''）的快照，严禁跨任务脏读其他 trace_id；
-            # 若调用方未指定 trace_id，则允许获取该群该日期最新的该阶段快照。
-            if not row:
-                if trace_id:
-                    row = conn.execute(
-                        "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND stage_name = ? AND (trace_id = '' OR trace_id IS NULL) AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
-                        (str(group_id), str(date_str), stage_name, now),
-                    ).fetchone()
-                else:
-                    row = conn.execute(
-                        "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
-                        (str(group_id), str(date_str), stage_name, now),
-                    ).fetchone()
+            # 精确任务查询不得回退到归属不明的群级旧快照。
+            # 无任务身份的旧查询仍保留原有只读行为。
+            if not row and not trace_id:
+                row = conn.execute(
+                    "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                    (str(group_id), str(date_str), stage_name, now),
+                ).fetchone()
 
             if not row:
                 return None

@@ -434,13 +434,13 @@ def test_checkpoint_store_corner_cases_expiration_and_fallback(temp_db: Path):
     assert store.get_checkpoint("legacy_grp", "2026-09-10", "LLM_ANALYSIS") == {
         "legacy": True
     }
-    # 传入新 trace_id 读取也能平滑回退到老格式
+    # 指定任务时不能借用归属不明的旧快照
     assert store.get_checkpoint(
         "legacy_grp",
         "2026-09-10",
         "LLM_ANALYSIS",
         trace_id="non_exist_trace_id",
-    ) == {"legacy": True}
+    ) is None
 
     # 4. 严防跨任务脏读：若存在 Task A 快照，Task B 查找缺失快照时绝不能脏读 Task A 的快照
     store.save_checkpoint(
