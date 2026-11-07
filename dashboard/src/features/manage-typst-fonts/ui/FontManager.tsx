@@ -58,6 +58,10 @@ export function FontManager({
 
   return (
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Typography.Text type="secondary">
+        这里的 TTF / OTF 字体仅供插件本地 Typst 渲染使用，不影响 HTML / T2I
+        的网页字体。初音中文标题使用约 14 KB 的八字 TTF 子集；网页端仍使用 WOFF2。
+      </Typography.Text>
       <Typography.Text>
         按模板补齐缺失字体，共享字体只保存一份。服务器下载不通时，可通过下方「手动获取」在浏览器下载，再点击对应行「上传此字体」，自动使用插件所需文件名。替换或移除会影响所有依赖该字体的模板。
       </Typography.Text>
@@ -113,7 +117,8 @@ export function FontManager({
         <ExternalLink href="https://openfontlicense.org/open-font-license-official-text/">
           SIL OFL 1.1
         </ExternalLink>
-        ，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。
+        ，保留字体版权和许可；初音标题字库为已更名的子集；自行上传字体前请确认授权。BlueArchive
+        已改用 Noto Sans。
       </Typography.Text>
       {(vm.downloadQueue.error || vm.downloadQueue.progress.total > 0) && (
         <FontDownloadProgress download={vm.downloadQueue} />

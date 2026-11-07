@@ -16,6 +16,10 @@ export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
     <Space direction="vertical" style={{ width: "100%", marginTop: 12 }}>
       <Typography.Text strong>Typst 字体</Typography.Text>
       <Typography.Text type="secondary">
+        这里的 TTF / OTF 字体仅供插件本地 Typst 渲染使用，不影响 HTML / T2I
+        的网页字体。初音中文标题使用约 14 KB 的八字 TTF 子集；网页端仍使用 WOFF2。
+      </Typography.Text>
+      <Typography.Text type="secondary">
         按模板补齐缺失字体，包含简体、繁体、日文、Emoji
         和符号等共享基础字库。下载前会重新核对缺失项，CDN 失败自动尝试 Raw
         备用源。所有字体保存在本插件 data 目录，跨模板复用。
@@ -113,7 +117,8 @@ export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
         <ExternalLink href="https://openfontlicense.org/open-font-license-official-text/">
           SIL OFL 1.1
         </ExternalLink>
-        ，下载保留上游原文件及版权信息；自行上传字体前请确认授权。BlueArchive 已改用 Noto Sans。
+        ，保留字体版权和许可；初音标题字库为已更名的子集；自行上传字体前请确认授权。BlueArchive
+        已改用 Noto Sans。
       </Typography.Text>
       {(vm.downloadQueue.error || vm.downloadQueue.progress.total > 0) && (
         <FontDownloadProgress download={vm.downloadQueue} />
