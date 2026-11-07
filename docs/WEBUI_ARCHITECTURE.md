@@ -89,7 +89,7 @@
 * 将多个实体和功能有机组合为自包含的业务组件（Organisms）：
   * `ActiveTaskBoard.tsx`：活跃任务看板与实时步进计时器。
   * `TraceDrawer.tsx`：保留调用接口的任务诊断窗口，使用 shadcn Dialog 组织 Summary、SpanTimeline、TraceLogViewer；宽屏并排显示阶段树与记录，窄屏改为单列。
-  * `AnalysisTimelinePicker.tsx`：按时间倒序的任务选择条，直接显示平台、状态与记录的消耗和耗时。支持原生触屏滑动、鼠标拖动与方向键、Home / End；仅选中项进入 Tab 顺序，切换取消旧滚动帧，尊重减少动态效果，不滚动整页或虚构缺失指标。
+  * `AnalysisTimelinePicker.tsx`：按时间倒序的任务选择条，直接显示平台、状态与记录的消耗和耗时。支持原生触屏滑动、鼠标拖动与方向键、Home / End；鼠标纵向滚轮在列表可移动时转为横向滚动，到达首尾后放行页面滚动，横向手势与缩放保持原生行为。仅选中项进入 Tab 顺序，切换取消旧滚动帧，尊重减少动态效果，不滚动整页或虚构缺失指标。
   * `OverviewTrendCharts.tsx`：分析次数、Token 消耗和服务商分布，使用共享范围选择器与原生明细表。`useOverviewTrends` 管理范围、校验响应及隔离迟到请求；旧图保留自身范围标识，零消耗不借用历史总量。图表配置独立于请求状态，沿用 ECharts、主题变量与纯文本提示。
   * `TokenChartWidget.tsx`：按模块比较记录的 Token 总数，保留输入、输出和零消耗明细。可仅接收概要总数，缺少明细不补零；模块合计不一致时展示原始记录与说明，不编造其他模块。ECharts 采用主题变量和纯文本提示，表格支持键盘访问。
   * `FieldRenderer.tsx` & `TemplateListRenderer.tsx`：动态配置表单渲染器（支持 Provider/Persona 自动点选与模板列表）。模板列表通过 `useTemplateListModel` 处理默认值、字段编辑和排序，保留未知字段；视图使用共享按钮和弹窗，删除确认绑定原条目，配置变化后不删除错位条目。T2I 测试、字体和素材管理继续复用各自功能模块。
