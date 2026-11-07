@@ -39,6 +39,56 @@ def generate_openapi_spec() -> dict[str, object]:
         "paths": {
             **_file_paths,
             **_record_paths,
+            "/data/incremental/batches": {
+                "get": {
+                    "summary": "按页读取群聊增量批次",
+                    "operationId": "getIncrementalBatchPage",
+                    "parameters": [
+                        {
+                            "name": "group_id",
+                            "in": "query",
+                            "required": True,
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "page",
+                            "in": "query",
+                            "schema": {"type": "integer", "minimum": 1, "default": 1},
+                        },
+                        {
+                            "name": "page_size",
+                            "in": "query",
+                            "schema": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100,
+                                "default": 20,
+                            },
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "分页总数与页码来自同一次索引读取",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"const": "ok"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/IncrementalBatchesResponse"
+                                            },
+                                        },
+                                        "required": ["status", "data"],
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "缺少群号或分页参数格式错误"},
+                        "500": {"description": "批次读取失败或索引对应内容已变化"},
+                    },
+                },
+            },
             "/config": {
                 "get": {
                     "summary": "读取插件配置、表单定义和内容版本",
@@ -1802,17 +1852,14 @@ def generate_openapi_spec() -> dict[str, object]:
                 "IncrementalBatchTopic": {
                     "type": "object",
                     "properties": {
-                        "title": {"type": "string"},
-                        "summary": {"type": "string"},
-                        "description": {"type": "string"},
-                        "heat_score": {"type": "number"},
-                        "category": {"type": "string"},
-                        "keywords": {
+                        "topic": {"type": "string"},
+                        "detail": {"type": "string"},
+                        "contributors": {"type": "array", "items": {"type": "string"}},
+                        "contributor_ids": {
                             "type": "array",
                             "items": {"type": "string"},
                         },
                     },
-                    "additionalProperties": True,
                 },
                 "ChatQualityDimension": {
                     "type": "object",
@@ -1841,12 +1888,10 @@ def generate_openapi_spec() -> dict[str, object]:
                     "type": "object",
                     "properties": {
                         "content": {"type": "string"},
-                        "text": {"type": "string"},
-                        "sender_nickname": {"type": "string"},
-                        "sender_name": {"type": "string"},
-                        "author": {"type": "string"},
+                        "sender": {"type": "string"},
+                        "reason": {"type": "string"},
+                        "user_id": {"type": "string"},
                     },
-                    "additionalProperties": True,
                 },
                 "IncrementalBatchItem": {
                     "type": "object",
@@ -1900,7 +1945,6 @@ def generate_openapi_spec() -> dict[str, object]:
                         "timestamp",
                         "messages_count",
                         "characters_count",
-                        "topics_count",
                     ],
                     "additionalProperties": True,
                 },
@@ -1910,7 +1954,7 @@ def generate_openapi_spec() -> dict[str, object]:
                         "timestamp": {"type": "number", "nullable": True},
                         "group_id": {"type": "string"},
                         "last_analyzed_timestamp": {"type": "number"},
-                        "last_message_timestamp": {"type": "number"},
+                        "last_message_timestamp": {"type": "number", "nullable": True},
                         "tracked_message_ids_count": {"type": "number"},
                     },
                     "required": [
@@ -1923,6 +1967,9 @@ def generate_openapi_spec() -> dict[str, object]:
                 "IncrementalBatchesResponse": {
                     "type": "object",
                     "properties": {
+                        "total": {"type": "integer"},
+                        "page": {"type": "integer"},
+                        "page_size": {"type": "integer"},
                         "group_id": {"type": "string"},
                         "cursor": {
                             "$ref": "#/components/schemas/IncrementalCursorInfo"
@@ -1934,7 +1981,14 @@ def generate_openapi_spec() -> dict[str, object]:
                             },
                         },
                     },
-                    "required": ["group_id", "cursor", "batches"],
+                    "required": [
+                        "group_id",
+                        "cursor",
+                        "batches",
+                        "total",
+                        "page",
+                        "page_size",
+                    ],
                 },
                 "CheckpointItem": {
                     "type": "object",

@@ -342,6 +342,25 @@ class DataManagementRoutes:
             if not group_id:
                 return error_response("Missing group_id parameter", status_code=400)
 
+            try:
+                page = max(
+                    1, int(str(request.query.get("page") or payload.get("page") or 1))
+                )
+                page_size = min(
+                    100,
+                    max(
+                        1,
+                        int(
+                            str(
+                                request.query.get("page_size")
+                                or payload.get("page_size")
+                                or 20
+                            )
+                        ),
+                    ),
+                )
+            except (TypeError, ValueError):
+                return error_response("页码和每页数量必须是整数", status_code=400)
             query_dto: IncrementalBatchesQueryDTO = {"group_id": group_id}
 
             store = self._incremental_store
@@ -350,7 +369,7 @@ class DataManagementRoutes:
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            batches = await store.get_all_batches_with_details(query_dto["group_id"])
+            result = await store.list_batch_page(query_dto["group_id"], page, page_size)
             cursor_ts, cursor_msg_ids = await store.get_last_analyzed_cursor(
                 query_dto["group_id"]
             )
@@ -360,23 +379,15 @@ class DataManagementRoutes:
                     "status": "ok",
                     "data": {
                         "group_id": group_id,
-                        "batches": batches,
+                        "batches": result.items,
+                        "total": result.total,
+                        "page": result.page,
+                        "page_size": result.page_size,
                         "cursor": {
                             "timestamp": cursor_ts,
                             "group_id": group_id,
                             "last_analyzed_timestamp": cursor_ts or 0,
-                            "last_message_timestamp": max(
-                                (
-                                    value
-                                    for batch in batches
-                                    if isinstance(
-                                        value := batch.get("last_message_timestamp"),
-                                        (int, float),
-                                    )
-                                    and not isinstance(value, bool)
-                                ),
-                                default=0,
-                            ),
+                            "last_message_timestamp": result.last_message_timestamp,
                             "tracked_message_ids_count": len(cursor_msg_ids),
                         },
                     },

@@ -6,6 +6,8 @@ WebUI 模块化路由单元测试 (WebUI Modular Routes Tests)
 
 from __future__ import annotations
 
+from src.domain.entities.incremental_state import IncrementalBatchPage
+
 import asyncio
 import importlib
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -424,7 +426,7 @@ async def test_incremental_and_checkpoint_routes_resilience(
     mock_ckpt_store = MagicMock()
     mock_ckpt_store.list_all_checkpoints.return_value = ([], 0)
     mock_inc_store = AsyncMock()
-    mock_inc_store.get_all_batches_with_details.return_value = []
+    mock_inc_store.list_batch_page.return_value = IncrementalBatchPage([], 0, 1, 20, 0)
     mock_inc_store.get_last_analyzed_cursor.return_value = (None, set())
 
     mock_svc = MagicMock()
@@ -648,11 +650,7 @@ async def test_incremental_cursor_contract_preserves_message_time(mock_trace_sto
     from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.web_compat import request as proxy_request
 
     store = AsyncMock()
-    store.get_all_batches_with_details.return_value = [
-        {"timestamp": 999, "last_message_timestamp": 123},
-        {"timestamp": 1000, "last_message_timestamp": 456},
-        {"timestamp": 2000},
-    ]
+    store.list_batch_page.return_value = IncrementalBatchPage([], 3, 1, 20, 456)
     store.get_last_analyzed_cursor.return_value = (120, {"one", "two"})
     routes = DataManagementRoutes(mock_trace_store, MagicMock(incremental_store=store))
     target = MagicMock(query=PluginMultiDict([("group_id", "telegram:-1001")]))

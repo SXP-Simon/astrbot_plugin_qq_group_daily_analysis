@@ -749,6 +749,71 @@
         }
       }
     },
+    "/data/incremental/batches": {
+      "get": {
+        "summary": "按页读取群聊增量批次",
+        "operationId": "getIncrementalBatchPage",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分页总数与页码来自同一次索引读取",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/IncrementalBatchesResponse"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "缺少群号或分页参数格式错误"
+          },
+          "500": {
+            "description": "批次读取失败或索引对应内容已变化"
+          }
+        }
+      }
+    },
     "/config": {
       "get": {
         "summary": "读取插件配置、表单定义和内容版本",
@@ -3681,29 +3746,25 @@
       "IncrementalBatchTopic": {
         "type": "object",
         "properties": {
-          "title": {
+          "topic": {
             "type": "string"
           },
-          "summary": {
+          "detail": {
             "type": "string"
           },
-          "description": {
-            "type": "string"
+          "contributors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
-          "heat_score": {
-            "type": "number"
-          },
-          "category": {
-            "type": "string"
-          },
-          "keywords": {
+          "contributor_ids": {
             "type": "array",
             "items": {
               "type": "string"
             }
           }
-        },
-        "additionalProperties": true
+        }
       },
       "ChatQualityDimension": {
         "type": "object",
@@ -3748,20 +3809,16 @@
           "content": {
             "type": "string"
           },
-          "text": {
+          "sender": {
             "type": "string"
           },
-          "sender_nickname": {
+          "reason": {
             "type": "string"
           },
-          "sender_name": {
-            "type": "string"
-          },
-          "author": {
+          "user_id": {
             "type": "string"
           }
-        },
-        "additionalProperties": true
+        }
       },
       "IncrementalBatchItem": {
         "type": "object",
@@ -3844,8 +3901,7 @@
           "batch_id",
           "timestamp",
           "messages_count",
-          "characters_count",
-          "topics_count"
+          "characters_count"
         ],
         "additionalProperties": true
       },
@@ -3863,7 +3919,8 @@
             "type": "number"
           },
           "last_message_timestamp": {
-            "type": "number"
+            "type": "number",
+            "nullable": true
           },
           "tracked_message_ids_count": {
             "type": "number"
@@ -3879,6 +3936,15 @@
       "IncrementalBatchesResponse": {
         "type": "object",
         "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          },
           "group_id": {
             "type": "string"
           },
@@ -3895,7 +3961,10 @@
         "required": [
           "group_id",
           "cursor",
-          "batches"
+          "batches",
+          "total",
+          "page",
+          "page_size"
         ]
       },
       "CheckpointItem": {

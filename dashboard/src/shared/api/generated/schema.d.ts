@@ -191,6 +191,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/data/incremental/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按页读取群聊增量批次 */
+        get: operations["getIncrementalBatchPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config": {
         parameters: {
             query?: never;
@@ -1034,14 +1051,10 @@ export interface components {
             temp_files: components["schemas"]["SectionStats"];
         };
         IncrementalBatchTopic: {
-            title?: string;
-            summary?: string;
-            description?: string;
-            heat_score?: number;
-            category?: string;
-            keywords?: string[];
-        } & {
-            [key: string]: unknown;
+            topic?: string;
+            detail?: string;
+            contributors?: string[];
+            contributor_ids?: string[];
         };
         ChatQualityDimension: {
             name?: string;
@@ -1057,12 +1070,9 @@ export interface components {
         };
         IncrementalBatchGoldenQuote: {
             content?: string;
-            text?: string;
-            sender_nickname?: string;
-            sender_name?: string;
-            author?: string;
-        } & {
-            [key: string]: unknown;
+            sender?: string;
+            reason?: string;
+            user_id?: string;
         };
         IncrementalBatchItem: {
             group_id: string;
@@ -1071,7 +1081,7 @@ export interface components {
             created_at_iso?: string;
             messages_count: number;
             characters_count: number;
-            topics_count: number;
+            topics_count?: number;
             topics?: components["schemas"]["IncrementalBatchTopic"][];
             golden_quotes_count?: number;
             golden_quotes?: components["schemas"]["IncrementalBatchGoldenQuote"][];
@@ -1097,10 +1107,13 @@ export interface components {
             timestamp?: number | null;
             group_id: string;
             last_analyzed_timestamp: number;
-            last_message_timestamp: number;
+            last_message_timestamp: number | null;
             tracked_message_ids_count: number;
         };
         IncrementalBatchesResponse: {
+            total: number;
+            page: number;
+            page_size: number;
             group_id: string;
             cursor: components["schemas"]["IncrementalCursorInfo"];
             batches: components["schemas"]["IncrementalBatchItem"][];
@@ -1720,6 +1733,48 @@ export interface operations {
             };
             /** @description 存储暂不可用 */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getIncrementalBatchPage: {
+        parameters: {
+            query: {
+                group_id: string;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 分页总数与页码来自同一次索引读取 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: components["schemas"]["IncrementalBatchesResponse"];
+                    };
+                };
+            };
+            /** @description 缺少群号或分页参数格式错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 批次读取失败或索引对应内容已变化 */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
