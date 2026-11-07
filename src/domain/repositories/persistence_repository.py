@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from ..entities.incremental_state import IncrementalBatch, IncrementalBatchPage
     from ..value_objects.analysis_results import (
         CheckpointDetailPayload,
+        CheckpointGroupPayload,
         CheckpointSummaryPayload,
     )
 
@@ -169,12 +170,17 @@ class ICheckpointStore(ABC):
         date_str: str | None = None,
         stage_name: str | None = None,
         trace_id: str | None = None,
+        platform: str | None = None,
     ) -> tuple[list[CheckpointSummaryPayload], int]:
         """分页获取所有 Checkpoint 快照元数据列表"""
 
     @abstractmethod
     def get_distinct_checkpoint_groups(self) -> list[str]:
         """获取所有存在 Checkpoint 快照的唯一群号列表"""
+
+    @abstractmethod
+    def get_checkpoint_group_sessions(self) -> list[CheckpointGroupPayload]:
+        """获取有效快照关联的群聊身份，未关联任务的记录保留空平台。"""
 
     @abstractmethod
     def get_checkpoint_detail(
