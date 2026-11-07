@@ -101,6 +101,7 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
             {onViewTrace && (
               <Button
                 variant="outline"
+                className="border-info/20 bg-info/5 text-info hover:bg-info/10"
                 onClick={() => vm.selectedTrace && onViewTrace(vm.selectedTrace.trace_id)}
               >
                 查看任务详情

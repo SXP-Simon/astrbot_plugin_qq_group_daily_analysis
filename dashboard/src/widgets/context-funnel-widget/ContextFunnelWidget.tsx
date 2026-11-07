@@ -24,7 +24,9 @@ export function ContextFunnelWidget({ metrics }: ContextFunnelWidgetProps) {
   return (
     <section aria-label="消息留存" className="min-w-0 space-y-5">
       <h2 className="m-0 text-lg font-medium">消息留存</h2>
-      <div className="space-y-2">
+      <div
+        className={`space-y-3 rounded-xl p-3 ${retention === null ? "bg-muted/60" : "bg-success/8"}`}
+      >
         <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
           <span className="text-muted-foreground">有效消息占读取消息</span>
           <span className="font-mono text-lg">
@@ -33,7 +35,7 @@ export function ContextFunnelWidget({ metrics }: ContextFunnelWidgetProps) {
         </div>
         {retention !== null && (
           <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${retention}%` }} />
+            <div className="h-full rounded-full bg-success/55" style={{ width: `${retention}%` }} />
           </div>
         )}
       </div>
