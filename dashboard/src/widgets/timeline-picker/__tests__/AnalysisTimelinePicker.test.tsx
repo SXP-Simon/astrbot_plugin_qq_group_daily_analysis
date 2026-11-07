@@ -156,3 +156,75 @@ it("鼠标拖动只平移不误选，键盘激活仍可选择；触屏保留原�
   fireEvent.pointerMove(container, { clientX: 10 });
   expect(container.scrollLeft).toBe(70);
 });
+
+it("纵向滚轮横移记录，首尾和无溢出时放行页面滚动，不改变所选任务", () => {
+  render(<Picker />);
+  const first = screen.getByRole("button", { name: /选择任务 示例 a/ });
+  const container = first.closest("ol")!.parentElement!;
+  Object.defineProperties(container, {
+    scrollWidth: { configurable: true, value: 900 },
+    clientWidth: { value: 300 },
+  });
+  expect(fireEvent.wheel(container, { deltaY: -80 })).toBe(true);
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(false);
+  expect(container.scrollLeft).toBe(80);
+  expect(fireEvent.wheel(container, { deltaY: 1000 })).toBe(false);
+  expect(container.scrollLeft).toBe(600);
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(true);
+  expect(fireEvent.wheel(container, { deltaY: -80 })).toBe(false);
+  expect(container.scrollLeft).toBe(520);
+  expect(first).toHaveAttribute("aria-pressed", "true");
+  Object.defineProperty(container, "scrollWidth", { value: 300 });
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(true);
+});
+
+it("按行或整页的滚轮换算距离，触控板横滑、缩放和组合键保留原生行为", () => {
+  render(<Picker />);
+  const container = screen.getByRole("list").parentElement!;
+  container.style.lineHeight = "20px";
+  Object.defineProperties(container, {
+    scrollWidth: { value: 1800 },
+    clientWidth: { value: 300 },
+  });
+  fireEvent.wheel(container, { deltaY: 3, deltaMode: WheelEvent.DOM_DELTA_LINE });
+  expect(container.scrollLeft).toBe(60);
+  fireEvent.wheel(container, { deltaY: 1, deltaMode: WheelEvent.DOM_DELTA_PAGE });
+  expect(container.scrollLeft).toBe(360);
+  for (const properties of [
+    { deltaX: 50 },
+    { deltaX: 2, deltaY: 80 },
+    { deltaY: 80, ctrlKey: true },
+    { deltaY: 80, metaKey: true },
+    { deltaY: 80, shiftKey: true },
+    { deltaY: 80, cancelable: false },
+    { deltaY: 0 },
+  ]) {
+    expect(fireEvent.wheel(container, properties)).toBe(true);
+    expect(container.scrollLeft).toBe(360);
+  }
+});
+
+it("数据载入后注册滚轮事件，列表移除或卸载时清理监听", () => {
+  const onSelect = vi.fn();
+  const view = render(
+    <AnalysisTimelinePicker traces={[]} selectedTrace={null} onSelectTrace={onSelect} />,
+  );
+  view.rerender(
+    <AnalysisTimelinePicker traces={traces} selectedTrace={traces[0]} onSelectTrace={onSelect} />,
+  );
+  const container = screen.getByRole("list").parentElement!;
+  Object.defineProperties(container, { scrollWidth: { value: 900 }, clientWidth: { value: 300 } });
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(false);
+  view.rerender(
+    <AnalysisTimelinePicker traces={[]} selectedTrace={null} onSelectTrace={onSelect} />,
+  );
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(true);
+  expect(container.scrollLeft).toBe(80);
+  view.rerender(
+    <AnalysisTimelinePicker traces={traces} selectedTrace={traces[0]} onSelectTrace={onSelect} />,
+  );
+  const replacement = screen.getByRole("list").parentElement!;
+  const remove = vi.spyOn(replacement, "removeEventListener");
+  view.unmount();
+  expect(remove).toHaveBeenCalledWith("wheel", expect.any(Function));
+});

@@ -47,6 +47,42 @@ export function AnalysisTimelinePicker({
     return () => cancelAnimationFrame(frame);
   }, [selectedId, selectedIndex, traces.length]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onWheel = (event: WheelEvent) => {
+      // 横向手势、组合键和浏览器缩放继续使用原生行为。
+      if (
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.deltaX !== 0 ||
+        !event.cancelable
+      )
+        return;
+      const max = container.scrollWidth - container.clientWidth;
+      if (
+        max <= 0 ||
+        (event.deltaY < 0 && container.scrollLeft <= 1) ||
+        (event.deltaY > 0 && container.scrollLeft >= max - 1)
+      )
+        return;
+      const unit =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? parseFloat(getComputedStyle(container).lineHeight) || 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? container.clientWidth
+            : 1;
+      const left = Math.max(0, Math.min(max, container.scrollLeft + event.deltaY * unit));
+      if (left === container.scrollLeft) return;
+      event.preventDefault();
+      container.scrollLeft = left;
+    };
+    // React 的滚轮监听为被动监听，此处只在能够横向移动时阻止页面滚动。
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, [traces.length]);
+
   if (traces.length === 0) return null;
 
   return (
