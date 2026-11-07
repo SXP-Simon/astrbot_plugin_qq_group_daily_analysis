@@ -136,8 +136,17 @@ class AnalysisTriggerService:
             return f"群聊 {matched_name or target_group_id} 未在群分析启用名单中，已拒绝触发分析。"
 
         # 4. 并发排他锁防重入与原子预占
-        if session in self._pending_groups or self.analysis_service.is_group_running(
-            target_group_id, "daily", platform_id
+        if (
+            session in self._pending_groups
+            or self.analysis_service.is_group_running(
+                target_group_id, "daily", platform_id
+            )
+            or (
+                self.active_task_manager is not None
+                and self.active_task_manager.is_analysis_running(
+                    target_group_id, platform_id
+                )
+            )
         ):
             return (
                 f"[任务冲突] 群聊 {matched_name or target_group_id} ({target_group_id}) "

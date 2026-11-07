@@ -271,6 +271,7 @@ def mock_analysis_service():
 @pytest.fixture
 def mock_active_task_manager():
     mgr = MagicMock()
+    mgr.is_analysis_running.return_value = False
     mgr.register_task = AsyncMock()
     mgr.unregister_task = AsyncMock()
     return mgr
