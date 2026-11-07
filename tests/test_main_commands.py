@@ -161,6 +161,7 @@ def plugin(mock_context, default_config, tmp_path: Path):
         p.plugin_id = "astrbot_plugin_qq_group_daily_analysis"
         p.get_kv_data = AsyncMock(return_value={})
         p.put_kv_data = AsyncMock()
+        p.bot_manager.resolve_platform_id = Mock(side_effect=lambda value: value)
         p._initialized = True
         return p
 

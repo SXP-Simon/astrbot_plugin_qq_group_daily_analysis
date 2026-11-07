@@ -158,6 +158,9 @@ class StubbornService:
 
 
 class StubTaskManager:
+    def is_analysis_running(self, group_id, platform_id):
+        return False
+
     def __init__(self) -> None:
         self.active: set[str] = set()
         self.finished: list[str] = []
