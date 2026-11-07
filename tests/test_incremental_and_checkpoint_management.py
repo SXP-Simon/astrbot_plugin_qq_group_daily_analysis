@@ -117,7 +117,7 @@ async def test_incremental_store_crud_and_registration(dummy_plugin_kv: DummyPlu
     assert len(detail1.topics) == 1
     assert detail1.topics[0]["topic"] == "架构讨论"
 
-    batch_list = await store.get_all_batches_with_details("group_123")
+    batch_list = (await store.list_batch_page("group_123")).items
     assert len(batch_list) == 2
     # 按时间倒序
     assert batch_list[0]["batch_id"] == "batch_002"
@@ -821,3 +821,53 @@ def test_checkpoint_list_ties_and_read_snapshot(temp_db, monkeypatch):
     assert count == len(items) == 3
     assert all(item["trace_id"] != "new" for item in items)
     assert store.list_all_checkpoints()[1] == 4
+
+
+@pytest.mark.asyncio
+async def test_incremental_page_reads_only_selected_records(dummy_plugin_kv):
+    store = IncrementalStore(dummy_plugin_kv)
+    for number in range(45):
+        await store.save_batch(IncrementalBatch(
+            group_id="g", batch_id=f"b-{number:02}", timestamp=100,
+            last_message_timestamp=1000 + number,
+            topics=[SummaryTopic(topic="周末出游", detail="分享路线", contributors=["小林"]).to_dict()],
+        ))
+    with patch.object(store, "get_batch_detail", wraps=store.get_batch_detail) as reader:
+        page = await store.list_batch_page("g", 2, 20)
+        assert reader.await_count == 20
+    assert page.total == 45
+    assert page.page == 2
+    assert [item["batch_id"] for item in page.items] == [f"b-{number:02}" for number in range(24, 4, -1)]
+    assert page.items[0]["topics"] == [{"topic": "周末出游"}]
+    assert page.last_message_timestamp == 1044
+    # 总数和排序源于同一次索引读取，新增批次在下次刷新才出现。
+    original = store.get_batch_detail
+    async def concurrent_read(group_id, batch_id):
+        if batch_id == "b-44":
+            await store.save_batch(IncrementalBatch(group_id="g", batch_id="new", timestamp=200))
+        return await original(group_id, batch_id)
+    with patch.object(store, "get_batch_detail", side_effect=concurrent_read):
+        snapshot = await store.list_batch_page("g", 1, 20)
+    assert snapshot.total == 45
+    assert snapshot.items[0]["batch_id"] == "b-44"
+    assert (await store.list_batch_page("g", 1, 20)).total == 46
+    # 删除后请求原末页会回到新的末页；空群也保持第 1 页。
+    for number in range(5):
+        await store.delete_batch("g", f"b-{number:02}")
+    await store.delete_batch("g", "new")
+    last = await store.list_batch_page("g", 3, 20)
+    assert (last.page, last.total, len(last.items)) == (2, 40, 20)
+    empty = await store.list_batch_page("empty", 9, 20)
+    assert (empty.page, empty.total, empty.items) == (1, 0, [])
+
+
+@pytest.mark.asyncio
+async def test_incremental_page_legacy_index_and_missing_record(dummy_plugin_kv):
+    store = IncrementalStore(dummy_plugin_kv)
+    await store.save_batch(IncrementalBatch(group_id="g", batch_id="old", timestamp=10))
+    dummy_plugin_kv._kv[store._index_key("g")] = [{"batch_id": "old", "timestamp": 10}]
+    assert (await store.list_batch_page("g")).last_message_timestamp is None
+    dummy_plugin_kv._kv.pop(store._batch_key("g", "old"))
+    with pytest.raises(ValueError, match="记录已变化或缺失"):
+        await store.list_batch_page("g")
+

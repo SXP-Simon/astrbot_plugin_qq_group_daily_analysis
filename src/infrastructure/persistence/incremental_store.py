@@ -15,9 +15,13 @@ KV 键设计：
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
-from ...domain.entities.incremental_state import IncrementalBatch
+from ...domain.entities.incremental_state import (
+    IncrementalBatch,
+    IncrementalBatchPage,
+    IncrementalBatchPayload,
+)
 from ...domain.repositories.persistence_repository import IIncrementalStore
 from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
@@ -33,6 +37,7 @@ class BatchIndexEntry(TypedDict):
 
     batch_id: str
     timestamp: float
+    last_message_timestamp: NotRequired[int]
 
 
 class IncrementalStore(IIncrementalStore):
@@ -136,6 +141,11 @@ class IncrementalStore(IIncrementalStore):
                     entries.append(
                         {"batch_id": batch_id, "timestamp": float(timestamp)}
                     )
+                    last_message = item.get("last_message_timestamp")
+                    if isinstance(last_message, int) and not isinstance(
+                        last_message, bool
+                    ):
+                        entries[-1]["last_message_timestamp"] = last_message
             return entries
         except Exception as e:
             logger.error(f"读取批次索引失败 (Key: {key}): {e}", exc_info=True)
@@ -194,10 +204,12 @@ class IncrementalStore(IIncrementalStore):
                     {
                         "batch_id": batch.batch_id,
                         "timestamp": batch.timestamp,
+                        "last_message_timestamp": batch.last_message_timestamp,
                     }
                 )
             else:
                 existing_entry["timestamp"] = batch.timestamp
+                existing_entry["last_message_timestamp"] = batch.last_message_timestamp
             await self._save_index(group_id, index)
             await self._register_group(group_id)
 
@@ -520,67 +532,49 @@ class IncrementalStore(IIncrementalStore):
         index.sort(key=lambda x: x.get("timestamp", 0))
         return index
 
-    async def get_all_batches_with_details(
-        self, group_id: str
-    ) -> list[dict[str, object]]:
-        """获取指定群所有批次的概览详情列表（包含话题标签与基本指标）。
+    async def list_batch_page(
+        self, group_id: str, page: int = 1, page_size: int = 20
+    ) -> IncrementalBatchPage:
+        """按索引分页后读取内容，不加载其他页的完整批次。
 
         Args:
             group_id: 群组 ID。
+            page: 从 1 开始的页码，越界时收敛到最后一页。
+            page_size: 每页数量，限制在 1 至 100。
 
         Returns:
-            list[dict[str, object]]: 批次卡片展示用字典列表。
+            当前页与索引总数。旧索引缺少消息时间时返回未知，不全量读取补算。
         """
+        page_size = min(100, max(1, page_size))
         index = await self._get_index(group_id)
-        index.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
-
-        results: list[dict[str, object]] = []
-        for entry in index:
-            batch_id = entry.get("batch_id")
-            if not batch_id:
-                continue
-            batch = await self.get_batch_detail(group_id, batch_id)
-            if batch:
-                topics_summary = [
-                    {
-                        "topic": t.get("topic", ""),
-                        "contributors": t.get("contributors", []),
-                    }
-                    for t in batch.topics
-                ]
-
-                token_dict = batch.token_usage
-
-                participants_cnt = (
-                    len(batch.participant_ids)
-                    if batch.participant_ids
-                    else len(batch.user_stats)
-                )
-
-                results.append(
-                    {
-                        "batch_id": batch.batch_id,
-                        "group_id": batch.group_id,
-                        "timestamp": batch.timestamp,
-                        "last_message_timestamp": batch.last_message_timestamp,
-                        "messages_count": batch.messages_count,
-                        "characters_count": batch.characters_count,
-                        "topics": topics_summary,
-                        "participants_count": participants_cnt,
-                        "token_usage": token_dict,
-                    }
-                )
-            else:
-                results.append(
-                    {
-                        "batch_id": batch_id,
-                        "group_id": group_id,
-                        "timestamp": entry.get("timestamp", 0),
-                        "messages_count": 0,
-                        "characters_count": 0,
-                        "topics": [],
-                        "participants_count": 0,
-                        "token_usage": {"total_tokens": 0},
-                    }
-                )
-        return results
+        index.sort(
+            key=lambda entry: (entry["timestamp"], entry["batch_id"]), reverse=True
+        )
+        total = len(index)
+        page = min(max(1, page), max(1, (total + page_size - 1) // page_size))
+        items: list[IncrementalBatchPayload] = []
+        for entry in index[(page - 1) * page_size : page * page_size]:
+            batch = await self.get_batch_detail(group_id, entry["batch_id"])
+            if batch is None:
+                # 并发删除或失效索引不能冒充完整的一页。
+                raise ValueError("批次记录已变化或缺失，请刷新后重试")
+            items.append(
+                {
+                    "batch_id": batch.batch_id,
+                    "group_id": batch.group_id,
+                    "timestamp": batch.timestamp,
+                    "last_message_timestamp": batch.last_message_timestamp,
+                    "messages_count": batch.messages_count,
+                    "characters_count": batch.characters_count,
+                    "topics": [
+                        {"topic": topic.get("topic", "")} for topic in batch.topics
+                    ],
+                    "token_usage": batch.token_usage,
+                }
+            )
+        latest = (
+            max((entry.get("last_message_timestamp", 0) for entry in index), default=0)
+            if all("last_message_timestamp" in entry for entry in index)
+            else None
+        )
+        return IncrementalBatchPage(items, total, page, page_size, latest)

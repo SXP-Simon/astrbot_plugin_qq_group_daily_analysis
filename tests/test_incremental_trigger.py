@@ -393,10 +393,11 @@ def test_incremental_batch_index_is_idempotent():
 
         assert await store.save_batch(batch)
         batch.timestamp = 101.0
+        batch.last_message_timestamp = 99
         assert await store.save_batch(batch)
 
         index = plugin.data["incr_batch_index_123456"]
-        assert index == [{"batch_id": "stable-batch-id", "timestamp": 101.0}]
+        assert index == [{"batch_id": "stable-batch-id", "timestamp": 101.0, "last_message_timestamp": 99}]
 
     asyncio.run(scenario())
 
