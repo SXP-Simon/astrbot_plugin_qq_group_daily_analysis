@@ -14,11 +14,13 @@ import type {
   ManagedFile,
   ManagedPartition,
 } from "../../../../entities/plugin-data/api/managedFilesApi";
+import { copyToClipboard } from "../../../../shared/lib/clipboard";
 import { fetchManagedPartitions } from "../../../../entities/plugin-data/api/managedFilesApi";
 
 vi.mock("../../../../entities/plugin-data/api/managedFilesApi", () => ({
   fetchManagedPartitions: vi.fn(),
 }));
+vi.mock("../../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 beforeEach(() => vi.mocked(fetchManagedPartitions).mockResolvedValue([]));
 const partition: ManagedPartition = {
   key: "reports",
@@ -125,4 +127,29 @@ it("搜索按提交执行，可清空，上传重复文件仍通知 ViewModel", 
   fireEvent.change(input, { target: { files: [upload] } });
   fireEvent.change(input, { target: { files: [upload] } });
   expect(prepareUpload).toHaveBeenCalledTimes(2);
+});
+
+it("长文件路径与配置引用保留完整内容，复制和预览仍操作同一文件", async () => {
+  const name = "daily_comic/comic_characters/templates/character/reference_images/character.png";
+  const reference = "daily_comic.comic_characters[0].reference_images[0]";
+  const { result } = renderHook(useManagedFiles);
+  await act(async () => {});
+  const inspect = vi.fn();
+  vi.mocked(copyToClipboard).mockResolvedValue(true);
+  render(
+    <ManagedFileList
+      vm={{ ...result.current, files: [{ ...file, name }], inspect }}
+      partition={{ ...partition, key: "config_files", name: "配置参考素材" }}
+      references={{ ...references, references: new Map([[name, [reference]]]) }}
+    />,
+  );
+  const filename = screen.getByText(name, { exact: true });
+  expect(filename).toHaveAttribute("title", name);
+  expect(screen.getByText(`files/${name}`, { exact: true })).toBeVisible();
+  expect(screen.getByText(reference, { exact: true })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: `复制引用路径 files/${name}` }));
+  await waitFor(() => expect(copyToClipboard).toHaveBeenCalledWith(`files/${name}`));
+  fireEvent.click(screen.getByRole("button", { name: "预览 / 下载" }));
+  expect(inspect).toHaveBeenCalledWith(name);
+  expect(screen.getByRole("checkbox", { name: `选择文件 ${name}` })).toBeEnabled();
 });

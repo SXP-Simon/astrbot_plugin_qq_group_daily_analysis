@@ -19,6 +19,7 @@ export function ManagedFileTable({
   references: ReturnType<typeof useConfigFileReferences>;
   templatePrefix: string;
 }) {
+  const hasReferences = partition.key === "config_files";
   const selected = new Set(vm.selected.map((file) => file.name));
   const locked = vm.busy || vm.loading || vm.uploading;
   const allSelected = vm.files.length > 0 && vm.files.every((file) => selected.has(file.name));
@@ -30,11 +31,21 @@ export function ManagedFileTable({
       tabIndex={0}
       aria-busy={vm.loading}
     >
-      <table className="w-full min-w-[650px] text-left text-sm">
+      <table
+        className={`w-full table-fixed border-collapse text-left text-sm ${hasReferences ? "min-w-[67.5rem]" : "min-w-[50rem]"}`}
+      >
+        <colgroup>
+          {partition.deletable && <col className="w-12" />}
+          <col />
+          {hasReferences && <col className="w-80" />}
+          <col className="w-[6.25rem]" />
+          <col className="w-[11.25rem]" />
+          <col className="w-[9.5rem]" />
+        </colgroup>
         <thead className="bg-muted/60 text-muted-foreground">
           <tr>
             {partition.deletable && (
-              <th className="w-10 p-3">
+              <th className="p-3">
                 <input
                   type="checkbox"
                   aria-label="选择本页文件（最多 200）"
@@ -59,15 +70,15 @@ export function ManagedFileTable({
               </th>
             )}
             <th className="p-3 font-medium">文件名</th>
-            {partition.key === "config_files" && <th className="w-64 p-3 font-medium">配置引用</th>}
-            <th className="w-28 p-3 font-medium">大小</th>
-            <th className="w-44 p-3 font-medium">修改时间</th>
-            <th className="w-40 p-3 font-medium">操作</th>
+            {hasReferences && <th className="p-3 font-medium">配置引用</th>}
+            <th className="p-3 font-medium">大小</th>
+            <th className="p-3 font-medium">修改时间</th>
+            <th className="p-3 font-medium">操作</th>
           </tr>
         </thead>
         <tbody>
           {vm.files.map((file) => (
-            <tr key={file.name} className="border-t border-border hover:bg-muted/30">
+            <tr key={file.name} className="border-t border-border align-top hover:bg-muted/30">
               {partition.deletable && (
                 <td className="p-3">
                   <input
@@ -86,20 +97,25 @@ export function ManagedFileTable({
                   />
                 </td>
               )}
-              <td className="max-w-md break-all p-3">
-                <span className="flex items-start gap-2">
+              <td className="p-3">
+                <span className="flex min-w-0 items-start gap-2">
                   <IconFile aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-info" />
-                  <span>
+                  <span
+                    className="min-w-0 font-mono text-xs leading-relaxed [overflow-wrap:anywhere]"
+                    title={file.name}
+                  >
                     {templatePrefix && file.name.startsWith(templatePrefix)
                       ? file.name.slice(templatePrefix.length)
                       : file.name}
                   </span>
                 </span>
               </td>
-              {partition.key === "config_files" && (
+              {hasReferences && (
                 <td className="p-3">
-                  <div className="flex items-center gap-1">
-                    <code className="break-all text-xs">files/{file.name}</code>
+                  <div className="flex min-w-0 items-start gap-1">
+                    <code className="min-w-0 flex-1 text-xs leading-relaxed [overflow-wrap:anywhere]">
+                      files/{file.name}
+                    </code>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -113,7 +129,7 @@ export function ManagedFileTable({
                       <IconCopy aria-hidden="true" />
                     </Button>
                   </div>
-                  <p className="m-0 text-xs text-muted-foreground">
+                  <p className="m-0 font-mono text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                     {references.loading
                       ? "正在检查引用…"
                       : references.error
@@ -159,7 +175,7 @@ export function ManagedFileTable({
           {!vm.files.length && !vm.loading && (
             <tr>
               <td
-                colSpan={4 + Number(partition.deletable) + Number(partition.key === "config_files")}
+                colSpan={4 + Number(partition.deletable) + Number(hasReferences)}
                 className="p-8 text-center text-muted-foreground"
               >
                 {vm.search || vm.extensions
