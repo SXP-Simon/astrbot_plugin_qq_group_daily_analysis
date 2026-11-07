@@ -896,7 +896,9 @@ class TraceContext:
         if prefix:
             parts.append(prefix)
         if group_name:
-            safe_name = re.sub(r'[\s\n\r\t/\\:*?"<>|\[\]{}]', "", str(group_name))
+            safe_name = re.sub(
+                r'[\x00-\x1f\x7f\s/\\:*?"<>|\[\]{}]', "", str(group_name)
+            )
             safe_name = safe_name[:_MAX_GROUP_NAME_LEN]
             if safe_name:
                 parts.append(safe_name)

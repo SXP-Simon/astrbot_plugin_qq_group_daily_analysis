@@ -850,7 +850,9 @@ class AnalysisCommandHandler:
         try:
             group_info = await adapter.get_group_info(group_id)
             if group_info and group_info.group_name:
-                safe_name = re.sub(r'[\\/:*?"<>|]', "", group_info.group_name).strip()
+                safe_name = re.sub(
+                    r'[\x00-\x1f\x7f\\/:*?"<>|]', "", group_info.group_name
+                ).strip()
                 if safe_name:
                     filename_stem = f"群分析报告_{safe_name}_{date_str}_{timestamp}"
         except Exception:
