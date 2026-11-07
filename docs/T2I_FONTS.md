@@ -89,19 +89,30 @@ Google Fonts 链接指向[官方字体仓库](https://github.com/google/fonts)�
 安装时认字体内部名称，文件改名不会修改字体家族名。
 
 - Miku 的 HTML 中文主标题默认从当前方案 CDN 的 `/assets/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.woff2` 加载，不依赖远程 T2I 安装字体。这个约 5.4 KB 的网页字库只覆盖固定标题“群聊日常分析看板”的八个字，保留官方原始字形轮廓；内部名称改为 `Miku AllSeto Title`，原版权及 OFL 全文保存在字体元数据中。标题文字变更时需要重新生成该子集。该资源放在 `assets`，不打入 release。
-- Typst 的 Miku 按需字体包含完整的 `cjkFonts_allseto_v1.11.ttf`，来自 [AIRI 固定提交](https://github.com/moeru-ai/airi/blob/1eb62e912fe7936387804aa920ff98c9f1137d80/packages/font-cjkfonts-allseto/src/files/cjkFonts_allseto_v1.11.ttf)，已核对与 [cjkFonts 官方 1.11 字体包](https://cjkfonts.io/blog/cjkfonts_allseto) 的 TTF 逐字节一致。约 30 MiB，超过常见 CDN 的单文件限制，所以从固定完整文件来源下载到插件 data 目录。Typst 实际登记的字体族为 `cjkFonts`，不能直接填写 HTML 的 `cjkfonts AllSeto` 别名。
-- 全瀨體只影响中文主标题；正文继续使用 Noto，英文使用 Outfit／Inter，日文使用 Noto Sans JP。完整字体尚未下载时，Typst 保留 Noto 标题回退。HTML 的“已安装字体”模式仍需用户显式选择；在这个模式下才使用 `local()`，不会把机器人本地路径交给远程 T2I。
+- Typst 的初音中文标题改用 `cjkFonts-AllSeto-Title-v1.11.ttf`（14,596 字节，约 14.3 KiB），同样只含“群聊日常分析看板”八个字，内部字体族为 `Miku AllSeto Title`。它是网页 WOFF2 子集的未压缩 TTF，字形和排版指标一致；网页字体地址不能直接填到 Typst 中。通过 WebUI「数据 → Typst 字体」补齐初音模板字体，文件保存在插件 data 目录。
+- 已下载的旧完整版 `cjkFonts_allseto_v1.11.ttf` 仍可使用；新子集存在时优先使用子集。插件不会自动删除旧文件，确认自定义模板不再依赖它后可自行移除。新安装不再下载约 30 MiB 的完整版；两个版本都缺失时仍回退到 Noto，并在任务详情提示。
+- 源码检出优先复用仓库 `assets/HatsuneMiku` 中的 TTF，发布包不包含该目录，会使用所选 CDN 或 GitHub Raw 下载。子集沿用全瀨體 1.11 的字形及 SIL OFL 1.1 许可；HTML / T2I 的在线字体、已安装字体设置均保持不变。
+
+标题 TTF 可从现有 WOFF2 无损恢复，无需重新下载完整字体。在插件仓库根目录执行（仅用于维护字体资源，不是用户安装步骤）：
+
+```bash
+uv run --with "fonttools[woff]==4.63.0" python -c "from fontTools.ttLib import TTFont; from pathlib import Path; p=Path('assets/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.woff2'); f=TTFont(p,recalcTimestamp=False); f.flavor=None; f.save(p.with_suffix('.ttf'))"
+```
+
+修改固定标题时，需要从 [全瀨體 1.11 原始字体](https://github.com/moeru-ai/airi/blob/1eb62e912fe7936387804aa920ff98c9f1137d80/packages/font-cjkfonts-allseto/src/files/cjkFonts_allseto_v1.11.ttf) 重新生成两种格式的子集，保留版权与 OFL 信息并使用新的内部字体名，不能只修改文件扩展名。
+
+- 全瀨體只影响中文主标题；正文继续使用 Noto，英文使用 Outfit／Inter，日文使用 Noto Sans JP。标题子集和旧完整版均未安装时，Typst 保留 Noto 标题回退。HTML 的“已安装字体”模式仍需用户显式选择；在这个模式下才使用 `local()`，不会把机器人本地路径交给远程 T2I。
 
 - 部分系统包提供的是 `Noto Sans CJK SC`，模板使用的是 `Noto Sans SC`。它们可能互为备用，但不能据此认定原字体已经匹配。需要尽量保持原设计时，安装上表链接中的对应家族。
 - ATRI 使用 `LXGWWenKai-Regular.ttf`、`LXGWWenKai-Medium.ttf` 和 `LXGWWenKaiMono-Regular.ttf`。模板保留本地映射：`LXGW WenKai`／`LXGWWenKai-Regular` 对应 400，`LXGW WenKai Medium`／`LXGWWenKai-Medium` 对应原模板的 600，`LXGW WenKai Mono`／`LXGWWenKaiMono-Regular` 对应 400。Medium 文件自身的字重与模板声明可能不同，保留映射可继续使用该文件。
 
-插件不在 release 包中附带字体或额外的许可文本。Typst 可从 WebUI 按模板下载上游原始字体文件到插件 data 目录；自定义 T2I 则仍需安装到实际浏览器所在环境。
+插件不在 release 包中附带字体或额外的许可文本。Typst 可从 WebUI 按模板补齐预设字体文件到插件 data 目录；自定义 T2I 则仍需安装到实际浏览器所在环境。
 
 ### 预设字体授权
 
-[cjkFonts 全瀨體](https://cjkfonts.io/blog/cjkfonts_allseto) 的官方 1.11 包按 SIL OFL 1.1 发布，允许个人与商业使用。网页标题子集已更名以遵守原保留字体名要求，版权和许可仍保留在字库元数据中，不额外下载许可文本。
+[cjkFonts 全瀨體](https://cjkfonts.io/blog/cjkfonts_allseto) 的官方 1.11 包按 SIL OFL 1.1 发布，允许个人与商业使用。两种格式的标题子集均已更名以遵守原保留字体名要求，版权和许可仍保留在字库元数据中，不额外下载许可文本。
 
-当前预设字体均按 SIL Open Font License 1.1 提供：Google Fonts 的字体在各家族的 `ofl/<家族>/OFL.txt` 中声明授权（例如 [Noto Sans SC](https://github.com/google/fonts/blob/main/ofl/notosanssc/OFL.txt)）；[Noto Emoji](https://github.com/googlefonts/noto-emoji/blob/main/LICENSE) 和 [霞鹜文楷 v1.522](https://github.com/lxgw/LxgwWenKai/blob/v1.522/OFL.txt) 也提供各自的许可与版权声明。下载保持上游字体原样，不删除其内嵌版权和许可元数据，不另外下载许可证。字体属于原作者，插件自身的开源协议不替代字体许可；另行打包分发字体时须遵守对应字体的许可条件。
+当前预设字体均按 SIL Open Font License 1.1 提供：Google Fonts 的字体在各家族的 `ofl/<家族>/OFL.txt` 中声明授权（例如 [Noto Sans SC](https://github.com/google/fonts/blob/main/ofl/notosanssc/OFL.txt)）；[Noto Emoji](https://github.com/googlefonts/noto-emoji/blob/main/LICENSE) 和 [霞鹜文楷 v1.522](https://github.com/lxgw/LxgwWenKai/blob/v1.522/OFL.txt) 也提供各自的许可与版权声明。除已说明的初音标题子集外，下载保持上游字体原样；所有字体均保留内嵌版权和许可元数据，不另外下载许可证。字体属于原作者，插件自身的开源协议不替代字体许可；另行打包分发字体时须遵守对应字体的许可条件。
 
 CSS 中出现系统字体名称与分发字体文件是不同的行为。[微软官方字体 FAQ](https://learn.microsoft.com/en-us/typography/fonts/font-faq#web) 明确允许在网页字体栈中引用 Windows 字体；本次采用明确开源字体作为默认候选，是为了降低部署差异及来源不明字库被误用的风险，不能据此把所有系统字体引用都认定为侵权。自行上传的字体由使用者确认授权。
 
