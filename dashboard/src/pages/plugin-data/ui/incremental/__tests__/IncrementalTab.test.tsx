@@ -39,7 +39,7 @@ it("操作按钮指向所在批次，删除仍需确认且可取消", async () =
     topics_count: 0,
   }));
   const openDetail = vi.fn();
-  const deleteBatch = vi.fn().mockResolvedValue(undefined);
+  const deleteBatch = vi.fn().mockResolvedValue(true);
   render(
     <IncrementalTab
       vm={{
@@ -71,4 +71,57 @@ it("操作按钮指向所在批次，删除仍需确认且可取消", async () =
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(deleteBatch).toHaveBeenCalledTimes(1);
   expect(deleteBatch).toHaveBeenCalledWith("group-a", "batch-b");
+});
+
+it("删除失败时确认框保持打开，重新处理仍绑定原批次", async () => {
+  const { result } = renderHook(usePluginDataViewModel);
+  const batch = {
+    batch_id: "keep-me",
+    group_id: "a",
+    timestamp: 1,
+    messages_count: 0,
+    characters_count: 0,
+    topics_count: 0,
+    token_usage: { total_tokens: 0 },
+  };
+  const remove = vi.fn().mockResolvedValue(false);
+  const vm = {
+    ...result.current,
+    selectedIncrGroup: "a",
+    incrGroups: ["a"],
+    incrBatches: [batch],
+    handleDeleteBatch: remove,
+  };
+  const { rerender } = render(<IncrementalTab vm={vm} />);
+  expect(screen.getByRole("region", { name: "增量批次列表" })).toHaveTextContent("0");
+  fireEvent.click(screen.getByRole("button", { name: "删除" }));
+  const dialog = screen.getByRole("dialog");
+  await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "删除" })));
+  rerender(<IncrementalTab vm={{ ...vm, incrementalMutationError: "当前群有任务正在运行" }} />);
+  expect(screen.getByRole("dialog")).toHaveTextContent("keep-me");
+  expect(screen.getByRole("alert")).toHaveTextContent("当前群有任务正在运行");
+  expect(remove).toHaveBeenCalledWith("a", "keep-me");
+});
+
+it("超过选择上限时全选最多 200 条，并可再次点击取消", () => {
+  const { result } = renderHook(usePluginDataViewModel);
+  const batches = Array.from({ length: 201 }, (_, index) => ({
+    batch_id: `batch-${index}`,
+    group_id: "a",
+    timestamp: 1,
+    messages_count: 0,
+    characters_count: 0,
+    topics_count: 0,
+  }));
+  render(
+    <IncrementalTab
+      vm={{ ...result.current, selectedIncrGroup: "a", incrGroups: ["a"], incrBatches: batches }}
+    />,
+  );
+  const selectAll = screen.getByRole("checkbox", { name: "选择本群全部批次（最多 200）" });
+  fireEvent.click(selectAll);
+  expect(selectAll).toBeChecked();
+  expect(screen.getAllByRole("checkbox", { checked: true })).toHaveLength(201);
+  fireEvent.click(selectAll);
+  expect(screen.queryAllByRole("checkbox", { checked: true })).toHaveLength(0);
 });
