@@ -43,6 +43,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
     refresh,
     previewOpen,
     previewLoading,
+    previewError,
+    downloadingFiles,
+    downloadError,
     selectedReport,
     openPreview,
     closePreview,
@@ -237,7 +240,13 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
                 换模板
               </Button>
             )}
-            <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadReport(r)}>
+            <Button
+              size="small"
+              icon={<DownloadOutlined />}
+              loading={downloadingFiles.has(r.filename)}
+              disabled={downloadingFiles.has(r.filename)}
+              onClick={() => downloadReport(r)}
+            >
               下载
             </Button>
           </Space>
@@ -259,6 +268,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
         onDateRangeChange={setDateRange}
         onRefresh={refresh}
       />
+
+      {downloadError && (
+        <p role="alert" className="text-sm text-destructive">
+          {downloadError}
+        </p>
+      )}
 
       {loading && rawReports.length === 0 ? (
         <div style={{ padding: "24px 12px" }}>
@@ -300,6 +315,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       <ReportPreviewModal
         open={previewOpen}
         loading={previewLoading}
+        error={previewError}
+        downloading={Boolean(selectedReport && downloadingFiles.has(selectedReport.filename))}
         report={selectedReport}
         onClose={closePreview}
         onDownload={downloadReport}

@@ -93,6 +93,8 @@
   * `FieldRenderer.tsx` & `TemplateListRenderer.tsx`：动态配置表单渲染器（支持 Provider/Persona 自动点选与模板列表）。
 
 ### 2.5 `pages/`（页面与视图模型层）
+报告操作由 `useReportActions` 管理，预览按请求序号隔离，关闭或卸载后忽略迟到响应；返回内容需与请求文件名一致。同文件下载期间持有提交锁，HTML 临时地址延后释放并在卸载时清理，失败展示在页面及对应预览中。图像与 HTML 继续通过原报告 API 和宿主通信层读取。
+
 统计页由 `useContextInsightViewModel` 管理筛选防抖、选择与详情生命周期；列表、群聊和详情分别处理错误，切换任务立即隔离旧明细，手动刷新强制读取详情。缺失的 Token 明细不补零，上下文概要只补充已记录字段；`ContextFunnelWidget` 区分缺失、零值及不一致数量，留存比例不表示执行进度。任务选择与时间轴保留，查看详情使用现有诊断入口。
 
 * 全面实施 **MVVM 模式**：
