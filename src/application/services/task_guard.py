@@ -10,6 +10,7 @@ import time as time_mod
 import weakref
 from contextlib import asynccontextmanager
 
+from ...domain.value_objects.incremental_session import IncrementalSession
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
@@ -30,38 +31,53 @@ class TaskGuard:
         Args:
             max_concurrent: 最大允许的 LLM 全局并发任务数。
         """
-        self._locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
-            weakref.WeakValueDictionary()
-        )
-        self._active_tasks: set[str] = set()
+        self._locks: weakref.WeakValueDictionary[
+            tuple[str, IncrementalSession], asyncio.Lock
+        ] = weakref.WeakValueDictionary()
+        self._active_tasks: set[tuple[str, IncrementalSession]] = set()
         self._max_concurrent = max(1, int(max_concurrent))
         self.llm_semaphore = asyncio.Semaphore(self._max_concurrent)
 
     @property
-    def active_tasks(self) -> set[str]:
+    def active_tasks(self) -> set[tuple[str, IncrementalSession]]:
         """提供应用服务兼容入口使用的运行任务集合。"""
         return self._active_tasks
 
     @property
-    def locks(self) -> weakref.WeakValueDictionary[str, asyncio.Lock]:
+    def locks(
+        self,
+    ) -> weakref.WeakValueDictionary[tuple[str, IncrementalSession], asyncio.Lock]:
         """提供应用服务兼容入口使用的弱引用锁表。"""
         return self._locks
 
-    def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
+    def is_group_running(
+        self, group_id: str, task_type: str = "daily", platform_id: str | None = None
+    ) -> bool:
         """检查指定群的特定任务是否正在运行中。
 
         Args:
             group_id: 群组唯一标识。
             task_type: 任务类型（如 'daily', 'final', 'incremental' 等）。
+            platform_id: 真实实例 ID；省略时查询所有实例及旧共享任务。
 
         Returns:
             True 表示任务正在执行，False 表示空闲。
         """
-        lock_key = f"{task_type}:{group_id}"
-        return lock_key in self._active_tasks
+        return any(
+            kind == task_type
+            and session.group_id == group_id
+            and (
+                not platform_id
+                or not session.platform_id
+                or session.platform_id == platform_id
+            )
+            for kind, session in self._active_tasks
+        )
 
     @asynccontextmanager
-    async def group_lock(self, group_id: str, task_type: str = "analysis"):
+    async def group_lock(
+        self, group_id: str, task_type: str = "analysis", platform_id: str | None = None
+    ):
         """获取群组排他锁上下文管理器。
 
         保证同一时间同一个群只能有一个同类型任务在执行，退出时自动释放。
@@ -69,6 +85,7 @@ class TaskGuard:
         Args:
             group_id: 群号。
             task_type: 任务类型。
+            platform_id: 真实实例 ID；省略时保护该群所有实例的旧共享资源。
 
         Yields:
             None: 成功获取锁后进入上下文。
@@ -76,13 +93,13 @@ class TaskGuard:
         Raises:
             DuplicateGroupTaskError: 当任务已在运行时抛出，避免竞态重复执行。
         """
-        lock_key = f"{task_type}:{group_id}"
+        lock_key = (task_type, IncrementalSession(platform_id or "", group_id))
         lock = self._locks.get(lock_key)
         if lock is None:
             lock = asyncio.Lock()
             self._locks[lock_key] = lock
 
-        if lock_key in self._active_tasks:
+        if self.is_group_running(group_id, task_type, platform_id):
             logger.warning(f"群 {group_id} 的 {task_type} 任务已在运行，跳过本次请求")
             raise DuplicateGroupTaskError(f"Duplicate task for {lock_key}")
 
