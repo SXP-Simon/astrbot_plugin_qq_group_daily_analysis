@@ -78,7 +78,7 @@ it("快照 Mock 按请求身份读取真实 data 结构，并拒绝缺失或不�
   expect(extractData(mockHandlers["GET data/checkpoint/detail"](params))).toMatchObject({
     ...params,
     checkpoint_id: item.checkpoint_id,
-    data: { group_id: item.group_id, stage_name: item.stage_name },
+    data: { output_format: "png", template: "HatsuneMiku" },
   });
   expect(
     mockHandlers["GET data/checkpoint/detail"]({ ...params, trace_id: "missing" }).status,

@@ -805,39 +805,45 @@ export const mockHandlers = {
   },
   "GET data/checkpoints/groups": () => ({
     status: "ok",
-    data: { groups: ["123456789", "8899001122", "987654321"] },
+    data: { groups: [...new Set(mockCheckpoints.items.map((item) => item.group_id))] },
   }),
   "GET data/checkpoints": (params?: Record<string, unknown>) => {
     let items = [...mockCheckpoints.items];
-    if (params?.group_id && typeof params.group_id === "string") {
-      items = items.filter((c) => c.group_id === params.group_id);
+    for (const key of ["group_id", "date_str", "stage_name", "trace_id"] as const) {
+      if (params?.[key]) items = items.filter((item) => item[key] === params[key]);
     }
-    return { status: "ok", data: { total: items.length, items } };
-  },
-  "GET data/checkpoint/detail": (params?: Record<string, unknown>) => {
-    if (!params?.group_id || !params.date_str || !params.stage_name) {
-      return { status: "error", message: "请提供群、日期和阶段以读取快照。" };
-    }
-    const item = mockCheckpoints.items.find(
-      (item) =>
-        item.group_id === params.group_id &&
-        item.date_str === params.date_str &&
-        item.stage_name === params.stage_name &&
-        (!params.trace_id || item.trace_id === params.trace_id),
+    items.sort(
+      (a, b) =>
+        (b.created_at ?? 0) - (a.created_at ?? 0) ||
+        (b.checkpoint_id || "").localeCompare(a.checkpoint_id || ""),
     );
-    if (!item) return { status: "error", message: "快照不存在或已过期，请刷新列表。" };
+    const offset = Math.max(0, Number(params?.offset) || 0);
+    const limit = Math.max(1, Number(params?.limit) || 50);
     return {
       status: "ok",
-      data: {
-        ...item,
-        data: {
-          sample: "快照业务产物",
-          group_id: item.group_id,
-          stage_name: item.stage_name,
-          trace_id: item.trace_id,
-        },
-      },
+      data: { total: items.length, items: items.slice(offset, offset + limit) },
     };
   },
-  "POST data/checkpoint": () => ({ status: "ok", data: { deleted: true } }),
+  "GET data/checkpoint/detail": (params?: Record<string, unknown>) => {
+    if (!params?.group_id || !params.date_str || !params.stage_name)
+      return { status: "error", message: "请提供群、日期和阶段以读取快照。" };
+    const result = managedRecordMockHandlers["GET plugin-data/records/detail"]({
+      kind: "checkpoint",
+      ...params,
+      trace_id: params.trace_id || "",
+    });
+    return result.status === "ok" ? { status: "ok", data: result.data?.data } : result;
+  },
+  "POST data/checkpoint": (params?: Record<string, unknown>) => {
+    const locator = { kind: "checkpoint", ...params, trace_id: params?.trace_id || "" };
+    const result = managedRecordMockHandlers["GET plugin-data/records/detail"](locator);
+    if (result.status !== "ok" || !result.data)
+      return { status: "error", message: "快照不存在或已过期，请刷新列表。" };
+    const removed = managedRecordMockHandlers["POST plugin-data/records/mutate"]({
+      locator,
+      revision: result.data.revision,
+      operation: "delete",
+    });
+    return removed.status === "ok" ? { status: "ok", data: { deleted: true } } : removed;
+  },
 };

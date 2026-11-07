@@ -94,45 +94,71 @@ export const mockCheckpoints: CheckpointsListResponse = {
       checkpoint_id: "chk-20260926-001",
       group_id: "123456789",
       date_str: "2026-09-26",
-      stage_name: "llm_analysis",
+      stage_name: "LLM_ANALYSIS",
       trace_id: "trace-20260926-001",
       data_size_bytes: 5230,
-      created_at: Date.now() - 3600000,
-      created_at_formatted: "2026-09-26 00:00:14",
+      created_at: Math.floor((Date.now() - 3600000) / 1000),
       has_data: true,
     },
     {
       checkpoint_id: "chk-20260926-002-dense",
       group_id: "8899001122",
       date_str: "2026-09-26",
-      stage_name: "comic_generation",
+      stage_name: "COMIC_DRAWING",
       trace_id: "trace-20260926-002-dense",
       data_size_bytes: 84000,
-      created_at: Date.now() - 7167500,
-      created_at_formatted: "2026-09-26 23:02:10",
+      created_at: Math.floor((Date.now() - 7167500) / 1000),
       has_data: true,
     },
     {
       checkpoint_id: "chk-20260926-004-timeout",
       group_id: "987654321",
       date_str: "2026-09-26",
-      stage_name: "llm_analysis",
+      stage_name: "LLM_ANALYSIS",
       trace_id: "trace-20260926-004-timeout",
       data_size_bytes: 3820,
-      created_at: Date.now() - 1798800,
-      created_at_formatted: "2026-09-26 00:30:02",
+      created_at: Math.floor((Date.now() - 1798800) / 1000),
       has_data: true,
     },
     {
       checkpoint_id: "chk-20260924-008",
       group_id: "123456789",
       date_str: "2026-09-24",
-      stage_name: "report_rendering",
+      stage_name: "RENDER_REPORT",
       trace_id: "trace-20260924-008-resumed",
       data_size_bytes: 4100,
-      created_at: Date.now() - 259200000,
-      created_at_formatted: "2026-09-24 00:00:10",
+      created_at: Math.floor((Date.now() - 259200000) / 1000),
       has_data: true,
     },
   ],
 };
+
+for (const item of [...mockCheckpoints.items]) {
+  for (const stage of [
+    "FETCH_MESSAGES",
+    "CLEAN_MESSAGES",
+    "STATS_ANALYSIS",
+    "LLM_ANALYSIS",
+    "RENDER_REPORT",
+    "COMIC_DRAWING",
+  ]) {
+    if (stage === item.stage_name) continue;
+    if (item.trace_id?.includes("timeout") && ["RENDER_REPORT", "COMIC_DRAWING"].includes(stage))
+      continue;
+    mockCheckpoints.items.push({
+      ...item,
+      checkpoint_id: `${item.checkpoint_id}-${stage}`,
+      stage_name: stage,
+    });
+  }
+}
+mockCheckpoints.items.push({
+  checkpoint_id: "demo-daily-checkpoint",
+  group_id: "123456789",
+  date_str: "2026-09-23",
+  stage_name: "LLM_ANALYSIS",
+  trace_id: "",
+  data_size_bytes: 0,
+  created_at: Math.floor(Date.now() / 1000) - 86400,
+});
+mockCheckpoints.total = mockCheckpoints.items.length;

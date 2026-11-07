@@ -33,12 +33,25 @@ for (const item of mockCheckpoints.items) {
       date_str: item.date_str,
       stage_name: item.stage_name,
       trace_id: item.trace_id || "",
-      created_at: 1793664000,
-      expire_at: 1796256000,
-      data: {
-        topics: [{ topic: "Typst 模板优化", detail: "讨论报告排版与字体按需管理。" }],
-        messages_count: 420,
-      },
+      created_at: item.created_at,
+      data_size_bytes: item.data_size_bytes,
+      expire_at: Math.floor(Date.now() / 1000) + 86400 * 30,
+      data:
+        item.stage_name === "STATS_ANALYSIS"
+          ? { total_messages: 420, active_users: 23, total_characters: 6850 }
+          : ["FETCH_MESSAGES", "CLEAN_MESSAGES"].includes(item.stage_name)
+            ? {
+                messages_count: 420,
+                messages: [
+                  { sender_id: "demo-user", text_content: "示例：讨论报告排版与字体管理。" },
+                ],
+              }
+            : ["RENDER_REPORT", "COMIC_DRAWING"].includes(item.stage_name)
+              ? { output_format: "png", template: "HatsuneMiku", note: "示例渲染产物记录" }
+              : {
+                  topics: [{ topic: "Typst 模板优化", detail: "讨论报告排版与字体按需管理。" }],
+                  messages_count: 420,
+                },
     },
   );
 }
