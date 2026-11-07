@@ -703,6 +703,7 @@ async def test_main_llm_tool_integration_flow(
     plugin = MagicMock(spec=GroupDailyAnalysis)
     plugin.config_manager = mock_config_manager
     plugin.analysis_service = mock_analysis_service
+    plugin.bot_manager = mock_analysis_service.bot_manager
     plugin.report_query_service = report_query_service
     plugin.analysis_trigger_service = AnalysisTriggerService(
         config_manager=mock_config_manager,
@@ -722,6 +723,7 @@ async def test_main_llm_tool_integration_flow(
     ):
         get_res = await GroupDailyAnalysis.get_daily_report(plugin, event=event, group="123456", report_section="话题")
         assert "### 群聊日常分析报告" in get_res
+        assert report_query_service.query_reports.call_args.kwargs["platform_id"] == "aiocqhttp"
 
     # 2. 调用 trigger_daily_analysis 代理
     trig_res = await GroupDailyAnalysis.trigger_daily_analysis(
