@@ -15,10 +15,19 @@ if TYPE_CHECKING:
         CheckpointGroupPayload,
         CheckpointSummaryPayload,
     )
+    from ..value_objects.incremental_session import IncrementalSession
 
 
 class IIncrementalStore(ABC):
     """增量批次持久化仓储接口"""
+
+    @abstractmethod
+    async def for_session(self, group_id: str, platform_id: str) -> IIncrementalStore:
+        """获取会话隔离的仓储；首次访问时接管尚未归属的旧数据。"""
+
+    @abstractmethod
+    async def get_tracked_sessions(self) -> list[IncrementalSession]:
+        """列出会话身份，尚未归属的旧数据以空平台保留。"""
 
     @abstractmethod
     async def save_batch(self, batch: IncrementalBatch) -> bool:
