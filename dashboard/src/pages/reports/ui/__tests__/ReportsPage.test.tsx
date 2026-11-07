@@ -83,29 +83,26 @@ it("显示报告身份与明确操作，漫画不提供换模板，图片与HTML
   expect(await screen.findByTitle(html.filename)).toHaveAttribute("srcdoc", "<h1>示例报告</h1>");
 });
 
-it("本页日期筛空后仍能翻页，日期错误不应用，排序和重置可操作", async () => {
+it("日期与排序应用于全局查询，日期错误不请求，清空后恢复列表", async () => {
   render(<Page />);
   await screen.findByRole("list", { name: "报告文件" });
-  fireEvent.change(screen.getByLabelText("本页时间排序"), { target: { value: "asc" } });
-  expect(
-    within(screen.getByRole("list", { name: "报告文件" })).getAllByRole("listitem")[0],
-  ).toHaveTextContent(html.filename);
-  fireEvent.change(screen.getByLabelText("本页开始日期"), { target: { value: "2026-11-07" } });
-  fireEvent.change(screen.getByLabelText("本页结束日期"), { target: { value: "2026-11-01" } });
+  vi.mocked(fetchReportHistory).mockResolvedValueOnce({ items: [html, image], total: 25 });
+  fireEvent.change(screen.getByLabelText("时间排序"), { target: { value: "asc" } });
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole("list", { name: "报告文件" })).getAllByRole("listitem")[0],
+    ).toHaveTextContent(html.filename),
+  );
+  fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-11-07" } });
+  fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-11-01" } });
   expect(screen.getByRole("alert")).toHaveTextContent("结束日期不能早于开始日期");
-  fireEvent.change(screen.getByLabelText("本页结束日期"), { target: { value: "2026-11-08" } });
-  expect(screen.getByText("本页没有这个日期范围内的报告，可清空日期或继续翻页。")).toBeVisible();
-  expect(screen.getByRole("navigation", { name: "分页" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "下一页" }));
-  await waitFor(() =>
-    expect(fetchReportHistory).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 20 })),
-  );
+  vi.mocked(fetchReportHistory).mockResolvedValueOnce({ items: [], total: 0 });
+  fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-11-08" } });
+  expect(await screen.findByText("暂无符合条件的报告，可调整筛选或发起分析。")).toBeVisible();
+  expect(screen.queryByRole("navigation", { name: "分页" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "清空筛选" }));
-  expect(screen.getByLabelText("本页开始日期")).toHaveValue("");
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "第 1 页" })).toHaveAttribute("aria-current", "page"),
-  );
-  expect(screen.getByRole("list", { name: "报告文件" })).toBeVisible();
+  expect(screen.getByLabelText("开始日期")).toHaveValue("");
+  expect(await screen.findByRole("list", { name: "报告文件" })).toBeVisible();
 });
 
 it("换模板仍使用保存的报告身份，成功后刷新第一页；列表失败可重试", async () => {

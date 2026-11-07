@@ -10,8 +10,16 @@ interface ReportQuery {
   pageSize: number;
   search: string;
   selectedGroup?: string;
+  dateRange: [number, number] | null;
+  sortOrder: "desc" | "asc";
 }
-const INITIAL_QUERY: ReportQuery = { page: 1, pageSize: 20, search: "" };
+const INITIAL_QUERY: ReportQuery = {
+  page: 1,
+  pageSize: 20,
+  search: "",
+  dateRange: null,
+  sortOrder: "desc",
+};
 
 export function useReportsViewModel() {
   const [query, setQuery] = useState<ReportQuery>(INITIAL_QUERY);
@@ -22,8 +30,7 @@ export function useReportsViewModel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [groupsError, setGroupsError] = useState("");
-  const [dateRange, setDateRange] = useState<[number, number] | null>(null);
-  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [hasUpdates, setHasUpdates] = useState(false);
   const [refreshRequest, setRefreshRequest] = useState({ version: 0, silent: false });
   const previousQuery = useRef<ReportQuery | null>(null);
   const reportActions = useReportActions();
@@ -62,6 +69,9 @@ export function useReportsViewModel() {
           offset: (query.page - 1) * query.pageSize,
           group_id: query.selectedGroup || undefined,
           search: query.search.trim() || undefined,
+          start_time: query.dateRange?.[0],
+          end_time: query.dateRange?.[1],
+          sort_order: query.sortOrder,
         });
         if (!active) return;
         const lastPage = Math.max(1, Math.ceil(result.total / query.pageSize));
@@ -89,23 +99,6 @@ export function useReportsViewModel() {
     };
   }, [query, refreshRequest]);
 
-  // 接口按时间倒序分页；日期过滤与反向排列只作用于已载入这一页，界面明确此范围。
-  const filteredReports = useMemo(
-    () =>
-      reports
-        .filter((report) => {
-          if (!dateRange) return true;
-          const time = report.modified_at ?? report.created_at;
-          return typeof time === "number" && time >= dateRange[0] && time <= dateRange[1];
-        })
-        .sort((a, b) => {
-          const first = a.modified_at ?? a.created_at ?? 0;
-          const second = b.modified_at ?? b.created_at ?? 0;
-          return sortOrder === "desc" ? second - first : first - second;
-        }),
-    [reports, dateRange, sortOrder],
-  );
-
   const mergedGroups = useMemo(() => {
     const map = new Map(groups.map((group) => [group.group_id, group]));
     for (const report of reports) {
@@ -121,24 +114,25 @@ export function useReportsViewModel() {
 
   return {
     ...query,
-    reports: filteredReports,
+    reports,
     rawReports: reports,
     groups: mergedGroups,
     loading,
     error,
     groupsError,
     loadedPage,
-    dateRange,
-    setDateRange,
-    sortOrder,
-    setSortOrder,
+    hasUpdates,
+    markUpdated: () => setHasUpdates(true),
+    setDateRange: (dateRange: [number, number] | null) =>
+      setQuery((current) => ({ ...current, dateRange, page: 1 })),
+    setSortOrder: (sortOrder: "desc" | "asc") =>
+      setQuery((current) => ({ ...current, sortOrder, page: 1 })),
     total,
     setSearch: (search: string) => setQuery((current) => ({ ...current, search, page: 1 })),
     setSelectedGroup: (selectedGroup?: string) =>
       setQuery((current) => ({ ...current, selectedGroup, page: 1 })),
     resetFilters: () => {
       setQuery((current) => ({ ...INITIAL_QUERY, pageSize: current.pageSize }));
-      setDateRange(null);
     },
     handlePageChange: (page: number, pageSize?: number) =>
       setQuery((current) => ({
@@ -147,6 +141,7 @@ export function useReportsViewModel() {
         pageSize: pageSize ?? current.pageSize,
       })),
     refresh: (silent = true, resetPage = false) => {
+      setHasUpdates(false);
       if (resetPage) setQuery((current) => ({ ...current, page: 1 }));
       setRefreshRequest((current) => ({ version: current.version + 1, silent }));
     },

@@ -50,6 +50,9 @@ it("搜索防抖，筛选变化立即废弃旧页响应，分页只发出一次�
     offset: 0,
     group_id: undefined,
     search: "example",
+    start_time: undefined,
+    end_time: undefined,
+    sort_order: "desc",
   });
   act(() => result.current.handlePageChange(2, 20));
   await act(async () => vi.advanceTimersByTimeAsync(0));
@@ -62,31 +65,45 @@ it("搜索防抖，筛选变化立即废弃旧页响应，分页只发出一次�
   );
 });
 
-it("日期与排序只处理当前页，不改总数；元数据补充群聊保留实际平台", async () => {
+it("日期和排序传给后端并回到第一页，展示服务端返回的全局总数", async () => {
   const { result } = renderHook(useReportsViewModel);
   await act(async () => vi.advanceTimersByTimeAsync(0));
-  expect(result.current.groups).toContainEqual({
-    group_id: "123",
-    group_name: "示例群聊",
-    platform: "telegram",
-  });
-  expect(result.current.reports.map((report) => report.filename)).toEqual([
-    first.filename,
-    second.filename,
-  ]);
-  act(() => result.current.setSortOrder("asc"));
-  expect(result.current.reports.map((report) => report.filename)).toEqual([
-    second.filename,
-    first.filename,
-  ]);
-  act(() => result.current.setDateRange([100, 100]));
-  expect(result.current.reports).toEqual([second]);
-  expect(result.current.total).toBe(52);
-  expect(fetchReportHistory).toHaveBeenCalledTimes(1);
-  act(() => result.current.resetFilters());
+  act(() => result.current.handlePageChange(2));
   await act(async () => vi.advanceTimersByTimeAsync(0));
-  expect(result.current.dateRange).toBeNull();
-  expect(result.current.reports).toHaveLength(2);
+  vi.mocked(fetchReportHistory).mockResolvedValueOnce({ items: [second, first], total: 52 });
+  act(() => result.current.setSortOrder("asc"));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(result.current.page).toBe(1);
+  expect(result.current.reports).toEqual([second, first]);
+  expect(fetchReportHistory).toHaveBeenLastCalledWith(
+    expect.objectContaining({ sort_order: "asc", offset: 0 }),
+  );
+  vi.mocked(fetchReportHistory).mockResolvedValueOnce({ items: [second], total: 1 });
+  act(() => result.current.setDateRange([100, 100]));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(fetchReportHistory).toHaveBeenLastCalledWith(
+    expect.objectContaining({ start_time: 100, end_time: 100 }),
+  );
+  expect(result.current.total).toBe(1);
+  expect(result.current.reports).toEqual([second]);
+});
+
+it("通知更新不请求或跳页，主动刷新保留页码，刷新中的新通知不会丢失", async () => {
+  const { result } = renderHook(useReportsViewModel);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  act(() => result.current.handlePageChange(2));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  const calls = vi.mocked(fetchReportHistory).mock.calls.length;
+  act(() => result.current.markUpdated());
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(fetchReportHistory).toHaveBeenCalledTimes(calls);
+  expect(result.current.page).toBe(2);
+  expect(result.current.hasUpdates).toBe(true);
+  act(() => result.current.refresh(false));
+  act(() => result.current.markUpdated());
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(result.current.hasUpdates).toBe(true);
+  expect(result.current.page).toBe(2);
 });
 
 it("翻页失败保留旧页并标明来源，刷新保留筛选，页数减少时自动回到最后一页", async () => {

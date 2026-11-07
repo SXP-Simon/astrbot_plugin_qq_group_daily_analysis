@@ -30,6 +30,11 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
         onReset={vm.resetFilters}
         onRefresh={() => vm.refresh(false)}
       />
+      {vm.hasUpdates && (
+        <p role="status" className="text-sm text-info">
+          报告有更新，点击“刷新”查看。当前页保持不变。
+        </p>
+      )}
       {vm.groupsError && (
         <p role="alert" className="m-0 text-sm text-destructive">
           {vm.groupsError}
@@ -48,12 +53,10 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
       )}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
         <span className="text-sm text-muted-foreground">
-          {vm.dateRange
-            ? `本页日期范围内 ${vm.reports.length} / ${vm.rawReports.length} 份`
-            : `本页 ${vm.rawReports.length} 份报告`}
+          {`共 ${vm.total} 份报告 · 本页 ${vm.reports.length} 份`}
         </span>
         <label className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
-          本页时间排序
+          时间排序
           <span className="block w-36">
             <NativeSelect
               value={vm.sortOrder}
@@ -81,9 +84,7 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
         />
       ) : !vm.loading && !vm.error ? (
         <p role="status" className="py-12 text-center text-muted-foreground">
-          {vm.dateRange && vm.rawReports.length > 0
-            ? "本页没有这个日期范围内的报告，可清空日期或继续翻页。"
-            : "暂无符合条件的报告，可调整筛选或发起分析。"}
+          暂无符合条件的报告，可调整筛选或发起分析。
         </p>
       ) : null}
       {vm.total > 0 && (

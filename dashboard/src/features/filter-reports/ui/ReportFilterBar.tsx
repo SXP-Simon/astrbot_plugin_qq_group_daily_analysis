@@ -63,7 +63,7 @@ export function ReportFilterBar(props: ReportFilterBarProps) {
       <div className="grid grid-cols-2 items-end gap-3 sm:flex sm:flex-wrap">
         {(["start", "end"] as const).map((key) => (
           <label key={key} className="grid min-w-0 gap-1 text-sm text-muted-foreground sm:w-44">
-            {key === "start" ? "本页开始日期" : "本页结束日期"}
+            {key === "start" ? "开始日期" : "结束日期"}
             <Input
               type="date"
               value={dates[key]}
@@ -80,10 +80,7 @@ export function ReportFilterBar(props: ReportFilterBarProps) {
                     return;
                   }
                   setError("");
-                  const range: [number, number] = [
-                    Math.floor(start / 1000),
-                    Math.floor(end / 1000),
-                  ];
+                  const range: [number, number] = [Math.floor(start / 1000), end / 1000];
                   emitted.current = range;
                   props.onDateRangeChange(range);
                 } else {
