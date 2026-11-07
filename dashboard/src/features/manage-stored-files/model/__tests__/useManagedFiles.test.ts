@@ -231,3 +231,45 @@ it("读取替换文件期间不能保存，取消编辑后不恢复上传草稿"
   expect(result.current.editor).toBeNull();
   expect(result.current.uploading).toBe(false);
 });
+
+it("记录减少时修正最后页，旧筛选的刷新回调不能重新查询旧范围", async () => {
+  const { result } = renderHook(useManagedFiles);
+  act(() => result.current.select(partitions[0]));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  const oldLoad = result.current.load;
+  act(() => result.current.searchFiles("new"));
+  await waitFor(() =>
+    expect(fetchManagedFiles).toHaveBeenLastCalledWith("custom_templates", "new", 1, "", ""),
+  );
+  const calls = vi.mocked(fetchManagedFiles).mock.calls.length;
+  await act(async () => oldLoad());
+  expect(fetchManagedFiles).toHaveBeenCalledTimes(calls);
+  act(() => result.current.setPage(3));
+  await waitFor(() => expect(result.current.page).toBe(1));
+  await waitFor(() =>
+    expect(fetchManagedFiles).toHaveBeenLastCalledWith("custom_templates", "new", 1, "", ""),
+  );
+});
+
+it("删除固定确认时的修订号，失败保留原因且跨分区目标被拒绝", async () => {
+  const { result } = renderHook(useManagedFiles);
+  act(() => result.current.select(partitions[0]));
+  await waitFor(() => expect(result.current.files.length).toBe(1));
+  const targets = [...result.current.files];
+  vi.mocked(deleteManagedFiles).mockRejectedValueOnce(new Error("修订冲突"));
+  let ok: boolean | undefined;
+  await act(async () => {
+    ok = await result.current.deleteSelected(targets, "custom_templates");
+  });
+  expect(ok).toBe(false);
+  expect(result.current.actionError).toBe("修订冲突");
+  expect(deleteManagedFiles).toHaveBeenCalledWith("custom_templates", [
+    { name: targets[0].name, revision: targets[0].revision },
+  ]);
+  act(() => result.current.select(partitions[1]));
+  await act(async () => {
+    ok = await result.current.deleteSelected(targets, "custom_templates");
+  });
+  expect(ok).toBe(false);
+  expect(deleteManagedFiles).toHaveBeenCalledTimes(1);
+});

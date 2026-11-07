@@ -62,13 +62,22 @@ export function useManagedFiles() {
     }
   }, []);
 
+  const listQueryKey = JSON.stringify([partition?.key, search, page, extensions, directory]);
+  const currentListQuery = useRef(listQueryKey);
+  currentListQuery.current = listQueryKey;
   const load = useCallback(async () => {
+    if (listQueryKey !== currentListQuery.current) return;
     const sequence = ++listSequence.current;
     if (!partition || ["typst_fonts", "avatar_storage"].includes(partition.key)) return;
     setLoading(true);
     try {
       const result = await fetchManagedFiles(partition.key, search, page, extensions, directory);
-      if (sequence === listSequence.current) {
+      if (sequence === listSequence.current && listQueryKey === currentListQuery.current) {
+        const lastPage = Math.max(1, Math.ceil(result.total / 20));
+        if (page > lastPage) {
+          setPage(lastPage);
+          return;
+        }
         setFiles(result.items);
         setGroups(result.groups || []);
         setTotal(result.total);
@@ -80,7 +89,7 @@ export function useManagedFiles() {
     } finally {
       if (sequence === listSequence.current) setLoading(false);
     }
-  }, [partition, search, page, extensions, directory]);
+  }, [partition, search, page, extensions, directory, listQueryKey]);
 
   useEffect(() => {
     void refresh();
@@ -201,23 +210,35 @@ export function useManagedFiles() {
       }
     }
   };
-  const deleteSelected = async () => {
-    if (!partition || !selected.length || operation.current !== null) return;
+  const deleteSelected = async (targets = selected, expectedPartition = partition?.key) => {
+    if (
+      !partition ||
+      partition.key !== expectedPartition ||
+      !targets.length ||
+      operation.current !== null
+    )
+      return false;
     const sequence = detailSequence.current;
     operation.current = sequence;
     setBusy(true);
+    setActionError("");
     try {
       const result = await deleteManagedFiles(
         partition.key,
-        selected.map((file) => ({ name: file.name, revision: file.revision })),
+        targets.map((file) => ({ name: file.name, revision: file.revision })),
       );
-      if (sequence !== detailSequence.current) return;
+      if (sequence !== detailSequence.current) return false;
       setDeleteResult(result);
       setSelected((current) => current.filter((file) => !result.deleted.includes(file.name)));
       await Promise.all([load(), refresh()]);
+      return sequence === detailSequence.current;
     } catch (cause) {
-      if (sequence === detailSequence.current)
-        toast.error(cause instanceof Error ? cause.message : "多选删除失败");
+      if (sequence === detailSequence.current) {
+        const message = cause instanceof Error ? cause.message : "多选删除失败";
+        setActionError(message);
+        toast.error(message);
+      }
+      return false;
     } finally {
       if (sequence === detailSequence.current) {
         operation.current = null;
