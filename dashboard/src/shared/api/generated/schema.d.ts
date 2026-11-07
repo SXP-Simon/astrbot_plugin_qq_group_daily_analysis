@@ -430,6 +430,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/data/incremental/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按平台区分的增量群聊目录 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 群聊目录 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            status?: string;
+                            data?: components["schemas"]["IncrementalGroupDirectory"];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/data/checkpoints": {
         parameters: {
             query?: never;
@@ -808,6 +847,7 @@ export interface components {
             kind: string;
             key?: string;
             group_id?: string;
+            platform_id?: string;
             batch_id?: string;
             date_str?: string;
             stage_name?: string;
@@ -1139,6 +1179,15 @@ export interface components {
             reports: components["schemas"]["SectionStats"];
             temp_files: components["schemas"]["SectionStats"];
         };
+        IncrementalGroupDirectoryItem: {
+            group_id: string;
+            platform_id: string;
+            group_name: string;
+        };
+        IncrementalGroupDirectory: {
+            groups: string[];
+            group_details: components["schemas"]["IncrementalGroupDirectoryItem"][];
+        };
         IncrementalBatchTopic: {
             topic?: string;
             detail?: string;
@@ -1204,6 +1253,7 @@ export interface components {
             page: number;
             page_size: number;
             group_id: string;
+            platform_id?: string;
             cursor: components["schemas"]["IncrementalCursorInfo"];
             batches: components["schemas"]["IncrementalBatchItem"][];
         };
@@ -1834,6 +1884,7 @@ export interface operations {
     getIncrementalBatchPage: {
         parameters: {
             query: {
+                platform_id?: string;
                 group_id: string;
                 page?: number;
                 page_size?: number;

@@ -426,6 +426,7 @@ async def test_incremental_and_checkpoint_routes_resilience(
     mock_ckpt_store = MagicMock()
     mock_ckpt_store.list_all_checkpoints.return_value = ([], 0)
     mock_inc_store = AsyncMock()
+    mock_inc_store.for_session.return_value = mock_inc_store
     mock_inc_store.list_batch_page.return_value = IncrementalBatchPage([], 0, 1, 20, 0)
     mock_inc_store.get_last_analyzed_cursor.return_value = (None, set())
 
@@ -650,6 +651,7 @@ async def test_incremental_cursor_contract_preserves_message_time(mock_trace_sto
     from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.web_compat import request as proxy_request
 
     store = AsyncMock()
+    store.for_session.return_value = store
     store.list_batch_page.return_value = IncrementalBatchPage([], 3, 1, 20, 456)
     store.get_last_analyzed_cursor.return_value = (120, {"one", "two"})
     routes = DataManagementRoutes(mock_trace_store, MagicMock(incremental_store=store))

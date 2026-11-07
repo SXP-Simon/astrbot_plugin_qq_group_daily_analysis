@@ -202,3 +202,26 @@ async def test_existing_delete_endpoint_obeys_group_mutation_lock(record_endpoin
     request.json.return_value = {"group_id": "123", "batch_id": "batch-one"}
     async with guard.group_lock("123", "daily"):
         assert (await legacy.api_delete_incremental_batch())["status_code"] == 409
+
+
+@pytest.mark.asyncio
+async def test_same_batch_identity_is_scoped_for_import_edit_and_delete(record_endpoint):
+    endpoint, request, _, _ = record_endpoint
+    root = endpoint.service.incremental_store
+    for platform, count in [("onebot-main", 3), ("telegram-main", 8)]:
+        locator = {"kind": "batch", "platform_id": platform, "group_id": "123", "batch_id": "same"}
+        request.json.return_value = {"locator": locator, "operation": "create", "data": IncrementalBatch(group_id="123", batch_id="same", messages_count=count).to_dict()}
+        assert (await endpoint.api_mutate())["status"] == "ok"
+    request.query = locator
+    record = (await endpoint.api_detail())["data"]
+    assert record["locator"]["platform_id"] == "telegram-main"
+    assert record["data"]["messages_count"] == 8
+    request.json.return_value = {**record, "operation": "replace", "data": {**record["data"], "messages_count": 9}}
+    assert (await endpoint.api_mutate())["status"] == "ok"
+    record = (await endpoint.api_detail())["data"]
+    assert record["data"]["messages_count"] == 9
+    request.json.return_value = {**record, "operation": "delete"}
+    assert (await endpoint.api_mutate())["status"] == "ok"
+    assert (await endpoint.api_detail())["status_code"] == 404
+    first = await root.for_session("123", "onebot-main")
+    assert (await first.get_batch_detail("123", "same")).messages_count == 3

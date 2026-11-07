@@ -45,6 +45,11 @@ def generate_openapi_spec() -> dict[str, object]:
                     "operationId": "getIncrementalBatchPage",
                     "parameters": [
                         {
+                            "name": "platform_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
                             "name": "group_id",
                             "in": "query",
                             "required": True,
@@ -675,6 +680,30 @@ def generate_openapi_spec() -> dict[str, object]:
                                             "status": {"type": "string"},
                                             "task_id": {"type": "string"},
                                             "message": {"type": "string"},
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/data/incremental/groups": {
+                "get": {
+                    "tags": ["Data"],
+                    "summary": "按平台区分的增量群聊目录",
+                    "responses": {
+                        "200": {
+                            "description": "群聊目录",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/IncrementalGroupDirectory"
+                                            },
                                         },
                                     }
                                 }
@@ -1959,6 +1988,28 @@ def generate_openapi_spec() -> dict[str, object]:
                         "temp_files",
                     ],
                 },
+                "IncrementalGroupDirectoryItem": {
+                    "type": "object",
+                    "properties": {
+                        "group_id": {"type": "string"},
+                        "platform_id": {"type": "string"},
+                        "group_name": {"type": "string"},
+                    },
+                    "required": ["group_id", "platform_id", "group_name"],
+                },
+                "IncrementalGroupDirectory": {
+                    "type": "object",
+                    "properties": {
+                        "groups": {"type": "array", "items": {"type": "string"}},
+                        "group_details": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/components/schemas/IncrementalGroupDirectoryItem"
+                            },
+                        },
+                    },
+                    "required": ["groups", "group_details"],
+                },
                 "IncrementalBatchTopic": {
                     "type": "object",
                     "properties": {
@@ -2081,6 +2132,7 @@ def generate_openapi_spec() -> dict[str, object]:
                         "page": {"type": "integer"},
                         "page_size": {"type": "integer"},
                         "group_id": {"type": "string"},
+                        "platform_id": {"type": "string"},
                         "cursor": {
                             "$ref": "#/components/schemas/IncrementalCursorInfo"
                         },

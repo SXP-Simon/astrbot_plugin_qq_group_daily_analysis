@@ -40,6 +40,7 @@ class RecordLocator(TypedDict):
     kind: str
     key: str
     group_id: str
+    platform_id: str
     batch_id: str
     date_str: str
     stage_name: str
@@ -62,6 +63,7 @@ def parse_locator(raw: dict[str, object]) -> RecordLocator:
         "kind": "",
         "key": "",
         "group_id": "",
+        "platform_id": "",
         "batch_id": "",
         "date_str": "",
         "stage_name": "",
@@ -219,7 +221,10 @@ class ManagedRecordRoutes:
         if kind == "batch":
             if not service.incremental_store:
                 raise ValueError("增量存储尚未初始化")
-            batch = await service.incremental_store.get_batch_detail(
+            store = await service.incremental_store.for_session(
+                locator["group_id"], locator["platform_id"]
+            )
+            batch = await store.get_batch_detail(
                 locator["group_id"], locator["batch_id"]
             )
             return batch.to_dict() if batch else None
@@ -418,6 +423,7 @@ class ManagedRecordRoutes:
             store = service.incremental_store
             if not store:
                 raise ValueError("增量存储尚未初始化")
+            store = await store.for_session(locator["group_id"], locator["platform_id"])
             if operation == "delete":
                 if not await store.delete_batch(
                     locator["group_id"], locator["batch_id"]
