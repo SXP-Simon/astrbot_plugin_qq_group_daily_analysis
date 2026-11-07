@@ -150,9 +150,11 @@ class TraceSQLiteStore:
                     FOREIGN KEY (trace_id) REFERENCES analysis_traces(trace_id) ON DELETE CASCADE
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_traces_started_at ON analysis_traces(started_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_traces_started_id ON analysis_traces(started_at DESC, trace_id DESC);
+                DROP INDEX IF EXISTS idx_traces_started_at;
                 CREATE INDEX IF NOT EXISTS idx_traces_group_id ON analysis_traces(group_id);
-                CREATE INDEX IF NOT EXISTS idx_traces_group_started ON analysis_traces(group_id, started_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_traces_group_started_id ON analysis_traces(group_id, started_at DESC, trace_id DESC);
+                DROP INDEX IF EXISTS idx_traces_group_started;
                 CREATE INDEX IF NOT EXISTS idx_traces_status ON analysis_traces(status);
                 CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON trace_spans(trace_id);
 
@@ -165,8 +167,10 @@ class TraceSQLiteStore:
                     created_at REAL NOT NULL
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_artifacts_created_at ON report_artifacts(created_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_artifacts_group_created ON report_artifacts(group_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_created_name ON report_artifacts(created_at DESC, filename DESC);
+                DROP INDEX IF EXISTS idx_artifacts_created_at;
+                CREATE INDEX IF NOT EXISTS idx_artifacts_group_created_name ON report_artifacts(group_id, created_at DESC, filename DESC);
+                DROP INDEX IF EXISTS idx_artifacts_group_created;
                 CREATE INDEX IF NOT EXISTS idx_artifacts_trace_id ON report_artifacts(trace_id);
                 """
             )
@@ -834,8 +838,11 @@ class TraceSQLiteStore:
         self,
         group_id: str | None = None,
         search: str | None = None,
-        limit: int = 150,
+        limit: int | None = 150,
         offset: int = 0,
+        start_time: float | None = None,
+        end_time: float | None = None,
+        sort_order: str = "desc",
     ) -> list[dict[str, object]]:
         """从数据库高效分页拉取历史报告产物（纯索引有序扫描，支持按群过滤与模糊检索）"""
         with self._get_connection() as conn:
@@ -853,17 +860,41 @@ class TraceSQLiteStore:
                 )
                 params.extend([kw, kw, kw])
 
+            if start_time is not None:
+                conditions.append("created_at >= ?")
+                params.append(start_time)
+            if end_time is not None:
+                conditions.append("created_at <= ?")
+                params.append(end_time)
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+            direction = "ASC" if sort_order == "asc" else "DESC"
             query = f"""
                 SELECT filename, trace_id, group_id, file_format, relative_path, created_at
                 FROM report_artifacts
                 {where_clause}
-                ORDER BY created_at DESC
-                LIMIT ? OFFSET ?
+                ORDER BY created_at {direction}, filename {direction}
             """
-            params.extend([limit, offset])
+            if limit is not None:
+                query += " LIMIT ? OFFSET ?"
+                params.extend([limit, offset])
             rows = conn.execute(query, tuple(params)).fetchall()
             return [dict(r) for r in rows]
+
+    def delete_missing_report_artifacts(
+        self, artifacts: list[tuple[str, str, float]]
+    ) -> None:
+        """清理已确认缺失且核验期间未被重新登记的文件索引。
+
+        Args:
+            artifacts: 文件名、相对路径和原生成时间的条件快照。
+        """
+        if not artifacts:
+            return
+        with self._get_connection() as conn:
+            conn.executemany(
+                "DELETE FROM report_artifacts WHERE filename = ? AND relative_path = ? AND created_at = ?",
+                artifacts,
+            )
 
     def count_report_artifacts(
         self,
@@ -1121,6 +1152,8 @@ class TraceSQLiteStore:
         end_time: float | None = None,
         sort_by: str = "started_at",
         sort_order: str = "desc",
+        before_time: float | None = None,
+        before_id: str | None = None,
     ) -> tuple[list[dict[str, object]], int]:
         """分页筛选查询 Trace 列表（支持按群组、状态、触发方式、关键词、时间范围筛选与排序）"""
         conditions: list[str] = []
@@ -1155,6 +1188,12 @@ class TraceSQLiteStore:
             like_pattern = f"%{search}%"
             params.extend([like_pattern, like_pattern, like_pattern])
 
+        if before_time is not None and before_id is not None:
+            if sort_by != "started_at" or sort_order != "desc" or offset:
+                raise ValueError("游标仅适用于时间倒序，且不能同时使用分页偏移")
+            conditions.append("(t.started_at, t.trace_id) < (?, ?)")
+            params.extend([before_time, before_id])
+
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
         # 排序字段白名单校验
@@ -1168,6 +1207,8 @@ class TraceSQLiteStore:
         order_direction = "ASC" if sort_order.lower() == "asc" else "DESC"
 
         with self._get_connection() as conn:
+            # 显式读取事务确保计数与列表来自同一个 WAL 快照。
+            conn.execute("BEGIN")
             # 查询总数
             count_sql = f"SELECT COUNT(*) FROM analysis_traces t {where_clause}"
             total_count = conn.execute(count_sql, params).fetchone()[0]
@@ -1185,7 +1226,7 @@ class TraceSQLiteStore:
                 LEFT JOIN token_usage tu ON t.trace_id = tu.trace_id
                 LEFT JOIN context_metrics cm ON t.trace_id = cm.trace_id
                 {where_clause}
-                ORDER BY {order_field} {order_direction}
+                ORDER BY {order_field} {order_direction}, t.trace_id {order_direction}
                 LIMIT ? OFFSET ?
             """
             rows = conn.execute(query_sql, [*params, limit, offset]).fetchall()
