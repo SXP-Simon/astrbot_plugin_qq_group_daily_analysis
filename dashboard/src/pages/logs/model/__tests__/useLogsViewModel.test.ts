@@ -26,6 +26,29 @@ const entry: PluginLogItem = {
   location: "render:20",
 };
 
+it("函数名搜索也作用于实时日志，解析后保留定位字段", async () => {
+  const { result } = renderHook(() => useLogsViewModel());
+  await act(async () => result.current.setSearch("Renderer.generate"));
+  const receive = vi.mocked(subscribeSSE).mock.lastCall![0].onMessage;
+  act(() => {
+    receive({
+      event: "log_entry",
+      data: { ...entry, id: "matched", function_name: "Renderer.generate" },
+    });
+    receive({
+      event: "log_entry",
+      data: { ...entry, id: "unmatched", function_name: "Renderer.close" },
+    });
+  });
+  expect(result.current.logs).toEqual([
+    expect.objectContaining({
+      id: "matched",
+      function_name: "Renderer.generate",
+      location: "render:20",
+    }),
+  ]);
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {

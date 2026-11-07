@@ -123,9 +123,13 @@ export function useLogsViewModel(active = true) {
         const keyword = search.trim().toLowerCase();
         if (
           keyword &&
-          ![entry.message, entry.trace_id, entry.logger_name, entry.location].some((value) =>
-            value?.toLowerCase().includes(keyword),
-          )
+          ![
+            entry.message,
+            entry.trace_id,
+            entry.logger_name,
+            entry.location,
+            entry.function_name,
+          ].some((value) => value?.toLowerCase().includes(keyword))
         )
           return;
         if (pending.current !== null) {

@@ -35,7 +35,7 @@ export function LogFilterBar(props: LogFilterBarProps) {
           搜索日志
           <Input
             type="search"
-            placeholder="内容 / 任务编号 / 模块"
+            placeholder="内容 / 任务编号 / 文件 / 函数"
             value={props.search}
             onChange={(event) => props.onSearchChange(event.target.value)}
           />

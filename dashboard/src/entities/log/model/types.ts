@@ -17,6 +17,7 @@ export const logEntrySchema: z.ZodType<PluginLogItem> = z.object({
   trace_id: z.string().nullish(),
   stage: z.string().nullish(),
   location: z.string().nullish(),
+  function_name: z.string().nullish(),
 });
 
 export const TAG_STYLE_MAP: Record<string, { label: string; color: string }> = {

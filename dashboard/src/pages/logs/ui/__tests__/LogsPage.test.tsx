@@ -28,6 +28,7 @@ beforeEach(() => {
         logger_name: "Render",
         tag: "Render",
         location: "render:20",
+        function_name: "Renderer.generate",
         stage: "RENDER_REPORT",
         message: "示例：主服务超时\n备用服务继续渲染",
         raw: "[WARNING] 示例：主服务超时",
@@ -46,6 +47,10 @@ it("筛选、暂停、复制与关联任务入口保留；日志区域全选不�
   await waitFor(() => expect(region).toHaveTextContent("备用服务继续渲染"));
   expect(region).toHaveTextContent("WARNING");
   expect(region).toHaveTextContent("render:20");
+  expect(region).toHaveTextContent("Renderer.generate()");
+  const message = within(region).getByText("示例：主服务超时 备用服务继续渲染");
+  expect(message.textContent).toBe("示例：主服务超时\n备用服务继续渲染");
+  expect(message).toHaveClass("whitespace-pre-wrap");
   fireEvent.click(screen.getByRole("button", { name: "查看任务 example-trace" }));
   expect(onViewTrace).toHaveBeenCalledWith("example-trace");
   fireEvent.click(screen.getByRole("button", { name: "暂停更新" }));
@@ -115,10 +120,10 @@ it("各等级保留明确文字，警告与错误突出整行，实时与暂停�
   expect(within(region).getByText("DEBUG")).toHaveClass("text-creative");
   expect(within(region).getByText("INFO")).toHaveClass("text-info");
   expect(within(region).getByText("WARNING").parentElement?.parentElement).toHaveClass(
-    "border-warning",
+    "border-l-warning",
   );
   expect(within(region).getByText("ERROR").parentElement?.parentElement).toHaveClass(
-    "border-destructive",
+    "border-l-destructive",
   );
   expect(within(region).getByText("CRITICAL")).toHaveClass("text-destructive-foreground");
   expect(screen.getByText("实时更新")).toHaveClass("text-success");

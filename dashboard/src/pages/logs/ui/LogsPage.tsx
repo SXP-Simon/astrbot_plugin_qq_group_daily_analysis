@@ -105,7 +105,7 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
             selection?.addRange(range);
           }
         }}
-        className="h-[60dvh] min-h-80 space-y-1 overflow-auto rounded-xl border border-solid border-border bg-card p-3 font-mono text-[13px] leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-4"
+        className="h-[65dvh] min-h-80 overflow-auto rounded-xl border border-solid border-border bg-card p-2 font-mono text-[13px] leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {!vm.logs.length ? (
           <p className="py-12 text-center text-muted-foreground">
@@ -115,18 +115,18 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
           vm.logs.map((item) => (
             <div
               key={item.id}
-              className={`border-0 border-l-2 border-solid px-3 py-2 ${
+              className={`break-words border-0 border-b border-l-2 border-solid border-b-border/40 px-2 py-0.5 [overflow-wrap:anywhere] last:border-b-0 ${
                 ["ERROR", "CRITICAL"].includes(item.level)
-                  ? "border-destructive bg-destructive/5"
+                  ? "border-l-destructive bg-destructive/5"
                   : item.level === "WARNING"
-                    ? "border-warning bg-warning/5"
-                    : "border-transparent"
+                    ? "border-l-warning bg-warning/5"
+                    : "border-l-transparent"
               }`}
             >
-              <div className="flex flex-wrap items-center gap-x-3 text-muted-foreground">
-                <time>{item.time_str}</time>
+              <span className="text-muted-foreground">
+                <time className="mr-2 whitespace-nowrap">{item.time_str}</time>
                 <span
-                  className={`inline-flex items-center gap-1 rounded-md px-2 text-xs font-medium ${levelStyles[item.level] ?? "bg-muted text-muted-foreground"}`}
+                  className={`mr-2 inline-flex items-center gap-1 rounded px-1 align-baseline text-xs font-medium ${levelStyles[item.level] ?? "bg-muted text-muted-foreground"}`}
                 >
                   {item.level === "WARNING" && (
                     <IconAlertTriangle aria-hidden="true" className="size-3.5" />
@@ -136,14 +136,19 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
                   )}
                   {item.level}
                 </span>
-                <span title={TAG_STYLE_MAP[item.tag]?.label}>{item.tag}</span>
-                {item.location && <span className="break-all">{item.location}</span>}
-                {item.stage && <span className="break-all">{item.stage}</span>}
+                <span className="mr-2" title={TAG_STYLE_MAP[item.tag]?.label}>
+                  {item.tag}
+                </span>
+                <span className="mr-2" title="日志调用位置">
+                  [{item.location || item.logger_name}
+                  {item.function_name && <> {item.function_name}()</>}]
+                </span>
+                {item.stage && <span className="mr-2">{item.stage}</span>}
                 {item.trace_id && (
                   <Button
                     size="sm"
                     variant="link"
-                    className="h-auto whitespace-normal break-all p-0 font-mono text-xs text-info decoration-info/40 hover:text-info hover:decoration-info"
+                    className="mr-2 inline h-auto max-w-full whitespace-normal p-0 align-baseline font-mono text-xs font-normal text-info decoration-info/40 [overflow-wrap:anywhere] hover:text-info hover:decoration-info"
                     onClick={() => {
                       if (item.trace_id) onViewTrace(item.trace_id);
                     }}
@@ -151,8 +156,8 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
                     查看任务 {item.trace_id}
                   </Button>
                 )}
-              </div>
-              <div
+              </span>
+              <span
                 className={
                   "whitespace-pre-wrap break-words " +
                   (["ERROR", "CRITICAL"].includes(item.level)
@@ -161,7 +166,7 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
                 }
               >
                 {item.message}
-              </div>
+              </span>
             </div>
           ))
         )}
