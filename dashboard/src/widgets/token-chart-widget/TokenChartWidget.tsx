@@ -141,7 +141,7 @@ export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetPr
         ))}
       </dl>
       {plotted.length > 0 && (
-        <div>
+        <div className="min-w-0 overflow-hidden">
           <div
             aria-label="图例"
             className="mb-1 flex justify-end gap-4 text-xs text-muted-foreground"
