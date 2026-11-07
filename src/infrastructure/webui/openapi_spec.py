@@ -663,6 +663,37 @@ def generate_openapi_spec() -> dict[str, object]:
                             "in": "query",
                             "schema": {"type": "integer", "default": 0},
                         },
+                        {"name": "search", "in": "query", "schema": {"type": "string"}},
+                        {
+                            "name": "start_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "end_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "sort_by",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "sort_order",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "before_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "before_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
                     ],
                     "responses": {
                         "200": {
@@ -683,6 +714,7 @@ def generate_openapi_spec() -> dict[str, object]:
                                                         },
                                                     },
                                                     "total": {"type": "integer"},
+                                                    "has_more": {"type": "boolean"},
                                                 },
                                                 "required": ["items", "total"],
                                             },
@@ -873,6 +905,21 @@ def generate_openapi_spec() -> dict[str, object]:
                         },
                         {
                             "name": "search",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "start_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "end_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "sort_order",
                             "in": "query",
                             "schema": {"type": "string"},
                         },

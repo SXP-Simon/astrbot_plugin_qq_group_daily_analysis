@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import math
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
@@ -65,6 +66,7 @@ class ReportRoutes:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
         self.report_output_dir = report_output_dir
+        self._scanned_directories: set[Path] = set()
 
     async def api_get_report_history(self) -> WebApiResponse:
         """获取历史生成的报告文件列表（支持图片与 HTML 报告，包含群号、群名与平台归属精准解析）"""
@@ -91,12 +93,43 @@ class ReportRoutes:
             except Exception:
                 pass
 
+            try:
+                start_time = (
+                    float(request.query["start_time"])
+                    if request.query.get("start_time")
+                    else None
+                )
+                end_time = (
+                    float(request.query["end_time"])
+                    if request.query.get("end_time")
+                    else None
+                )
+                if any(
+                    value is not None and not math.isfinite(value)
+                    for value in (start_time, end_time)
+                ):
+                    raise ValueError("日期必须是有限数值")
+                if (
+                    start_time is not None
+                    and end_time is not None
+                    and start_time > end_time
+                ):
+                    raise ValueError("开始日期不能晚于结束日期")
+                sort_order = request.query.get("sort_order", "desc")
+                if sort_order not in {"asc", "desc"}:
+                    raise ValueError("排序方向不正确")
+            except (ValueError, TypeError) as exc:
+                return error_response(str(exc), status_code=400)
+
             reports, effective_total = await asyncio.to_thread(
                 self._load_report_history,
                 query_limit,
                 query_offset,
                 query_group_id,
                 query_search,
+                start_time,
+                end_time,
+                sort_order,
             )
 
             # 响应数据：标准分页结构 { items, total }，同时顶层保留 items 键兼容部分直接读取
@@ -121,6 +154,9 @@ class ReportRoutes:
         query_offset: int,
         query_group_id: str | None,
         query_search: str | None,
+        start_time: float | None = None,
+        end_time: float | None = None,
+        sort_order: str = "desc",
     ) -> tuple[list[ReportHistoryItemDTO], int]:
         """在线程中完成历史产物查询和旧文件索引补录。
 
@@ -129,6 +165,9 @@ class ReportRoutes:
             query_offset: 分页偏移。
             query_group_id: 可选群号过滤条件。
             query_search: 可选文件或追踪号关键词。
+            start_time: 可选生成时间下界。
+            end_time: 可选生成时间上界。
+            sort_order: 全局生成时间排序方向。
 
         Returns:
             当前分页记录及过滤后的总数。
@@ -141,7 +180,7 @@ class ReportRoutes:
             for g in (self.trace_store.get_distinct_groups())
         }
         candidate_dirs: list[Path] = []
-        if self.report_output_dir and self.report_output_dir.exists():
+        if self.report_output_dir:
             candidate_dirs.append(self.report_output_dir)
 
         # 兼容自托管 HTML 输出目录
@@ -158,46 +197,30 @@ class ReportRoutes:
             custom_html_dir = cfg_mgr.get_html_output_dir() or ""
             if custom_html_dir:
                 p = Path(custom_html_dir)
-                if p.exists() and p not in candidate_dirs:
+                if p not in candidate_dirs:
                     candidate_dirs.append(p)
 
-        # 1. Level 1: 优先走数据库 report_artifacts 索引极速查询
-        total_count = 0
-        db_artifacts: list[dict[str, object]] = []
-        try:
-            total_count = self.trace_store.count_report_artifacts(
-                group_id=query_group_id,
-                search=query_search,
-            )
-            db_artifacts = self.trace_store.query_report_artifacts(
-                group_id=query_group_id,
-                search=query_search,
-                limit=query_limit,
-                offset=query_offset,
-            )
-        except Exception:
-            pass
+        # 旧文件仅在索引为空且目录尚未扫描时补录，空筛选不触发反复全盘扫描。
+        pending_dirs = [
+            d
+            for d in candidate_dirs
+            if d.is_dir() and d.resolve() not in self._scanned_directories
+        ]
+        if pending_dirs and self.trace_store.count_report_artifacts() == 0:
+            self._scan_report_history(pending_dirs, group_info_map)
+        self._scanned_directories.update(d.resolve() for d in pending_dirs)
 
-        reports = self._read_indexed_reports(
-            db_artifacts, candidate_dirs, group_info_map
+        # 单次 SELECT 固定元数据集合；核验文件后再分页，计数和列表来自同一集合。
+        # 为保证删除文件后总数准确，需要核验所有匹配路径，但不读取文件内容或递归扫描。
+        artifacts = self.trace_store.query_report_artifacts(
+            group_id=query_group_id,
+            search=query_search,
+            limit=None,
+            start_time=start_time,
+            end_time=end_time,
+            sort_order=sort_order,
         )
-        if reports or (total_count > 0 and query_offset >= total_count):
-            return reports, total_count
-        reports = self._scan_report_history(candidate_dirs, group_info_map)
-        if query_group_id:
-            reports = [
-                report for report in reports if report["group_id"] == query_group_id
-            ]
-        if query_search:
-            keyword = query_search.casefold()
-            reports = [
-                report
-                for report in reports
-                if any(
-                    keyword in report[field].casefold()
-                    for field in ("filename", "group_id", "trace_id")
-                )
-            ]
+        reports = self._read_indexed_reports(artifacts, candidate_dirs, group_info_map)
         return reports[query_offset : query_offset + query_limit], len(reports)
 
     def _read_indexed_reports(
@@ -209,7 +232,7 @@ class ReportRoutes:
         """解析索引记录并验证实际产物仍在允许的报告目录中。
 
         Args:
-            db_artifacts: 当前分页的数据库索引记录。
+            db_artifacts: 当前查询匹配的数据库索引记录。
             candidate_dirs: 允许读取的报告目录。
             group_info_map: 群名与平台映射。
 
@@ -218,6 +241,7 @@ class ReportRoutes:
         """
         reports: list[ReportHistoryItemDTO] = []
         seen_paths: set[Path] = set()
+        missing: list[tuple[str, str, float]] = []
         for art in db_artifacts:
             fn = str(art.get("filename") or "")
             rel_p = str(art.get("relative_path") or fn)
@@ -237,6 +261,23 @@ class ReportRoutes:
                         break
 
             if not matched_file:
+                # 仅清理确定不存在的文件，不把权限问题或目录离线当成永久删除。
+                try:
+                    paths = [
+                        d / name
+                        for d in candidate_dirs
+                        for name in (rel_p, Path(rel_p).name)
+                    ]
+                    created = art.get("created_at")
+                    if (
+                        paths
+                        and all(d.is_dir() for d in candidate_dirs)
+                        and all(not p.exists() for p in paths)
+                        and isinstance(created, (int, float))
+                    ):
+                        missing.append((fn, rel_p, float(created)))
+                except OSError:
+                    pass
                 continue
 
             res_p = matched_file.resolve()
@@ -278,6 +319,7 @@ class ReportRoutes:
             except Exception:
                 pass
 
+        self.trace_store.delete_missing_report_artifacts(missing)
         return reports
 
     def _scan_report_history(
@@ -447,7 +489,7 @@ class ReportRoutes:
             target_file: Path | None = None
 
             search_dirs: list[Path] = []
-            if self.report_output_dir and self.report_output_dir.exists():
+            if self.report_output_dir:
                 search_dirs.append(self.report_output_dir)
             cfg_mgr = (
                 self.analysis_service.config_manager

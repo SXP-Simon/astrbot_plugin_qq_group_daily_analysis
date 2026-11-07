@@ -6,6 +6,7 @@ WebUI 链路观测与指标路由 (Trace & Metrics Routes)
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from typing import TYPE_CHECKING, TypedDict
 
@@ -99,6 +100,27 @@ class TraceRoutes:
             end_time_raw = (request.query.get("end_time") or "").strip()
             sort_by = (request.query.get("sort_by") or "").strip() or "started_at"
             sort_order = (request.query.get("sort_order") or "").strip() or "desc"
+            before_raw = request.query.get("before_time")
+            before_id = (request.query.get("before_id") or "").strip() or None
+            before_time = None
+            if before_raw is not None or before_id is not None:
+                try:
+                    before_time = float(before_raw) if before_raw is not None else None
+                except (ValueError, TypeError):
+                    return error_response("分页游标格式不正确", status_code=400)
+                if (
+                    before_time is None
+                    or not math.isfinite(before_time)
+                    or not before_id
+                    or sort_by != "started_at"
+                    or sort_order != "desc"
+                    or offset != 0
+                ):
+                    return error_response(
+                        "分页游标仅支持时间倒序，不能同时指定偏移", status_code=400
+                    )
+            limit = max(1, min(200, limit))
+            offset = max(0, offset)
 
             start_time = None
             if start_time_raw:
@@ -129,7 +151,7 @@ class TraceRoutes:
 
             items, total = await asyncio.to_thread(
                 self.trace_store.list_traces,
-                limit=query_dto.get("limit", 20),
+                limit=limit + 1,
                 offset=query_dto.get("offset", 0),
                 group_id=query_dto.get("group_id"),
                 status=query_dto.get("status"),
@@ -139,9 +161,18 @@ class TraceRoutes:
                 end_time=query_dto.get("end_time"),
                 sort_by=query_dto.get("sort_by", "started_at"),
                 sort_order=query_dto.get("sort_order", "desc"),
+                before_time=before_time,
+                before_id=before_id,
             )
             return json_response(
-                {"status": "ok", "data": {"items": items, "total": total}}
+                {
+                    "status": "ok",
+                    "data": {
+                        "items": items[:limit],
+                        "total": total,
+                        "has_more": len(items) > limit,
+                    },
+                }
             )
         except Exception as e:
             logger.error(f"查询 Trace 列表异常: {e}", exc_info=True)

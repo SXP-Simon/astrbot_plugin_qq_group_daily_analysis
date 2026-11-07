@@ -2266,6 +2266,13 @@ export interface operations {
                 trigger_type?: string;
                 limit?: number;
                 offset?: number;
+                search?: string;
+                start_time?: number;
+                end_time?: number;
+                sort_by?: string;
+                sort_order?: string;
+                before_time?: number;
+                before_id?: string;
             };
             header?: never;
             path?: never;
@@ -2284,6 +2291,7 @@ export interface operations {
                         data?: {
                             items: components["schemas"]["TraceRecord"][];
                             total: number;
+                            has_more?: boolean;
                         };
                     };
                 };
@@ -2419,6 +2427,9 @@ export interface operations {
                 offset?: number;
                 group_id?: string;
                 search?: string;
+                start_time?: number;
+                end_time?: number;
+                sort_order?: string;
             };
             header?: never;
             path?: never;
