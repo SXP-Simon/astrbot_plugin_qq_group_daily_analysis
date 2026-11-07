@@ -304,16 +304,6 @@ class AnalysisRecoveryService:
             group_id, date_str, checkpoint_trace_id, platform_id=platform_id
         )
         if cached_result is not None:
-            # 续跑任务拥有独立 ID，复用产物也必须归档到新任务，供再次续跑读取。
-            if self.checkpoint_store:
-                await asyncio.to_thread(
-                    self.checkpoint_store.save_checkpoint,
-                    group_id=group_id,
-                    date_str=date_str,
-                    stage_name=AnalysisStage.LLM_ANALYSIS.value,
-                    data=AnalysisResultSerializer.serialize(dict(cached_result)),
-                    trace_id=trace.trace_id,
-                )
             cached_topics = cached_result.get("topics", [])
             cached_titles = cached_result.get("user_titles", [])
             cached_stats = cached_result.get("statistics")
@@ -340,6 +330,18 @@ class AnalysisRecoveryService:
                     f"群 {group_id} 命中完整的 LLM 分析产物快照，跳过消息拉取与 LLM 分析，直接进入报告排版与分发"
                 )
                 async with self.task_guard.group_lock(group_id, "daily", platform_id):
+                    # 只有成功取得会话锁的续跑，才可为新任务归档复用产物。
+                    if self.checkpoint_store:
+                        await asyncio.to_thread(
+                            self.checkpoint_store.save_checkpoint,
+                            group_id=group_id,
+                            date_str=date_str,
+                            stage_name=AnalysisStage.LLM_ANALYSIS.value,
+                            data=AnalysisResultSerializer.serialize(
+                                dict(cached_result)
+                            ),
+                            trace_id=trace.trace_id,
+                        )
                     adapter = self.bot_manager.get_adapter(platform_id)
                     pipeline.restore_checkpoint_span(
                         AnalysisStage.LLM_ANALYSIS,
@@ -398,6 +400,15 @@ class AnalysisRecoveryService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
+            if self.checkpoint_store and cached_result is not None:
+                await asyncio.to_thread(
+                    self.checkpoint_store.save_checkpoint,
+                    group_id=group_id,
+                    date_str=date_str,
+                    stage_name=AnalysisStage.LLM_ANALYSIS.value,
+                    data=AnalysisResultSerializer.serialize(dict(cached_result)),
+                    trace_id=trace.trace_id,
+                )
             if self.checkpoint_store:
                 await asyncio.to_thread(
                     self.checkpoint_store.save_checkpoint,
