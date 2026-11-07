@@ -129,3 +129,35 @@ it("不存在的快照、错误平台及不支持的模板或格式不能伪造�
   }
   expect(mockReportHistory).toEqual(savedReports);
 });
+it("日期与升序先应用于全局数据，再分页；同一时间以文件名定序", () => {
+  mockReportHistory.splice(
+    0,
+    mockReportHistory.length,
+    ...Array.from({ length: 6 }, (_, i) => ({
+      ...savedReports[0],
+      filename: `global-${i}.png`,
+      modified_at: Math.floor(i / 2),
+    })),
+  );
+  const first = mockHandlers["GET reports/history"]({
+    limit: 2,
+    sort_order: "asc",
+    start_time: 1,
+    end_time: 2,
+  }).data;
+  const second = mockHandlers["GET reports/history"]({
+    limit: 2,
+    offset: 2,
+    sort_order: "asc",
+    start_time: 1,
+    end_time: 2,
+  }).data;
+  expect(first.total).toBe(4);
+  expect(second.total).toBe(4);
+  expect([...first.items, ...second.items].map((item) => item.filename)).toEqual([
+    "global-2.png",
+    "global-3.png",
+    "global-4.png",
+    "global-5.png",
+  ]);
+});

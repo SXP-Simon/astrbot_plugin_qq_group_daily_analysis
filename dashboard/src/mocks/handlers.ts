@@ -336,11 +336,20 @@ export const mockHandlers = {
     items.sort((left, right) => {
       const a = left[field],
         b = right[field];
-      if (a == null && b == null) return 0;
+      const tie =
+        (left.trace_id < right.trace_id ? -1 : left.trace_id > right.trace_id ? 1 : 0) * direction;
+      if (a == null && b == null) return tie;
       if (a == null) return -direction;
       if (b == null) return direction;
-      return (a - b) * direction;
+      return (a - b) * direction || tie;
     });
+    if (typeof params?.before_time === "number" && typeof params.before_id === "string") {
+      const time = params.before_time,
+        id = params.before_id;
+      items = items.filter(
+        (item) => item.started_at < time || (item.started_at === time && item.trace_id < id),
+      );
+    }
     const total = items.length;
     const offset = Number.isFinite(Number(params?.offset))
       ? Math.max(0, Math.floor(Number(params?.offset)))
@@ -350,7 +359,7 @@ export const mockHandlers = {
       : 20;
     return {
       status: "ok",
-      data: { items: items.slice(offset, offset + limit), total },
+      data: { items: items.slice(offset, offset + limit), total, has_more: offset + limit < total },
     };
   },
   "GET traces/:traceId": (
@@ -409,8 +418,19 @@ export const mockHandlers = {
     if (params?.report_type && typeof params.report_type === "string") {
       items = items.filter((r) => r.report_type === params.report_type);
     }
+    if (typeof params?.start_time === "number")
+      items = items.filter(
+        (item) => (item.modified_at ?? item.created_at ?? 0) >= Number(params.start_time),
+      );
+    if (typeof params?.end_time === "number")
+      items = items.filter(
+        (item) => (item.modified_at ?? item.created_at ?? 0) <= Number(params.end_time),
+      );
+    const direction = params?.sort_order === "asc" ? 1 : -1;
     items.sort(
-      (a, b) => (b.modified_at || b.created_at || 0) - (a.modified_at || a.created_at || 0),
+      (a, b) =>
+        ((a.modified_at ?? a.created_at ?? 0) - (b.modified_at ?? b.created_at ?? 0) ||
+          (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0)) * direction,
     );
     const limit = Math.max(1, Math.min(100, Math.trunc(Number(params?.limit) || 20)));
     const offset = Math.max(0, Math.trunc(Number(params?.offset) || 0));

@@ -48,6 +48,7 @@ it("群聊精确匹配，搜索覆盖名称与编号，日期和触发条件可�
   expect(mockHandlers["GET traces"]({ search: "不存在的示例任务" }).data).toEqual({
     items: [],
     total: 0,
+    has_more: false,
   });
   const result = mockHandlers["GET traces"]({
     group_id: sample.group_id,
@@ -93,5 +94,30 @@ it("旧成功和取消状态沿用后端别名，未知排序回退开始时间"
     );
   } finally {
     mockTraces.splice(mockTraces.length - records.length, records.length);
+  }
+});
+it("相同时间的游标继续读取不会因前方新增或删除记录错位", () => {
+  const original = [...mockTraces];
+  const records = Array.from({ length: 6 }, (_, i) => ({
+    ...original[0],
+    trace_id: `cursor-${i}`,
+    started_at: 100,
+  }));
+  mockTraces.splice(0, mockTraces.length, ...records);
+  try {
+    const first = mockHandlers["GET traces"]({ limit: 3 }).data;
+    expect(first.has_more).toBe(true);
+    const anchor = first.items.at(-1)!;
+    mockTraces.splice(4, 1);
+    mockTraces.push({ ...records[0], trace_id: "new", started_at: 101 });
+    const older = mockHandlers["GET traces"]({
+      limit: 3,
+      before_time: anchor.started_at,
+      before_id: anchor.trace_id,
+    }).data;
+    expect(older.items.map((item) => item.trace_id)).toEqual(["cursor-2", "cursor-1", "cursor-0"]);
+    expect(older.has_more).toBe(false);
+  } finally {
+    mockTraces.splice(0, mockTraces.length, ...original);
   }
 });
