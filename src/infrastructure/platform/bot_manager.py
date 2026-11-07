@@ -429,6 +429,26 @@ class BotManager:
         # 3. 兜底读取 platform_name
         return str(getattr(adapter, "platform_name", "") or "")
 
+    def resolve_platform_id(self, platform_id: str | None) -> str:
+        """将入口别名解析成唯一真实实例，供锁、配置与持久化共同使用。
+
+        Args:
+            platform_id: 实例 ID 或仅在单实例时有效的协议别名。
+
+        Returns:
+            已注册适配器的真实实例 ID。
+
+        Raises:
+            ValueError: 接入不存在、身份不完整或别名存在歧义。
+        """
+        adapter = self.get_adapter(platform_id)
+        if adapter is None:
+            raise ValueError(f"未找到平台 {platform_id} 的适配器，请选择有效的平台实例")
+        actual_id = self.get_adapter_platform_id(adapter)
+        if not actual_id:
+            raise ValueError("无法确定平台实例身份，请检查接入配置")
+        return actual_id
+
     def get_all_adapters(self) -> dict[str, PlatformAdapter[object]]:
         """获取所有 PlatformAdapter 实例 {platform_id: adapter}"""
         return self._adapters.copy()
