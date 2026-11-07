@@ -47,7 +47,11 @@ it("保留输入输出、零消耗模块和完整明细，图表按已记录模�
   expect(within(table).getAllByRole("row")).toHaveLength(4);
   expect(within(table).getByRole("row", { name: "群聊金句 0 0 0" })).toBeVisible();
   expect(within(table).getByRole("row", { name: "话题分析 60 10 70" })).toBeVisible();
-  expect(observed?.series).toMatchObject([{ data: [70, 30], name: "总 Tokens" }]);
+  expect(observed?.series).toMatchObject([
+    { data: [60, 20], name: "输入 Tokens", stack: "usage", barWidth: 10 },
+    { data: [10, 10], name: "输出 Tokens", stack: "usage", barWidth: 10 },
+  ]);
+  expect(observed?.xAxis).toMatchObject({ show: false, max: "dataMax" });
   expect(observed?.yAxis).toMatchObject({ data: ["话题分析", "群友画像"] });
   expect(screen.queryByText(/与任务总数不同/)).not.toBeInTheDocument();
 });
@@ -71,7 +75,8 @@ it("记录不一致或非法数值不会改写总量或虚构其他模块", () =
 });
 
 it("使用宿主主题与纯文本图表提示，未知模块名不会作为 HTML 执行", () => {
-  document.documentElement.style.setProperty("--ring", "#123456");
+  document.documentElement.style.setProperty("--chart-input", "rgba(90, 145, 172, 0.58)");
+  document.documentElement.style.setProperty("--chart-output", "rgba(149, 122, 177, 0.54)");
   document.documentElement.style.setProperty("--card", "#202020");
   try {
     render(
@@ -93,10 +98,31 @@ it("使用宿主主题与纯文本图表提示，未知模块名不会作为 HTM
     expect(observed).toMatchObject({
       animation: false,
       tooltip: { renderMode: "richText", confine: true, backgroundColor: "#202020" },
-      series: [{ itemStyle: { color: "#123456" } }],
+      series: [
+        { itemStyle: { color: "rgba(90, 145, 172, 0.58)" } },
+        { itemStyle: { color: "rgba(149, 122, 177, 0.54)" } },
+      ],
     });
   } finally {
-    document.documentElement.style.removeProperty("--ring");
+    document.documentElement.style.removeProperty("--chart-input");
+    document.documentElement.style.removeProperty("--chart-output");
     document.documentElement.style.removeProperty("--card");
   }
+});
+
+it("输入输出与模块总数不一致时只画原始总量，不用堆叠伪造用量", () => {
+  render(
+    <TokenChartWidget
+      tokenUsage={{
+        ...usage,
+        per_analyzer: {
+          topics: { prompt_tokens: 60, completion_tokens: 10, total_tokens: 100 },
+        },
+      }}
+    />,
+  );
+  expect(observed?.series).toMatchObject([{ name: "总 Tokens", data: [100] }]);
+  expect(Array.isArray(observed?.series) && observed.series.length).toBe(1);
+  expect(screen.getByText("模块总量")).toBeVisible();
+  expect(screen.getByRole("row", { name: "话题分析 60 10 100" })).toBeVisible();
 });

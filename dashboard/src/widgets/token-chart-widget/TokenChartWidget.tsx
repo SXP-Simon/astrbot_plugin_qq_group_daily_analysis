@@ -33,6 +33,9 @@ export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetPr
     }))
     .sort((a, b) => (b.total ?? -1) - (a.total ?? -1));
   const plotted = rows.filter((row) => row.total !== null && row.total > 0);
+  const canStack = plotted.every(
+    (row) => row.input !== null && row.output !== null && row.input + row.output === row.total,
+  );
   const moduleTotal = rows.reduce((sum, row) => sum + (row.total ?? 0), 0);
   const mismatched =
     rows.length > 0 &&
@@ -51,17 +54,12 @@ export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetPr
       borderColor: color("--border"),
       textStyle: { color: color("--foreground") },
     },
-    grid: { top: 10, bottom: 20, left: 8, right: 20, containLabel: true },
+    grid: { top: 4, bottom: 4, left: 0, right: 64, containLabel: true },
     xAxis: {
       type: "value",
+      show: false,
+      max: "dataMax",
       minInterval: 1,
-      splitLine: { lineStyle: { color: color("--border") } },
-      axisLabel: {
-        color: color("--muted-foreground"),
-        hideOverlap: true,
-        formatter: (value: number) =>
-          value >= 10000 ? `${Number((value / 10000).toFixed(1))}万` : String(value),
-      },
     },
     yAxis: {
       type: "category",
@@ -69,28 +67,72 @@ export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetPr
       data: plotted.map((row) => row.name),
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: color("--foreground"), width: 108, overflow: "truncate" },
+      axisLabel: {
+        color: color("--foreground"),
+        fontSize: 12,
+        width: 96,
+        overflow: "truncate",
+        margin: 12,
+      },
     },
     series: [
       {
         type: "bar",
-        name: "总 Tokens",
-        barMaxWidth: 18,
-        data: plotted.map((row) => row.total),
-        itemStyle: { color: color("--ring"), borderRadius: [0, 4, 4, 0] },
+        name: canStack ? "输入 Tokens" : "总 Tokens",
+        stack: "usage",
+        barWidth: 10,
+        showBackground: true,
+        backgroundStyle: { color: color("--muted"), borderRadius: 5 },
+        data: plotted.map((row) => (canStack ? row.input : row.total)),
+        itemStyle: { color: color("--chart-input"), borderRadius: canStack ? [5, 0, 0, 5] : 5 },
+        label: {
+          show: !canStack,
+          position: "right",
+          distance: 10,
+          color: color("--foreground"),
+          formatter: (params) => plotted[params.dataIndex].total!.toLocaleString(),
+        },
       },
+      ...(canStack
+        ? [
+            {
+              type: "bar" as const,
+              name: "输出 Tokens",
+              stack: "usage",
+              barWidth: 10,
+              data: plotted.map((row) => row.output),
+              itemStyle: { color: color("--chart-output"), borderRadius: [0, 5, 5, 0] },
+              label: {
+                show: true,
+                position: "right" as const,
+                distance: 10,
+                color: color("--foreground"),
+                formatter: (params: { dataIndex: number }) =>
+                  plotted[params.dataIndex].total!.toLocaleString(),
+              },
+            },
+          ]
+        : []),
     ],
   };
   return (
     <section aria-label="模型消耗" className="min-w-0 space-y-4">
       <h2 className="m-0 text-lg font-medium">模型消耗</h2>
-      <dl className="m-0 grid grid-cols-3 gap-3">
+      <dl className="m-0 grid grid-cols-3 gap-2">
         {[
-          ["总 Tokens", total],
-          ["输入 Tokens", recordedCount(tokenUsage?.prompt_tokens)],
-          ["输出 Tokens", recordedCount(tokenUsage?.completion_tokens)],
-        ].map(([label, value]) => (
-          <div key={label} className="min-w-0">
+          { label: "总 Tokens", value: total, tone: "bg-primary/10" },
+          {
+            label: "输入 Tokens",
+            value: recordedCount(tokenUsage?.prompt_tokens),
+            tone: "bg-info/10",
+          },
+          {
+            label: "输出 Tokens",
+            value: recordedCount(tokenUsage?.completion_tokens),
+            tone: "bg-creative/10",
+          },
+        ].map(({ label, value, tone }) => (
+          <div key={label} className={`min-w-0 rounded-xl p-3 ${tone}`}>
             <dt className="text-sm text-muted-foreground">{label}</dt>
             <dd className="m-0 mt-1 break-words text-lg tabular-nums">
               {typeof value === "number" ? value.toLocaleString() : "未记录"}
@@ -99,11 +141,36 @@ export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetPr
         ))}
       </dl>
       {plotted.length > 0 && (
-        <ReactECharts
-          option={option}
-          notMerge
-          style={{ height: Math.min(480, Math.max(170, plotted.length * 34 + 50)), width: "100%" }}
-        />
+        <div>
+          <div
+            aria-label="图例"
+            className="mb-1 flex justify-end gap-4 text-xs text-muted-foreground"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="size-2 rounded-sm"
+                style={{ background: color("--chart-input") }}
+              />
+              {canStack ? "输入" : "模块总量"}
+            </span>
+            {canStack && (
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-sm"
+                  style={{ background: color("--chart-output") }}
+                />
+                输出
+              </span>
+            )}
+          </div>
+          <ReactECharts
+            option={option}
+            notMerge
+            style={{ height: Math.min(480, Math.max(94, plotted.length * 42 + 8)), width: "100%" }}
+          />
+        </div>
       )}
       {rows.length ? (
         <>
