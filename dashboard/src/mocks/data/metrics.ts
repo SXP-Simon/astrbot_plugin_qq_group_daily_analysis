@@ -5,6 +5,20 @@ const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime
 const dayCounts = [
   3, 0, 4, 2, 5, 1, 2, 0, 3, 1, 4, 6, 2, 3, 4, 5, 1, 2, 3, 4, 6, 5, 7, 9, 8, 6, 7, 7, 14, 18,
 ];
+const providerNames = [
+  "示例 DeepSeek",
+  "示例 OpenAI",
+  "示例 Gemini",
+  "示例 Claude",
+  "示例 Qwen",
+  "示例本地推理",
+  "示例备用渠道",
+  "示例低峰渠道",
+  "示例团队渠道",
+  "示例代理 / 自定义长名称的模型服务商",
+  "示例测试渠道",
+  "示例共享渠道",
+];
 let ordinal = 0;
 // 各范围共用一组确定性示例事件，切换小时与日期时总数和服务商消耗仍可对照。
 const events = dayCounts.flatMap((count, index) => {
@@ -16,7 +30,7 @@ const events = dayCounts.flatMap((count, index) => {
     return {
       timestamp: (day.getTime() + Math.floor((available * (slot + 1)) / (count + 1))) / 1000,
       failed: ordinal % 20 === 0,
-      provider: ordinal % 3 === 0 ? "示例 OpenAI" : "示例 DeepSeek",
+      provider: providerNames[Math.max(0, (ordinal % 24) - 12)],
       model: ordinal % 3 === 0 ? "gpt-4o" : "deepseek-chat",
       prompt: 1600,
       completion: 750,
