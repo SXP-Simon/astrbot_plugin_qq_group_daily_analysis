@@ -210,7 +210,9 @@ it("包内新建文件留在模板目录，选择另一个模板时清空筛选�
   );
   await waitFor(() => expect(editor).not.toBeVisible());
   fireEvent.click(screen.getByText("Typst 模板（.typ）"));
-  fireEvent.click(document.querySelector('.ant-table-tbody input[type="checkbox"]')!);
+  const fileRow = screen.getByText("report.typ", { exact: true }).closest("tr")!;
+  await waitFor(() => expect(within(fileRow).getByRole("checkbox")).toBeEnabled());
+  fireEvent.click(within(fileRow).getByRole("checkbox"));
   expect(screen.getByText("已选 1 项（最多 200，支持跨页）")).toBeInTheDocument();
   await selectTemplate("other");
   expect(screen.getByText("全部类型").closest("button")).toHaveAttribute("aria-pressed", "true");
