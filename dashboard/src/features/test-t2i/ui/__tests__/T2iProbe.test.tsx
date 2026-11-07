@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { testT2i } from "../../../../entities/config/api/configApi";
 import type { T2iProbe as ProbeResult } from "../../../../entities/config/model/t2iProbe";
 import { T2iProbe } from "../T2iProbe";
 import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
+import { useT2iProbe } from "../../model/useT2iProbe";
 
 vi.mock("../../../../entities/config/api/configApi", () => ({ testT2i: vi.fn() }));
 vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
@@ -66,7 +67,7 @@ it("宿主方案可测试默认配置和群聊配置，切换目标后清除旧�
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
   await screen.findByAltText("T2I 测试图片");
   expect(testT2i).toHaveBeenLastCalledWith(host);
-  fireEvent.mouseDown(screen.getByLabelText("测试使用的 AstrBot 配置", { selector: "input" }));
+  fireEvent.click(screen.getByRole("button", { name: /^测试使用的 AstrBot 配置：/ }));
   fireEvent.click(await screen.findByText("日常交流群（123 · onebot_1）"));
   expect(screen.queryByAltText("T2I 测试图片")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
@@ -136,7 +137,7 @@ it("相同群号的不同平台可分别选择并传入正确会话", async () =
   ]);
   vi.mocked(testT2i).mockResolvedValue(result);
   render(<T2iProbe input={{ render_service: "astrbot" }} />);
-  fireEvent.mouseDown(screen.getByLabelText("测试使用的 AstrBot 配置", { selector: "input" }));
+  fireEvent.click(screen.getByRole("button", { name: /^测试使用的 AstrBot 配置：/ }));
   expect(await screen.findByText("群一（123 · onebot_1）")).toBeInTheDocument();
   fireEvent.click(screen.getByText("群二（123 · onebot_2）"));
   fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
@@ -146,4 +147,58 @@ it("相同群号的不同平台可分别选择并传入正确会话", async () =
     group_id: "123",
     platform_id: "onebot_2",
   });
+});
+
+it("筛选群聊后选择回到入口焦点，仍按平台和群号测试", async () => {
+  vi.mocked(testT2i).mockResolvedValue(result);
+  render(<T2iProbe input={{ render_service: "astrbot" }} />);
+  const opener = screen.getByRole("button", { name: /^测试使用的 AstrBot 配置：/ });
+  opener.focus();
+  fireEvent.click(opener);
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "onebot_1" } });
+  fireEvent.click(await screen.findByRole("button", { name: "日常交流群（123 · onebot_1）" }));
+  await waitFor(() => expect(opener).toHaveFocus());
+  fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
+  await screen.findByRole("img", { name: "T2I 测试图片" });
+  expect(testT2i).toHaveBeenLastCalledWith({
+    render_service: "astrbot",
+    group_id: "123",
+    platform_id: "onebot_1",
+  });
+});
+
+it("Typst 测试保留本地字体和编译器说明，不加载宿主群聊选项", async () => {
+  vi.mocked(testT2i).mockResolvedValue(result);
+  render(<T2iProbe input={{ render_service: "typst" }} />);
+  expect(screen.getByText(/测试插件数据目录中的字体和 Typst 独立编译器/)).toBeVisible();
+  expect(screen.getByText(/不会下载角色素材、调用大模型或发到群里/)).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: /^测试使用的 AstrBot 配置：/ }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "测试渲染" }));
+  await screen.findByRole("img");
+  expect(fetchGroupSessions).not.toHaveBeenCalled();
+  expect(testT2i).toHaveBeenCalledWith({ render_service: "typst" });
+});
+
+it("同一批次重复发起测试也只发送一次请求", async () => {
+  let finish!: (value: ProbeResult) => void;
+  vi.mocked(testT2i).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const { result: hook } = renderHook(() => useT2iProbe(input));
+  let first!: Promise<void>;
+  act(() => {
+    first = hook.current.run();
+    void hook.current.run();
+  });
+  expect(testT2i).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    finish(result);
+    await first;
+  });
+  expect(hook.current.loading).toBe(false);
+  expect(hook.current.result).toEqual(result);
 });
