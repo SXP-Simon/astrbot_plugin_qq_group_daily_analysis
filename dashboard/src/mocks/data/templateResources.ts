@@ -182,7 +182,7 @@ const fonts = [
   "NotoSansJP.ttf",
   "NotoSansSymbols2.ttf",
   "NotoColorEmoji.ttf",
-  "cjkFonts_allseto_v1.11.ttf",
+  "cjkFonts-AllSeto-Title-v1.11.ttf",
   "Outfit.ttf",
   "ShareTechMono.ttf",
   "Inter.ttf",
@@ -202,7 +202,7 @@ const fonts = [
   "LXGWWenKaiMono.ttf",
 ];
 const themeFonts: Record<string, string[]> = {
-  HatsuneMiku: ["Outfit.ttf", "ShareTechMono.ttf", "Inter.ttf", "cjkFonts_allseto_v1.11.ttf"],
+  HatsuneMiku: ["Outfit.ttf", "ShareTechMono.ttf", "Inter.ttf", "cjkFonts-AllSeto-Title-v1.11.ttf"],
   simple: [],
   hack: ["Inter.ttf", "JetBrainsMono.ttf", "LXGWWenKaiMono.ttf"],
   maria: [

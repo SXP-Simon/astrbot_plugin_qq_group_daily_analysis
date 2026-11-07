@@ -298,7 +298,7 @@ it("Typst演示覆盖本地缓存、下载、超时、恢复、失败和取消�
     titleFallback?.spans?.find((span) => span.stage_name === "TYPST_RESOURCES")?.payload,
   ).toMatchObject({
     title_font: "Noto Sans SC",
-    warning: expect.stringContaining("全瀨體尚未下载"),
+    warning: expect.stringContaining("初音标题字体尚未下载"),
   });
   for (const trace of native) {
     for (const span of trace.spans || []) {
