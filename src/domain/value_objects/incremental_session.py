@@ -1,11 +1,5 @@
-"""增量存储的会话身份，不使用平台显示名作为隔离键。"""
+"""分层原子迁移期间的内部导出，调用方迁移完成后删除。"""
 
-from dataclasses import dataclass
+from .group_session import GroupSession as IncrementalSession
 
-
-@dataclass(frozen=True, order=True)
-class IncrementalSession:
-    """平台实例与群号共同定位一份增量状态。"""
-
-    platform_id: str
-    group_id: str
+__all__ = ["IncrementalSession"]
