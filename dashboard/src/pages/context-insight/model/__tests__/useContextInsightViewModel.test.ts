@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { fetchTraceList, fetchTraceDetail } from "../../../../entities/trace/api/traceApi";
-import { fetchDistinctGroups } from "../../../../entities/group/api/groupApi";
+import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
 import type { TraceRecord } from "../../../../entities/trace/model/types";
 import { useContextInsightViewModel } from "../useContextInsightViewModel";
 
@@ -9,7 +9,7 @@ vi.mock("../../../../entities/trace/api/traceApi", () => ({
   fetchTraceList: vi.fn(),
   fetchTraceDetail: vi.fn(),
 }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchDistinctGroups: vi.fn() }));
+vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 
 const first: TraceRecord = {
   trace_id: "example-a",
@@ -66,7 +66,7 @@ beforeEach(() => {
   vi.mocked(fetchTraceDetail).mockImplementation(async (id) =>
     id === first.trace_id ? detail : second,
   );
-  vi.mocked(fetchDistinctGroups).mockResolvedValue([]);
+  vi.mocked(fetchGroupSessions).mockResolvedValue([]);
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -164,7 +164,7 @@ it("刷新保留筛选和当前选择，列表与群聊错误可以恢复而不�
   });
   await act(async () => vi.advanceTimersByTimeAsync(0));
   vi.mocked(fetchTraceList).mockRejectedValueOnce(new Error("宿主未响应"));
-  vi.mocked(fetchDistinctGroups).mockRejectedValueOnce(new Error("群聊不可用"));
+  vi.mocked(fetchGroupSessions).mockRejectedValueOnce(new Error("群聊不可用"));
   act(() => result.current.refresh());
   await act(async () => vi.advanceTimersByTimeAsync(0));
   expect(result.current.selectedTrace?.trace_id).toBe(second.trace_id);
@@ -240,4 +240,19 @@ it("继续加载防重入，失败可重试，改筛选和卸载会废弃迟到�
   expect(result.current.traces.some((item) => item.trace_id === "late")).toBe(false);
   unmount();
   expect(vi.getTimerCount()).toBe(0);
+});
+
+it("平台变更清空群聊，群聊选择携带平台身份", async () => {
+  const { result } = renderHook(useContextInsightViewModel);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  act(() => result.current.setSelectedGroup("same", "telegram"));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(fetchTraceList).toHaveBeenLastCalledWith(
+    expect.objectContaining({ group_id: "same", platform: "telegram" }),
+  );
+  act(() => result.current.setSelectedPlatform(""));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(fetchTraceList).toHaveBeenLastCalledWith(
+    expect.objectContaining({ group_id: undefined, platform: "" }),
+  );
 });

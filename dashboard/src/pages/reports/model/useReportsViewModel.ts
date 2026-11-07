@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchReportHistory } from "../../../entities/report/api/reportApi";
-import { fetchDistinctGroups } from "../../../entities/group/api/groupApi";
+import { fetchGroupSessions } from "../../../entities/group/api/groupApi";
 import type { ReportItem } from "../../../entities/report/model/types";
 import type { GroupItem } from "../../../entities/group/model/types";
 import { useReportActions } from "./useReportActions";
@@ -10,6 +10,7 @@ interface ReportQuery {
   pageSize: number;
   search: string;
   selectedGroup?: string;
+  selectedPlatform?: string;
   dateRange: [number, number] | null;
   sortOrder: "desc" | "asc";
 }
@@ -38,7 +39,7 @@ export function useReportsViewModel() {
   useEffect(() => {
     let active = true;
     setGroupsError("");
-    void fetchDistinctGroups()
+    void fetchGroupSessions()
       .then((result) => {
         if (active) setGroups(result);
       })
@@ -68,6 +69,7 @@ export function useReportsViewModel() {
           limit: query.pageSize,
           offset: (query.page - 1) * query.pageSize,
           group_id: query.selectedGroup || undefined,
+          platform: query.selectedPlatform,
           search: query.search.trim() || undefined,
           start_time: query.dateRange?.[0],
           end_time: query.dateRange?.[1],
@@ -100,10 +102,12 @@ export function useReportsViewModel() {
   }, [query, refreshRequest]);
 
   const mergedGroups = useMemo(() => {
-    const map = new Map(groups.map((group) => [group.group_id, group]));
+    const map = new Map(
+      groups.map((group) => [JSON.stringify([group.platform, group.group_id]), group]),
+    );
     for (const report of reports) {
-      if (report.group_id && !map.has(report.group_id))
-        map.set(report.group_id, {
+      if (report.group_id && !map.has(JSON.stringify([report.platform || "", report.group_id])))
+        map.set(JSON.stringify([report.platform || "", report.group_id]), {
           group_id: report.group_id,
           group_name: report.group_name || `群 ${report.group_id}`,
           platform: report.platform || "",
@@ -129,8 +133,15 @@ export function useReportsViewModel() {
       setQuery((current) => ({ ...current, sortOrder, page: 1 })),
     total,
     setSearch: (search: string) => setQuery((current) => ({ ...current, search, page: 1 })),
-    setSelectedGroup: (selectedGroup?: string) =>
-      setQuery((current) => ({ ...current, selectedGroup, page: 1 })),
+    setSelectedPlatform: (selectedPlatform?: string) =>
+      setQuery((current) => ({ ...current, selectedPlatform, selectedGroup: undefined, page: 1 })),
+    setSelectedGroup: (selectedGroup?: string, platform?: string) =>
+      setQuery((current) => ({
+        ...current,
+        selectedPlatform: platform ?? current.selectedPlatform,
+        selectedGroup,
+        page: 1,
+      })),
     resetFilters: () => {
       setQuery((current) => ({ ...INITIAL_QUERY, pageSize: current.pageSize }));
     },

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchTraceList } from "../../../entities/trace/api/traceApi";
-import { fetchDistinctGroups } from "../../../entities/group/api/groupApi";
+import { fetchGroupSessions } from "../../../entities/group/api/groupApi";
 import type { TraceRecord } from "../../../entities/trace/model/types";
 import type { GroupItem } from "../../../entities/group/model/types";
 import type { TraceQuery, TraceSortField } from "../../../entities/trace/model/traceQuery";
@@ -29,7 +29,7 @@ export function useTracesViewModel() {
   useEffect(() => {
     let active = true;
     setGroupsError("");
-    void fetchDistinctGroups()
+    void fetchGroupSessions()
       .then((result) => {
         if (active) setGroups(result);
       })
@@ -59,6 +59,7 @@ export function useTracesViewModel() {
           limit: query.pageSize,
           offset: (query.page - 1) * query.pageSize,
           group_id: query.selectedGroup || undefined,
+          platform: query.selectedPlatform,
           search: query.search.trim() || undefined,
           status: query.statusFilter || undefined,
           trigger_type: query.triggerTypeFilter || undefined,
@@ -108,8 +109,15 @@ export function useTracesViewModel() {
       setQuery((current) => ({ ...current, statusFilter, page: 1 })),
     setTriggerTypeFilter: (triggerTypeFilter?: string) =>
       setQuery((current) => ({ ...current, triggerTypeFilter, page: 1 })),
-    setSelectedGroup: (selectedGroup?: string) =>
-      setQuery((current) => ({ ...current, selectedGroup, page: 1 })),
+    setSelectedPlatform: (selectedPlatform?: string) =>
+      setQuery((current) => ({ ...current, selectedPlatform, selectedGroup: undefined, page: 1 })),
+    setSelectedGroup: (selectedGroup?: string, platform?: string) =>
+      setQuery((current) => ({
+        ...current,
+        selectedPlatform: platform ?? current.selectedPlatform,
+        selectedGroup,
+        page: 1,
+      })),
     setDateRange: (dateRange: [number, number] | null) =>
       setQuery((current) => ({ ...current, dateRange, page: 1 })),
     resetFilters: () =>

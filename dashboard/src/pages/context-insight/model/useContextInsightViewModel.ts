@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchTraceList, fetchTraceDetail } from "../../../entities/trace/api/traceApi";
-import { fetchDistinctGroups } from "../../../entities/group/api/groupApi";
+import { fetchGroupSessions } from "../../../entities/group/api/groupApi";
 import type { TraceRecord, ContextMetrics } from "../../../entities/trace/model/types";
 import type { GroupItem } from "../../../entities/group/model/types";
 
 interface InsightFilters {
   search: string;
   selectedGroup?: string;
+  selectedPlatform?: string;
   statusFilter?: string;
   dateRange: [number, number] | null;
 }
@@ -37,7 +38,7 @@ export function useContextInsightViewModel() {
   useEffect(() => {
     let active = true;
     setGroupsError("");
-    void fetchDistinctGroups()
+    void fetchGroupSessions()
       .then((result) => {
         if (active) setGroups(result);
       })
@@ -72,6 +73,7 @@ export function useContextInsightViewModel() {
         const result = await fetchTraceList({
           limit: 50,
           group_id: filters.selectedGroup || undefined,
+          platform: filters.selectedPlatform,
           search: filters.search.trim() || undefined,
           status: filters.statusFilter || undefined,
           start_time: filters.dateRange?.[0],
@@ -161,6 +163,7 @@ export function useContextInsightViewModel() {
       const result = await fetchTraceList({
         limit: 50,
         group_id: filters.selectedGroup || undefined,
+        platform: filters.selectedPlatform,
         search: filters.search.trim() || undefined,
         status: filters.statusFilter || undefined,
         start_time: filters.dateRange?.[0],
@@ -224,8 +227,14 @@ export function useContextInsightViewModel() {
     groupsError,
     setSelectedTrace: (trace: TraceRecord | null) => setSelectedTraceId(trace?.trace_id ?? null),
     setSearch: (search: string) => setFilters((current) => ({ ...current, search })),
-    setSelectedGroup: (selectedGroup?: string) =>
-      setFilters((current) => ({ ...current, selectedGroup })),
+    setSelectedPlatform: (selectedPlatform?: string) =>
+      setFilters((current) => ({ ...current, selectedPlatform, selectedGroup: undefined })),
+    setSelectedGroup: (selectedGroup?: string, platform?: string) =>
+      setFilters((current) => ({
+        ...current,
+        selectedPlatform: platform ?? current.selectedPlatform,
+        selectedGroup,
+      })),
     setStatusFilter: (statusFilter?: string) =>
       setFilters((current) => ({ ...current, statusFilter })),
     setDateRange: (dateRange: [number, number] | null) =>

@@ -20,6 +20,8 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
     <div className="space-y-5">
       <ReportFilterBar
         search={vm.search}
+        selectedPlatform={vm.selectedPlatform}
+        onPlatformChange={vm.setSelectedPlatform}
         selectedGroup={vm.selectedGroup}
         dateRange={vm.dateRange}
         groups={vm.groups}

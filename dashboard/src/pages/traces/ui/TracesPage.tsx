@@ -41,6 +41,8 @@ export const TracesPage: React.FC<TracesPageProps> = ({ viewModel, onViewTrace }
       {/* 过滤筛选工具栏 (Feature Molecule) */}
       <TraceFilterBar
         search={search}
+        selectedPlatform={viewModel.selectedPlatform}
+        onPlatformChange={viewModel.setSelectedPlatform}
         selectedGroup={selectedGroup}
         statusFilter={statusFilter}
         triggerTypeFilter={triggerTypeFilter}

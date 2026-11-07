@@ -8,7 +8,7 @@ import {
   fetchReportTemplates,
   rerenderReport,
 } from "../../../../entities/report/api/reportApi";
-import { fetchDistinctGroups } from "../../../../entities/group/api/groupApi";
+import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
 import type { ReportItem } from "../../../../entities/report/model/types";
 
 vi.mock("../../../../entities/report/api/reportApi", () => ({
@@ -17,7 +17,7 @@ vi.mock("../../../../entities/report/api/reportApi", () => ({
   fetchReportTemplates: vi.fn(),
   rerenderReport: vi.fn(),
 }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchDistinctGroups: vi.fn() }));
+vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 const image: ReportItem = {
   filename: "example-a.png",
   modified_at: 200,
@@ -40,7 +40,7 @@ function Page() {
 }
 beforeEach(() => {
   vi.mocked(fetchReportHistory).mockResolvedValue({ items: [image, html, comic], total: 25 });
-  vi.mocked(fetchDistinctGroups).mockResolvedValue([]);
+  vi.mocked(fetchGroupSessions).mockResolvedValue([]);
   vi.mocked(fetchReportContent).mockImplementation(async (filename) =>
     filename === html.filename
       ? { ...html, html_content: "<h1>示例报告</h1>" }

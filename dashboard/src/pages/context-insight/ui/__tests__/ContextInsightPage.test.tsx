@@ -3,14 +3,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ContextInsightPage } from "../ContextInsightPage";
 import { useContextInsightViewModel } from "../../model/useContextInsightViewModel";
 import { fetchTraceList, fetchTraceDetail } from "../../../../entities/trace/api/traceApi";
-import { fetchDistinctGroups } from "../../../../entities/group/api/groupApi";
+import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
 import type { TraceRecord } from "../../../../entities/trace/model/types";
 
 vi.mock("../../../../entities/trace/api/traceApi", () => ({
   fetchTraceList: vi.fn(),
   fetchTraceDetail: vi.fn(),
 }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchDistinctGroups: vi.fn() }));
+vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 vi.mock("../../../../widgets/timeline-picker/AnalysisTimelinePicker", () => ({
   AnalysisTimelinePicker: () => null,
 }));
@@ -37,7 +37,7 @@ beforeEach(() => {
   vi.mocked(fetchTraceDetail).mockImplementation(
     async (id) => traces.find((trace) => trace.trace_id === id) ?? null,
   );
-  vi.mocked(fetchDistinctGroups).mockResolvedValue([]);
+  vi.mocked(fetchGroupSessions).mockResolvedValue([]);
 });
 afterEach(() => vi.resetAllMocks());
 

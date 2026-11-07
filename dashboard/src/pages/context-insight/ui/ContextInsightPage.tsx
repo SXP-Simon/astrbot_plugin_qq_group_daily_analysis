@@ -19,6 +19,8 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
     <div className="space-y-6">
       <TraceFilterBar
         search={vm.search}
+        selectedPlatform={vm.selectedPlatform}
+        onPlatformChange={vm.setSelectedPlatform}
         selectedGroup={vm.selectedGroup}
         statusFilter={vm.statusFilter}
         dateRange={vm.dateRange}

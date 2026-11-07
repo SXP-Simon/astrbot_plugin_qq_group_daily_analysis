@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { fetchReportHistory } from "../../../../entities/report/api/reportApi";
-import { fetchDistinctGroups } from "../../../../entities/group/api/groupApi";
+import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
 import type { ReportItem } from "../../../../entities/report/model/types";
 import { useReportsViewModel } from "../useReportsViewModel";
 
@@ -9,7 +9,7 @@ vi.mock("../../../../entities/report/api/reportApi", () => ({
   fetchReportHistory: vi.fn(),
   fetchReportContent: vi.fn(),
 }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchDistinctGroups: vi.fn() }));
+vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 const first: ReportItem = {
   filename: "example-a.png",
   size_bytes: 100,
@@ -22,7 +22,7 @@ const second: ReportItem = { ...first, filename: "example-b.html", modified_at: 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.mocked(fetchReportHistory).mockResolvedValue({ items: [first, second], total: 52 });
-  vi.mocked(fetchDistinctGroups).mockResolvedValue([]);
+  vi.mocked(fetchGroupSessions).mockResolvedValue([]);
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -117,7 +117,7 @@ it("翻页失败保留旧页并标明来源，刷新保留筛选，页数减少�
   expect(result.current.page).toBe(3);
   expect(result.current.reports).toHaveLength(2);
   vi.mocked(fetchReportHistory).mockResolvedValue({ items: [second], total: 21 });
-  vi.mocked(fetchDistinctGroups).mockRejectedValueOnce(new Error("群聊暂不可读"));
+  vi.mocked(fetchGroupSessions).mockRejectedValueOnce(new Error("群聊暂不可读"));
   act(() => result.current.refresh(false));
   await act(async () => vi.advanceTimersByTimeAsync(0));
   await act(async () => vi.advanceTimersByTimeAsync(1));
@@ -149,4 +149,19 @@ it("卸载清除搜索定时器，迟到失败不再写回或发起请求", asyn
   });
   expect(fetchReportHistory).toHaveBeenCalledTimes(1);
   expect(vi.getTimerCount()).toBe(0);
+});
+
+it("平台变更清空群聊，群聊选择携带平台身份", async () => {
+  const { result } = renderHook(useReportsViewModel);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  act(() => result.current.setSelectedGroup("same", "telegram"));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(fetchReportHistory).toHaveBeenLastCalledWith(
+    expect.objectContaining({ group_id: "same", platform: "telegram" }),
+  );
+  act(() => result.current.setSelectedPlatform(""));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(fetchReportHistory).toHaveBeenLastCalledWith(
+    expect.objectContaining({ group_id: undefined, platform: "" }),
+  );
 });
