@@ -1639,6 +1639,7 @@ def generate_openapi_spec() -> dict[str, object]:
                         "trace_id": {"type": "string", "nullable": True},
                         "stage": {"type": "string", "nullable": True},
                         "location": {"type": "string", "nullable": True},
+                        "function_name": {"type": "string", "nullable": True},
                     },
                     "required": [
                         "id",

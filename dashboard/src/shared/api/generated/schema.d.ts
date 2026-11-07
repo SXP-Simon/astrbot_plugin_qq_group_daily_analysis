@@ -994,6 +994,7 @@ export interface components {
             trace_id?: string | null;
             stage?: string | null;
             location?: string | null;
+            function_name?: string | null;
         };
         AvailableTag: {
             key: string;
