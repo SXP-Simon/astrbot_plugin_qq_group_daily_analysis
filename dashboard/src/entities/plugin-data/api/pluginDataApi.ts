@@ -140,7 +140,8 @@ export async function fetchCheckpointsList(params?: {
     ...(params ?? {}),
   });
   const data = extractData<CheckpointsListResponse>(res);
-  return data ?? { items: [], total: 0 };
+  if (!data) throw new Error("快照列表响应为空，请刷新重试。");
+  return data;
 }
 
 export async function fetchCheckpointDetail(
