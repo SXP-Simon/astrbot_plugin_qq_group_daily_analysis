@@ -1,4 +1,10 @@
 import { expect, it } from "vitest";
+import { mockHandlers } from "../handlers";
+import { extractData } from "../../shared/api/bridge";
+import type {
+  IncrementalBatchItem,
+  IncrementalBatchesResponse,
+} from "../../entities/plugin-data/model/types";
 import { mockIncrementalBatches } from "../data/pluginData";
 
 it("增量批次与游标遵守秒级时间契约，详情时间与列表一致", () => {
@@ -15,5 +21,66 @@ it("增量批次与游标遵守秒级时间契约，详情时间与列表一致"
   }
   for (const batch of mockIncrementalBatches.batches) {
     expect(Date.parse(batch.created_at_iso!)).toBe(batch.timestamp * 1000);
+  }
+});
+
+it("切换群和批次返回对应数据，不再总是返回第一份批次", () => {
+  const other = extractData<IncrementalBatchesResponse>(
+    mockHandlers["GET data/incremental/batches"]({ group_id: "其他群" }),
+  );
+  expect(other?.batches).toEqual([]);
+  expect(other?.cursor).toMatchObject({ group_id: "其他群", last_analyzed_timestamp: 0 });
+  for (const batch of mockIncrementalBatches.batches) {
+    const detail = extractData<IncrementalBatchItem>(
+      mockHandlers["GET data/incremental/batch/detail"]({
+        group_id: batch.group_id,
+        batch_id: batch.batch_id,
+      }),
+    );
+    expect(detail?.batch_id).toBe(batch.batch_id);
+    expect(detail?.topics).toEqual(batch.topics);
+  }
+  expect(
+    mockHandlers["GET data/incremental/batch/detail"]({
+      group_id: "其他群",
+      batch_id: mockIncrementalBatches.batches[0].batch_id,
+    }).status,
+  ).toBe("error");
+});
+
+it("单批删除和整群重置同步到列表、详情及游标", () => {
+  const original = structuredClone(mockIncrementalBatches);
+  try {
+    const first = original.batches[0];
+    expect(
+      mockHandlers["POST data/incremental/batch"]({
+        group_id: first.group_id,
+        batch_id: first.batch_id,
+      }).status,
+    ).toBe("ok");
+    expect(
+      mockHandlers["GET data/incremental/batch/detail"]({
+        group_id: first.group_id,
+        batch_id: first.batch_id,
+      }).status,
+    ).toBe("error");
+    expect(mockIncrementalBatches.batches.some((batch) => batch.batch_id === first.batch_id)).toBe(
+      false,
+    );
+    const remaining = mockIncrementalBatches.batches.length;
+    expect(
+      mockHandlers["POST data/incremental/reset"]({ group_id: first.group_id }).data,
+    ).toMatchObject({ deleted_batches: remaining });
+    expect(mockIncrementalBatches.batches).toHaveLength(0);
+    expect(mockIncrementalBatches.cursor.last_analyzed_timestamp).toBe(0);
+  } finally {
+    for (const batch of original.batches) {
+      mockHandlers["POST plugin-data/records/mutate"]({
+        locator: { kind: "batch", group_id: batch.group_id, batch_id: batch.batch_id },
+        operation: "create",
+        data: batch,
+      });
+    }
+    Object.assign(mockIncrementalBatches, original);
   }
 });

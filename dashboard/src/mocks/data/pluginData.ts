@@ -18,6 +18,7 @@ const incrementalNow = Math.floor(Date.now() / 1000);
 export const mockIncrementalBatches: IncrementalBatchesResponse = {
   group_id: "123456789",
   cursor: {
+    timestamp: incrementalNow - 86400,
     group_id: "123456789",
     last_analyzed_timestamp: incrementalNow - 86400,
     last_message_timestamp: incrementalNow,
@@ -31,7 +32,19 @@ export const mockIncrementalBatches: IncrementalBatchesResponse = {
       created_at_iso: new Date((incrementalNow - 43200) * 1000).toISOString(),
       messages_count: 420,
       characters_count: 6850,
-      topics_count: 3,
+      topics_count: 2,
+      last_message_timestamp: incrementalNow - 43260,
+      token_usage: { total_tokens: 3600, prompt_tokens: 2800, completion_tokens: 800 },
+      chat_quality_review: {
+        title: "示例：技术交流与轻松闲聊",
+        subtitle: "讨论集中，气氛友好",
+        summary: "大家围绕实际开发问题分享经验，偶尔穿插日常话题。",
+        dimensions: [{ name: "信息交流", percentage: 75, comment: "问题和解答都有具体背景。" }],
+      },
+      golden_quotes_count: 1,
+      golden_quotes: [
+        { content: "先把问题复现出来，修复就有了方向。", sender_nickname: "示例小林" },
+      ],
       topics: [
         {
           title: "React 19 特性讨论",

@@ -742,16 +742,67 @@ export const mockHandlers = {
       ],
     },
   }),
-  "GET data/incremental/batches": () => ({ status: "ok", data: mockIncrementalBatches }),
-  "GET data/incremental/batch/detail": () => ({
+  "GET data/incremental/batches": (params?: Record<string, unknown>) => ({
     status: "ok",
-    data: mockIncrementalBatches.batches[0],
+    data: {
+      group_id: params?.group_id,
+      cursor:
+        params?.group_id === mockIncrementalBatches.group_id
+          ? mockIncrementalBatches.cursor
+          : {
+              group_id: String(params?.group_id || ""),
+              timestamp: 0,
+              last_analyzed_timestamp: 0,
+              last_message_timestamp: 0,
+              tracked_message_ids_count: 0,
+            },
+      batches: mockIncrementalBatches.batches.filter((item) => item.group_id === params?.group_id),
+    },
   }),
-  "POST data/incremental/batch": () => ({ status: "ok", data: { deleted: true } }),
-  "POST data/incremental/reset": () => ({
-    status: "ok",
-    data: { deleted_batches: 3, message: "已重置增量状态" },
-  }),
+  "GET data/incremental/batch/detail": (params?: Record<string, unknown>) => {
+    const response = managedRecordMockHandlers["GET plugin-data/records/detail"]({
+      kind: "batch",
+      group_id: params?.group_id,
+      batch_id: params?.batch_id,
+    });
+    return response.status === "ok" ? { status: "ok", data: response.data?.data } : response;
+  },
+  "POST data/incremental/batch": (params?: Record<string, unknown>) => {
+    const locator = { kind: "batch", group_id: params?.group_id, batch_id: params?.batch_id };
+    const current = managedRecordMockHandlers["GET plugin-data/records/detail"](locator);
+    if (current.status !== "ok") return current;
+    const result = managedRecordMockHandlers["POST plugin-data/records/mutate"]({
+      locator,
+      revision: current.data?.revision,
+      operation: "delete",
+    });
+    return result.status === "ok" ? { status: "ok", data: { deleted: true } } : result;
+  },
+  "POST data/incremental/reset": (params?: Record<string, unknown>) => {
+    const batches = mockIncrementalBatches.batches.filter(
+      (batch) => batch.group_id === params?.group_id,
+    );
+    for (const batch of batches) {
+      const locator = { kind: "batch", group_id: batch.group_id, batch_id: batch.batch_id };
+      const current = managedRecordMockHandlers["GET plugin-data/records/detail"](locator);
+      const result = managedRecordMockHandlers["POST plugin-data/records/mutate"]({
+        locator,
+        revision: current.data?.revision,
+        operation: "delete",
+      });
+      if (result.status !== "ok") return result;
+    }
+    if (mockIncrementalBatches.group_id === params?.group_id) {
+      mockIncrementalBatches.cursor = {
+        group_id: mockIncrementalBatches.group_id,
+        timestamp: 0,
+        last_analyzed_timestamp: 0,
+        last_message_timestamp: 0,
+        tracked_message_ids_count: 0,
+      };
+    }
+    return { status: "ok", data: { deleted_batches: batches.length, message: "已重置增量状态" } };
+  },
   "GET data/checkpoints/groups": () => ({
     status: "ok",
     data: { groups: ["123456789", "8899001122", "987654321"] },
