@@ -18,6 +18,7 @@
   border-left: 1px solid var(--border);
 }
 .stage-row {
+  --stage-tone: var(--ring);
   display: block;
   width: 100%;
   text-align: left;
@@ -33,6 +34,30 @@
 .stage-row:hover,
 .stage-row[data-selected] {
   background: var(--accent);
+}
+.stage-row[data-selected] {
+  outline: 1px solid var(--stage-tone);
+  outline-offset: -1px;
+}
+.stage-row[data-outcome="warning"] {
+  --stage-tone: var(--warning);
+}
+.stage-row[data-outcome="failed"] {
+  --stage-tone: var(--destructive);
+}
+.stage-row:is([data-outcome="warning"], [data-outcome="failed"]) {
+  background: color-mix(in srgb, var(--stage-tone) 8%, transparent);
+}
+.stage-row:is([data-outcome="warning"], [data-outcome="failed"]):is(:hover, [data-selected]) {
+  background: color-mix(in srgb, var(--stage-tone) 16%, transparent);
+}
+.stage-row:is([data-outcome="warning"], [data-outcome="failed"]) .stage-status {
+  color: var(--stage-tone);
+}
+.stage-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .stage-row:focus-visible {
   outline: 2px solid var(--ring);
@@ -75,7 +100,7 @@
 .stage-duration-track > span {
   display: block;
   height: 100%;
-  background: var(--ring);
+  background: var(--stage-tone);
 }
 .stage-slow {
   display: block;

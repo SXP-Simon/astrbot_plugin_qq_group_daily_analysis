@@ -9,12 +9,13 @@ interface SpanAlertsProps {
 
 export function SpanAlerts({ stageName, status, payload }: SpanAlertsProps) {
   const outcome = resolveSpanOutcome(status, payload);
-  const messages: { label: string; value: unknown; danger?: boolean }[] = [];
+  const messages: { label: string; value: unknown; danger?: boolean; warning?: boolean }[] = [];
   const renderDiagnostic = getRenderAttemptDiagnostic(payload);
   if (renderDiagnostic)
     messages.push({
       label: renderDiagnostic.label,
       value: `此前失败原因：${renderDiagnostic.reason}`,
+      warning: true,
     });
   if (outcome === "cancelled") messages.push({ label: "已停止", value: "该阶段已停止。" });
   if (payload?.failure_reason)
@@ -28,7 +29,7 @@ export function SpanAlerts({ stageName, status, payload }: SpanAlertsProps) {
       danger: true,
     });
   if (outcome !== "failed" && payload?.warning)
-    messages.push({ label: "阶段警告", value: payload.warning });
+    messages.push({ label: "阶段警告", value: payload.warning, warning: true });
   if (Array.isArray(payload?.subtask_errors)) {
     for (const error of payload.subtask_errors) {
       if (error != null && error !== "") messages.push({ label: "子任务异常", value: error });
@@ -65,10 +66,10 @@ export function SpanAlerts({ stageName, status, payload }: SpanAlertsProps) {
   if (!messages.length) return null;
   return (
     <div className="mb-4 space-y-3 text-sm" aria-label="阶段提示">
-      {messages.map(({ label, value, danger }, index) => (
+      {messages.map(({ label, value, danger, warning }, index) => (
         <div
           key={index}
-          className={`border-0 border-l-2 border-solid pl-3 ${danger ? "border-destructive text-destructive" : "border-border text-foreground"}`}
+          className={`border-0 border-l-2 border-solid px-3 py-2 ${danger ? "border-destructive bg-destructive/10 text-destructive" : warning ? "border-warning bg-warning/10 text-warning" : "border-border text-foreground"}`}
         >
           <p className="m-0 font-medium">{label}</p>
           <p className="mb-0 mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">

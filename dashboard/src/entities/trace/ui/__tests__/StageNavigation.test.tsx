@@ -19,6 +19,25 @@ const renderSpan: TraceSpan = {
   payload: { render_attempts: [{ status: "failed", error: "首次超时" }, { status: "success" }] },
 };
 
+it("警告阶段选中与取消选中均保留警告状态，耗时条不改变统计含义", () => {
+  render(
+    <SpanTimeline
+      spans={[first, { ...renderSpan, status: "warning", payload: { warning: "请求限流" } }]}
+      taskStatus="succeeded"
+      totalDurationMs={1000}
+    />,
+  );
+  const tree = within(screen.getByRole("navigation", { name: "执行阶段" }));
+  const warning = tree.getByRole("button", { name: /报告长图渲染与生成/ });
+  expect(warning).toHaveAttribute("data-outcome", "warning");
+  expect(warning).toHaveAttribute("aria-current", "true");
+  expect(within(warning).getByText("警告 (200ms)")).toHaveClass("stage-status");
+  expect(warning).toHaveTextContent("占总耗时 20%");
+  fireEvent.click(tree.getByRole("button", { name: /拉取聊天记录/ }));
+  expect(warning).not.toHaveAttribute("data-selected");
+  expect(warning).toHaveAttribute("data-outcome", "warning");
+});
+
 it("任务完成后默认定位渲染恢复阶段，并保留最终完成状态", () => {
   const view = render(<SpanTimeline spans={[first, renderSpan]} taskStatus="succeeded" />);
   const tree = within(screen.getByRole("navigation", { name: "执行阶段" }));

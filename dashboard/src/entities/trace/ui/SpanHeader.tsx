@@ -1,4 +1,10 @@
-import { IconChevronDown, IconChevronRight, IconLoader2 } from "@tabler/icons-react";
+import {
+  IconAlertCircle,
+  IconAlertTriangle,
+  IconChevronDown,
+  IconChevronRight,
+  IconLoader2,
+} from "@tabler/icons-react";
 import { resolveSpanOutcome } from "../model/spanOutcome";
 import { getRenderAttemptDiagnostic } from "../model/renderAttempts";
 import { getSpanTiming, getDurationRatio } from "../model/spanTiming";
@@ -100,7 +106,9 @@ export function SpanHeader({
         {outcome === "running" && taskStatus === "running" && (
           <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
         )}
-        <span>
+        <span className="stage-status">
+          {outcome === "warning" && <IconAlertTriangle size={14} aria-hidden="true" />}
+          {outcome === "failed" && <IconAlertCircle size={14} aria-hidden="true" />}
           {labels[outcome]} ({timing.live ? "已运行 " : ""}
           {duration})
         </span>

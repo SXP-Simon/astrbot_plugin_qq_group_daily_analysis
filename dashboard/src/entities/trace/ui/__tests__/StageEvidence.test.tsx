@@ -2,6 +2,33 @@ import { render, screen, within } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { SpanAlerts } from "../SpanAlerts";
 import { LlmAttemptsTable } from "../LlmAttemptsTable";
+import { StageMetric } from "../StageMetric";
+
+it("警告提示与警告指标使用警告色，失败和停止保持各自含义", () => {
+  const view = render(
+    <SpanAlerts stageName="COMIC_DRAWING" status="warning" payload={{ warning: "请求限流" }} />,
+  );
+  expect(screen.getByText("阶段警告").parentElement).toHaveClass(
+    "border-warning",
+    "bg-warning/10",
+    "text-warning",
+  );
+  view.rerender(
+    <SpanAlerts stageName="COMIC_DRAWING" status="failed" payload={{ error: "请求失败" }} />,
+  );
+  expect(screen.getByText("阶段执行异常").parentElement).toHaveClass(
+    "border-destructive",
+    "text-destructive",
+  );
+  view.rerender(<SpanAlerts stageName="COMIC_DRAWING" status="cancelled" />);
+  expect(screen.getByText("已停止").parentElement).not.toHaveClass(
+    "text-destructive",
+    "text-warning",
+  );
+  view.rerender(<StageMetric label="降级预警" value="请求限流" status="warning" />);
+  expect(screen.getByText("请求限流").parentElement).toHaveClass("text-warning");
+  expect(screen.getByLabelText("注意")).toBeVisible();
+});
 
 it("仅有话题数为零不能断言全部分析无产出或 Provider 故障", () => {
   const view = render(

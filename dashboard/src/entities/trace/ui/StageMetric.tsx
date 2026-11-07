@@ -13,7 +13,7 @@ export function StageMetric({ label, value, isMono = true, status = "default" }:
     <span className="flex min-w-0 flex-col gap-1 text-xs leading-relaxed">
       <span className="text-muted-foreground">{label}:</span>
       <span
-        className={`flex min-w-0 items-start gap-1 break-words ${isMono ? "font-mono" : ""} ${status === "error" ? "text-destructive" : "text-foreground"}`}
+        className={`flex min-w-0 items-start gap-1 break-words ${isMono ? "font-mono" : ""} ${status === "error" ? "text-destructive" : status === "warning" ? "text-warning" : "text-foreground"}`}
       >
         {status === "warning" || status === "error" ? (
           <IconAlertCircle
