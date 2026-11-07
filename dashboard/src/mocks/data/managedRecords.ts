@@ -91,13 +91,58 @@ put(
   },
 );
 
+// 使用独立示例存档补足跨页浏览，不冒充已经执行的分析任务。
+for (let day = 1; day <= 24; day++) {
+  const date = `2026-10-${String(day).padStart(2, "0")}`;
+  const group = day % 2 ? "123456789" : "-1001987654321";
+  put(
+    { kind: "history", key: `analysis_${group}_${date}_12-00`, group_id: group, date_str: date },
+    {
+      demo: true,
+      summary: { total_messages: 300 + day * 7, active_users: 12 + (day % 9) },
+      analysis: {
+        topics: [
+          {
+            topic: day % 2 ? "周末出游安排" : "做饭与摄影交流",
+            detail: "示例存档，用于检查历史浏览、导出与修订。",
+          },
+        ],
+      },
+    },
+  );
+}
+for (let index = 1; index <= 22; index++) {
+  put(
+    {
+      kind: "avatar",
+      key: `${index % 2 ? "telegram" : "discord"}:demo-user-${String(index).padStart(2, "0")}`,
+    },
+    {
+      data_uri:
+        "data:image/svg+xml;base64," +
+        btoa(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" rx="24" fill="#56768b"/><text x="60" y="73" text-anchor="middle" fill="white" font-size="36">${index}</text></svg>`,
+        ),
+    },
+  );
+}
+
 export const managedRecordMockHandlers = {
   "GET plugin-data/records": (query?: Record<string, unknown>) => {
-    const items = [...records.values()].filter(
-      (record) =>
-        record.locator.kind === query?.kind &&
-        String(record.locator.key || "").includes(String(query?.search || "")),
-    );
+    const search = String(query?.search || "").toLocaleLowerCase();
+    const items = [...records.values()]
+      .filter(
+        (record) =>
+          record.locator.kind === query?.kind &&
+          String(record.locator.key || "")
+            .toLocaleLowerCase()
+            .includes(search),
+      )
+      .sort((left, right) => {
+        const a = left.locator.key || "",
+          b = right.locator.key || "";
+        return a === b ? 0 : a > b ? -1 : 1;
+      });
     const start = (Number(query?.page || 1) - 1) * 20;
     return {
       status: "ok",
