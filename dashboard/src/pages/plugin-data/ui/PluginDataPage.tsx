@@ -113,6 +113,10 @@ export const PluginDataPage: React.FC<{
         onClose={vm.handleCloseCkptDetail}
         ckptDetail={vm.selectedCkptDetail}
         loading={vm.loadingCkptDetail}
+        error={vm.checkpointDetailError}
+        onRetry={() => {
+          if (vm.selectedCkptDetail) void vm.handleOpenCkptDetail(vm.selectedCkptDetail);
+        }}
       />
     </div>
   );

@@ -6,17 +6,15 @@ import {
   fetchIncrementalBatchDetail,
   deleteIncrementalBatch,
   resetIncrementalGroup,
-  fetchCheckpointGroups,
-  fetchCheckpointsList,
-  fetchCheckpointDetail,
-  deleteCheckpoint,
   IncrementalBatchItem,
   IncrementalCursorInfo,
-  CheckpointItem,
-  CheckpointDetail,
 } from "../../../entities/plugin-data/api/pluginDataApi";
 
+import { useCheckpointsViewModel } from "./useCheckpointsViewModel";
+
 export function usePluginDataViewModel() {
+  const checkpointVM = useCheckpointsViewModel();
+  const { refreshCheckpointGroups } = checkpointVM;
   // 2. 增量分析批次管理
   const [incrGroups, setIncrGroups] = useState<string[]>([]);
   const [selectedIncrGroup, setSelectedIncrGroup] = useState<string>("");
@@ -46,20 +44,6 @@ export function usePluginDataViewModel() {
       groupsRequest.current += 1;
     };
   }, []);
-
-  // 3. 阶段产物 Checkpoint 管理
-  const [ckptGroups, setCkptGroups] = useState<string[]>([]);
-  const [ckptFilterGroup, setCkptFilterGroup] = useState<string | undefined>(undefined);
-  const [ckptFilterDate, setCkptFilterDate] = useState<string | undefined>(undefined);
-  const [ckptFilterStage, setCkptFilterStage] = useState<string | undefined>(undefined);
-  const [checkpoints, setCheckpoints] = useState<CheckpointItem[]>([]);
-  const [checkpointsTotal, setCheckpointsTotal] = useState(0);
-  const [checkpointsPage, setCheckpointsPage] = useState(1);
-  const [checkpointsPageSize, setCheckpointsPageSize] = useState(20);
-  const [loadingCheckpoints, setLoadingCheckpoints] = useState(false);
-  const [ckptDetailModalOpen, setCkptDetailModalOpen] = useState(false);
-  const [selectedCkptDetail, setSelectedCkptDetail] = useState<CheckpointDetail | null>(null);
-  const [loadingCkptDetail, setLoadingCkptDetail] = useState(false);
 
   // 刷新增量群列表
   const refreshIncrGroups = useCallback(async () => {
@@ -203,127 +187,6 @@ export function usePluginDataViewModel() {
     }
   };
 
-  // 刷新 Checkpoint 群列表与列表
-  const refreshCheckpointGroups = useCallback(async () => {
-    try {
-      const groups = await fetchCheckpointGroups();
-      setCkptGroups(groups);
-    } catch {
-      toast.error("获取 Checkpoint 群号列表失败");
-    }
-  }, []);
-
-  const loadCheckpoints = useCallback(
-    async (
-      page = checkpointsPage,
-      pageSize = checkpointsPageSize,
-      group = ckptFilterGroup,
-      date = ckptFilterDate,
-      stage = ckptFilterStage,
-    ) => {
-      setLoadingCheckpoints(true);
-      try {
-        const offset = (page - 1) * pageSize;
-        const res = await fetchCheckpointsList({
-          limit: pageSize,
-          offset,
-          group_id: group,
-          date_str: date,
-          stage_name: stage,
-        });
-        setCheckpoints(res.items || []);
-        setCheckpointsTotal(res.total || 0);
-        setCheckpointsPage(page);
-        setCheckpointsPageSize(pageSize);
-      } catch {
-        toast.error("加载阶段快照列表失败");
-      } finally {
-        setLoadingCheckpoints(false);
-      }
-    },
-    [checkpointsPage, checkpointsPageSize, ckptFilterGroup, ckptFilterDate, ckptFilterStage],
-  );
-
-  // 查看 Checkpoint JSON 详情
-  const handleOpenCkptDetail = async (item: CheckpointItem) => {
-    setCkptDetailModalOpen(true);
-    setSelectedCkptDetail({
-      checkpoint_id: item.checkpoint_id,
-      group_id: item.group_id,
-      date_str: item.date_str,
-      stage_name: item.stage_name,
-      trace_id: item.trace_id,
-      created_at: item.created_at,
-      created_at_formatted: item.created_at_formatted,
-      data_size_bytes: item.data_size_bytes ?? item.data_size,
-      data: undefined,
-    });
-    setLoadingCkptDetail(true);
-    try {
-      const detail = await fetchCheckpointDetail(
-        item.group_id,
-        item.date_str,
-        item.stage_name,
-        item.trace_id,
-      );
-      if (detail) {
-        const payloadData =
-          detail.checkpoint_data !== undefined
-            ? detail.checkpoint_data
-            : detail.data !== undefined
-              ? detail.data
-              : detail;
-        setSelectedCkptDetail({
-          checkpoint_id: detail.checkpoint_id || item.checkpoint_id,
-          group_id: detail.group_id || item.group_id,
-          date_str: detail.date_str || item.date_str,
-          stage_name: detail.stage_name || item.stage_name,
-          trace_id: detail.trace_id || item.trace_id,
-          created_at: detail.created_at ?? item.created_at,
-          created_at_formatted: detail.created_at_formatted || item.created_at_formatted,
-          data_size_bytes: detail.data_size_bytes ?? detail.data_size ?? item.data_size_bytes,
-          data: payloadData,
-        });
-      } else {
-        toast.error("快照数据不存在或已过期");
-      }
-    } catch {
-      toast.error("获取快照详情异常");
-    } finally {
-      setLoadingCkptDetail(false);
-    }
-  };
-
-  const handleCloseCkptDetail = () => {
-    setCkptDetailModalOpen(false);
-    setSelectedCkptDetail(null);
-  };
-
-  // 删除 Checkpoint
-  const handleDeleteCheckpoint = async (
-    groupId: string,
-    dateStr: string,
-    stageName?: string,
-    traceId?: string,
-  ) => {
-    try {
-      const ok = await deleteCheckpoint(groupId, dateStr, stageName, traceId);
-      if (ok) {
-        toast.success(
-          stageName
-            ? `已删除 ${groupId} (${dateStr}) 的阶段快照「${stageName}」`
-            : `已清空 ${groupId} (${dateStr}) 的所有阶段快照`,
-        );
-        await loadCheckpoints();
-        await refreshCheckpointGroups();
-      } else {
-        toast.error("删除快照失败");
-      }
-    } catch {
-      toast.error("删除快照异常");
-    }
-  };
-
   // 全局刷新
   const refreshAll = useCallback(async () => {
     await Promise.all([refreshIncrGroups(), refreshCheckpointGroups()]);
@@ -353,27 +216,7 @@ export function usePluginDataViewModel() {
     handleDeleteBatch,
     handleResetIncrGroup,
 
-    // 3. 快照 Checkpoints
-    ckptGroups,
-    ckptFilterGroup,
-    ckptFilterDate,
-    ckptFilterStage,
-    checkpoints,
-    checkpointsTotal,
-    checkpointsPage,
-    checkpointsPageSize,
-    loadingCheckpoints,
-    ckptDetailModalOpen,
-    selectedCkptDetail,
-    loadingCkptDetail,
-    setCkptFilterGroup,
-    setCkptFilterDate,
-    setCkptFilterStage,
-    loadCheckpoints,
-    refreshCheckpointGroups,
-    handleOpenCkptDetail,
-    handleCloseCkptDetail,
-    handleDeleteCheckpoint,
+    ...checkpointVM,
 
     // 总刷新
     refreshAll,
