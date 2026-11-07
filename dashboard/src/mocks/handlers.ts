@@ -305,7 +305,7 @@ export const mockHandlers = {
     if (params?.group_id && typeof params.group_id === "string") {
       items = items.filter((t) => t.group_id === params.group_id);
     }
-    if (params?.platform && typeof params.platform === "string" && params.platform !== "ALL") {
+    if (typeof params?.platform === "string") {
       items = items.filter((t) => t.platform === params.platform);
     }
     if (typeof params?.trigger_type === "string" && params.trigger_type) {
@@ -396,9 +396,22 @@ export const mockHandlers = {
     const logs = mockPluginLogs.filter((l) => l.trace_id === traceId);
     return { status: "ok", data: logs };
   },
-  "GET groups": () => ({
+  "GET groups": (params?: Record<string, unknown>) => ({
     status: "ok",
-    data: mockGroups,
+    data: params?.by_session
+      ? [
+          ...new Map(
+            mockTraces.map((trace) => [
+              JSON.stringify([trace.platform || "", trace.group_id]),
+              {
+                group_id: trace.group_id,
+                group_name: trace.group_name || trace.group_id,
+                platform: trace.platform || "",
+              },
+            ]),
+          ).values(),
+        ]
+      : mockGroups,
   }),
   "GET providers": () => ({ status: "ok", data: mockProviders }),
   "GET personas": () => ({ status: "ok", data: mockPersonas }),
@@ -409,6 +422,8 @@ export const mockHandlers = {
     const group = typeof params?.group_id === "string" ? params.group_id.trim() : "";
     const search = typeof params?.search === "string" ? params.search.trim().toLowerCase() : "";
     if (group) items = items.filter((item) => item.group_id === group);
+    if (typeof params?.platform === "string")
+      items = items.filter((item) => (item.platform || "") === params.platform);
     if (search)
       items = items.filter((item) =>
         [item.filename, item.group_id, item.trace_id].some((value) =>

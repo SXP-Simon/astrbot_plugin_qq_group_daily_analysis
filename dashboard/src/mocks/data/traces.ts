@@ -985,3 +985,14 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
     },
   },
 ];
+
+mockTraces.push({
+  trace_id: "trace-platform-same-group-example",
+  group_id: "123456789",
+  group_name: "摄影交流示例群",
+  platform: "telegram",
+  trigger_type: "manual",
+  status: "succeeded",
+  started_at: (Date.now() - 86400000) / 1000,
+  duration_ms: 2100,
+});
