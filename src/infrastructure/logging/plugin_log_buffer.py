@@ -30,6 +30,7 @@ class PluginLogEntry:
     message: str
     raw: str
     location: str | None = None
+    function_name: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -128,6 +129,7 @@ class PluginLogBuffer:
         trace_id: str | None = None,
         logger_name: str = "plugin",
         location: str | None = None,
+        function_name: str | None = None,
     ) -> PluginLogEntry:
         """主动记录日志条目并实时推送给前端监听器"""
         self._counter += 1
@@ -175,6 +177,8 @@ class PluginLogBuffer:
             clean_msg = clean_msg[len(f"[{trace_id}] ") :]
 
         loc_label = f"[{location}]" if location else f"[{logger_name}]"
+        if function_name:
+            loc_label += f" [{function_name}]"
         raw = f"[{full_time_str}] [{level.upper()}] {loc_label}: {clean_msg}"
 
         entry = PluginLogEntry(
@@ -189,6 +193,7 @@ class PluginLogBuffer:
             message=clean_msg,
             raw=raw,
             location=location,
+            function_name=function_name,
         )
         self._buffer.append(entry)
 
@@ -228,6 +233,7 @@ class PluginLogBuffer:
                 and search_kw not in (entry.trace_id or "").lower()
                 and search_kw not in entry.logger_name.lower()
                 and search_kw not in (entry.location or "").lower()
+                and search_kw not in (entry.function_name or "").lower()
             ):
                 continue
             results.append(entry)
