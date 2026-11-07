@@ -53,6 +53,8 @@ class TaskRoutes:
         self.active_task_manager = active_task_manager
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
+        # 只串行化受理检查与登记，不覆盖后台分析、渲染或发送。
+        self._submission_lock = asyncio.Lock()
 
     async def api_get_active_tasks(self) -> WebApiResponse:
         """获取当前正在执行的任务列表"""
@@ -168,26 +170,34 @@ class TaskRoutes:
                 "template_name": template_name,
             }
 
-            asyncio_task = asyncio.create_task(
-                self._run_triggered_task(
-                    trace_id=trace_id,
+            async with self._submission_lock:
+                # 预检查后读取请求及存盘都可能让出执行权，登记前必须再次确认。
+                if self.analysis_service.is_group_running(
+                    group_id, "daily", platform
+                ) or self.active_task_manager.is_analysis_running(group_id, platform):
+                    return error_response(
+                        "此会话的分析任务正在执行中，请稍后再试", status_code=409
+                    )
+                asyncio_task = asyncio.create_task(
+                    self._run_triggered_task(
+                        trace_id=trace_id,
+                        group_id=trigger_dto["group_id"],
+                        group_name=trigger_dto["group_name"],
+                        platform=trigger_dto["platform"],
+                        provider_id=trigger_dto.get("provider_id"),
+                        template_name=trigger_dto.get("template_name"),
+                    )
+                )
+
+                await self.active_task_manager.register_task(
+                    task_id=trace_id,
                     group_id=trigger_dto["group_id"],
                     group_name=trigger_dto["group_name"],
                     platform=trigger_dto["platform"],
-                    provider_id=trigger_dto.get("provider_id"),
-                    template_name=trigger_dto.get("template_name"),
+                    trigger_type="web_ui",
+                    current_stage=AnalysisStage.FETCH_MESSAGES,
+                    asyncio_task=asyncio_task,
                 )
-            )
-
-            await self.active_task_manager.register_task(
-                task_id=trace_id,
-                group_id=trigger_dto["group_id"],
-                group_name=trigger_dto["group_name"],
-                platform=trigger_dto["platform"],
-                trigger_type="web_ui",
-                current_stage=AnalysisStage.FETCH_MESSAGES,
-                asyncio_task=asyncio_task,
-            )
 
             return json_response(
                 {
@@ -390,40 +400,48 @@ class TaskRoutes:
                 "template_name": template_name,
             }
 
-            await asyncio.to_thread(
-                self.trace_store.save_trace,
-                {
-                    "trace_id": resume_trace_id,
-                    "group_id": group_id,
-                    "group_name": group_name,
-                    "platform": platform,
-                    "trigger_type": "resume",
-                    "status": TaskStatus.RUNNING.value,
-                },
-            )
+            async with self._submission_lock:
+                # 预检查后读取请求及存盘都可能让出执行权，登记前必须再次确认。
+                if self.analysis_service.is_group_running(
+                    group_id, "daily", platform
+                ) or self.active_task_manager.is_analysis_running(group_id, platform):
+                    return error_response(
+                        "此会话的分析任务正在执行中，请稍后再试", status_code=409
+                    )
+                await asyncio.to_thread(
+                    self.trace_store.save_trace,
+                    {
+                        "trace_id": resume_trace_id,
+                        "group_id": group_id,
+                        "group_name": group_name,
+                        "platform": platform,
+                        "trigger_type": "resume",
+                        "status": TaskStatus.RUNNING.value,
+                    },
+                )
 
-            asyncio_task = asyncio.create_task(
-                self._run_resumed_task(
-                    trace_id=resume_dto["trace_id"],
-                    checkpoint_trace_id=trace_id,
-                    date_str=date_str,
+                asyncio_task = asyncio.create_task(
+                    self._run_resumed_task(
+                        trace_id=resume_dto["trace_id"],
+                        checkpoint_trace_id=trace_id,
+                        date_str=date_str,
+                        group_id=group_id,
+                        group_name=group_name,
+                        platform=platform,
+                        provider_id=resume_dto.get("provider_id"),
+                        template_name=resume_dto.get("template_name"),
+                    )
+                )
+
+                await self.active_task_manager.register_task(
+                    task_id=resume_dto["trace_id"],
                     group_id=group_id,
                     group_name=group_name,
                     platform=platform,
-                    provider_id=resume_dto.get("provider_id"),
-                    template_name=resume_dto.get("template_name"),
+                    trigger_type="resume",
+                    current_stage=AnalysisStage.LLM_ANALYSIS,
+                    asyncio_task=asyncio_task,
                 )
-            )
-
-            await self.active_task_manager.register_task(
-                task_id=resume_dto["trace_id"],
-                group_id=group_id,
-                group_name=group_name,
-                platform=platform,
-                trigger_type="resume",
-                current_stage=AnalysisStage.LLM_ANALYSIS,
-                asyncio_task=asyncio_task,
-            )
 
             return json_response(
                 {
@@ -437,6 +455,8 @@ class TaskRoutes:
                     },
                 }
             )
+        except ValueError as e:
+            return error_response(str(e), status_code=400)
         except Exception as e:
             logger.error(f"恢复任务异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)

@@ -166,3 +166,50 @@ async def test_cancel_initializing_trace_does_not_leave_running_archive(tmp_path
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("same_session", [True, False])
+async def test_simultaneous_resume_admission_is_scoped_and_atomic(tmp_path, monkeypatch, same_session):
+    """两个续跑请求同时通过预检查时，最终仍只能受理同会话的一份任务。"""
+    module = importlib.import_module(TaskRoutes.__module__)
+    store = TraceSQLiteStore(tmp_path / "resume-admission.db")
+    manager = ActiveTaskManager()
+    service = MagicMock()
+    service.is_group_running.return_value = False
+    service.bot_manager.resolve_platform_id.side_effect = lambda value: value
+    routes = TaskRoutes(store, manager, service)
+    for source, platform in [("old-a", "first"), ("old-b", "first" if same_session else "second")]:
+        store.save_trace({"trace_id": source, "group_id": "123", "platform": platform, "status": "running"})
+        TaskLifecycleService(store).transition(source, trace_context.TaskEvent.FAIL)
+
+    arrived = 0
+    both_reading_payload = asyncio.Event()
+    class Request:
+        query = {}
+        async def json(self):
+            nonlocal arrived
+            arrived += 1
+            if arrived == 2:
+                both_reading_payload.set()
+            await both_reading_payload.wait()
+            return {}
+    monkeypatch.setattr(module, "request", Request())
+    running = []
+    async def background(**kwargs):
+        running.append(kwargs["trace_id"])
+        await asyncio.Event().wait()
+    monkeypatch.setattr(routes, "_run_resumed_task", background)
+    try:
+        results = await asyncio.wait_for(asyncio.gather(routes.api_resume_task("old-a"), routes.api_resume_task("old-b")), 5)
+        assert sorted(item.get("status_code", 200) for item in results) == ([200, 409] if same_session else [200, 200])
+        active = manager.get_active_tasks()
+        assert len(active) == (1 if same_session else 2)
+        assert len(running) == len(active)
+        assert {item["platform"] for item in active} == ({"first"} if same_session else {"first", "second"})
+    finally:
+        tasks = [item.asyncio_task for item in manager._tasks.values() if item.asyncio_task]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        for task_id in list(manager._tasks):
+            await manager.finish_task(task_id)
