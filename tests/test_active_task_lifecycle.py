@@ -11,6 +11,18 @@ from src.application.services.task_lifecycle_service import (
     TaskLifecycleService,
 )
 from src.domain.value_objects.task_event import TaskEvent
+
+
+@pytest.mark.asyncio
+async def test_full_analysis_visibility_is_scoped_and_does_not_merge_task_types():
+    manager = ActiveTaskManager()
+    await manager.register_task("rendering", "123", platform="first", trigger_type="manual", current_stage="RENDER_REPORT")
+    assert manager.is_analysis_running("123", "first")
+    assert not manager.is_analysis_running("123", "second")
+    await manager.register_task("comic", "123", platform="second", trigger_type="comic")
+    assert not manager.is_analysis_running("123", "second")
+    await manager.finish_task("rendering")
+    assert not manager.is_analysis_running("123", "first")
 from src.domain.value_objects.task_status import TaskStatus
 from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from src.infrastructure.webui.active_task_manager import ActiveTaskManager
