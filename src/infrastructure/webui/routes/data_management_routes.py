@@ -564,6 +564,7 @@ class DataManagementRoutes:
 
             items, total = await asyncio.to_thread(
                 store.list_all_checkpoints,
+                platform=request.query.get("platform"),
                 limit=query_dto.get("limit", 50),
                 offset=query_dto.get("offset", 0),
                 group_id=query_dto.get("group_id"),
@@ -589,7 +590,10 @@ class DataManagementRoutes:
             groups = await asyncio.to_thread(
                 store.get_distinct_checkpoint_groups,
             )
-            return json_response({"status": "ok", "data": {"groups": groups}})
+            sessions = await asyncio.to_thread(store.get_checkpoint_group_sessions)
+            return json_response(
+                {"status": "ok", "data": {"groups": groups, "sessions": sessions}}
+            )
         except Exception as e:
             logger.error(f"获取 Checkpoint 群号列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)

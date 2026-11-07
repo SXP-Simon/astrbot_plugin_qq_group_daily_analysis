@@ -430,6 +430,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/data/checkpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询有效阶段快照 */
+        get: {
+            parameters: {
+                query?: {
+                    group_id?: string;
+                    platform?: string;
+                    date_str?: string;
+                    stage_name?: string;
+                    trace_id?: string;
+                    limit?: number;
+                    offset?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 查询结果 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            status?: string;
+                            data?: components["schemas"]["CheckpointsListResponse"];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/data/checkpoints/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 有效阶段快照的群聊身份 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 查询结果 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            status?: string;
+                            data?: {
+                                groups: string[];
+                                sessions: components["schemas"]["GroupItem"][];
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/traces": {
         parameters: {
             query?: never;
@@ -1121,6 +1210,8 @@ export interface components {
         CheckpointItem: {
             checkpoint_id?: string;
             group_id: string;
+            group_name?: string;
+            platform?: string;
             date_str: string;
             stage_name: string;
             trace_id?: string;

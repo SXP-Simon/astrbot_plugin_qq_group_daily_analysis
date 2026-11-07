@@ -683,6 +683,104 @@ def generate_openapi_spec() -> dict[str, object]:
                     },
                 }
             },
+            "/data/checkpoints": {
+                "get": {
+                    "tags": ["Data"],
+                    "summary": "分页查询有效阶段快照",
+                    "parameters": [
+                        {
+                            "name": "group_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "platform",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "date_str",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "stage_name",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "trace_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "limit",
+                            "in": "query",
+                            "schema": {"type": "integer", "minimum": 1},
+                        },
+                        {
+                            "name": "offset",
+                            "in": "query",
+                            "schema": {"type": "integer", "minimum": 0},
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "查询结果",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/CheckpointsListResponse"
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/data/checkpoints/groups": {
+                "get": {
+                    "tags": ["Data"],
+                    "summary": "有效阶段快照的群聊身份",
+                    "responses": {
+                        "200": {
+                            "description": "查询结果",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "groups": {
+                                                        "type": "array",
+                                                        "items": {"type": "string"},
+                                                    },
+                                                    "sessions": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "$ref": "#/components/schemas/GroupItem"
+                                                        },
+                                                    },
+                                                },
+                                                "required": ["groups", "sessions"],
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
             "/traces": {
                 "get": {
                     "summary": "List execution traces with filters",
@@ -2007,6 +2105,8 @@ def generate_openapi_spec() -> dict[str, object]:
                     "properties": {
                         "checkpoint_id": {"type": "string"},
                         "group_id": {"type": "string"},
+                        "group_name": {"type": "string"},
+                        "platform": {"type": "string"},
                         "date_str": {"type": "string"},
                         "stage_name": {"type": "string"},
                         "trace_id": {"type": "string"},
