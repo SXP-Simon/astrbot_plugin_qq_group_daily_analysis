@@ -36,6 +36,7 @@ export function ManagedPartitionDrawer({
       width="min(1100px, 96vw)"
       onClose={manager.closePartition}
       destroyOnClose
+      keyboard={!vm.content && !vm.editor && !manager.installing}
     >
       {partition && (
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>

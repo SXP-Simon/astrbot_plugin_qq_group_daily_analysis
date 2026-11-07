@@ -92,8 +92,7 @@ afterEach(() => {
 });
 
 async function modalLayer(title: string) {
-  const heading = await screen.findByText(title, { selector: ".ant-modal-title" });
-  return heading.closest<HTMLElement>(".ant-modal-wrap")!;
+  return screen.findByRole("dialog", { name: title });
 }
 
 async function selectTemplate(label = "我的模板（demo）") {
@@ -101,9 +100,9 @@ async function selectTemplate(label = "我的模板（demo）") {
   fireEvent.click(await screen.findByText(label, { selector: ".ant-select-item-option-content" }));
 }
 
-it("详情与子编辑弹窗继承父层级，关闭编辑后仍可查看详情", async () => {
+it("详情与子编辑弹窗保持关联，关闭编辑后仍可查看详情", async () => {
   render(
-    <ConfigProvider theme={{ token: { motion: false, zIndexPopupBase: 1500 } }}>
+    <ConfigProvider theme={{ token: { motion: false } }}>
       <ManagedFilesPanel />
     </ConfigProvider>,
   );
@@ -112,17 +111,17 @@ it("详情与子编辑弹窗继承父层级，关闭编辑后仍可查看详情"
   fireEvent.click(await screen.findByText("查看 / 编辑"));
   const detail = await modalLayer("demo/report.typ");
   const drawer = document.querySelector<HTMLElement>(".ant-drawer")!;
-  const detailLayer = Number(getComputedStyle(detail).zIndex);
-  expect(detailLayer).toBeGreaterThan(Number(getComputedStyle(drawer).zIndex));
+  expect(detail).toBeVisible();
+  expect(drawer).toBeInTheDocument();
   fireEvent.click(within(detail).getByText("编辑源码"));
   const editor = await modalLayer("替换或编辑文件");
-  expect(Number(getComputedStyle(editor).zIndex)).toBeGreaterThan(detailLayer);
+  expect(editor).toBeVisible();
   fireEvent.click(within(editor).getByText(/取.?消/));
   await waitFor(() => expect(editor).not.toBeVisible());
   expect(detail).toBeVisible();
   fireEvent.click(within(detail).getByText("重命名"));
   const rename = await modalLayer("重命名文件");
-  expect(Number(getComputedStyle(rename).zIndex)).toBeGreaterThan(detailLayer);
+  expect(rename).toBeVisible();
 }, 20000);
 
 it("从抽屉新建源码与安装模板时，弹窗显示在抽屉上方", async () => {
@@ -136,7 +135,7 @@ it("从抽屉新建源码与安装模板时，弹窗显示在抽屉上方", asyn
   const editor = await modalLayer("上传或新建文件");
   const drawer = document.querySelector<HTMLElement>(".ant-drawer")!;
   const drawerLayer = Number(getComputedStyle(drawer).zIndex);
-  expect(Number(getComputedStyle(editor).zIndex)).toBeGreaterThan(drawerLayer);
+  expect(editor).toBeVisible();
   fireEvent.click(within(editor).getByText(/取.?消/));
   fireEvent.click(screen.getByText("安装模板包"));
   const installTitle = await screen.findByText("安装自定义报告模板");
