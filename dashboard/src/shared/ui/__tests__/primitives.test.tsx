@@ -1,7 +1,14 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "../button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "../dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogClose,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "../dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../tabs";
 import { NativeSelect } from "../native-select";
 import { useState } from "react";
@@ -109,4 +116,21 @@ describe("基础控件的交互约定", () => {
     expect(screen.getByRole("tab", { name: "日志" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveTextContent("日志记录");
   });
+});
+
+it("抽屉可在固定标题中提供唯一关闭入口，沿用焦点恢复", async () => {
+  render(
+    <Dialog defaultOpen>
+      <DialogContent showCloseButton={false}>
+        <DialogTitle>分区</DialogTitle>
+        <DialogDescription>示例</DialogDescription>
+        <DialogClose asChild>
+          <Button>关闭分区</Button>
+        </DialogClose>
+      </DialogContent>
+    </Dialog>,
+  );
+  expect(screen.queryByRole("button", { name: "关闭" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "关闭分区" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 });
