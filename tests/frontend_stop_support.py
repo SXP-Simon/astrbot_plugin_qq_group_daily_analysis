@@ -80,6 +80,9 @@ class StubConfig:
 
 
 class StubBotManager:
+    def resolve_platform_id(self, platform_id):
+        return platform_id
+
     def update_from_event(self, event: HostEvent) -> None:
         pass
 
@@ -95,8 +98,8 @@ class StubAnalysisService:
         self.started = asyncio.Event()
         self.cancelled = False
 
-    def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
-        return self.guard.is_group_running(group_id, task_type)
+    def is_group_running(self, group_id: str, task_type: str = "daily", platform_id: str | None = None) -> bool:
+        return self.guard.is_group_running(group_id, task_type, platform_id)
 
     async def execute_daily_analysis(
         self,
@@ -121,8 +124,8 @@ class FastSuccessService:
     def __init__(self) -> None:
         self.guard = TaskGuard(1)
 
-    def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
-        return self.guard.is_group_running(group_id, task_type)
+    def is_group_running(self, group_id: str, task_type: str = "daily", platform_id: str | None = None) -> bool:
+        return self.guard.is_group_running(group_id, task_type, platform_id)
 
     async def execute_daily_analysis(self, **kwargs: object) -> dict[str, object]:
         return {"success": True}
@@ -137,7 +140,7 @@ class StubbornService:
         self.release = False
         self.cancel_received = asyncio.Event()
 
-    def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
+    def is_group_running(self, group_id: str, task_type: str = "daily", platform_id: str | None = None) -> bool:
         return False
 
     async def execute_daily_analysis(self, **kwargs: object) -> dict[str, object]:

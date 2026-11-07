@@ -185,6 +185,7 @@ class AnalysisCommandHandler:
                 return
 
             self.bot_manager.update_from_event(event)
+            platform_id = self.bot_manager.resolve_platform_id(platform_id)
 
             check_target = (
                 event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
@@ -194,7 +195,7 @@ class AnalysisCommandHandler:
                 yield event.plain_result("❌ 此群未启用日常分析功能")
                 return
 
-            if self.analysis_service.is_group_running(group_id, "daily"):
+            if self.analysis_service.is_group_running(group_id, "daily", platform_id):
                 yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
                 return
 

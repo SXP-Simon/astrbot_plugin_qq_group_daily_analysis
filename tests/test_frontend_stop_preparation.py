@@ -95,6 +95,7 @@ async def test_preparation_waits_are_stoppable(stage, stop_mode, monkeypatch):
     )
     handler.bot_manager = SimpleNamespace(
         update_from_event=lambda _: None,
+        resolve_platform_id=lambda platform: platform,
         get_adapter=lambda _: adapter,
     )
 
@@ -166,6 +167,7 @@ async def test_stop_before_preparation_does_not_start_group_query(monkeypatch):
     handler = make_handler(service, manager)
     handler.bot_manager = SimpleNamespace(
         update_from_event=lambda _: None,
+        resolve_platform_id=lambda platform: platform,
         get_adapter=lambda _: adapter,
     )
     event = HostEvent()
@@ -255,6 +257,7 @@ async def test_group_info_failure_still_allows_analysis(monkeypatch):
     )
     handler.bot_manager = SimpleNamespace(
         update_from_event=lambda _: None,
+        resolve_platform_id=lambda platform: platform,
         get_adapter=lambda _: adapter,
     )
     delivered = [item async for item in handler.handle_daily_analysis(HostEvent())]
