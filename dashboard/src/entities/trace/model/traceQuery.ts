@@ -8,6 +8,7 @@ export interface TraceQuery {
   statusFilter?: string;
   triggerTypeFilter?: string;
   selectedGroup?: string;
+  selectedPlatform?: string;
   dateRange: [number, number] | null;
   sortField: TraceSortField;
   sortOrder: TraceSortOrder;

@@ -6,6 +6,7 @@ export interface ListReportsParams {
   limit?: number;
   offset?: number;
   group_id?: string;
+  platform?: string;
   search?: string;
   start_time?: number;
   end_time?: number;
