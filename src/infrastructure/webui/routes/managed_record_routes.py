@@ -215,6 +215,10 @@ class ManagedRecordRoutes:
         service = self.service
         if not service:
             raise ValueError("分析服务尚未初始化")
+        if locator["platform_id"]:
+            locator["platform_id"] = service.bot_manager.resolve_platform_id(
+                locator["platform_id"]
+            )
         if kind == "history":
             value = cast(
                 "object",

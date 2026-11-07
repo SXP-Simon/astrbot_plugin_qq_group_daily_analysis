@@ -17,6 +17,19 @@ from src.infrastructure.webui.routes import managed_record_routes as routes
 
 
 @pytest.mark.asyncio
+async def test_record_read_normalizes_alias_before_binding_storage(record_endpoint):
+    endpoint, request, _, _ = record_endpoint
+    endpoint.service.bot_manager.resolve_platform_id = lambda value: "first" if value == "alias" else value
+    root = endpoint.service.incremental_store
+    scoped = await root.for_session("123", "first")
+    await scoped.save_batch(IncrementalBatch(group_id="123", batch_id="one"))
+    request.query = {"kind": "batch", "group_id": "123", "platform_id": "alias", "batch_id": "one"}
+    result = (await endpoint.api_detail())["data"]
+    assert result["locator"]["platform_id"] == "first"
+    assert {session.platform_id for session in await root.get_tracked_sessions()} == {"first"}
+
+
+@pytest.mark.asyncio
 async def test_session_history_versions_remain_manageable_and_delete_repairs_only_own_pointer(record_endpoint, monkeypatch):
     endpoint, request, plugin, _ = record_endpoint
     manager = HistoryManager(plugin)
