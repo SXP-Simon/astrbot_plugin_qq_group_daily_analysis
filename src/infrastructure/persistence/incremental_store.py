@@ -483,27 +483,46 @@ class IncrementalStore(IIncrementalStore):
             group_id: 群组 ID。
 
         Returns:
-            最后分析时间戳，以及该时间戳下已经处理的消息 ID 集合。
+            最后分析时间戳及边界消息 ID；未保存过游标时返回零和空集合。
+
+        Raises:
+            RuntimeError: 游标存储读取失败或数据损坏，停止分析以免重算历史消息。
         """
         await self._assert_scope(group_id)
         key = self._last_ts_key(group_id)
         try:
             data = await self.plugin.get_kv_data(key, 0)
+            message_ids: set[str] = set()
             if is_string_mapping(data):
-                raw_timestamp = data.get("timestamp", 0)
-                if not isinstance(raw_timestamp, (str, int, float)):
-                    raise TypeError("增量游标时间戳必须是数值")
-                timestamp = max(0, int(raw_timestamp))
-                message_ids = data.get("message_ids", [])
-                if not is_object_list(message_ids):
-                    message_ids = []
-                return timestamp, {str(item) for item in message_ids if str(item)}
-            return (
-                int(data) if isinstance(data, (str, int, float)) and data else 0
-            ), set()
+                raw_timestamp = data.get("timestamp")
+                raw_ids = data.get("message_ids")
+                if not is_object_list(raw_ids):
+                    raise ValueError("增量游标缺少有效的边界消息 ID 列表")
+                for item in raw_ids:
+                    if (
+                        isinstance(item, bool)
+                        or not isinstance(item, (str, int))
+                        or not str(item).strip()
+                    ):
+                        raise ValueError("增量游标包含无效的边界消息 ID")
+                    message_ids.add(str(item))
+            else:
+                raw_timestamp = data
+            if isinstance(raw_timestamp, bool) or not isinstance(
+                raw_timestamp, (str, int, float)
+            ):
+                raise ValueError("增量游标时间戳必须是非负整数")
+            timestamp = int(raw_timestamp)
+            if timestamp < 0 or (
+                isinstance(raw_timestamp, float) and not raw_timestamp.is_integer()
+            ):
+                raise ValueError("增量游标时间戳必须是非负整数")
+            return timestamp, message_ids
         except Exception as e:
             logger.error(f"读取最后分析游标失败 (Key: {key}): {e}", exc_info=True)
-            return 0, set()
+            raise RuntimeError(
+                "无法读取增量分析进度，本次分析已停止。请检查存储或游标数据后重试。"
+            ) from e
 
     async def update_last_analyzed_cursor(
         self,
