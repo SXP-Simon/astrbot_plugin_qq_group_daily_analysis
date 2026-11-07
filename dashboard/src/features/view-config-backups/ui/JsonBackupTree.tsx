@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Tag, Typography } from "antd";
 import type { BackupJsonValue } from "../../../entities/plugin-data/model/configBackup";
 
 export function JsonBackupTree({ label, value }: { label: string; value: BackupJsonValue }) {
@@ -21,44 +20,34 @@ export function JsonBackupTree({ label, value }: { label: string; value: BackupJ
   const entries: [string, BackupJsonValue][] = compound ? Object.entries(value) : [];
   const name = (
     <>
-      <Typography.Text strong style={{ overflowWrap: "anywhere" }}>
-        {label}
-      </Typography.Text>{" "}
-      <Tag>
+      <span className="break-all font-mono text-sm">{label}</span>{" "}
+      <span className="text-xs text-muted-foreground">
         {type}
         {compound ? ` · ${entries.length} 项` : ""}
-      </Tag>
+      </span>
     </>
   );
-
   if (!compound && !longString) {
     return (
-      <div style={{ padding: "5px 0", overflowWrap: "anywhere" }}>
-        {name}
-        <code>{JSON.stringify(value)}</code>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 py-1.5 text-sm">
+        <span>{name}</span>
+        <code className="break-all">{JSON.stringify(value)}</code>
       </div>
     );
   }
   return (
-    <details
-      onToggle={(event) => setExpanded(event.currentTarget.open)}
-      style={{ padding: "5px 0" }}
-    >
-      <summary style={{ cursor: "pointer", overflowWrap: "anywhere" }}>
+    <details onToggle={(event) => setExpanded(event.currentTarget.open)} className="py-1.5">
+      <summary className="cursor-pointer break-words rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
         {name}
         {longString && (
-          <Typography.Text type="secondary">{String(value).length} 字符，展开查看</Typography.Text>
+          <span className="ml-2 text-xs text-muted-foreground">
+            {String(value).length} 字符，展开查看
+          </span>
         )}
       </summary>
       {expanded &&
         (compound ? (
-          <div
-            style={{
-              marginLeft: 16,
-              paddingLeft: 12,
-              borderLeft: "1px solid var(--ant-color-border, #d9d9d9)",
-            }}
-          >
+          <div className="ml-2 border-l border-border pl-2 sm:ml-3 sm:pl-3">
             {entries.map(([key, child]) => (
               <JsonBackupTree
                 key={key}
@@ -68,15 +57,7 @@ export function JsonBackupTree({ label, value }: { label: string; value: BackupJ
             ))}
           </div>
         ) : (
-          <pre
-            style={{
-              margin: "8px 0",
-              padding: 12,
-              whiteSpace: "pre-wrap",
-              overflowWrap: "anywhere",
-              fontFamily: "ui-monospace, monospace",
-            }}
-          >
+          <pre className="my-2 whitespace-pre-wrap break-words rounded-lg bg-muted p-3 font-mono text-sm [overflow-wrap:anywhere]">
             {String(value)}
           </pre>
         ))}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchConfigBackup,
   fetchConfigBackups,
@@ -18,6 +18,17 @@ export function useConfigBackups() {
   const [detailError, setDetailError] = useState("");
   const listRequest = useRef(0);
   const detailRequest = useRef(0);
+  const [page, setPage] = useState(1);
+  const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
+
+  useEffect(() => {
+    const list = listRequest;
+    const detail = detailRequest;
+    return () => {
+      list.current++;
+      detail.current++;
+    };
+  }, []);
 
   const load = async () => {
     const request = ++listRequest.current;
@@ -25,6 +36,8 @@ export function useConfigBackups() {
     setOpen(true);
     setLoading(true);
     setItems([]);
+    setPage(1);
+    setSelectedFilename(null);
     setError("");
     setDetail(null);
     setDetailError("");
@@ -42,11 +55,15 @@ export function useConfigBackups() {
   const select = async (filename: string) => {
     const request = ++detailRequest.current;
     setDetail(null);
+    setSelectedFilename(filename);
     setDetailLoading(true);
     setDetailError("");
     try {
       const backup = await fetchConfigBackup(filename);
-      if (request === detailRequest.current) setDetail(backup);
+      if (request === detailRequest.current) {
+        if (backup.backup.filename !== filename) throw new Error("备份文件名不一致");
+        setDetail(backup);
+      }
     } catch {
       if (request === detailRequest.current)
         setDetailError("这份备份暂时无法打开，可能已被清理或内容损坏。请刷新列表后重试。");
@@ -65,6 +82,10 @@ export function useConfigBackups() {
   return {
     open,
     items,
+    page,
+    setPage,
+    visibleItems: items.slice((page - 1) * 5, page * 5),
+    selectedFilename,
     loading,
     error,
     detail,
