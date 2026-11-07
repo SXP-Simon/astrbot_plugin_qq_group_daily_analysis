@@ -5,7 +5,13 @@ import { fetchAnalyticsTrends } from "../../../entities/metric/api/metricApi";
 import { createMockAnalyticsTrends } from "../../../mocks/data/metrics";
 import { createOverviewTrendOptions } from "../overviewTrendOptions";
 
-vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
+const chartRender = vi.hoisted(() => vi.fn());
+vi.mock("echarts-for-react", () => ({
+  default: ({ option }: { option: unknown }) => {
+    chartRender(option);
+    return <div data-testid="chart" />;
+  },
+}));
 vi.mock("../../../entities/metric/api/metricApi", () => ({ fetchAnalyticsTrends: vi.fn() }));
 vi.mock("../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 beforeEach(() => vi.resetAllMocks());
@@ -63,7 +69,7 @@ describe("趋势图与明细", () => {
     expect(screen.getByText("近7天 · 分析次数与模型消耗")).toBeInTheDocument();
   });
 
-  it("图表使用主题颜色和纯文本提示，无动画或 HTML 拼接", () => {
+  it("图表使用主题颜色，提示浮层不拦截鼠标且不解析渠道名中的 HTML", () => {
     const data = createMockAnalyticsTrends();
     const colors = {
       text: "#111",
@@ -77,7 +83,10 @@ describe("趋势图与明细", () => {
     for (const option of options) {
       expect(option.animation).toBe(false);
       expect(option.tooltip).toMatchObject({
-        renderMode: "richText",
+        renderMode: "html",
+        enterable: false,
+        transitionDuration: 0,
+        extraCssText: expect.stringContaining("pointer-events: none"),
         confine: true,
         backgroundColor: colors.background,
       });
@@ -100,6 +109,52 @@ describe("趋势图与明细", () => {
         })),
       },
     ]);
+    const name = '<img src=x onerror="alert(1)">渠道 & 测试';
+    const [, , providerOption] = createOverviewTrendOptions(
+      data.points,
+      [{ name, total_tokens: 1200, request_count: 3 }],
+      colors,
+    );
+    const tooltip = providerOption.tooltip;
+    if (!tooltip || Array.isArray(tooltip) || typeof tooltip.formatter !== "function")
+      throw new Error("服务商提示格式化函数缺失");
+    const content = tooltip.formatter(
+      {
+        componentType: "series",
+        componentSubType: "pie",
+        componentIndex: 0,
+        $vars: ["seriesName", "name", "value", "percent"],
+        seriesType: "pie",
+        seriesIndex: 0,
+        name,
+        dataIndex: 0,
+        data: 1200,
+        value: 1200,
+      },
+      "test",
+      () => {},
+    );
+    expect(content).toBeInstanceOf(HTMLElement);
+    if (!(content instanceof HTMLElement)) throw new Error("提示内容不是文本容器");
+    expect(content.textContent).toBe(`${name}\n1,200 Tokens · 100.0%\n分析 3 次`);
+    expect(content.childElementCount).toBe(0);
+  });
+
+  it("父页更新任务耗时不会重设图表，真正的趋势变更仍刷新", () => {
+    const data = createMockAnalyticsTrends();
+    const { rerender } = render(<OverviewTrendCharts initialTrends={data} />);
+    const initialRenders = chartRender.mock.calls.length;
+    for (let tick = 0; tick < 4; tick++) rerender(<OverviewTrendCharts initialTrends={data} />);
+    expect(chartRender).toHaveBeenCalledTimes(initialRenders);
+    const changed = {
+      ...data,
+      points: data.points.map((point) => ({ ...point, request_count: point.request_count + 1 })),
+    };
+    rerender(<OverviewTrendCharts initialTrends={changed} />);
+    expect(chartRender.mock.calls.length).toBeGreaterThan(initialRenders);
+    expect(
+      screen.getByText(`${changed.points.reduce((sum, point) => sum + point.request_count, 0)} 次`),
+    ).toBeVisible();
   });
 });
 

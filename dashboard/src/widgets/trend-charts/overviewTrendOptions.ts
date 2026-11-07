@@ -10,13 +10,26 @@ interface Palette {
   providerColors: string[];
 }
 
+function tooltipText(content: string): HTMLDivElement {
+  const element = document.createElement("div");
+  // 服务商名称可能来自用户配置，仅写入文本，避免被当成 HTML 执行。
+  element.textContent = content;
+  return element;
+}
+
 export function createOverviewTrendOptions(
   points: AnalyticsTrendPoint[],
   providers: ProviderBreakdownItem[],
   colors: Palette,
 ): EChartsOption[] {
   const tooltip = {
-    renderMode: "richText" as const,
+    // SVG 内的富文本提示会挡住扇区命中；独立浮层不接收鼠标事件。
+    renderMode: "html" as const,
+    className: "overview-trend-tooltip",
+    enterable: false,
+    transitionDuration: 0,
+    extraCssText:
+      "pointer-events: none; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 280px;",
     confine: true,
     backgroundColor: colors.background,
     borderColor: colors.border,
@@ -58,9 +71,11 @@ export function createOverviewTrendOptions(
           )
             return "";
           const point = points[item.dataIndex];
-          return point
-            ? `${point.date_full}\n分析 ${point.request_count} 次\n成功 ${point.succeeded_count} 次 · 失败 ${point.failed_count} 次`
-            : "";
+          return tooltipText(
+            point
+              ? `${point.date_full}\n分析 ${point.request_count} 次\n成功 ${point.succeeded_count} 次 · 失败 ${point.failed_count} 次`
+              : "",
+          );
         },
       },
       series: [
@@ -91,9 +106,11 @@ export function createOverviewTrendOptions(
           )
             return "";
           const point = points[item.dataIndex];
-          return point
-            ? `${point.date_full}\n总消耗 ${point.total_tokens.toLocaleString()} Tokens\n输入 ${point.prompt_tokens.toLocaleString()} · 输出 ${point.completion_tokens.toLocaleString()}`
-            : "";
+          return tooltipText(
+            point
+              ? `${point.date_full}\n总消耗 ${point.total_tokens.toLocaleString()} Tokens\n输入 ${point.prompt_tokens.toLocaleString()} · 输出 ${point.completion_tokens.toLocaleString()}`
+              : "",
+          );
         },
       },
       series: [
@@ -129,9 +146,11 @@ export function createOverviewTrendOptions(
           )
             return "";
           const provider = providers[item.dataIndex];
-          return provider
-            ? `${provider.name}\n${provider.total_tokens.toLocaleString()} Tokens${providerTotal > 0 ? ` · ${((provider.total_tokens / providerTotal) * 100).toFixed(1)}%` : ""}\n分析 ${provider.request_count} 次`
-            : "";
+          return tooltipText(
+            provider
+              ? `${provider.name}\n${provider.total_tokens.toLocaleString()} Tokens${providerTotal > 0 ? ` · ${((provider.total_tokens / providerTotal) * 100).toFixed(1)}%` : ""}\n分析 ${provider.request_count} 次`
+              : "",
+          );
         },
       },
       series: [

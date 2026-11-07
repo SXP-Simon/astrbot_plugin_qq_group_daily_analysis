@@ -1,3 +1,4 @@
+import { memo } from "react";
 import ReactECharts from "echarts-for-react";
 import type { AnalyticsTrendsResponse } from "../../entities/metric/model/types";
 import { formatSmartTokens } from "../../shared/lib/formatters";
@@ -14,7 +15,10 @@ interface OverviewTrendChartsProps {
   totalTokens?: number;
 }
 
-export function OverviewTrendCharts({ initialTrends }: OverviewTrendChartsProps) {
+// 运行中任务每秒刷新耗时；相同趋势数据不应重设图表并打断悬浮提示。
+export const OverviewTrendCharts = memo(function OverviewTrendCharts({
+  initialTrends,
+}: OverviewTrendChartsProps) {
   const vm = useOverviewTrends(initialTrends);
   useTheme();
   const style = getComputedStyle(document.documentElement);
@@ -164,4 +168,4 @@ export function OverviewTrendCharts({ initialTrends }: OverviewTrendChartsProps)
       )}
     </section>
   );
-}
+});
