@@ -184,3 +184,60 @@ it("刷新保留筛选和当前选择，列表与群聊错误可以恢复而不�
   expect(result.current.selectedGroup).toBeUndefined();
   expect(result.current.selectedTrace?.trace_id).toBe(second.trace_id);
 });
+it("继续加载使用最后一条游标，追加去重并保留选择，刷新移出范围时明确标记", async () => {
+  vi.mocked(fetchTraceList).mockResolvedValueOnce({
+    items: [first, second],
+    total: 60,
+    has_more: true,
+  });
+  const { result } = renderHook(useContextInsightViewModel);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  act(() => result.current.setSelectedTrace(second));
+  const older = { ...first, trace_id: "older", started_at: 90 };
+  vi.mocked(fetchTraceList).mockResolvedValueOnce({
+    items: [second, older],
+    total: 1,
+    has_more: false,
+  });
+  await act(async () => result.current.loadMore());
+  expect(fetchTraceList).toHaveBeenLastCalledWith(
+    expect.objectContaining({ before_time: 100, before_id: second.trace_id }),
+  );
+  expect(result.current.traces.map((item) => item.trace_id)).toEqual([
+    first.trace_id,
+    second.trace_id,
+    older.trace_id,
+  ]);
+  expect(result.current.selectedTrace?.trace_id).toBe(second.trace_id);
+  expect(result.current.total).toBe(60);
+  expect(result.current.hasMore).toBe(false);
+  vi.mocked(fetchTraceList).mockResolvedValueOnce({ items: [first], total: 1 });
+  act(() => result.current.refresh(false));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(result.current.selectedTrace).toBeNull();
+  expect(result.current.selectionMissing).toBe(true);
+  await act(async () => result.current.setSelectedTrace(first));
+  expect(result.current.selectionMissing).toBe(false);
+});
+
+it("继续加载防重入，失败可重试，改筛选和卸载会废弃迟到追加", async () => {
+  vi.mocked(fetchTraceList).mockResolvedValueOnce({ items: [first], total: 60, has_more: true });
+  const { result, unmount } = renderHook(useContextInsightViewModel);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  vi.mocked(fetchTraceList).mockRejectedValueOnce(new Error("断网"));
+  await act(async () => result.current.loadMore());
+  expect(result.current.moreError).toContain("重试");
+  expect(result.current.traces).toEqual([first]);
+  const late = deferred<Awaited<ReturnType<typeof fetchTraceList>>>();
+  vi.mocked(fetchTraceList).mockReturnValueOnce(late.promise);
+  act(() => {
+    void result.current.loadMore();
+    void result.current.loadMore();
+  });
+  expect(fetchTraceList).toHaveBeenCalledTimes(3);
+  act(() => result.current.setSearch("新的筛选"));
+  await act(async () => late.resolve({ items: [{ ...second, trace_id: "late" }], total: 1 }));
+  expect(result.current.traces.some((item) => item.trace_id === "late")).toBe(false);
+  unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});

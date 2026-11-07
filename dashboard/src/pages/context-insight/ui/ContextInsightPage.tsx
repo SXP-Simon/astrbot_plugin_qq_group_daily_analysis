@@ -31,6 +31,11 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
         onReset={vm.resetFilters}
         onRefresh={() => vm.refresh(false)}
       />
+      {vm.hasUpdates && (
+        <p role="status" className="text-sm text-info">
+          分析记录有更新，点击“刷新”查看。当前选择保持不变。
+        </p>
+      )}
       {vm.groupsError && (
         <p role="alert" className="m-0 text-sm text-destructive">
           {vm.groupsError}
@@ -46,8 +51,8 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="m-0 text-lg font-medium">选择分析记录</h2>
           <span className="text-sm text-muted-foreground">
-            {vm.total > vm.traces.length
-              ? `已载入最近 ${vm.traces.length} / ${vm.total} 条，可缩小筛选范围`
+            {vm.total !== vm.traces.length
+              ? `已载入 ${vm.traces.length} 条 · 首次查询共 ${vm.total} 条`
               : `共 ${vm.total} 条`}
           </span>
         </div>
@@ -75,6 +80,25 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
           selectedTrace={vm.selectedTrace}
           onSelectTrace={vm.setSelectedTrace}
         />
+      )}
+      {vm.hasMore && (
+        <Button
+          variant="outline"
+          disabled={vm.loading || vm.loadingMore}
+          onClick={() => void vm.loadMore()}
+        >
+          {vm.loadingMore ? "正在加载…" : "加载更早记录"}
+        </Button>
+      )}
+      {vm.moreError && (
+        <p role="alert" className="text-sm text-destructive">
+          {vm.moreError}
+        </p>
+      )}
+      {vm.selectionMissing && (
+        <p role="status" className="text-sm text-warning">
+          所选任务已不在当前加载范围，可能已删除或不再符合筛选。请选择其他记录，或继续加载更早记录。
+        </p>
       )}
       {vm.selectedTrace ? (
         <section
@@ -127,7 +151,7 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
             />
           </div>
         </section>
-      ) : !vm.loading && !vm.error ? (
+      ) : !vm.loading && !vm.error && !vm.selectionMissing ? (
         <p role="status" className="py-12 text-center text-muted-foreground">
           暂无符合条件的分析记录，可调整筛选或发起分析。
         </p>

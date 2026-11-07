@@ -44,7 +44,7 @@ afterEach(() => vi.resetAllMocks());
 it("通过可搜索选择器切换同群号不同平台的任务，详情入口与数据一致，日期清空后同步表单", async () => {
   render(<Page />);
   await screen.findByRole("button", { name: "查看任务详情" });
-  expect(screen.getByText("已载入最近 2 / 300 条，可缩小筛选范围")).toBeVisible();
+  expect(screen.getByText("已载入 2 条 · 首次查询共 300 条")).toBeVisible();
   const selection = screen.getByRole("button", { name: /选择分析记录：/ });
   selection.focus();
   fireEvent.click(selection);
@@ -86,6 +86,15 @@ it("失败与空数据分开显示，刷新可以恢复，不用零图表掩盖�
   expect(await screen.findByRole("alert")).toHaveTextContent("当前保留上次读取的记录");
   vi.mocked(fetchTraceList).mockResolvedValueOnce({ items: [], total: 0 });
   fireEvent.click(screen.getByRole("button", { name: "刷新" }));
-  expect(await screen.findByText(/暂无符合条件/)).toBeVisible();
+  expect(await screen.findByText(/所选任务已不在当前加载范围/)).toBeVisible();
   expect(screen.queryByRole("region", { name: "所选任务统计" })).not.toBeInTheDocument();
+});
+
+it("加载期间记录增加时区分已载入数量和首次查询总数", async () => {
+  vi.mocked(fetchTraceList)
+    .mockResolvedValueOnce({ items: [traces[0]], total: 1, has_more: true })
+    .mockResolvedValueOnce({ items: [traces[1]], total: 1, has_more: false });
+  render(<Page />);
+  fireEvent.click(await screen.findByRole("button", { name: "加载更早记录" }));
+  expect(await screen.findByText("已载入 2 条 · 首次查询共 1 条")).toBeVisible();
 });

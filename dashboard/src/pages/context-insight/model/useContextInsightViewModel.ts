@@ -27,6 +27,12 @@ export function useContextInsightViewModel() {
   const [refreshRequest, setRefreshRequest] = useState({ version: 0, silent: false });
   const previousFilters = useRef<InsightFilters | null>(null);
   const detailVersion = useRef(0);
+  const listGeneration = useRef(0);
+  const moreRequest = useRef<symbol | null>(null);
+  const [nextCursor, setNextCursor] = useState<{ time: number; id: string } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState("");
+  const [hasUpdates, setHasUpdates] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -52,14 +58,19 @@ export function useContextInsightViewModel() {
     let active = true;
     const delay =
       previousFilters.current && previousFilters.current.search !== filters.search ? 250 : 0;
-    const silent = previousFilters.current === filters && refreshRequest.silent;
+    const filtersChanged = previousFilters.current !== filters;
+    const silent = !filtersChanged && refreshRequest.silent;
+    listGeneration.current += 1;
+    moreRequest.current = null;
+    setLoadingMore(false);
+    setMoreError("");
     previousFilters.current = filters;
     setLoading(!silent);
     setError("");
     const timer = setTimeout(async () => {
       try {
         const result = await fetchTraceList({
-          limit: 200,
+          limit: 50,
           group_id: filters.selectedGroup || undefined,
           search: filters.search.trim() || undefined,
           status: filters.statusFilter || undefined,
@@ -71,10 +82,19 @@ export function useContextInsightViewModel() {
         if (!active) return;
         setTraces(result.items);
         setTotal(result.total);
+        const last = result.items.at(-1);
+        setNextCursor(
+          (result.has_more ?? result.items.length === 50) && last
+            ? { time: last.started_at, id: last.trace_id }
+            : null,
+        );
+        // 主动刷新后不悄悄改选其他任务；筛选条件变化才重新选择第一条。
         setSelectedTraceId((current) =>
           result.items.some((trace) => trace.trace_id === current)
             ? current
-            : (result.items[0]?.trace_id ?? null),
+            : filtersChanged || !current
+              ? (result.items[0]?.trace_id ?? null)
+              : current,
         );
       } catch (reason) {
         if (active)
@@ -91,6 +111,8 @@ export function useContextInsightViewModel() {
     return () => {
       active = false;
       clearTimeout(timer);
+      listGeneration.current += 1;
+      moreRequest.current = null;
     };
   }, [filters, refreshRequest]);
 
@@ -128,6 +150,48 @@ export function useContextInsightViewModel() {
     };
   }, [selectedTraceId, refreshRequest.version]);
 
+  const loadMore = async () => {
+    if (loading || moreRequest.current || !nextCursor) return;
+    const generation = listGeneration.current;
+    const request = Symbol("older-traces");
+    moreRequest.current = request;
+    setLoadingMore(true);
+    setMoreError("");
+    try {
+      const result = await fetchTraceList({
+        limit: 50,
+        group_id: filters.selectedGroup || undefined,
+        search: filters.search.trim() || undefined,
+        status: filters.statusFilter || undefined,
+        start_time: filters.dateRange?.[0],
+        end_time: filters.dateRange?.[1],
+        sort_by: "started_at",
+        sort_order: "desc",
+        before_time: nextCursor.time,
+        before_id: nextCursor.id,
+      });
+      if (generation !== listGeneration.current || moreRequest.current !== request) return;
+      setTraces((current) => {
+        const ids = new Set(current.map((trace) => trace.trace_id));
+        return [...current, ...result.items.filter((trace) => !ids.has(trace.trace_id))];
+      });
+      const last = result.items.at(-1);
+      setNextCursor(
+        (result.has_more ?? result.items.length === 50) && last
+          ? { time: last.started_at, id: last.trace_id }
+          : null,
+      );
+    } catch {
+      if (generation === listGeneration.current && moreRequest.current === request)
+        setMoreError("更早的记录读取失败，请重试。已加载的记录会保留。");
+    } finally {
+      if (moreRequest.current === request) {
+        moreRequest.current = null;
+        setLoadingMore(false);
+      }
+    }
+  };
+
   // 选择变化后的首次渲染也不能借用上一项的明细，更不能把缺失字段补成零。
   const currentDetail = detail?.trace_id === selectedTraceId ? detail : null;
   const selectedTrace = traces.find((trace) => trace.trace_id === selectedTraceId) ?? null;
@@ -142,6 +206,13 @@ export function useContextInsightViewModel() {
     ...filters,
     traces,
     total,
+    hasUpdates,
+    markUpdated: () => setHasUpdates(true),
+    hasMore: nextCursor !== null,
+    loadingMore,
+    moreError,
+    loadMore,
+    selectionMissing: Boolean(selectedTraceId && !selectedTrace && !loading),
     selectedTrace,
     contextMetrics,
     tokenUsage: currentDetail?.token_usage ?? null,
@@ -160,7 +231,9 @@ export function useContextInsightViewModel() {
     setDateRange: (dateRange: [number, number] | null) =>
       setFilters((current) => ({ ...current, dateRange })),
     resetFilters: () => setFilters(INITIAL_FILTERS),
-    refresh: (silent = true) =>
-      setRefreshRequest((current) => ({ version: current.version + 1, silent })),
+    refresh: (silent = true) => {
+      setHasUpdates(false);
+      setRefreshRequest((current) => ({ version: current.version + 1, silent }));
+    },
   };
 }
