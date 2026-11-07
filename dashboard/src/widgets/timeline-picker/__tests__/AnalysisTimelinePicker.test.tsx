@@ -86,6 +86,26 @@ it("状态、平台、用量、耗时与留存无需悬停，取消不冒充运�
   expect(screen.getByRole("button", { name: "下一条" })).toBeDisabled();
 });
 
+it("长群名收起显示时仍能识别完整任务，状态、平台和选择行为不丢失", () => {
+  const longName = "深度学习与自然语言处理前沿学术讨论暨核心内测技术交流特大群（第 3 分群）";
+  const longTrace = { ...traces[1], group_name: longName, group_id: "108273918237493821" };
+  const onSelect = vi.fn();
+  render(
+    <AnalysisTimelinePicker
+      traces={[traces[0], longTrace]}
+      selectedTrace={traces[0]}
+      onSelectTrace={onSelect}
+    />,
+  );
+  const card = screen.getByRole("button", { name: (name) => name.includes(longName) });
+  expect(card).toHaveAccessibleName(expect.stringContaining(longTrace.trace_id));
+  expect(within(card).getByTitle(longName)).toHaveTextContent(longName);
+  expect(within(card).getByText("成功")).toBeVisible();
+  expect(within(card).getByText(`discord · ${longTrace.group_id}`)).toBeVisible();
+  fireEvent.click(card);
+  expect(onSelect).toHaveBeenCalledWith(longTrace);
+});
+
 it("快速切换取消旧帧，减少动态效果时直接定位，卸载取消待执行滚动", () => {
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   const view = render(<Picker />);

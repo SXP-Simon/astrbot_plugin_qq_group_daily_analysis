@@ -126,7 +126,7 @@ export function AnalysisTimelinePicker({
             );
             const duration = recorded(item.duration_ms);
             return (
-              <li key={trace.trace_id}>
+              <li key={trace.trace_id} className="w-60 min-w-0 shrink-0">
                 <Button
                   ref={(node) => {
                     if (node) nodes.current.set(trace.trace_id, node);
@@ -137,7 +137,7 @@ export function AnalysisTimelinePicker({
                   aria-pressed={isSelected}
                   aria-label={`选择任务 ${trace.group_name || trace.group_id} · ${trace.platform} · ${formatTimestamp(trace.started_at)} · ${trace.trace_id}`}
                   tabIndex={index === (selectedIndex < 0 ? 0 : selectedIndex) ? 0 : -1}
-                  className="grid h-auto w-60 select-none gap-2 whitespace-normal p-3 text-left font-normal"
+                  className="grid h-full w-full min-w-0 select-none grid-cols-1 content-start items-start justify-stretch gap-2 whitespace-normal p-3 text-left font-normal"
                   onClick={(event) => {
                     if (!moved.current || event.detail === 0) onSelectTrace(trace);
                   }}
@@ -158,11 +158,16 @@ export function AnalysisTimelinePicker({
                     nodes.current.get(traces[target].trace_id)?.focus({ preventScroll: true });
                   }}
                 >
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="truncate font-medium">
+                  <span className="flex min-h-10 min-w-0 items-start justify-between gap-2">
+                    <span
+                      className="line-clamp-2 min-w-0 break-words font-medium leading-5"
+                      title={trace.group_name || trace.group_id}
+                    >
                       {trace.group_name || trace.group_id}
                     </span>
-                    <StatusTag status={trace.status} />
+                    <span className="shrink-0">
+                      <StatusTag status={trace.status} />
+                    </span>
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
                     {trace.platform} · {trace.group_id}
@@ -170,7 +175,7 @@ export function AnalysisTimelinePicker({
                   <span className="font-mono text-xs text-muted-foreground">
                     {formatTimestamp(trace.started_at)}
                   </span>
-                  <span className="text-xs">
+                  <span className="break-words text-xs">
                     Tokens {tokens === null ? "未记录" : tokens.toLocaleString()} · 耗时{" "}
                     {duration === null
                       ? "未记录"
