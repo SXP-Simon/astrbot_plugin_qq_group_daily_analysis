@@ -148,6 +148,17 @@ class ActiveTaskSnapshot(TypedDict):
 # Trace ID 中群名的最大长度（平衡可读性和日志宽度）
 _MAX_GROUP_NAME_LEN = 10
 
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def sanitize_component(value: str) -> str:
+    """移除会破坏文件名的 C0/DEL 控制字符。
+
+    用于 legacy trace id、外部传入的名字等不受 generate() 保护的值。
+    """
+    return _CONTROL_CHARS.sub("", str(value))
+
+
 # 用于匹配报告 Caption 中去重 Token 的正则模式
 REPORT_CAPTION_PATTERN = re.compile(r"\| (\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 

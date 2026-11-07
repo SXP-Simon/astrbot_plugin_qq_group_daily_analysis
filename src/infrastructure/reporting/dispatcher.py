@@ -14,7 +14,7 @@ from ...domain.repositories.platform_adapter_repository import (
     MarkdownImageSupportProtocol,
 )
 from ...shared.constants import AnalysisStage
-from ...shared.trace_context import TraceContext
+from ...shared.trace_context import TraceContext, sanitize_component
 from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 from .html_renderer import bind_group_html_renderer
@@ -229,7 +229,7 @@ class ReportDispatcher:
                 try:
                     reports_dir = self.report_generator.data_dir / "reports"
                     reports_dir.mkdir(parents=True, exist_ok=True)
-                    eff_trace_id = (
+                    eff_trace_id = sanitize_component(
                         trace_id
                         or (trace_ctx.trace_id if trace_ctx else "")
                         or TraceContext.get()

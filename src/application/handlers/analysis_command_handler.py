@@ -30,7 +30,7 @@ from ...domain.value_objects.task_event import TaskEvent
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
 from ...infrastructure.reporting.report_image import save_report_image
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
-from ...shared.trace_context import TraceContext
+from ...shared.trace_context import TraceContext, sanitize_component
 from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 from ..services.analysis_application_service import (
@@ -775,7 +775,9 @@ class AnalysisCommandHandler:
             reports_dir.mkdir(parents=True, exist_ok=True)
             ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
             cur_trace = TraceContext.current()
-            eff_trace_id = trace_id or (cur_trace.trace_id if cur_trace else "")
+            eff_trace_id = sanitize_component(
+                trace_id or (cur_trace.trace_id if cur_trace else "")
+            )
             trace_suffix = f"_{eff_trace_id}" if eff_trace_id else ""
             dest = reports_dir / f"report_{group_id}_{ts_str}{trace_suffix}.jpg"
             dest = save_report_image(image_url, dest)
@@ -851,7 +853,7 @@ class AnalysisCommandHandler:
             group_info = await adapter.get_group_info(group_id)
             if group_info and group_info.group_name:
                 safe_name = re.sub(
-                    r'[\x00-\x1f\x7f\\/:*?"<>|]', "", group_info.group_name
+                    r'[\\/:*?"<>|]', "", sanitize_component(group_info.group_name)
                 ).strip()
                 if safe_name:
                     filename_stem = f"群分析报告_{safe_name}_{date_str}_{timestamp}"
