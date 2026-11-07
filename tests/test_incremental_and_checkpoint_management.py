@@ -63,6 +63,7 @@ async def test_incremental_store_crud_and_registration(dummy_plugin_kv: DummyPlu
     batch1 = IncrementalBatch(
         batch_id="batch_001",
         group_id="group_123",
+        last_message_timestamp=1725950000,
         timestamp=time.time() - 3600,
         messages_count=50,
         characters_count=300,
@@ -121,6 +122,7 @@ async def test_incremental_store_crud_and_registration(dummy_plugin_kv: DummyPlu
     # 按时间倒序
     assert batch_list[0]["batch_id"] == "batch_002"
     assert batch_list[1]["batch_id"] == "batch_001"
+    assert batch_list[1]["last_message_timestamp"] == 1725950000
 
     # 4. 更新游标并检查
     await store.update_last_analyzed_cursor("group_123", 1725960000, {"msg_1", "msg_2"})

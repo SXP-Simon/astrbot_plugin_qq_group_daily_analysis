@@ -562,6 +562,7 @@ class IncrementalStore(IIncrementalStore):
                         "batch_id": batch.batch_id,
                         "group_id": batch.group_id,
                         "timestamp": batch.timestamp,
+                        "last_message_timestamp": batch.last_message_timestamp,
                         "messages_count": batch.messages_count,
                         "characters_count": batch.characters_count,
                         "topics": topics_summary,
