@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
 from ....application.services.task_guard import DuplicateGroupTaskError
-from ....domain.value_objects.incremental_session import IncrementalSession
+from ....domain.value_objects.group_session import GroupSession
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
 from ...config.config_backup_reader import ConfigBackupReader
@@ -325,7 +325,7 @@ class DataManagementRoutes:
             history = await asyncio.to_thread(
                 self.trace_store.get_distinct_groups, by_session=True
             )
-            sessions: set[IncrementalSession] = (
+            sessions: set[GroupSession] = (
                 set(await store.get_tracked_sessions()) if store else set()
             )
             # 旧键不包含平台；按升级前群号未碰撞的约定，归属最近一次已记录的平台。
@@ -343,9 +343,7 @@ class DataManagementRoutes:
                         await store.for_session(session.group_id, platform)
                 sessions = set(await store.get_tracked_sessions())
             names = {
-                IncrementalSession(item["platform"], item["group_id"]): item[
-                    "group_name"
-                ]
+                GroupSession(item["platform"], item["group_id"]): item["group_name"]
                 for item in history
                 if item["group_id"]
             }
