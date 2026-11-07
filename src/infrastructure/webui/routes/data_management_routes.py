@@ -69,7 +69,9 @@ class DataManagementRoutes:
         self.report_output_dir = report_output_dir
 
     @asynccontextmanager
-    async def _mutation_guard(self, group_id: str) -> AsyncGenerator[None, None]:
+    async def _mutation_guard(
+        self, group_id: str, platform_id: str | None = None
+    ) -> AsyncGenerator[None, None]:
         """删除批次、重置游标和清理快照时，与群分析任务互斥。
 
         Args:
@@ -85,7 +87,9 @@ class DataManagementRoutes:
             if self.analysis_service:
                 for task_type in ("daily", "incremental", "final"):
                     await stack.enter_async_context(
-                        self.analysis_service.group_lock(group_id, task_type)
+                        self.analysis_service.group_lock(
+                            group_id, task_type, platform_id
+                        )
                     )
             yield
 
@@ -413,6 +417,10 @@ class DataManagementRoutes:
                     "IncrementalStore not initialized", status_code=503
                 )
 
+            if platform_id and self.analysis_service:
+                platform_id = self.analysis_service.bot_manager.resolve_platform_id(
+                    platform_id
+                )
             store = await store.for_session(group_id, platform_id)
             result = await store.list_batch_page(query_dto["group_id"], page, page_size)
             cursor_ts, cursor_msg_ids = await store.get_last_analyzed_cursor(
@@ -476,6 +484,10 @@ class DataManagementRoutes:
                     "IncrementalStore not initialized", status_code=503
                 )
 
+            if platform_id and self.analysis_service:
+                platform_id = self.analysis_service.bot_manager.resolve_platform_id(
+                    platform_id
+                )
             store = await store.for_session(group_id, platform_id)
             batch = await store.get_batch_detail(
                 query_dto["group_id"], query_dto["batch_id"]
@@ -524,7 +536,11 @@ class DataManagementRoutes:
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            async with self._mutation_guard(group_id):
+            async with self._mutation_guard(group_id, platform_id or None):
+                if platform_id and self.analysis_service:
+                    platform_id = self.analysis_service.bot_manager.resolve_platform_id(
+                        platform_id
+                    )
                 store = await store.for_session(group_id, platform_id)
                 deleted = await store.delete_batch(
                     delete_dto["group_id"], delete_dto["batch_id"]
@@ -576,7 +592,11 @@ class DataManagementRoutes:
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            async with self._mutation_guard(group_id):
+            async with self._mutation_guard(group_id, platform_id or None):
+                if platform_id and self.analysis_service:
+                    platform_id = self.analysis_service.bot_manager.resolve_platform_id(
+                        platform_id
+                    )
                 store = await store.for_session(group_id, platform_id)
                 deleted_count = await store.reset_group(reset_dto["group_id"])
             return json_response(

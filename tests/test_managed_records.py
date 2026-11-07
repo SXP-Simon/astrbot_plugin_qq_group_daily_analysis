@@ -62,6 +62,7 @@ def record_endpoint(tmp_path, monkeypatch):
     guard = TaskGuard()
     service = SimpleNamespace(
         history_manager=SimpleNamespace(plugin=plugin),
+        bot_manager=SimpleNamespace(resolve_platform_id=lambda value: value),
         incremental_store=IncrementalStore(plugin),
         checkpoint_store=CheckpointStore(tmp_path / "traces.db"),
         group_lock=guard.group_lock,

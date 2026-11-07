@@ -124,6 +124,7 @@ async def test_resume_task_uses_new_trace_and_preserves_terminal_source(
         resumed_args.append(kwargs)
 
     routes = TaskRoutes(mock_trace_store, mock_active_mgr, MagicMock())
+    routes.analysis_service.bot_manager.resolve_platform_id.side_effect = lambda value: value
     monkeypatch.setattr(routes, "_run_resumed_task", run_resumed_task)
 
     response = await routes.api_resume_task("resume-source")

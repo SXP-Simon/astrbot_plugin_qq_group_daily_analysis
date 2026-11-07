@@ -37,6 +37,7 @@ def bridge_setup(temp_db: Path, tmp_path: Path):
     active_mgr = ActiveTaskManager()
     mock_context = MagicMock()
     mock_analysis_svc = MagicMock()
+    mock_analysis_svc.bot_manager.resolve_platform_id.side_effect = lambda value: value
     mock_dispatcher = MagicMock()
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -197,7 +198,7 @@ async def test_api_trigger_task_duplicate_rejection(bridge_setup):
         "astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.plugin_page_bridge.request",
         create=True,
     ) as mock_req:
-        mock_req.json = AsyncMock(return_value={"group_id": "123456"})
+        mock_req.json = AsyncMock(return_value={"group_id": "123456", "platform": "onebot"})
         mock_req.query = {}
 
         res = await bridge.api_trigger_task()
@@ -213,7 +214,7 @@ async def test_api_trigger_task_duplicate_rejection(bridge_setup):
         "astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.plugin_page_bridge.request",
         create=True,
     ) as mock_req:
-        mock_req.json = AsyncMock(return_value={"group_id": "123456"})
+        mock_req.json = AsyncMock(return_value={"group_id": "123456", "platform": "onebot"})
         mock_req.query = {}
 
         res = await bridge.api_trigger_task()

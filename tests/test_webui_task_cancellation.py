@@ -63,6 +63,7 @@ async def test_webui_trigger_can_be_cancelled_during_analysis_or_typst(
 
     service = MagicMock()
     service.is_group_running.return_value = False
+    service.bot_manager.resolve_platform_id.side_effect = lambda value: value
     service.execute_daily_analysis = AsyncMock(side_effect=execute)
     service.bot_manager.get_adapter.return_value = MagicMock()
     dispatcher = SimpleNamespace(dispatch=AsyncMock())

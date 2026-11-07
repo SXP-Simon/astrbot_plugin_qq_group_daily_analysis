@@ -57,11 +57,11 @@ async def test_routes_read_delete_and_reset_only_selected_platform(tmp_path, mon
     request = MagicMock(query={"group_id": "123", "platform_id": "telegram-main", "batch_id": "same"})
     request.json = AsyncMock(return_value={})
     monkeypatch.setattr(data_management_routes, "request", request)
-    routes = data_management_routes.DataManagementRoutes(TraceSQLiteStore(tmp_path / "state.db"), SimpleNamespace(incremental_store=root))
+    routes = data_management_routes.DataManagementRoutes(TraceSQLiteStore(tmp_path / "state.db"), SimpleNamespace(bot_manager=SimpleNamespace(resolve_platform_id=lambda value: value), incremental_store=root))
     # 路由锁仅负责任务互斥，仓储会话决定实际读写范围。
     from contextlib import asynccontextmanager
     @asynccontextmanager
-    async def unlocked(_group):
+    async def unlocked(_group, _platform=None):
         yield
     monkeypatch.setattr(routes, "_mutation_guard", unlocked)
     listed = (await routes.api_get_incremental_batches())["data"]
@@ -74,5 +74,28 @@ async def test_routes_read_delete_and_reset_only_selected_platform(tmp_path, mon
     first = await root.for_session("123", "onebot-main")
     assert await first.get_batch_count("123") == 1
     assert await first.get_last_analyzed_cursor("123") == (7, {"onebot-main"})
+
     request.query.pop("platform_id")
     assert (await routes.api_get_incremental_batches())["status_code"] == 400
+
+
+@pytest.mark.asyncio
+async def test_reset_protects_only_selected_session(tmp_path, monkeypatch):
+    from src.application.services.task_guard import TaskGuard
+    guard = TaskGuard()
+    root = IncrementalStore(MemoryStar())
+    for platform in ("first", "second"):
+        scoped = await root.for_session("123", platform)
+        await scoped.save_batch(IncrementalBatch(group_id="123", batch_id="batch"))
+    request = MagicMock(query={})
+    request.json = AsyncMock(return_value={"group_id": "123", "platform_id": "second"})
+    monkeypatch.setattr(data_management_routes, "request", request)
+    monkeypatch.setattr(data_management_routes, "json_response", lambda value: value)
+    monkeypatch.setattr(data_management_routes, "error_response", lambda message, status_code: {"status_code": status_code})
+    service = SimpleNamespace(incremental_store=root, group_lock=guard.group_lock, bot_manager=SimpleNamespace(resolve_platform_id=lambda value: value))
+    endpoint = data_management_routes.DataManagementRoutes(TraceSQLiteStore(tmp_path / "state.db"), service)
+    async with guard.group_lock("123", "incremental", "first"):
+        assert (await endpoint.api_reset_incremental_group())["status"] == "ok"
+        request.json.return_value["platform_id"] = "first"
+        assert (await endpoint.api_reset_incremental_group())["status_code"] == 409
+    assert await (await root.for_session("123", "first")).get_batch_count("123") == 1

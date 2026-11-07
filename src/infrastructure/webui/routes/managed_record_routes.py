@@ -363,15 +363,36 @@ class ManagedRecordRoutes:
             data = body.get("data")
             record_revision(data)
             async with self._lock, AsyncExitStack() as stack:
+                current = await self._read(locator)
+                if locator["kind"] == "history" and is_string_mapping(current):
+                    owner = current.get("platform_id")
+                    if isinstance(owner, str):
+                        locator["platform_id"] = owner
+                if locator["platform_id"] and self.service:
+                    locator["platform_id"] = (
+                        self.service.bot_manager.resolve_platform_id(
+                            locator["platform_id"]
+                        )
+                    )
+                scope = locator["platform_id"] or None
+                if locator["kind"] == "checkpoint":
+                    scope = None
                 if locator["group_id"] and self.service:
                     if any(
                         task.get("group_id") == locator["group_id"]
+                        and (
+                            not scope
+                            or not task.get("platform")
+                            or task.get("platform") == scope
+                        )
                         for task in self.active_tasks.get_active_tasks()
                     ):
                         raise FileExistsError("此群有任务正在执行，请结束后再修改记录")
                     for task_type in ("daily", "incremental", "final"):
                         await stack.enter_async_context(
-                            self.service.group_lock(locator["group_id"], task_type)
+                            self.service.group_lock(
+                                locator["group_id"], task_type, scope
+                            )
                         )
                 current = await self._read(locator)
                 if operation == "create":
@@ -559,7 +580,10 @@ class ManagedRecordRoutes:
                 )
                 if isinstance(trace_id, str) and trace_id:
                     task_key = f"analysis_task_{trace_id.encode().hex()}"
-                    if await plugin.get_kv_data(task_key, None) == locator["key"]:
+                    if (
+                        cast("object", await plugin.get_kv_data(task_key, None))
+                        == locator["key"]
+                    ):
                         await plugin.delete_kv_data(task_key)
         elif is_string_mapping(data):
             if "analysis" in data and (

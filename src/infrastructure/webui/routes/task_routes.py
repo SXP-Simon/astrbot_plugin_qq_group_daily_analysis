@@ -107,21 +107,32 @@ class TaskRoutes:
             if not group_id:
                 return error_response("group_id is required", status_code=400)
 
-            # 防重入即时拦截：若该群已有分析任务正在执行，直接拒绝重复触发并返回友好提示
-            if self.analysis_service.is_group_running(group_id, "daily"):
-                return error_response(
-                    f"群 {group_id} 的日常分析任务正在执行中，请勿重复触发",
-                    status_code=409,
-                )
-
             group_name = str(
                 payload.get("group_name")
                 or request.query.get("group_name")
                 or f"群 {group_id}"
             ).strip()
             platform = str(
-                payload.get("platform") or request.query.get("platform") or "qq"
+                payload.get("platform") or request.query.get("platform") or ""
             ).strip()
+
+            if not platform:
+                adapters = self.analysis_service.bot_manager.get_all_adapters()
+                if len(adapters) != 1:
+                    return error_response(
+                        "请选择准确的平台实例后再发起分析", status_code=400
+                    )
+                platform = next(iter(adapters))
+            platform = self.analysis_service.bot_manager.resolve_platform_id(platform)
+            if self.analysis_service.is_group_running(
+                group_id, "daily", platform
+            ) or any(
+                task.get("group_id") == group_id and task.get("platform") == platform
+                for task in self.active_task_manager.get_active_tasks()
+            ):
+                return error_response(
+                    "此会话的分析任务正在执行中，请稍后再试", status_code=409
+                )
 
             trace_id = TraceContext.generate("web_manual", group_name)
 
@@ -192,6 +203,8 @@ class TaskRoutes:
                     },
                 }
             )
+        except ValueError as e:
+            return error_response(str(e), status_code=400)
         except Exception as e:
             logger.error(f"触发分析任务异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
@@ -221,24 +234,8 @@ class TaskRoutes:
             trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
             bot_mgr = self.analysis_service.bot_manager
-            target_platform: str | None = None
-
-            if platform and bot_mgr.get_adapter(platform):
-                target_platform = str(platform).strip()
-            else:
-                adapters = bot_mgr.get_all_adapters()
-                if len(adapters) == 1:
-                    target_platform = next(iter(adapters.keys()))
-                elif len(adapters) > 1 and group_id:
-                    for p_id, adp in adapters.items():
-                        try:
-                            if await adp.get_group_info(str(group_id)):
-                                target_platform = bot_mgr.get_adapter_platform_id(
-                                    adp
-                                ) or str(p_id)
-                                break
-                        except Exception:
-                            continue
+            target_platform = bot_mgr.resolve_platform_id(platform)
+            trace_ctx.platform = target_platform
 
             result = await self.analysis_service.execute_daily_analysis(
                 group_id=group_id,
@@ -321,6 +318,12 @@ class TaskRoutes:
             previous_status = str(trace_record.get("status", ""))
             if previous_status == TaskStatus.RUNNING.value:
                 return error_response("任务仍在运行，不能重复续跑", status_code=409)
+            if not platform:
+                return error_response(
+                    "原任务未记录平台实例，无法安全续跑，请选择会话重新分析",
+                    status_code=400,
+                )
+            platform = self.analysis_service.bot_manager.resolve_platform_id(platform)
             resume_trace_id = str(uuid.uuid4())
             # 归档日随源任务保留，避免历史续跑或跨日再次续跑误查当天快照。
             extra = trace_record.get("extra")
@@ -461,24 +464,8 @@ class TaskRoutes:
             trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
             bot_mgr = self.analysis_service.bot_manager
-            target_platform: str | None = None
-
-            if platform and bot_mgr.get_adapter(platform):
-                target_platform = str(platform).strip()
-            else:
-                adapters = bot_mgr.get_all_adapters()
-                if len(adapters) == 1:
-                    target_platform = next(iter(adapters.keys()))
-                elif len(adapters) > 1 and group_id:
-                    for p_id, adp in adapters.items():
-                        try:
-                            if await adp.get_group_info(str(group_id)):
-                                target_platform = bot_mgr.get_adapter_platform_id(
-                                    adp
-                                ) or str(p_id)
-                                break
-                        except Exception:
-                            continue
+            target_platform = bot_mgr.resolve_platform_id(platform)
+            trace_ctx.platform = target_platform
 
             result = await self.analysis_service.resume_analysis(
                 trace_id=trace_id,
