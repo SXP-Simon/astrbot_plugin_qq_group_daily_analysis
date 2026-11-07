@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import type { Key } from "react";
 import {
   fetchManagedRecord,
@@ -8,6 +8,16 @@ import {
 } from "../../../entities/plugin-data/api/managedRecordsApi";
 
 export function useRecordSelection(locators: RecordLocator[], onChanged: () => void) {
+  const removing = useRef(false);
+  const generation = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+    };
+  }, []);
   const [selected, setSelected] = useState<RecordLocator[]>([]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -26,10 +36,14 @@ export function useRecordSelection(locators: RecordLocator[], onChanged: () => v
     );
   };
   const clear = useCallback(() => {
+    generation.current += 1;
     setSelected([]);
     setResult(null);
   }, []);
   const remove = async (targets = selected) => {
+    if (removing.current || !targets.length) return;
+    removing.current = true;
+    const request = generation.current;
     setBusy(true);
     setProgress(0);
     setResult(null);
@@ -53,12 +67,16 @@ export function useRecordSelection(locators: RecordLocator[], onChanged: () => v
           message: cause instanceof Error ? cause.message : "删除失败",
         });
       }
-      setProgress((value) => value + 1);
+      if (mounted.current && generation.current === request) setProgress((value) => value + 1);
     }
-    setSelected((current) => current.filter((locator) => !deleted.has(recordKey(locator))));
-    setResult({ deleted: deleted.size, failed });
+    removing.current = false;
+    if (!mounted.current) return;
     setBusy(false);
-    onChanged();
+    if (generation.current === request) {
+      setSelected((current) => current.filter((locator) => !deleted.has(recordKey(locator))));
+      setResult({ deleted: deleted.size, failed });
+      onChanged();
+    }
   };
   return { selected, keys: selected.map(recordKey), select, busy, progress, result, remove, clear };
 }
