@@ -26,6 +26,16 @@ it("实时事件、详情和日志查询引用同一个活跃任务，注销后�
     expect(log.data.message).toContain("演示");
     expect(log.data.trace_id).toBe(task?.task_id);
     expect(log.data.stage).toBe(task?.current_stage);
+    expect(log.data.location).toBe("demo_task_runner.py:68");
+    expect(log.data.function_name).toBe("DemoTaskRunner.heartbeat");
+    expect(log.data.raw).toContain("[demo_task_runner.py:68] [DemoTaskRunner.heartbeat]");
+    expect(
+      mockHandlers["GET logs"]({ search: "DemoTaskRunner.heartbeat" }).data.items,
+    ).toContainEqual(log.data);
+    expect(
+      mockHandlers["GET logs"]({ search: "demo_task_runner.py:68" }).data.items,
+    ).toContainEqual(log.data);
+    expect(mockHandlers["GET logs"]({ trace_id: "not-a-task" }).data.items).toEqual([]);
     expect(
       mockHandlers["GET traces/:traceId"](undefined, { traceId: log.data.trace_id }).data,
     ).toMatchObject({

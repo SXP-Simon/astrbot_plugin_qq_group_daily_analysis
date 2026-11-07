@@ -245,9 +245,14 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
 ];
 
 // 与后端日志的秒级时间戳和日期格式保持一致。
-for (const entry of mockPluginLogs) {
+for (const [index, entry] of mockPluginLogs.entries()) {
   const date = new Date(entry.timestamp);
   entry.timestamp /= 1000;
   entry.time_str = `${date.toLocaleString("sv-SE")}.${String(date.getMilliseconds()).padStart(3, "0")}`;
-  if (entry.raw) entry.raw = entry.raw.replace(/^\[\d{2}:\d{2}:\d{2}\]/, `[${entry.time_str}]`);
+  // 演示用代码位置，不指向真实源码；保留一条缺少调用位置的旧记录。
+  if (entry.id !== "log-sys-0") {
+    entry.location = `demo_${entry.tag.toLowerCase()}.py:${40 + index * 7}`;
+    entry.function_name = `Demo${entry.tag}.run`;
+  }
+  entry.raw = `[${entry.time_str}] [${entry.level}] [${entry.location || entry.logger_name}]${entry.function_name ? ` [${entry.function_name}]` : ""}: ${entry.message}`;
 }

@@ -641,6 +641,9 @@ export const mockHandlers = {
   // 5. 日志流
   "GET logs": (params?: Record<string, unknown>) => {
     let items = [...mockPluginLogs];
+    if (typeof params?.trace_id === "string" && params.trace_id.trim()) {
+      items = items.filter((item) => item.trace_id === String(params.trace_id).trim());
+    }
     if (params?.level && typeof params.level === "string" && params.level !== "ALL") {
       items = items.filter((l) => l.level === params.level);
     }
@@ -653,7 +656,10 @@ export const mockHandlers = {
         (l) =>
           l.message.toLowerCase().includes(q) ||
           (l.raw && l.raw.toLowerCase().includes(q)) ||
-          (l.logger_name && l.logger_name.toLowerCase().includes(q)),
+          (l.logger_name && l.logger_name.toLowerCase().includes(q)) ||
+          (l.location && l.location.toLowerCase().includes(q)) ||
+          (l.function_name && l.function_name.toLowerCase().includes(q)) ||
+          (l.trace_id && l.trace_id.toLowerCase().includes(q)),
       );
     }
     const tags: AvailableTag[] = Object.entries(TAG_STYLE_MAP).map(([key, value]) => ({

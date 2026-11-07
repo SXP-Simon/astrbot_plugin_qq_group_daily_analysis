@@ -50,11 +50,14 @@ class MockSSEService {
         time_str: time,
         level: "DEBUG",
         logger_name: "astrbot_plugin_qq_group_daily_analysis.mock",
+        location: "demo_task_runner.py:68",
+        function_name: "DemoTaskRunner.heartbeat",
         tag: "Trace",
         trace_id: task.task_id,
         stage: task.current_stage,
         message,
-        raw: "[" + time + "] [DEBUG] [" + task.task_id + "] " + message,
+        raw:
+          "[" + time + "] [DEBUG] [demo_task_runner.py:68] [DemoTaskRunner.heartbeat]: " + message,
       };
       mockPluginLogs.unshift(entry);
       if (mockPluginLogs.length > 2000) mockPluginLogs.length = 2000;
