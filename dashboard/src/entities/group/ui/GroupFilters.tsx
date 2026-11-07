@@ -6,7 +6,7 @@ interface GroupFiltersProps {
   groups: GroupItem[];
   selectedPlatform?: string;
   selectedGroup?: string;
-  onPlatformChange: (platform?: string) => void;
+  onPlatformChange?: (platform?: string) => void;
   onGroupChange: (groupId?: string, platform?: string) => void;
 }
 
@@ -61,10 +61,11 @@ export function GroupFilters({
       <label className="grid min-w-0 gap-1 text-sm text-muted-foreground">
         平台
         <NativeSelect
+          disabled={!onPlatformChange}
           value={selectedPlatform === undefined ? "" : JSON.stringify(selectedPlatform)}
           onChange={(event) => {
             const platform = platforms.find((item) => JSON.stringify(item) === event.target.value);
-            onPlatformChange(platform);
+            onPlatformChange?.(platform);
           }}
         >
           <option value="">全部平台</option>
