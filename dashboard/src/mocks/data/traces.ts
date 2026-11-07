@@ -302,9 +302,9 @@ export const mockTraces: TraceRecord[] = [
       total_tokens: 4820,
       estimated_cost: 0.0096,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 1800, completion_tokens: 420, total_tokens: 2220 },
-        quality_analyzer: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 },
-        quote_analyzer: { prompt_tokens: 820, completion_tokens: 280, total_tokens: 1100 },
+        topics: { prompt_tokens: 1800, completion_tokens: 420, total_tokens: 2220 },
+        chat_quality: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 },
+        golden_quotes: { prompt_tokens: 820, completion_tokens: 280, total_tokens: 1100 },
       },
     },
     performance_metrics: {
@@ -427,10 +427,10 @@ export const mockTraces: TraceRecord[] = [
       total_tokens: 98500,
       estimated_cost: 0.2955,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 35000, completion_tokens: 8200, total_tokens: 43200 },
-        quality_analyzer: { prompt_tokens: 22000, completion_tokens: 5800, total_tokens: 27800 },
-        comic_prompt_engine: { prompt_tokens: 12500, completion_tokens: 3800, total_tokens: 16300 },
-        quote_analyzer: { prompt_tokens: 9000, completion_tokens: 2200, total_tokens: 11200 },
+        topics: { prompt_tokens: 35000, completion_tokens: 8200, total_tokens: 43200 },
+        chat_quality: { prompt_tokens: 22000, completion_tokens: 5800, total_tokens: 27800 },
+        comic_storyboard: { prompt_tokens: 12500, completion_tokens: 3800, total_tokens: 16300 },
+        golden_quotes: { prompt_tokens: 9000, completion_tokens: 2200, total_tokens: 11200 },
       },
     },
     performance_metrics: {
@@ -593,7 +593,7 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
       total_tokens: 1200,
       estimated_cost: 0.0024,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 1200, completion_tokens: 0, total_tokens: 1200 },
+        topics: { prompt_tokens: 1200, completion_tokens: 0, total_tokens: 1200 },
       },
     },
     performance_metrics: {
@@ -689,8 +689,8 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
       total_tokens: 5600,
       estimated_cost: 0.0112,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 2800, completion_tokens: 800, total_tokens: 3600 },
-        quote_analyzer: { prompt_tokens: 1400, completion_tokens: 600, total_tokens: 2000 },
+        topics: { prompt_tokens: 2800, completion_tokens: 800, total_tokens: 3600 },
+        golden_quotes: { prompt_tokens: 1400, completion_tokens: 600, total_tokens: 2000 },
       },
     },
     performance_metrics: {
@@ -837,7 +837,7 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
       total_tokens: 6200,
       estimated_cost: 0.0155,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 4900, completion_tokens: 1300, total_tokens: 6200 },
+        topics: { prompt_tokens: 4900, completion_tokens: 1300, total_tokens: 6200 },
       },
     },
     performance_metrics: {
