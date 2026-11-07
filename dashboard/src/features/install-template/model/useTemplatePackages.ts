@@ -8,6 +8,15 @@ export function useTemplatePackages(groups: ManagedFileGroup[], onChanged: () =>
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const lifecycle = useRef(0);
+  useEffect(() => {
+    const epoch = lifecycle;
+    epoch.current++;
+    return () => {
+      epoch.current++;
+    };
+  }, []);
   const sequence = useRef(0);
   const operating = useRef(false);
   const refresh = useCallback(async () => {
@@ -45,23 +54,37 @@ export function useTemplatePackages(groups: ManagedFileGroup[], onChanged: () =>
     loading,
     busy,
     error,
+    actionError,
+    clearActionError: () => setActionError(""),
     refresh,
     uninstall: async (name: string) => {
       if (operating.current) return false;
+      if (name === "." || !groups.some((group) => group.directory === name)) {
+        setActionError("模板目录已变化，请刷新后重新选择。");
+        return false;
+      }
+      const request = lifecycle.current;
       operating.current = true;
       setBusy(name);
-      setError("");
+      setActionError("");
       try {
-        await uninstallTemplate(name);
+        const result = await uninstallTemplate(name);
+        if (request !== lifecycle.current) return false;
+        if (!result || result.name !== name || result.removed !== true)
+          throw new Error("模板未移除，请刷新后重试。");
         onChanged();
+        if (request !== lifecycle.current) return false;
         await refresh();
-        return true;
+        return request === lifecycle.current;
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "模板移除失败");
+        if (request === lifecycle.current)
+          setActionError(cause instanceof Error ? cause.message : "模板移除失败");
         return false;
       } finally {
-        operating.current = false;
-        setBusy("");
+        if (request === lifecycle.current) {
+          operating.current = false;
+          setBusy("");
+        }
       }
     },
   };

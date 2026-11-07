@@ -96,8 +96,8 @@ async function modalLayer(title: string) {
 }
 
 async function selectTemplate(label = "我的模板（demo）") {
-  fireEvent.mouseDown(await screen.findByLabelText("选择自定义模板", { selector: "input" }));
-  fireEvent.click(await screen.findByText(label, { selector: ".ant-select-item-option-content" }));
+  fireEvent.click(await screen.findByRole("button", { name: /^选择自定义模板：/ }));
+  fireEvent.click(await screen.findByRole("option", { name: label }));
 }
 
 it("详情与子编辑弹窗保持关联，关闭编辑后仍可查看详情", async () => {
@@ -296,12 +296,10 @@ it("大量模板通过虚拟下拉列表搜索选择，不把所有模板铺到�
       />
     </ConfigProvider>,
   );
-  const input = screen.getByLabelText("选择自定义模板", { selector: "input" });
-  fireEvent.mouseDown(input);
-  expect(document.querySelectorAll(".ant-select-item-option").length).toBeLessThan(30);
+  fireEvent.click(screen.getByRole("button", { name: /^选择自定义模板：/ }));
+  expect(screen.getAllByRole("option").length).toBeLessThan(30);
+  const input = screen.getByRole("combobox", { name: "搜索选择自定义模板" });
   fireEvent.change(input, { target: { value: "theme_499" } });
-  fireEvent.click(
-    await screen.findByText("theme_499", { selector: ".ant-select-item-option-content" }),
-  );
+  fireEvent.click(await screen.findByRole("option", { name: "theme_499" }));
   expect(select).toHaveBeenCalledWith("theme_499");
 });
