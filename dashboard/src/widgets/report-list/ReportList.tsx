@@ -32,6 +32,11 @@ export function ReportList({
       {reports.map((report) => {
         const isHtml = Boolean(report.is_html || /\.html?$/i.test(report.filename));
         const isComic = Boolean(report.is_comic || /^(comic_|漫画_)/i.test(report.filename));
+        const fileTone = isComic
+          ? "bg-creative/10 text-creative"
+          : isHtml
+            ? "bg-warning/10 text-warning"
+            : "bg-info/10 text-info";
         const Icon = isHtml ? IconFileText : IconPhoto;
         const time = report.modified_at ?? report.created_at;
         const busy = downloadingFiles.has(report.filename);
@@ -42,11 +47,17 @@ export function ReportList({
           >
             <div className="min-w-0 space-y-2">
               <div className="flex items-start gap-2">
-                <Icon aria-hidden="true" className="mt-1 size-5 shrink-0 text-muted-foreground" />
+                <span
+                  className={`inline-flex size-8 shrink-0 items-center justify-center rounded-lg ${fileTone}`}
+                >
+                  <Icon aria-hidden="true" className="size-4" />
+                </span>
                 <span className="break-all font-mono text-sm">{report.filename}</span>
               </div>
               <p className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>{isComic ? "群漫画" : isHtml ? "交互式 HTML" : "图片报告"}</span>
+                <span className={isComic ? "text-creative" : isHtml ? "text-warning" : "text-info"}>
+                  {isComic ? "群漫画" : isHtml ? "交互式 HTML" : "图片报告"}
+                </span>
                 <span>
                   {Number.isFinite(report.size_bytes) && report.size_bytes >= 0
                     ? `${(report.size_bytes / 1024).toFixed(1)} KB`
@@ -74,7 +85,7 @@ export function ReportList({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-auto max-w-full gap-1 px-0 py-1 text-xs"
+                    className="h-auto max-w-full gap-1 px-0 py-1 text-xs text-info hover:bg-info/10"
                     onClick={() => report.trace_id && onViewTrace(report.trace_id)}
                   >
                     查看任务
@@ -91,12 +102,22 @@ export function ReportList({
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" onClick={() => onPreview(report)}>
+              <Button
+                variant="ghost"
+                className="bg-info/10 text-info hover:bg-info/15"
+                size="sm"
+                onClick={() => onPreview(report)}
+              >
                 <IconEye aria-hidden="true" />
                 预览
               </Button>
               {!isComic && (
-                <Button variant="outline" size="sm" onClick={() => onRerender(report)}>
+                <Button
+                  variant="outline"
+                  className="border-creative/20 bg-creative/5 text-creative hover:bg-creative/10"
+                  size="sm"
+                  onClick={() => onRerender(report)}
+                >
                   <IconPalette aria-hidden="true" />
                   换模板
                 </Button>
