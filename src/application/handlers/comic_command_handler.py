@@ -14,7 +14,7 @@ from ...domain.repositories.platform_adapter_repository import GroupAlbumSupport
 from ...domain.value_objects.analysis_results import SummaryTopic
 from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
-from ...shared.trace_context import TraceContext, sanitize_component
+from ...shared.trace_context import TraceContext, strip_control_characters
 from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 from ..services.analysis_application_service import (
@@ -469,7 +469,9 @@ class ComicCommandHandler:
                 ext = self.detect_image_ext(comic_bytes)
                 ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                 trace_suffix = (
-                    f"_{sanitize_component(cur_trace.trace_id)}" if cur_trace else ""
+                    f"_{strip_control_characters(cur_trace.trace_id)}"
+                    if cur_trace
+                    else ""
                 )
                 filename = f"comic_{group_id}_{ts_str}{trace_suffix}{ext}"
 
