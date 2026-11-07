@@ -397,6 +397,7 @@ async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
         date_str="2026-08-26",
         stage_name="LLM_ANALYSIS",
         data=service._serialize_analysis_result(analysis_result),
+        trace_id='test_trace_rerender_001',
     )
 
     # 2. 执行免 Token 重新渲染 (图片，传入 trace_id)
@@ -452,6 +453,7 @@ async def test_resume_analysis_using_checkpoint(temp_db: Path):
             "top_users": [],
             "unified_messages": [],
         },
+        trace_id='trace_resume_test_001',
     )
 
     mock_llm = MagicMock()
@@ -533,6 +535,7 @@ async def test_resume_analysis_reuses_existing_subtasks(temp_db: Path):
             "top_users": [],
             "unified_messages": [],
         },
+        trace_id='trace_resume_partial_001',
     )
 
     # 2. 模拟话题已成功生成，但金句尚未生成的历史快照
@@ -554,6 +557,7 @@ async def test_resume_analysis_reuses_existing_subtasks(temp_db: Path):
                 "token_usage": {"total_tokens": 150},
             },
         },
+        trace_id='trace_resume_partial_001',
     )
 
     mock_llm = MagicMock()
