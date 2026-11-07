@@ -30,6 +30,23 @@ async def test_record_read_normalizes_alias_before_binding_storage(record_endpoi
 
 
 @pytest.mark.asyncio
+async def test_import_history_uses_explicit_payload_session_and_keeps_identity(record_endpoint):
+    endpoint, request, plugin, _ = record_endpoint
+    locator = {"kind": "history", "key": "analysis_123_2026-11-07_12-00_" + "1" * 32}
+    data = {"platform_id": "first", "group_id": "123", "date_str": "2026-11-07", "summary": {}, "analysis": {"trace_id": "imported-task"}}
+    request.json.return_value = {"locator": locator, "operation": "create", "data": data}
+    assert (await endpoint.api_mutate())["status"] == "ok"
+    manager = HistoryManager(plugin)
+    assert (await manager.get_analysis("123", "2026-11-07", platform_id="first", trace_id="imported-task"))["trace_id"] == "imported-task"
+    assert "analysis_123_2026-11-07" not in plugin.values
+    request.query = locator
+    detail = (await endpoint.api_detail())["data"]
+    changed = {**data, "platform_id": "second"}
+    request.json.return_value = {"locator": locator, "operation": "replace", "data": changed, "revision": detail["revision"]}
+    assert (await endpoint.api_mutate())["status_code"] == 400
+
+
+@pytest.mark.asyncio
 async def test_session_history_versions_remain_manageable_and_delete_repairs_only_own_pointer(record_endpoint, monkeypatch):
     endpoint, request, plugin, _ = record_endpoint
     manager = HistoryManager(plugin)

@@ -368,8 +368,13 @@ class ManagedRecordRoutes:
             record_revision(data)
             async with self._lock, AsyncExitStack() as stack:
                 current = await self._read(locator)
-                if locator["kind"] == "history" and is_string_mapping(current):
-                    owner = current.get("platform_id")
+                if locator["kind"] == "history":
+                    identity = current if current is not None else data
+                    owner = (
+                        identity.get("platform_id")
+                        if is_string_mapping(identity)
+                        else ""
+                    )
                     if isinstance(owner, str):
                         locator["platform_id"] = owner
                 if locator["platform_id"] and self.service:
@@ -590,6 +595,10 @@ class ManagedRecordRoutes:
                     ):
                         await plugin.delete_kv_data(task_key)
         elif is_string_mapping(data):
+            if is_string_mapping(current) and str(data.get("platform_id", "")) != str(
+                current.get("platform_id", "")
+            ):
+                raise ValueError("不能修改历史记录的平台归属")
             if "analysis" in data and (
                 not isinstance(data["analysis"], dict)
                 or not isinstance(data.get("summary"), dict)
