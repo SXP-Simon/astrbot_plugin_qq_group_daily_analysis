@@ -10,7 +10,7 @@ import time as time_mod
 import weakref
 from contextlib import asynccontextmanager
 
-from ...domain.value_objects.incremental_session import IncrementalSession
+from ...domain.value_objects.group_session import GroupSession
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
@@ -32,21 +32,21 @@ class TaskGuard:
             max_concurrent: 最大允许的 LLM 全局并发任务数。
         """
         self._locks: weakref.WeakValueDictionary[
-            tuple[str, IncrementalSession], asyncio.Lock
+            tuple[str, GroupSession], asyncio.Lock
         ] = weakref.WeakValueDictionary()
-        self._active_tasks: set[tuple[str, IncrementalSession]] = set()
+        self._active_tasks: set[tuple[str, GroupSession]] = set()
         self._max_concurrent = max(1, int(max_concurrent))
         self.llm_semaphore = asyncio.Semaphore(self._max_concurrent)
 
     @property
-    def active_tasks(self) -> set[tuple[str, IncrementalSession]]:
+    def active_tasks(self) -> set[tuple[str, GroupSession]]:
         """提供应用服务兼容入口使用的运行任务集合。"""
         return self._active_tasks
 
     @property
     def locks(
         self,
-    ) -> weakref.WeakValueDictionary[tuple[str, IncrementalSession], asyncio.Lock]:
+    ) -> weakref.WeakValueDictionary[tuple[str, GroupSession], asyncio.Lock]:
         """提供应用服务兼容入口使用的弱引用锁表。"""
         return self._locks
 
@@ -93,7 +93,7 @@ class TaskGuard:
         Raises:
             DuplicateGroupTaskError: 当任务已在运行时抛出，避免竞态重复执行。
         """
-        lock_key = (task_type, IncrementalSession(platform_id or "", group_id))
+        lock_key = (task_type, GroupSession(platform_id or "", group_id))
         lock = self._locks.get(lock_key)
         if lock is None:
             lock = asyncio.Lock()
