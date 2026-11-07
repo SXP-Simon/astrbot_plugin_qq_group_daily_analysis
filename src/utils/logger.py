@@ -9,14 +9,14 @@ from ..infrastructure.logging.plugin_log_buffer import global_log_buffer
 from ..shared.trace_context import TraceContext
 
 
-def _extract_caller_location(stacklevel: int = 1) -> str | None:
-    """提取调用当前日志记录器的方法所在文件与行号
+def _extract_caller(stacklevel: int = 1) -> tuple[str | None, str | None]:
+    """提取调用当前日志记录器的文件、行号与函数限定名。
 
     Args:
         stacklevel: 额外向上回溯的调用栈层数（默认为 1，表示直接调用方）。
 
     Returns:
-        形如 'filename.py:line' 的代码位置字符串，无法获取时返回 None。
+        代码位置与函数限定名；无法获取时两项均为 None。
     """
     frame = None
     try:
@@ -34,12 +34,12 @@ def _extract_caller_location(stacklevel: int = 1) -> str | None:
         if frame:
             basename = os.path.basename(frame.f_code.co_filename)
             lineno = frame.f_lineno
-            return f"{basename}:{lineno}"
+            return f"{basename}:{lineno}", frame.f_code.co_qualname
     except Exception:
         pass
     finally:
         del frame
-    return None
+    return None, None
 
 
 class PluginLogger:
@@ -71,13 +71,14 @@ class PluginLogger:
             rendered = (formatted_msg % args) if args else formatted_msg
         except Exception:
             rendered = formatted_msg
-        location = _extract_caller_location(stacklevel=stacklevel)
+        location, function_name = _extract_caller(stacklevel=stacklevel)
         try:
             global_log_buffer.record_log(
                 level=level,
                 msg=rendered,
                 trace_id=trace_id,
                 location=location,
+                function_name=function_name,
             )
         except Exception:
             pass
