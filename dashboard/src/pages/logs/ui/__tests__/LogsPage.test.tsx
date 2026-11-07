@@ -48,6 +48,7 @@ it("筛选、暂停、复制与关联任务入口保留；日志区域全选不�
   expect(region).toHaveTextContent("WARNING");
   expect(region).toHaveTextContent("render:20");
   expect(region).toHaveTextContent("Renderer.generate()");
+  expect(within(region).getByText("报告与模板")).toHaveAttribute("title", "Render");
   const message = within(region).getByText("示例：主服务超时 备用服务继续渲染");
   expect(message.textContent).toBe("示例：主服务超时\n备用服务继续渲染");
   expect(message).toHaveClass("whitespace-pre-wrap");
@@ -129,4 +130,45 @@ it("各等级保留明确文字，警告与错误突出整行，实时与暂停�
   expect(screen.getByText("实时更新")).toHaveClass("text-success");
   fireEvent.click(screen.getByRole("button", { name: "暂停更新" }));
   expect(screen.getByText("已暂停更新")).toHaveClass("text-warning");
+});
+
+it("功能分类按用途分组，未知服务端分类仍可选择，提交原始分类键", async () => {
+  vi.mocked(fetchPluginLogs).mockResolvedValue({
+    items: [
+      {
+        id: "future",
+        timestamp: 1,
+        time_str: "12:00:00",
+        level: "INFO",
+        logger_name: "future",
+        tag: "Future",
+        message: "新模块日志",
+        raw: "原文",
+      },
+    ],
+    total: 1,
+    available_tags: [
+      { key: "Typst", label: "Typst 本地排版" },
+      { key: "Resources", label: "字体与素材" },
+      { key: "Satori", label: "Satori 平台" },
+      { key: "General", label: "通用日志" },
+      { key: "Future", label: "未来分类" },
+    ],
+  });
+  render(<Page />);
+  await screen.findByRole("option", { name: "字体与素材" });
+  const select = screen.getByRole("combobox", { name: "功能分类" });
+  expect(
+    within(screen.getByRole("region", { name: "日志内容" })).getByText("Future"),
+  ).toBeVisible();
+  expect(within(select).getByRole("group", { name: "报告与资源" })).toHaveTextContent(
+    "Typst 本地排版",
+  );
+  expect(within(select).getByRole("group", { name: "平台接入" })).toHaveTextContent("Satori 平台");
+  expect(within(select).getByRole("group", { name: "系统与数据" })).toHaveTextContent("通用日志");
+  expect(within(select).getByRole("group", { name: "其他" })).toHaveTextContent("未来分类");
+  fireEvent.change(select, { target: { value: "Resources" } });
+  await waitFor(() =>
+    expect(fetchPluginLogs).toHaveBeenLastCalledWith(expect.objectContaining({ tag: "Resources" })),
+  );
 });

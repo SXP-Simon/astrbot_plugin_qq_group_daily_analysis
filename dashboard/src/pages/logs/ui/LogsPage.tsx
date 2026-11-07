@@ -136,8 +136,8 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
                   )}
                   {item.level}
                 </span>
-                <span className="mr-2" title={TAG_STYLE_MAP[item.tag]?.label}>
-                  {item.tag}
+                <span className="mr-2" title={item.tag}>
+                  {TAG_STYLE_MAP[item.tag]?.label ?? item.tag}
                 </span>
                 <span className="mr-2" title="日志调用位置">
                   [{item.location || item.logger_name}

@@ -5,7 +5,11 @@ import {
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
-import type { AvailableTag } from "../../../entities/log/model/types";
+import {
+  LOG_TAG_GROUPS,
+  TAG_STYLE_MAP,
+  type AvailableTag,
+} from "../../../entities/log/model/types";
 import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
 import { NativeSelect } from "../../../shared/ui/native-select";
@@ -61,11 +65,22 @@ export function LogFilterBar(props: LogFilterBarProps) {
             onChange={(event) => props.onTagChange(event.target.value || undefined)}
           >
             <option value="">全部分类</option>
-            {props.availableTags.map((tag) => (
-              <option key={tag.key} value={tag.key}>
-                {tag.label} · {tag.key}
-              </option>
-            ))}
+            {LOG_TAG_GROUPS.map((group) => {
+              const tags = props.availableTags.filter(
+                (tag) => (TAG_STYLE_MAP[tag.key]?.group ?? "其他") === group,
+              );
+              return (
+                tags.length > 0 && (
+                  <optgroup key={group} label={group}>
+                    {tags.map((tag) => (
+                      <option key={tag.key} value={tag.key}>
+                        {tag.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                )
+              );
+            })}
           </NativeSelect>
         </label>
       </div>
