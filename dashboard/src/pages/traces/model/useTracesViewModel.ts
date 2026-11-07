@@ -18,6 +18,7 @@ export function useTracesViewModel() {
   const [query, setQuery] = useState<TraceQuery>(INITIAL_QUERY);
   const [traces, setTraces] = useState<TraceRecord[]>([]);
   const [total, setTotal] = useState(0);
+  const [hasUpdates, setHasUpdates] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [groups, setGroups] = useState<GroupItem[]>([]);
@@ -95,6 +96,8 @@ export function useTracesViewModel() {
   return {
     ...query,
     traces,
+    hasUpdates,
+    markUpdated: () => setHasUpdates(true),
     total,
     loading,
     error,
@@ -125,7 +128,9 @@ export function useTracesViewModel() {
         sortField: field,
         sortOrder: current.sortField === field && current.sortOrder === "desc" ? "asc" : "desc",
       })),
-    refresh: (silent = true) =>
-      setRefreshRequest((current) => ({ version: current.version + 1, silent })),
+    refresh: (silent = true) => {
+      setHasUpdates(false);
+      setRefreshRequest((current) => ({ version: current.version + 1, silent }));
+    },
   };
 }

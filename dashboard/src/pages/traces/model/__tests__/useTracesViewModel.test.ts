@@ -160,3 +160,18 @@ it("卸载清理搜索定时器，迟到的请求不再产生后续查询", asyn
   expect(fetchTraceList).toHaveBeenCalledTimes(1);
   expect(vi.getTimerCount()).toBe(0);
 });
+it("更新通知不重排或重查当前历史页，主动刷新才更新结果", async () => {
+  const { result } = renderHook(useTracesViewModel);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  const calls = vi.mocked(fetchTraceList).mock.calls.length;
+  const before = result.current.traces;
+  act(() => result.current.markUpdated());
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(result.current.hasUpdates).toBe(true);
+  expect(result.current.traces).toBe(before);
+  expect(fetchTraceList).toHaveBeenCalledTimes(calls);
+  act(() => result.current.refresh(false));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(fetchTraceList).toHaveBeenCalledTimes(calls + 1);
+  expect(result.current.hasUpdates).toBe(false);
+});

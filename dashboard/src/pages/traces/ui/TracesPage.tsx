@@ -55,6 +55,11 @@ export const TracesPage: React.FC<TracesPageProps> = ({ viewModel, onViewTrace }
         onReset={resetFilters}
         onRefresh={() => refresh(false)}
       />
+      {viewModel.hasUpdates && (
+        <p role="status" className="text-sm text-info">
+          分析记录有更新，点击“刷新”查看。当前页保持不变。
+        </p>
+      )}
       {groupsError && (
         <p role="alert" className="text-sm text-destructive">
           {groupsError}

@@ -120,10 +120,7 @@ export function TraceFilterBar(props: TraceFilterBarProps) {
                     return;
                   }
                   setDateError("");
-                  const range: [number, number] = [
-                    Math.floor(start / 1000),
-                    Math.floor(end / 1000),
-                  ];
+                  const range: [number, number] = [Math.floor(start / 1000), end / 1000];
                   emittedRange.current = range;
                   props.onDateRangeChange(range);
                 } else {

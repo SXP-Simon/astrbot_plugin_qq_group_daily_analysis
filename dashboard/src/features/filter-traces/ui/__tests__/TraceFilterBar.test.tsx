@@ -40,7 +40,7 @@ it("日期使用本地完整日边界，清空一端保留另一端，倒置范�
   fireEvent.change(end, { target: { value: "2026-11-08" } });
   expect(base.onDateRangeChange).toHaveBeenLastCalledWith([
     new Date("2026-11-07T00:00:00").getTime() / 1000,
-    new Date("2026-11-08T23:59:59").getTime() / 1000,
+    new Date("2026-11-08T23:59:59.999").getTime() / 1000,
   ]);
   fireEvent.change(end, { target: { value: "" } });
   expect(start).toHaveValue("2026-11-07");
