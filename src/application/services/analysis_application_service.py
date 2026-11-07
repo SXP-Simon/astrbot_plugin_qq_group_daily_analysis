@@ -197,7 +197,9 @@ class AnalysisApplicationService:
         """兼容层：任务锁字典。"""
         return self._task_guard.locks
 
-    def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
+    def is_group_running(
+        self, group_id: str, task_type: str = "daily", platform_id: str | None = None
+    ) -> bool:
         """检查指定群的特定任务是否正在执行中。
 
         Args:
@@ -207,11 +209,19 @@ class AnalysisApplicationService:
         Returns:
             bool: 是否正在运行。
         """
-        return self._task_guard.is_group_running(group_id, task_type)
+        actual_id = (
+            self.bot_manager.resolve_platform_id(platform_id) if platform_id else None
+        )
+        return self._task_guard.is_group_running(group_id, task_type, actual_id)
 
-    def group_lock(self, group_id: str, task_type: str = "analysis"):
+    def group_lock(
+        self, group_id: str, task_type: str = "analysis", platform_id: str | None = None
+    ):
         """获取群组排他锁上下文管理器。"""
-        return self._task_guard.group_lock(group_id, task_type)
+        actual_id = (
+            self.bot_manager.resolve_platform_id(platform_id) if platform_id else None
+        )
+        return self._task_guard.group_lock(group_id, task_type, actual_id)
 
     def _llm_slot(self, group_id: str, stage: str):
         """观察并占用一次 LLM 分析槽位。"""
@@ -284,6 +294,7 @@ class AnalysisApplicationService:
         Raises:
             ValueError: 未找到平台适配器时抛出。
         """
+        platform_id = self.bot_manager.resolve_platform_id(platform_id)
         trace = TraceContext.current()
         if not trace:
             trace = TraceContext.get_or_create(
@@ -299,7 +310,7 @@ class AnalysisApplicationService:
                 trace.platform = platform_id
             trace.trigger_type = "manual" if manual else "auto"
 
-        async with self.group_lock(group_id, "daily"):
+        async with self.group_lock(group_id, "daily", platform_id):
             logger.info(
                 f"开始执行分析用例: 群 {group_id}, platform_id={platform_id or '默认'}, days={days or '默认'}"
             )
@@ -549,7 +560,10 @@ class AnalysisApplicationService:
             serializer=self._serialize_analysis_result,
         ) as step:
             await self.history_manager.save_analysis(
-                group_id, analysis_result, date_str=date_str
+                group_id,
+                analysis_result,
+                date_str=date_str,
+                platform_id=pipeline.trace.platform if pipeline.trace else "",
             )
             if self.checkpoint_store:
                 try:
@@ -896,7 +910,8 @@ class AnalysisApplicationService:
         Raises:
             ValueError: 找不到对应平台适配器时抛出。
         """
-        async with self.group_lock(group_id, "comic"):
+        platform_id = self.bot_manager.resolve_platform_id(platform_id)
+        async with self.group_lock(group_id, "comic", platform_id):
             logger.info(
                 "开始执行手动漫画话题分析: group=%s, platform=%s, days=%s",
                 group_id,

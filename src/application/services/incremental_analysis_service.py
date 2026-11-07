@@ -111,6 +111,7 @@ class IncrementalAnalysisService:
             RuntimeError: 当增量存储仓储未初始化时抛出。
             ValueError: 未找到平台适配器时抛出。
         """
+        platform_id = self.bot_manager.resolve_platform_id(platform_id)
         trace = TraceContext.current()
         if not trace:
             trace = TraceContext.get_or_create(
@@ -120,7 +121,7 @@ class IncrementalAnalysisService:
                 auto_bind=True,
             )
 
-        async with self.task_guard.group_lock(group_id, "incremental"):
+        async with self.task_guard.group_lock(group_id, "incremental", platform_id):
             analysis_started_at = time_mod.monotonic()
             if not self.incremental_store:
                 raise RuntimeError("增量分析未初始化：缺少 IncrementalStore")
@@ -514,7 +515,8 @@ class IncrementalAnalysisService:
             RuntimeError: 当增量仓储或合并服务未初始化时抛出。
             ValueError: 未找到平台适配器时抛出。
         """
-        async with self.task_guard.group_lock(group_id, "final"):
+        platform_id = self.bot_manager.resolve_platform_id(platform_id)
+        async with self.task_guard.group_lock(group_id, "final", platform_id):
             if not self.incremental_store or not self.incremental_merge_service:
                 raise RuntimeError(
                     "增量分析未初始化：缺少 IncrementalStore 或 IncrementalMergeService"
@@ -652,7 +654,9 @@ class IncrementalAnalysisService:
             analysis_result = self.incremental_merge_service.build_analysis_result(
                 state, user_titles
             )
-            await self.history_manager.save_analysis(group_id, analysis_result)
+            await self.history_manager.save_analysis(
+                group_id, analysis_result, platform_id=platform_id
+            )
 
             logger.info(
                 f"群 {group_id} 增量最终报告内容生成并保存完成，等待发送: "

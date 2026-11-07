@@ -92,6 +92,7 @@ async def test_resume_json_messages_and_preserves_archive_date(tmp_path):
                 }
             ],
         },
+        trace_id="resume-json",
     )
     config = MagicMock()
     config.get_topic_analysis_enabled.return_value = True
