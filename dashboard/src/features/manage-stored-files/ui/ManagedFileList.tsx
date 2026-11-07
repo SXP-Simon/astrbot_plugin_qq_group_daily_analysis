@@ -1,45 +1,93 @@
-import { Alert, Button, Input, Popconfirm, Space, Table, Tag, Typography, Upload } from "antd";
-import { FileOutlined, ReloadOutlined, UploadOutlined } from "@ant-design/icons";
+import { useEffect, useRef, useState } from "react";
+import { IconRefresh, IconUpload, IconSearch, IconX, IconTrash } from "@tabler/icons-react";
 import type {
   ManagedFile,
   ManagedPartition,
 } from "../../../entities/plugin-data/api/managedFilesApi";
 import { partitionPresentation } from "../../../entities/plugin-data/model/partitionPresentation";
-import { formatBytes } from "../../../shared/lib/formatters";
 import type { useManagedFiles } from "../model/useManagedFiles";
 import type { useConfigFileReferences } from "../model/useConfigFileReferences";
+import { Button } from "../../../shared/ui/button";
+import { Input } from "../../../shared/ui/input";
+import { Pagination } from "../../../shared/ui/pagination";
+import { ManagedFileDeleteDialog } from "./ManagedFileDeleteDialog";
+import { ManagedFileTable } from "./ManagedFileTable";
 
 export function ManagedFileList({
   vm,
-  partition: activePartition,
+  partition,
   references,
 }: {
   vm: ReturnType<typeof useManagedFiles>;
   partition: ManagedPartition;
   references: ReturnType<typeof useConfigFileReferences>;
 }) {
+  const [draft, setDraft] = useState(vm.search);
+  const [deletion, setDeletion] = useState<{
+    partition: string;
+    directory: string;
+    files: ManagedFile[];
+  } | null>(null);
+  useEffect(() => {
+    setDraft(vm.search);
+  }, [vm.search, partition.key, vm.directory]);
+  useEffect(() => {
+    setDeletion(null);
+  }, [partition.key, vm.directory]);
+  const upload = useRef<HTMLInputElement>(null);
   const templatePrefix =
-    activePartition.key === "custom_templates" && vm.directory && vm.directory !== "."
+    partition.key === "custom_templates" && vm.directory && vm.directory !== "."
       ? `${vm.directory}/`
       : "";
-  const fileAction = ["typst_assets", "preview_cache"].includes(activePartition.key)
-    ? "清理"
-    : "删除";
+  const fileAction = ["typst_assets", "preview_cache"].includes(partition.key) ? "清理" : "删除";
+  const locked = vm.busy || vm.uploading;
+  const currentDeletion =
+    deletion?.partition === partition.key && deletion.directory === vm.directory ? deletion : null;
   return (
-    <Space direction="vertical" style={{ width: "100%" }}>
-      <Space wrap>
-        <Input.Search
-          key={vm.search}
-          aria-label="搜索文件"
-          placeholder="搜索文件名或相对路径"
-          defaultValue={vm.search}
-          allowClear
-          onSearch={vm.searchFiles}
-          style={{ width: 260 }}
-        />
+    <div className="grid min-w-0 gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <form
+          className="flex min-w-0 flex-1 gap-2 sm:max-w-md"
+          onSubmit={(event) => {
+            event.preventDefault();
+            vm.searchFiles(draft.trim());
+          }}
+        >
+          <Input
+            aria-label="搜索文件"
+            type="search"
+            placeholder="文件名或相对路径"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            disabled={locked}
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            size="icon"
+            aria-label="搜索文件列表"
+            disabled={locked}
+          >
+            <IconSearch aria-hidden="true" />
+          </Button>
+          {(draft || vm.search) && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="清空文件搜索"
+              disabled={locked}
+              onClick={() => {
+                setDraft("");
+                vm.searchFiles("");
+              }}
+            >
+              <IconX aria-hidden="true" />
+            </Button>
+          )}
+        </form>
         <Button
-          icon={<ReloadOutlined />}
-          loading={vm.loading}
+          variant="outline"
+          disabled={vm.loading || locked}
           onClick={() => {
             vm.clearSelection();
             void vm.load();
@@ -47,202 +95,129 @@ export function ManagedFileList({
             void references.refresh();
           }}
         >
+          <IconRefresh aria-hidden="true" />
           刷新列表
         </Button>
-        {activePartition.writable && activePartition.key !== "config_files" && (
-          <Upload
-            showUploadList={false}
-            beforeUpload={(file) => {
-              void vm.prepareUpload(file);
-              return false;
-            }}
-          >
-            <Button icon={<UploadOutlined />} disabled={vm.busy}>
-              上传文件
+        {partition.writable && partition.key !== "config_files" && (
+          <>
+            <input
+              ref={upload}
+              type="file"
+              className="sr-only"
+              tabIndex={-1}
+              aria-label="上传分区文件"
+              disabled={locked}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void vm.prepareUpload(file);
+              }}
+            />
+            <Button variant="outline" disabled={locked} onClick={() => upload.current?.click()}>
+              <IconUpload aria-hidden="true" />
+              {vm.uploading ? "正在读取文件…" : "上传文件"}
             </Button>
-          </Upload>
+          </>
         )}
-        {activePartition.key === "custom_templates" && (
-          <Button onClick={() => vm.setEditor({ name: templatePrefix, text: "" })}>新建源码</Button>
+        {partition.key === "custom_templates" && (
+          <Button
+            variant="outline"
+            disabled={locked}
+            onClick={() => vm.setEditor({ name: templatePrefix, text: "" })}
+          >
+            新建源码
+          </Button>
         )}
-      </Space>
-      <Space role="group" aria-label="文件类型筛选" wrap size={[8, 8]}>
+      </div>
+      <div role="group" aria-label="文件类型筛选" className="flex flex-wrap gap-2">
         {[
           { value: "", label: "全部类型" },
-          ...(partitionPresentation[activePartition.key]?.filters || []),
+          ...(partitionPresentation[partition.key]?.filters || []),
         ].map((filter) => (
           <Button
             key={filter.value}
-            size="small"
-            type={vm.extensions === filter.value ? "primary" : "default"}
+            size="sm"
+            variant={vm.extensions === filter.value ? "secondary" : "ghost"}
             aria-pressed={vm.extensions === filter.value}
+            disabled={locked}
             onClick={() => vm.filterExtensions(filter.value)}
           >
             {filter.label}
           </Button>
         ))}
-      </Space>
-      {activePartition.deletable && (
-        <Space wrap>
-          <Typography.Text>已选 {vm.selected.length} 项（最多 200，支持跨页）</Typography.Text>
+      </div>
+      {partition.deletable && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="mr-auto text-muted-foreground">
+            已选 {vm.selected.length} 项（最多 200，支持跨页）
+          </span>
           <Button
-            size="small"
-            disabled={!vm.selected.length || vm.busy}
+            variant="ghost"
+            size="sm"
+            disabled={!vm.selected.length || locked}
             onClick={vm.clearSelection}
           >
             取消选择
           </Button>
-          <Popconfirm
-            title={`${fileAction}已选的 ${vm.selected.length} 个文件？`}
-            description={
-              <Space direction="vertical">
-                <Typography.Text>
-                  {activePartition.name}
-                  {vm.directory && ` / ${vm.directory}`} · {vm.extensions || "全部类型"} ·{" "}
-                  {vm.search || "无关键词"}
-                </Typography.Text>
-                <Typography.Text>{activePartition.impact}</Typography.Text>
-                <Typography.Text style={{ maxWidth: 420, overflowWrap: "anywhere" }}>
-                  {vm.selected
-                    .slice(0, 5)
-                    .map((file) => file.name)
-                    .join("、")}
-                  {vm.selected.length > 5 ? " 等" : ""}
-                </Typography.Text>
-              </Space>
-            }
-            okText={`${fileAction}所选`}
-            cancelText="取消"
-            onConfirm={vm.deleteSelected}
+          <Button
+            variant="ghost"
+            className="text-destructive"
+            size="sm"
+            disabled={!vm.selected.length || locked}
+            onClick={() => {
+              vm.clearActionError();
+              setDeletion({
+                partition: partition.key,
+                directory: vm.directory,
+                files: [...vm.selected],
+              });
+            }}
           >
-            <Button danger size="small" disabled={!vm.selected.length} loading={vm.busy}>
-              {fileAction}所选
-            </Button>
-          </Popconfirm>
-        </Space>
+            <IconTrash aria-hidden="true" />
+            {fileAction}所选
+          </Button>
+        </div>
       )}
       {vm.deleteResult && (
-        <Alert
-          showIcon
-          type={vm.deleteResult.failed.length ? "warning" : "success"}
-          message={`${fileAction}成功 ${vm.deleteResult.deleted.length} 项，失败 ${vm.deleteResult.failed.length} 项`}
-          description={vm.deleteResult.failed.map((file) => (
-            <div key={file.name}>
+        <div
+          role="status"
+          className={`rounded-xl p-3 text-sm ${vm.deleteResult.failed.length ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}
+        >
+          {fileAction}成功 {vm.deleteResult.deleted.length} 项，失败 {vm.deleteResult.failed.length}{" "}
+          项
+          {vm.deleteResult.failed.map((file) => (
+            <div key={file.name} className="break-all">
               {file.name}：{file.message}
             </div>
           ))}
-        />
+        </div>
       )}
-      <Table<ManagedFile>
-        rowKey="name"
-        size="small"
-        dataSource={vm.files}
-        loading={vm.loading}
-        locale={{
-          emptyText:
-            vm.search || vm.extensions
-              ? "没有匹配文件，请调整关键词或文件类型。"
-              : partitionPresentation[activePartition.key]?.empty,
-        }}
-        rowSelection={
-          activePartition.deletable
-            ? {
-                selectedRowKeys: vm.selected.map((file) => file.name),
-                onChange: vm.selectFiles,
-                preserveSelectedRowKeys: true,
-                getCheckboxProps: (file) => ({
-                  disabled:
-                    vm.busy ||
-                    (vm.selected.length >= 200 &&
-                      !vm.selected.some((item) => item.name === file.name)),
-                }),
-              }
-            : undefined
-        }
-        scroll={{ x: 650 }}
-        pagination={{
-          current: vm.page,
-          total: vm.total,
-          pageSize: 20,
-          showSizeChanger: false,
-          onChange: vm.setPage,
-          showTotal: (count) => `共 ${count} 个文件`,
-        }}
-        columns={[
-          {
-            title: "文件名",
-            dataIndex: "name",
-            render: (name: string) => (
-              <Typography.Text style={{ overflowWrap: "anywhere" }}>
-                <FileOutlined />{" "}
-                {templatePrefix && name.startsWith(templatePrefix)
-                  ? name.slice(templatePrefix.length)
-                  : name}
-              </Typography.Text>
-            ),
-          },
-          ...(activePartition.key === "config_files"
-            ? [
-                {
-                  title: "配置引用",
-                  width: 250,
-                  render: (_: unknown, file: ManagedFile) => (
-                    <Space direction="vertical" size={2}>
-                      <Typography.Text
-                        copyable
-                        style={{ fontSize: 12, overflowWrap: "anywhere" }}
-                      >{`files/${file.name}`}</Typography.Text>
-                      <Typography.Text
-                        type="secondary"
-                        style={{ fontSize: 12, overflowWrap: "anywhere" }}
-                      >
-                        {references.loading
-                          ? "正在检查引用…"
-                          : references.error
-                            ? "引用关系未确认"
-                            : references.references.get(file.name)?.join("、") ||
-                              "未在已保存配置中找到引用；自定义源码中的引用需自行确认。"}
-                      </Typography.Text>
-                    </Space>
-                  ),
-                },
-              ]
-            : []),
-          { title: "大小", width: 105, render: (_, file) => formatBytes(file.size_bytes) },
-          {
-            title: "修改时间",
-            width: 175,
-            render: (_, file) => new Date(file.modified_at * 1000).toLocaleString(),
-          },
-          {
-            title: "操作",
-            width: 150,
-            render: (_, file) =>
-              file.downloadable ? (
-                <Button
-                  type="link"
-                  disabled={vm.busy}
-                  onClick={() =>
-                    void (file.editable ||
-                    /^(image\/|text\/|application\/json)/.test(file.media_type)
-                      ? vm.inspect(file.name)
-                      : vm.download(file.name))
-                  }
-                >
-                  {file.editable
-                    ? "查看 / 编辑"
-                    : /^(image\/|text\/html)/.test(file.media_type)
-                      ? "预览 / 下载"
-                      : /^(text\/|application\/json)/.test(file.media_type)
-                        ? "查看内容 / 下载"
-                        : "下载文件"}
-                </Button>
-              ) : (
-                <Tag>由模块管理</Tag>
-              ),
-          },
-        ]}
+      {vm.loading && (
+        <p role="status" className="m-0 text-sm text-muted-foreground">
+          正在读取文件列表…
+        </p>
+      )}
+      <ManagedFileTable
+        vm={vm}
+        partition={partition}
+        references={references}
+        templatePrefix={templatePrefix}
       />
-    </Space>
+      <Pagination
+        page={vm.page}
+        pageSize={20}
+        pageSizes={[20]}
+        total={vm.total}
+        disabled={vm.loading || locked}
+        onChange={(page) => vm.setPage(page)}
+      />
+      <ManagedFileDeleteDialog
+        vm={vm}
+        partition={partition}
+        deletion={currentDeletion}
+        onClose={() => setDeletion(null)}
+        fileAction={fileAction}
+      />
+    </div>
   );
 }
