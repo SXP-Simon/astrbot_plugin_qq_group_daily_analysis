@@ -91,6 +91,31 @@ put(
   },
 );
 
+// 同一分钟的同号群存档保留独立版本，用于检查真实会话元数据。
+for (const [index, platform] of ["aiocqhttp_main", "telegram_main"].entries()) {
+  const key = `analysis_123456789_2026-11-07_12-00_${String(index + 1).padStart(32, "0")}`;
+  put(
+    { kind: "history", key, platform_id: platform, group_id: "123456789", date_str: "2026-11-07" },
+    {
+      platform_id: platform,
+      group_id: "123456789",
+      date_str: "2026-11-07",
+      created_at: `2026-11-07T12:00:0${index}.000000`,
+      summary: {
+        message_count: 300 + index,
+        participant_count: 12,
+        generated_at: "2026-11-07 12:00:00",
+      },
+      analysis: {
+        platform_id: platform,
+        group_id: "123456789",
+        trace_id: `demo-history-session-${index}`,
+        topics: [{ topic: "示例：周末出游", detail: "展示同号群在不同接入下的独立历史版本。" }],
+      },
+    },
+  );
+}
+
 // 使用独立示例存档补足跨页浏览，不冒充已经执行的分析任务。
 for (let day = 1; day <= 24; day++) {
   const date = `2026-10-${String(day).padStart(2, "0")}`;

@@ -246,12 +246,20 @@ export const mockHandlers = {
   "POST tasks/trigger": (body?: Record<string, unknown>) => {
     if (typeof body?.group_id !== "string" || !body.group_id.trim())
       return { status: "error", message: "请选择要分析的群聊" };
+    if (typeof body.platform !== "string" || !body.platform.trim())
+      return { status: "error", message: "请选择准确的平台实例" };
+    if (
+      mockActiveTasks.some(
+        (task) => task.group_id === body.group_id && task.platform === body.platform,
+      )
+    )
+      return { status: "error", message: "此会话的分析任务正在执行中，请稍后再试" };
     const now = Date.now() / 1000;
     const task = {
       task_id: `trace-manual-${crypto.randomUUID()}`,
       group_id: body.group_id,
       group_name: typeof body.group_name === "string" ? body.group_name : body.group_id,
-      platform: typeof body.platform === "string" ? body.platform : "auto",
+      platform: body.platform,
       trigger_type: "web_ui",
       current_stage: "FETCH_MESSAGES",
       started_at: now,
@@ -290,10 +298,29 @@ export const mockHandlers = {
     mockSSEService.emitManualEvent({ event: "task_canceled", data: { task_id: task.task_id } });
     return { status: "ok", data: { success: true } };
   },
-  "POST tasks/:traceId/resume": () => ({
-    status: "ok",
-    data: { trace_id: `trace-resume-${Date.now()}`, message: "任务恢复执行成功" },
-  }),
+  "POST tasks/:traceId/resume": (
+    _body?: Record<string, unknown>,
+    params?: Record<string, string>,
+  ): MockHandlerResponse<{ trace_id: string; message: string }> => {
+    const source = mockTraces.find((trace) => trace.trace_id === params?.traceId);
+    if (!source) return { status: "error", message: "原任务不存在" };
+    if (source.status === "running")
+      return { status: "error", message: "任务仍在运行，不能重复续跑" };
+    if (!source.platform)
+      return { status: "error", message: "原任务未记录平台实例，请选择会话重新分析" };
+    const response = mockHandlers["POST tasks/trigger"]({
+      group_id: source.group_id,
+      group_name: source.group_name,
+      platform: source.platform,
+    });
+    if (response.data) {
+      const task = mockActiveTasks.find((item) => item.task_id === response.data.trace_id);
+      const trace = mockTraces.find((item) => item.trace_id === response.data.trace_id);
+      if (task) task.trigger_type = "resume";
+      if (trace) trace.trigger_type = "resume";
+    }
+    return response;
+  },
 
   // 3. 链路追踪
   "GET traces": (params?: Record<string, unknown>) => {
@@ -632,6 +659,8 @@ export const mockHandlers = {
     const format = body?.render_format;
     if (format !== "html" && format !== "image")
       return { status: "error", message: "请选择图片或 HTML 格式。" };
+    if (!body?.platform_id && !body?.trace_id)
+      return { status: "error", message: "请选择平台实例或具体分析任务后重绘" };
     const source = mockReportHistory.find(
       (item) =>
         item.group_id === body?.group_id &&
@@ -639,6 +668,14 @@ export const mockHandlers = {
         (!body?.platform_id || item.platform === body.platform_id),
     );
     if (!source) return { status: "error", message: "未找到这次分析的示例产物记录。" };
+    if (
+      body?.trace_id &&
+      (!source.platform ||
+        !mockTraces.some(
+          (trace) => trace.trace_id === source.trace_id && trace.group_id === source.group_id,
+        ))
+    )
+      return { status: "error", message: "无法确认原任务归属，已有报告仍可查看和下载" };
     const available = mockHandlers["GET reports/templates"]({ render_format: format }).data;
     if (!available.some((item) => item.id === body?.template_name))
       return { status: "error", message: "所选模板不支持当前输出格式。" };

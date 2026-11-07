@@ -12,6 +12,41 @@ import { mockCheckpoints } from "../data/pluginData";
 import { extractData } from "../../shared/api/bridge";
 import { mockActiveTasks } from "../data/tasks";
 
+it("同号群按实例分别触发，重复请求拒绝，续跑沿用原会话", () => {
+  const group = "mock-session-isolation",
+    ids: string[] = [];
+  try {
+    const first = mockHandlers["POST tasks/trigger"]({ group_id: group, platform: "aiocqhttp" });
+    const second = mockHandlers["POST tasks/trigger"]({ group_id: group, platform: "telegram" });
+    expect(first.status).toBe("ok");
+    expect(second.status).toBe("ok");
+    ids.push(first.data!.trace_id, second.data!.trace_id);
+    expect(
+      mockHandlers["POST tasks/trigger"]({ group_id: group, platform: "telegram" }).status,
+    ).toBe("error");
+    expect(mockHandlers["POST tasks/:traceId/resume"]({}, { traceId: ids[1] }).status).toBe(
+      "error",
+    );
+    mockHandlers["POST tasks/cancel"]({ task_id: ids[1] });
+    const resumed = mockHandlers["POST tasks/:traceId/resume"](
+      { platform: "aiocqhttp" },
+      { traceId: ids[1] },
+    );
+    expect(resumed.status).toBe("ok");
+    ids.push(resumed.data!.trace_id);
+    expect(mockActiveTasks.find((task) => task.task_id === resumed.data!.trace_id)?.platform).toBe(
+      "telegram",
+    );
+    expect(mockTraces.find((trace) => trace.trace_id === ids[1])?.status).toBe("aborted");
+  } finally {
+    for (const id of ids) {
+      mockHandlers["POST tasks/cancel"]({ task_id: id });
+      const index = mockTraces.findIndex((trace) => trace.trace_id === id);
+      if (index >= 0) mockTraces.splice(index, 1);
+    }
+  }
+});
+
 it("字体上传 Mock 只有末块才发布文件，取消后拒绝迟到分块", () => {
   const name = "mock-chunk-font.ttf",
     download_id = "chunk-upload-test";

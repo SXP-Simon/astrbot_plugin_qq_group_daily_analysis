@@ -1,5 +1,21 @@
 import { expect, it } from "vitest";
 import { managedRecordMockHandlers as handlers } from "../data/managedRecords";
+
+it("同分钟同号群的会话存档保留独立键和实例身份", () => {
+  const items = handlers["GET plugin-data/records"]({
+    kind: "history",
+    search: "2026-11-07_12-00_",
+  }).data.items;
+  expect(items).toHaveLength(2);
+  expect(new Set(items.map((item) => item.locator.platform_id)).size).toBe(2);
+  for (const item of items) {
+    const record = handlers["GET plugin-data/records/detail"](item.locator).data!;
+    expect(record.data).toMatchObject({
+      platform_id: item.locator.platform_id,
+      group_id: "123456789",
+    });
+  }
+});
 it("存档和头像示例足够跨页，按键倒序排列且列表不加载头像内容", () => {
   for (const kind of ["history", "avatar"]) {
     const first = handlers["GET plugin-data/records"]({ kind, page: 1 }).data;
