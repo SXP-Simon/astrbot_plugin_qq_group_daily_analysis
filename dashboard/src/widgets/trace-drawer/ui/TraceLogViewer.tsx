@@ -11,7 +11,7 @@ export function TraceLogViewer({ logs }: { logs: PluginLogItem[] }) {
       .map(
         (log) =>
           log.raw ||
-          `[${log.time_str}] [${log.level}] ${log.location ? `[${log.location}] ` : ""}${log.tag ? `[${log.tag}] ` : ""}${log.message}`,
+          `[${log.time_str}] [${log.level}] ${log.location ? `[${log.location}] ` : ""}${log.function_name ? `[${log.function_name}] ` : ""}${log.tag ? `[${log.tag}] ` : ""}${log.message}`,
       )
       .join("\n");
     setCopyResult((await copyToClipboard(text)) ? "已复制日志" : "无法复制，请手动选择日志内容。");
@@ -59,7 +59,8 @@ export function TraceLogViewer({ logs }: { logs: PluginLogItem[] }) {
                 <span className="text-muted-foreground">{log.time_str} </span>
                 <span>[{log.level}] </span>
                 {log.tag && <span>[{log.tag}] </span>}
-                {log.location && <span className="text-muted-foreground">[{log.location}] </span>}
+                <span className="text-muted-foreground">[{log.location || log.logger_name}] </span>
+                {log.function_name && <span>[{log.function_name}()] </span>}
                 {log.message}
               </div>
             ))}

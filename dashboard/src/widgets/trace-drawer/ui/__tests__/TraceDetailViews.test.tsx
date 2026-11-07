@@ -101,9 +101,10 @@ it("兼容历史产物记录，忽略无效条目；快照缺失不声称报告�
 
 it("日志复制尊重真实结果，并保留错误级别、来源和快捷键", async () => {
   vi.mocked(copyToClipboard).mockResolvedValueOnce(false);
-  render(<TraceLogViewer logs={[log]} />);
+  render(<TraceLogViewer logs={[{ ...log, function_name: "Renderer.generate" }]} />);
   expect(screen.getByText("[ERROR]")).toBeVisible();
   expect(screen.getByText("[render:10]")).toBeVisible();
+  expect(screen.getByText("[Renderer.generate()]")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "复制日志" }));
   await screen.findByText("无法复制，请手动选择日志内容。");
   expect(copyToClipboard).toHaveBeenCalledWith("原始日志文本");
