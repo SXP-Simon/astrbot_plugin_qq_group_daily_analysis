@@ -25,6 +25,7 @@ export function useManagedFonts(onChanged: () => void, initialSelection?: FontMa
   const [search, setSearch] = useState("");
   const [format, setFormat] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [requestedPage, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -142,6 +143,7 @@ export function useManagedFonts(onChanged: () => void, initialSelection?: FontMa
       row.name.toLowerCase().includes(search.toLowerCase()) &&
       (!format || row.name.toLowerCase().endsWith(`.${format}`)),
   );
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(visible.length / 15)));
   return {
     status,
     files,
@@ -157,6 +159,9 @@ export function useManagedFonts(onChanged: () => void, initialSelection?: FontMa
     downloadQueue,
     fontUpload,
     rows: visible,
+    page,
+    pageRows: visible.slice((page - 1) * 15, page * 15),
+    setPage,
     installed: rows.filter((row) => row.file).length,
     required: required.length,
     missing: rows.filter((row) => !row.file).length,
@@ -180,14 +185,17 @@ export function useManagedFonts(onChanged: () => void, initialSelection?: FontMa
       }),
     setSelected,
     selectTheme: (value: string) => {
+      setPage(1);
       setTheme(value);
       setSelected([]);
     },
     searchFonts: (value: string) => {
+      setPage(1);
       setSearch(value);
       setSelected([]);
     },
     filterFormat: (value: string) => {
+      setPage(1);
       setFormat(value);
       setSelected([]);
     },

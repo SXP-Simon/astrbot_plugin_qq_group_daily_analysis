@@ -36,10 +36,12 @@ it("管理入口保留模板与来源，管理完成后刷新状态", async () =
     </FontManagementContext.Provider>,
   );
   await screen.findByText("所选模板还需下载 7 / 9 个字体文件");
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "字体模板" }));
-  fireEvent.click(screen.getByText("ATRI (亚托莉)"));
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "字体下载来源" }));
-  fireEvent.click(screen.getByText("GitHub Raw 直连（全部字体）"));
+  fireEvent.change(screen.getByRole("combobox", { name: "字体模板" }), {
+    target: { value: "ATRI" },
+  });
+  fireEvent.change(screen.getByRole("combobox", { name: "字体下载来源" }), {
+    target: { value: "github" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "管理 / 上传字体" }));
   expect(open).toHaveBeenCalledWith({
     theme: "ATRI",
@@ -102,8 +104,9 @@ it("选择 Raw 后传递来源，展示真实字节与等待时间，失败原�
   });
   render(<TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" />);
   await screen.findByText("所选模板还需下载 7 / 9 个字体文件");
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "字体下载来源" }));
-  fireEvent.click(screen.getByText("GitHub Raw 直连（全部字体）"));
+  fireEvent.change(screen.getByRole("combobox", { name: "字体下载来源" }), {
+    target: { value: "github" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "下载所选模板字体" }));
   expect(await screen.findByText(/正在接收字体：1\.0 MB \/ 5\.0 MB/)).toBeVisible();
   expect(screen.getByText(/已 7 秒未收到新数据/)).toBeVisible();
