@@ -125,7 +125,6 @@
     max-height: 360px;
     overflow: auto;
     padding: 4px;
-    scrollbar-width: thin;
   }
   .stage-return {
     display: inline-flex;
