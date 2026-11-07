@@ -36,7 +36,10 @@ describe("API 通信网桥 (Shared API Bridge)", () => {
   });
 
   it("在开发环境下能够通过 devBridge 模拟 POST 提交分析任务", async () => {
-    const res = await apiPost("tasks/trigger", { group_id: "123456789" });
+    const res = await apiPost("tasks/trigger", {
+      group_id: "123456789",
+      platform: "aiocqhttp_main",
+    });
     expect(res).toBeDefined();
     expect(res?.status).toBe("ok");
   });
