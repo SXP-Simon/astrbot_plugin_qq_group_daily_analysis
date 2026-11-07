@@ -1,281 +1,263 @@
-import React from "react";
-import { Modal, Button, Space, Descriptions, Card, Tag, Typography, theme } from "antd";
-import { ThunderboltOutlined, CopyOutlined } from "@ant-design/icons";
-import {
-  IncrementalBatchItem,
-  IncrementalBatchTopic,
-  IncrementalBatchGoldenQuote,
-  ChatQualityDimension,
-  ChatQualityReviewObject,
-} from "../../../../entities/plugin-data/model/types";
+import { useEffect, useRef, useState } from "react";
+import { IconCopy } from "@tabler/icons-react";
+import type { IncrementalBatchItem } from "../../../../entities/plugin-data/model/types";
+import { batchQualityReviewSchema } from "../../../../entities/plugin-data/model/batchQualityReview";
 import { formatTimestamp, formatTokens } from "../../../../shared/lib/formatters";
-import { SANS_NUM_STYLE, handleCopyJson } from "../constants";
-
-const { Text, Paragraph } = Typography;
+import { copyToClipboard } from "../../../../shared/lib/clipboard";
+import { Button } from "../../../../shared/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "../../../../shared/ui/dialog";
 
 interface BatchDetailModalProps {
   open: boolean;
   onClose: () => void;
   batchDetail: IncrementalBatchItem | null;
   loading: boolean;
+  error?: string;
+  onRetry?: () => void;
 }
 
-export const BatchDetailModal: React.FC<BatchDetailModalProps> = ({
+export function BatchDetailModal({
   open,
   onClose,
   batchDetail,
   loading,
-}) => {
-  const { token } = theme.useToken();
-
+  error,
+  onRetry,
+}: BatchDetailModalProps) {
+  const [copyResult, setCopyResult] = useState("");
+  const copyRequest = useRef(0);
+  useEffect(() => {
+    copyRequest.current += 1;
+    setCopyResult("");
+    return () => {
+      copyRequest.current += 1;
+    };
+  }, [open, batchDetail]);
+  const review = batchDetail?.chat_quality_review;
+  const parsedReview = batchQualityReviewSchema.safeParse(review);
+  const quality = parsedReview.success ? parsedReview.data : null;
+  const usage = batchDetail?.token_usage;
   return (
-    <Modal
-      title={
-        <Space>
-          <ThunderboltOutlined style={{ color: "#1677ff" }} />
-          <span>
-            增量批次详情:{" "}
-            {batchDetail?.batch_id
-              ? batchDetail.batch_id.length > 18
-                ? `${batchDetail.batch_id.slice(0, 18)}...`
-                : batchDetail.batch_id
-              : ""}
-          </span>
-        </Space>
-      }
+    <Dialog
       open={open}
-      onCancel={onClose}
-      footer={[
-        <Button key="copy" icon={<CopyOutlined />} onClick={() => handleCopyJson(batchDetail)}>
-          复制完整 JSON
-        </Button>,
-        <Button key="close" type="primary" onClick={onClose}>
-          关闭
-        </Button>,
-      ]}
-      width={850}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
     >
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "30px 0" }}>
-          <Text type="secondary">加载批次明细数据中...</Text>
-        </div>
-      ) : batchDetail ? (
-        <Space direction="vertical" size="small" style={{ width: "100%" }}>
-          <Descriptions
-            size="small"
-            bordered
-            column={{ xs: 1, sm: 2, md: 2 }}
-            style={{ marginBottom: 4 }}
-            items={[
-              {
-                key: "group",
-                label: "目标群聊",
-                children: (
-                  <Text strong style={SANS_NUM_STYLE}>
-                    {batchDetail.group_id}
-                  </Text>
-                ),
-              },
-              {
-                key: "time",
-                label: "批次生成时间",
-                children: (
-                  <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
-                    {formatTimestamp(batchDetail.timestamp)}
-                  </span>
-                ),
-              },
-              {
-                key: "count",
-                label: "消息与字符量",
-                children: (
-                  <span style={SANS_NUM_STYLE}>
-                    {batchDetail.messages_count} 条 (
-                    {(batchDetail.characters_count || 0).toLocaleString()} 字)
-                  </span>
-                ),
-              },
-              {
-                key: "last_msg_time",
-                label: "涵盖最新消息时间",
-                children: batchDetail.last_message_timestamp ? (
-                  <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
-                    {formatTimestamp(batchDetail.last_message_timestamp)}
-                  </span>
+      <DialogContent className="max-w-3xl">
+        <DialogTitle>增量批次详情</DialogTitle>
+        <DialogDescription className="break-all font-mono">
+          {batchDetail?.batch_id || "未选择批次"}
+        </DialogDescription>
+        {loading ? (
+          <p role="status" className="py-6 text-muted-foreground">
+            正在读取批次详情…
+          </p>
+        ) : error ? (
+          <div className="grid gap-3">
+            <p role="alert" className="m-0 text-sm text-destructive">
+              {error}
+            </p>
+            {onRetry && (
+              <Button variant="outline" className="w-fit" onClick={onRetry}>
+                重新读取
+              </Button>
+            )}
+          </div>
+        ) : batchDetail ? (
+          <div className="grid gap-5 text-sm">
+            <dl className="m-0 grid gap-3 sm:grid-cols-2">
+              {[
+                ["目标群聊", batchDetail.group_id],
+                ["生成时间", formatTimestamp(batchDetail.timestamp)],
+                [
+                  "消息与字符",
+                  `${batchDetail.messages_count.toLocaleString()} 条 · ${batchDetail.characters_count.toLocaleString()} 字`,
+                ],
+                [
+                  "最新消息时间",
+                  batchDetail.last_message_timestamp
+                    ? formatTimestamp(batchDetail.last_message_timestamp)
+                    : "未记录",
+                ],
+                [
+                  "总 Tokens",
+                  usage?.total_tokens === undefined ? "未记录" : formatTokens(usage.total_tokens),
+                ],
+                [
+                  "输入 / 输出 Tokens",
+                  usage
+                    ? `${usage.prompt_tokens === undefined ? "未记录" : formatTokens(usage.prompt_tokens)} / ${usage.completion_tokens === undefined ? "未记录" : formatTokens(usage.completion_tokens)}`
+                    : "未记录",
+                ],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className="m-0 mt-1 break-all tabular-nums">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  const request = ++copyRequest.current;
+                  const copied = await copyToClipboard(batchDetail.batch_id);
+                  if (request === copyRequest.current)
+                    setCopyResult(copied ? "已复制批次编号" : "复制失败，可手动选择编号复制。");
+                }}
+              >
+                <IconCopy aria-hidden="true" />
+                复制批次编号
+              </Button>
+            </div>
+            {!!review && (
+              <section
+                aria-label="聊天质量与氛围评价"
+                className="grid gap-2 border-0 border-t border-solid border-border pt-4"
+              >
+                <h3 className="m-0 text-base font-medium">聊天质量与氛围评价</h3>
+                {typeof review === "string" ? (
+                  <p className="m-0 whitespace-pre-wrap">{review}</p>
+                ) : quality ? (
+                  <>
+                    {(quality.title || quality.subtitle) && (
+                      <p className="m-0">
+                        {[quality.title, quality.subtitle].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                    {quality.summary && (
+                      <p className="m-0 whitespace-pre-wrap text-muted-foreground">
+                        {quality.summary}
+                      </p>
+                    )}
+                    {Array.isArray(quality.dimensions) ? (
+                      quality.dimensions.map((dimension, index) => (
+                        <div key={index} className="grid gap-1">
+                          <span className="text-creative">
+                            {dimension.name || `维度 ${index + 1}`} ·{" "}
+                            {dimension.percentage === undefined
+                              ? "未记录"
+                              : `${dimension.percentage}%`}
+                          </span>
+                          <p className="m-0 whitespace-pre-wrap text-muted-foreground">
+                            {dimension.comment}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <pre className="m-0 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">
+                        {JSON.stringify(review, null, 2)}
+                      </pre>
+                    )}
+                  </>
                 ) : (
-                  "-"
-                ),
-              },
-              {
-                key: "batch_id",
-                label: "批次完整 ID",
-                span: 2,
-                children: (
-                  <Space size={8}>
-                    <Text copyable code style={{ fontSize: 12, ...SANS_NUM_STYLE }}>
-                      {batchDetail.batch_id}
-                    </Text>
-                  </Space>
-                ),
-              },
-              {
-                key: "tokens",
-                label: "Token 消耗",
-                span: 2,
-                children: batchDetail.token_usage ? (
-                  <Space size={12}>
-                    <span>
-                      总计:{" "}
-                      <Text strong style={SANS_NUM_STYLE}>
-                        {formatTokens(batchDetail.token_usage.total_tokens || 0)}
-                      </Text>
-                    </span>
-                    <Text type="secondary" style={{ fontSize: 11 }}>
-                      (Prompt: {formatTokens(batchDetail.token_usage.prompt_tokens || 0)} /
-                      Completion: {formatTokens(batchDetail.token_usage.completion_tokens || 0)})
-                    </Text>
-                  </Space>
-                ) : (
-                  "-"
-                ),
-              },
-            ]}
-          />
-
-          {batchDetail.chat_quality_review ? (
-            <Card size="small" title="聊天质量与氛围评价">
-              {typeof batchDetail.chat_quality_review === "string" ? (
-                <Paragraph style={{ margin: 0, fontSize: 12 }}>
-                  {batchDetail.chat_quality_review}
-                </Paragraph>
-              ) : typeof batchDetail.chat_quality_review === "object" ? (
-                (() => {
-                  const review = batchDetail.chat_quality_review as ChatQualityReviewObject;
-                  return (
-                    <Space direction="vertical" size={4} style={{ width: "100%" }}>
-                      {review.title && (
-                        <Text
-                          strong
-                          style={{
-                            fontSize: 13,
-                            color: token.colorTextHeading,
-                          }}
-                        >
-                          {review.title}
-                          {review.subtitle ? ` · ${review.subtitle}` : ""}
-                        </Text>
+                  <pre className="m-0 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">
+                    {JSON.stringify(review, null, 2)}
+                  </pre>
+                )}
+              </section>
+            )}
+            {!!batchDetail.topics?.length && (
+              <section
+                aria-label="提炼话题"
+                className="grid gap-3 border-0 border-t border-solid border-border pt-4"
+              >
+                <h3 className="m-0 text-base font-medium">
+                  提炼话题 · {batchDetail.topics.length}
+                </h3>
+                {batchDetail.topics.map((topic, index) => (
+                  <div key={index} className="grid gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{topic.title || "未命名话题"}</span>
+                      {topic.heat_score !== undefined && (
+                        <span className="rounded-md bg-warning/10 px-2 py-0.5 text-xs text-warning">
+                          热度 {topic.heat_score}℃
+                        </span>
                       )}
-                      {Array.isArray(review.dimensions) ? (
-                        review.dimensions.map((dim: ChatQualityDimension, idx: number) => (
-                          <div key={idx} style={{ fontSize: 12, marginTop: 4 }}>
-                            <Tag color="purple">
-                              {dim.name || `维度 ${idx + 1}`} ({dim.percentage || 0}%)
-                            </Tag>
-                            <Text type="secondary">{dim.comment}</Text>
-                          </div>
-                        ))
-                      ) : (
-                        <Paragraph style={{ margin: 0, fontSize: 12 }}>
-                          {JSON.stringify(batchDetail.chat_quality_review)}
-                        </Paragraph>
+                      {topic.category && (
+                        <span className="text-xs text-muted-foreground">
+                          {String(topic.category)}
+                        </span>
                       )}
-                    </Space>
-                  );
-                })()
-              ) : null}
-            </Card>
-          ) : null}
-
-          {Array.isArray(batchDetail.topics) && batchDetail.topics.length > 0 && (
-            <Card size="small" title={`提炼话题 (${batchDetail.topics.length} 个)`}>
-              <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                {batchDetail.topics.map((t: IncrementalBatchTopic, idx: number) => (
-                  <div
-                    key={idx}
-                    style={{
-                      fontSize: 12,
-                      paddingBottom: 6,
-                      borderBottom:
-                        idx < batchDetail.topics!.length - 1
-                          ? `1px dashed ${token.colorBorderSecondary}`
-                          : "none",
-                    }}
-                  >
-                    <Space size={6}>
-                      <Tag
-                        color={
-                          (t.heat_score || 0) >= 80
-                            ? "volcano"
-                            : (t.heat_score || 0) >= 50
-                              ? "orange"
-                              : "geekblue"
-                        }
-                      >
-                        {t.title || "未命名话题"} ({t.heat_score || 0}℃)
-                      </Tag>
-                      {t.category ? <Tag>{String(t.category)}</Tag> : null}
-                    </Space>
-                    {t.description || t.summary ? (
-                      <div
-                        style={{
-                          marginTop: 4,
-                          color: token.colorTextSecondary,
-                        }}
-                      >
-                        {String(t.description || t.summary)}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </Space>
-            </Card>
-          )}
-
-          {Array.isArray(batchDetail.golden_quotes) && batchDetail.golden_quotes.length > 0 && (
-            <Card size="small" title={`精彩金句 (${batchDetail.golden_quotes.length} 条)`}>
-              <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                {batchDetail.golden_quotes.map((q: IncrementalBatchGoldenQuote, idx: number) => (
-                  <div key={idx} style={{ fontSize: 12 }}>
-                    <Text strong style={{ color: "#d48806" }}>
-                      “{String(q.content || q.text || JSON.stringify(q))}”
-                    </Text>
-                    {(q.sender_nickname || q.sender_name || q.author) && (
-                      <Text type="secondary" style={{ marginLeft: 8 }}>
-                        —— {String(q.sender_nickname || q.sender_name || q.author)}
-                      </Text>
+                    </div>
+                    {(topic.description || topic.summary) && (
+                      <p className="m-0 whitespace-pre-wrap text-muted-foreground">
+                        {String(topic.description || topic.summary)}
+                      </p>
                     )}
                   </div>
                 ))}
-              </Space>
-            </Card>
-          )}
-
-          <div>
-            <Text strong style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
-              底层完整批次数据 (JSON):
-            </Text>
-            <pre
-              style={{
-                fontSize: 11,
-                fontFamily:
-                  "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, monospace",
-                background: token.colorFillAlter,
-                color: token.colorText,
-                border: `1px solid ${token.colorBorderSecondary}`,
-                padding: "8px 10px",
-                borderRadius: 4,
-                maxHeight: 280,
-                overflowY: "auto",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                margin: 0,
-              }}
-            >
-              {JSON.stringify(batchDetail, null, 2)}
-            </pre>
+              </section>
+            )}
+            {!!batchDetail.golden_quotes?.length && (
+              <section
+                aria-label="精彩金句"
+                className="grid gap-3 border-0 border-t border-solid border-border pt-4"
+              >
+                <h3 className="m-0 text-base font-medium">
+                  精彩金句 · {batchDetail.golden_quotes.length}
+                </h3>
+                {batchDetail.golden_quotes.map((quote, index) => (
+                  <blockquote
+                    key={index}
+                    className="m-0 border-0 border-l-2 border-solid border-warning/40 pl-3"
+                  >
+                    <p className="m-0 whitespace-pre-wrap">
+                      {String(quote.content || quote.text || JSON.stringify(quote))}
+                    </p>
+                    {(quote.sender_nickname || quote.sender_name || quote.author) && (
+                      <footer className="mt-1 text-muted-foreground">
+                        {String(quote.sender_nickname || quote.sender_name || quote.author)}
+                      </footer>
+                    )}
+                  </blockquote>
+                ))}
+              </section>
+            )}
+            <details>
+              <summary className="w-fit cursor-pointer rounded-md py-1 focus-visible:outline-2 focus-visible:outline-ring">
+                完整批次数据（JSON）
+              </summary>
+              <pre
+                tabIndex={0}
+                className="m-0 mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-muted p-3 font-mono text-xs focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                {JSON.stringify(batchDetail, null, 2)}
+              </pre>
+            </details>
           </div>
-        </Space>
-      ) : null}
-    </Modal>
+        ) : (
+          <p role="status" className="text-muted-foreground">
+            没有可显示的批次数据。
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-end gap-2 border-0 border-t border-solid border-border pt-3">
+          <span role="status" className="mr-auto text-sm text-muted-foreground">
+            {copyResult}
+          </span>
+          <Button
+            variant="outline"
+            disabled={loading || !!error || !batchDetail}
+            onClick={async () => {
+              const request = ++copyRequest.current;
+              const copied = await copyToClipboard(JSON.stringify(batchDetail, null, 2));
+              if (request === copyRequest.current)
+                setCopyResult(copied ? "已复制完整 JSON" : "复制失败，可展开完整数据后手动复制。");
+            }}
+          >
+            <IconCopy aria-hidden="true" />
+            复制完整 JSON
+          </Button>
+          <Button onClick={onClose}>关闭详情</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
-};
+}
