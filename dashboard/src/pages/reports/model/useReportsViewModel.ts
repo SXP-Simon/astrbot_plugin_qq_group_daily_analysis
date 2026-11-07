@@ -1,148 +1,155 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchReportHistory } from "../../../entities/report/api/reportApi";
 import { fetchDistinctGroups } from "../../../entities/group/api/groupApi";
-import { ReportItem } from "../../../entities/report/model/types";
-import { GroupItem } from "../../../entities/group/model/types";
+import type { ReportItem } from "../../../entities/report/model/types";
+import type { GroupItem } from "../../../entities/group/model/types";
 import { useReportActions } from "./useReportActions";
 
+interface ReportQuery {
+  page: number;
+  pageSize: number;
+  search: string;
+  selectedGroup?: string;
+}
+const INITIAL_QUERY: ReportQuery = { page: 1, pageSize: 20, search: "" };
+
 export function useReportsViewModel() {
+  const [query, setQuery] = useState<ReportQuery>(INITIAL_QUERY);
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [loadedPage, setLoadedPage] = useState(1);
   const [groups, setGroups] = useState<GroupItem[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  // 过滤筛选状态
-  const [search, setSearch] = useState("");
-  const [selectedGroup, setSelectedGroup] = useState<string | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [groupsError, setGroupsError] = useState("");
   const [dateRange, setDateRange] = useState<[number, number] | null>(null);
-
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [refreshRequest, setRefreshRequest] = useState({ version: 0, silent: false });
+  const previousQuery = useRef<ReportQuery | null>(null);
   const reportActions = useReportActions();
 
-  const loadReports = useCallback(
-    async (targetPage = page, targetPageSize = pageSize, silent = false) => {
-      if (!silent) setLoading(true);
-      try {
-        const [res, groupList] = await Promise.all([
-          fetchReportHistory({
-            limit: targetPageSize,
-            offset: (targetPage - 1) * targetPageSize,
-            group_id: selectedGroup,
-            search: search.trim() || undefined,
-          }),
-          groups.length === 0 ? fetchDistinctGroups().catch(() => []) : Promise.resolve(groups),
-        ]);
-        setReports(res.items);
-        setTotal(res.total);
-        if (groups.length === 0) setGroups(groupList);
-      } catch {
-        // 忽略加载异常
-      } finally {
-        if (!silent) setLoading(false);
-      }
-    },
-    [page, pageSize, selectedGroup, search, groups],
-  );
-
-  const handlePageChange = (newPage: number, newPageSize?: number) => {
-    const nextSize = newPageSize || pageSize;
-    setPage(newPage);
-    setPageSize(nextSize);
-    loadReports(newPage, nextSize);
-  };
-
-  // 综合计算筛选后的报告列表
-  const filteredReports = useMemo(() => {
-    const list = reports.filter((item) => {
-      // 1. 群聊筛选
-      if (selectedGroup) {
-        if (item.group_id !== selectedGroup && !item.filename.includes(selectedGroup)) {
-          return false;
-        }
-      }
-
-      // 2. 日期范围筛选 (基于 modified_at / created_at 时间戳)
-      if (dateRange && dateRange[0] && dateRange[1]) {
-        const itemTime = item.modified_at || item.created_at || 0;
-        if (itemTime < dateRange[0] || itemTime > dateRange[1]) {
-          return false;
-        }
-      }
-
-      // 3. 关键字搜索（支持文件名、群号、群名、绝对路径、TraceID）
-      if (search.trim()) {
-        const kw = search.trim().toLowerCase();
-        const matchName = item.filename.toLowerCase().includes(kw);
-        const matchGid = (item.group_id || "").toLowerCase().includes(kw);
-        const matchGname = (item.group_name || "").toLowerCase().includes(kw);
-        const matchPath = (item.absolute_path || "").toLowerCase().includes(kw);
-        const matchTrace = (item.trace_id || "").toLowerCase().includes(kw);
-        if (!matchName && !matchGid && !matchGname && !matchPath && !matchTrace) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-
-    // 严格降序排序兜底：确保界面列表始终按生成时间从新到旧排列
-    return list.sort((a, b) => {
-      const timeA = a.modified_at || a.created_at || 0;
-      const timeB = b.modified_at || b.created_at || 0;
-      return timeB - timeA;
-    });
-  }, [reports, selectedGroup, dateRange, search]);
-
-  // 合并来自报告元数据的群聊选项，保证未入库群聊也能正常筛选
-  const mergedGroups = useMemo(() => {
-    const map = new Map<string, GroupItem>();
-    for (const g of groups) {
-      map.set(g.group_id, g);
-    }
-    for (const r of reports) {
-      if (r.group_id && !map.has(r.group_id)) {
-        map.set(r.group_id, {
-          group_id: r.group_id,
-          group_name: r.group_name || `群 ${r.group_id}`,
-          platform: "qq",
-        });
-      }
-    }
-    return Array.from(map.values());
-  }, [groups, reports]);
+  useEffect(() => {
+    let active = true;
+    setGroupsError("");
+    void fetchDistinctGroups()
+      .then((result) => {
+        if (active) setGroups(result);
+      })
+      .catch((reason: unknown) => {
+        if (active)
+          setGroupsError(
+            reason instanceof Error
+              ? `群聊列表加载失败：${reason.message}`
+              : "群聊列表加载失败，仍可搜索报告。",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [refreshRequest.version]);
 
   useEffect(() => {
-    setPage(1);
-    loadReports(1, pageSize);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedGroup, search]);
+    let active = true;
+    const delay = previousQuery.current && previousQuery.current.search !== query.search ? 250 : 0;
+    const silent = previousQuery.current === query && refreshRequest.silent;
+    previousQuery.current = query;
+    setLoading(!silent);
+    setError("");
+    const timer = setTimeout(async () => {
+      try {
+        const result = await fetchReportHistory({
+          limit: query.pageSize,
+          offset: (query.page - 1) * query.pageSize,
+          group_id: query.selectedGroup || undefined,
+          search: query.search.trim() || undefined,
+        });
+        if (!active) return;
+        const lastPage = Math.max(1, Math.ceil(result.total / query.pageSize));
+        if (query.page > lastPage) {
+          setQuery((current) => ({ ...current, page: lastPage }));
+          return;
+        }
+        setReports(result.items);
+        setTotal(result.total);
+        setLoadedPage(query.page);
+      } catch (reason) {
+        if (active)
+          setError(
+            reason instanceof Error
+              ? `报告列表加载失败：${reason.message}`
+              : "报告列表加载失败，请重试。",
+          );
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, delay);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [query, refreshRequest]);
 
-  const refresh = useCallback(
-    (silent = true, resetPage = false) => {
-      const targetPage = resetPage ? 1 : page;
-      if (resetPage) setPage(1);
-      return loadReports(targetPage, pageSize, silent);
-    },
-    [page, pageSize, loadReports],
+  // 接口按时间倒序分页；日期过滤与反向排列只作用于已载入这一页，界面明确此范围。
+  const filteredReports = useMemo(
+    () =>
+      reports
+        .filter((report) => {
+          if (!dateRange) return true;
+          const time = report.modified_at ?? report.created_at;
+          return typeof time === "number" && time >= dateRange[0] && time <= dateRange[1];
+        })
+        .sort((a, b) => {
+          const first = a.modified_at ?? a.created_at ?? 0;
+          const second = b.modified_at ?? b.created_at ?? 0;
+          return sortOrder === "desc" ? second - first : first - second;
+        }),
+    [reports, dateRange, sortOrder],
   );
 
+  const mergedGroups = useMemo(() => {
+    const map = new Map(groups.map((group) => [group.group_id, group]));
+    for (const report of reports) {
+      if (report.group_id && !map.has(report.group_id))
+        map.set(report.group_id, {
+          group_id: report.group_id,
+          group_name: report.group_name || `群 ${report.group_id}`,
+          platform: report.platform || "",
+        });
+    }
+    return [...map.values()];
+  }, [groups, reports]);
+
   return {
+    ...query,
     reports: filteredReports,
     rawReports: reports,
     groups: mergedGroups,
     loading,
-    search,
-    setSearch,
-    selectedGroup,
-    setSelectedGroup,
+    error,
+    groupsError,
+    loadedPage,
     dateRange,
     setDateRange,
-    page,
-    pageSize,
+    sortOrder,
+    setSortOrder,
     total,
-    handlePageChange,
-    refresh,
+    setSearch: (search: string) => setQuery((current) => ({ ...current, search, page: 1 })),
+    setSelectedGroup: (selectedGroup?: string) =>
+      setQuery((current) => ({ ...current, selectedGroup, page: 1 })),
+    resetFilters: () => {
+      setQuery((current) => ({ ...INITIAL_QUERY, pageSize: current.pageSize }));
+      setDateRange(null);
+    },
+    handlePageChange: (page: number, pageSize?: number) =>
+      setQuery((current) => ({
+        ...current,
+        page,
+        pageSize: pageSize ?? current.pageSize,
+      })),
+    refresh: (silent = true, resetPage = false) => {
+      if (resetPage) setQuery((current) => ({ ...current, page: 1 }));
+      setRefreshRequest((current) => ({ version: current.version + 1, silent }));
+    },
     ...reportActions,
   };
 }
