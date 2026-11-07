@@ -83,6 +83,15 @@ putManagedMockFile(
 );
 putManagedMockFile("custom_templates", "my_miku/template.json", '{"name":"我的初音模板"}');
 putManagedMockFile("custom_templates", "my_miku/assets/character.svg", svg);
+// 模板素材提供多页示例，便于验证分页和跨页选择，不触发真实渲染。
+for (let index = 1; index <= 24; index++) {
+  putManagedMockFile(
+    "custom_templates",
+    `my_miku/assets/example-decoration-${String(index).padStart(2, "0")}.svg`,
+    svg,
+  );
+}
+
 putManagedMockFile(
   "custom_templates",
   "my_maria/report.typ",
