@@ -15,8 +15,9 @@ from src.infrastructure.reporting import typst_fonts, typst_resources
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("filename", ["Outfit.ttf", "cjkFonts_allseto_v1.11.ttf"])
+@pytest.mark.parametrize("filename", ["Outfit.ttf", "cjkFonts-AllSeto-Title-v1.11.ttf"])
 async def test_font_file_download_is_limited_to_the_selected_preset(tmp_path, monkeypatch, filename):
+    monkeypatch.setattr(typst_fonts, "REPOSITORY_TITLE_FONT", tmp_path / "absent.ttf")
     calls = []
 
     async def download(session, url, target, on_progress=None):
@@ -339,3 +340,57 @@ async def test_theme_font_download_skips_other_themes_and_reuses_shared_files(
             await typst_resources.download_typst_fonts(tmp_path, cdn, "../../outside")
     finally:
         await runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_miku_title_subset_reuses_repository_and_existing_cache(tmp_path, monkeypatch):
+    """源码补齐只复制真实标题子集，不下载完整版；已有用户文件保持原样。"""
+    from unittest.mock import AsyncMock
+
+    download = AsyncMock(side_effect=AssertionError("本地标题字体不应联网"))
+    monkeypatch.setattr(typst_fonts, "_download_font", download)
+    progress = []
+    status = await typst_fonts.download_typst_fonts(
+        tmp_path, "https://cdn.test", "HatsuneMiku", name=typst_fonts.MIKU_TITLE_FONT,
+        on_progress=progress.append,
+    )
+    target = tmp_path / "typst/fonts" / typst_fonts.MIKU_TITLE_FONT
+    assert target.read_bytes() == typst_fonts.REPOSITORY_TITLE_FONT.read_bytes()
+    assert 0 < target.stat().st_size < 32 * 1024
+    assert progress[-1]["received"] == target.stat().st_size
+    assert progress[-1]["url"].startswith("file:")
+    assert "cjkFonts_allseto_v1.11.ttf" not in status["missing"]
+    target.write_bytes(b"user-font")
+    await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test", name=target.name)
+    assert target.read_bytes() == b"user-font"
+    assert not list(target.parent.glob("*.part"))
+    download.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["cdn", "github"])
+async def test_miku_subset_release_download_uses_small_resource(tmp_path, monkeypatch, source):
+    """发布包无 assets 时下载同一份子集，原子保存并校验真实 TTF 响应。"""
+    payload = typst_fonts.REPOSITORY_TITLE_FONT.read_bytes()
+    monkeypatch.setattr(typst_fonts, "REPOSITORY_TITLE_FONT", tmp_path / "no-assets.ttf")
+    calls = []
+    real_download = typst_fonts._download_font
+    app = web.Application()
+    async def serve(request):
+        return web.Response(body=payload)
+    app.router.add_get("/font.ttf", serve)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, "127.0.0.1", 0).start()
+    async def capture(session, url, target, on_progress=None):
+        calls.append(url)
+        await real_download(session, f"http://127.0.0.1:{runner.addresses[0][1]}/font.ttf", target, on_progress)
+    monkeypatch.setattr(typst_fonts, "_download_font", capture)
+    try:
+        status = await typst_fonts.download_typst_fonts(tmp_path, "https://cdn.test/", name=typst_fonts.MIKU_TITLE_FONT, source=source)
+    finally:
+        await runner.cleanup()
+    preset = next(item for item in status["presets"] if item["name"] == typst_fonts.MIKU_TITLE_FONT)
+    assert calls == [preset["download_url"] if source == "github" else "https://cdn.test/" + preset["cdn_path"]]
+    assert (tmp_path / "typst/fonts" / typst_fonts.MIKU_TITLE_FONT).read_bytes() == payload
+    assert "moeru-ai" not in calls[0]

@@ -420,7 +420,7 @@ async def test_native_trace_tracks_stages_and_cancel(native, monkeypatch, cancel
         assert trace.status == ("aborted" if cancel else "warning")
         resources = next(span for span in spans if span["stage_name"] == "TYPST_RESOURCES")
         assert resources["payload"]["title_font"] in ("Noto Sans SC", "Noto Sans TC")
-        assert "全瀨體尚未下载" in resources["payload"]["warning"]
+        assert "初音标题字体尚未下载" in resources["payload"]["warning"]
     finally:
         await native.close()
 
@@ -440,3 +440,34 @@ async def test_worker_telemetry_follows_existing_switch(tmp_path, monkeypatch, e
     metrics = await run_typst_worker(tmp_path, tmp_path / "fonts", 1)
     assert ("--metrics" in create.call_args.args) is enabled
     assert metrics == ({"worker_peak_rss_mb":120.5, "layout_ms":12.0} if enabled else None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("installed,expected", [
+    ([], None),
+    (["cjkFonts_allseto_v1.11.ttf"], "cjkFonts"),
+    (["cjkFonts-AllSeto-Title-v1.11.ttf"], "Miku AllSeto Title"),
+    (["cjkFonts_allseto_v1.11.ttf", "cjkFonts-AllSeto-Title-v1.11.ttf"], "Miku AllSeto Title"),
+])
+async def test_miku_title_subset_priority_and_existing_full_font(native, monkeypatch, installed, expected):
+    """新子集优先，旧完整版可复用；均缺失时保留 Noto 回退及诊断提示。"""
+    native.config_manager.config["basic"]["report_language"] = "zh-Hans"
+    directory = native.data_dir / "typst/fonts"
+    directory.mkdir(parents=True)
+    for name in ["NotoSansSC.ttf", *installed]:
+        (directory / name).write_bytes(b"font")
+    trace = TraceContext(trace_id="miku-font-selection")
+    monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: trace))
+    async def worker(job, fonts, timeout, raster_ppi=144):
+        data = json.loads((job / "data.json").read_text(encoding="utf-8"))
+        assert data["miku_title_font"] == expected
+        (job / "report.png").write_bytes(png_bytes())
+    monkeypatch.setattr("src.infrastructure.reporting.typst_renderer.run_typst_worker", worker)
+    try:
+        assert (await native.generate_image_report(create_analysis_result(), "font-selection", None))[0]
+        resources = next(span for span in trace.to_dict()["spans"] if span["stage_name"] == "TYPST_RESOURCES")
+        assert resources["payload"]["title_font"] == (expected or "Noto Sans SC")
+        assert ("初音标题字体尚未下载" in resources["payload"].get("warning", "")) is (expected is None)
+        assert all((directory / name).is_file() for name in installed)
+    finally:
+        await native.close()

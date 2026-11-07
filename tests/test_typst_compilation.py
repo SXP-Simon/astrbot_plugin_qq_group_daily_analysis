@@ -514,7 +514,7 @@ async def test_high_density_survives_generator_and_history_copy(compiler, tmp_pa
 @pytest.mark.parametrize("language", ["zh-Hans", "zh-Hant", "en", "ja"])
 async def test_miku_title_uses_allseto_only_for_chinese_and_keeps_font_fallback(compiler, tmp_path, monkeypatch, language):
     config, generator, _ = compiler
-    font = generator.data_dir / "typst/fonts/cjkFonts_allseto_v1.11.ttf"
+    font = generator.data_dir / "typst/fonts/cjkFonts-AllSeto-Title-v1.11.ttf"
     assert font.is_file(), "真实 Miku 编译需要按需字体清单中的全瀨體"
     config.config["basic"]["report_language"] = language
     real_worker = typst_renderer.run_typst_worker
@@ -522,12 +522,12 @@ async def test_miku_title_uses_allseto_only_for_chinese_and_keeps_font_fallback(
 
     async def compare(job, fonts, timeout, raster_ppi=144):
         data = json.loads((job / "data.json").read_text(encoding="utf-8"))
-        assert data["miku_allseto"] is True and data["language"] == language
+        assert data["miku_title_font"] == "Miku AllSeto Title" and data["language"] == language
         metrics = await real_worker(job, fonts, timeout, raster_ppi)
         original = (job / "report.png").read_bytes()
         clone = tmp_path / "fallback"
         shutil.copytree(job, clone)
-        data["miku_allseto"] = False
+        data["miku_title_font"] = None
         (clone / "data.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         await real_worker(clone, fonts, timeout, raster_ppi)
         results.extend([original, (clone / "report.png").read_bytes()])
@@ -543,3 +543,23 @@ async def test_miku_title_uses_allseto_only_for_chinese_and_keeps_font_fallback(
             assert actual.crop((50, 75, 500, 130)).tobytes() != fallback.crop((50, 75, 500, 130)).tobytes()
         else:
             assert actual.size == fallback.size and actual.tobytes() == fallback.tobytes()
+
+
+
+def test_miku_title_subset_compiles_all_eight_glyphs_without_system_fonts(tmp_path):
+    """无需外部字库也能验证子集真实可用，避免把缺字回退误当成成功。"""
+    from src.infrastructure.reporting.typst_fonts import REPOSITORY_TITLE_FONT
+
+    fonts = typst.Fonts(include_system_fonts=False, font_paths=[str(REPOSITORY_TITLE_FONT.parent)])
+    assert "Miku AllSeto Title" in fonts.families()
+    source = tmp_path / "title.typ"
+    source.write_text(
+        '#set page(width:auto,height:auto,margin:0pt)\n'
+        '#set text(font:"Miku AllSeto Title",size:44.8pt)\n群聊日常分析看板',
+        encoding="utf-8",
+    )
+    compiler = typst.Compiler(str(source), font_paths=fonts, ignore_system_fonts=True)
+    png, warnings = compiler.compile_with_warnings(format="png", ppi=144)
+    assert not warnings
+    with Image.open(BytesIO(png)) as image:
+        assert image.width > 500 and image.height > 30
