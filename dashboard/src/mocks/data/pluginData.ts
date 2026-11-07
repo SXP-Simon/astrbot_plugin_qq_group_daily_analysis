@@ -209,3 +209,31 @@ mockCheckpoints.items.push({
   has_data: true,
 });
 mockCheckpoints.total = mockCheckpoints.items.length;
+
+// 与正式仓储一致，批次和游标按平台实例、群号分别保存。
+export const mockIncrementalSessions = new Map<string, IncrementalBatchesResponse>([
+  [JSON.stringify(["aiocqhttp", mockIncrementalBatches.group_id]), mockIncrementalBatches],
+]);
+export function incrementalMockSession(groupId: string, platformId: string) {
+  const key = JSON.stringify([platformId, groupId]);
+  let session = mockIncrementalSessions.get(key);
+  if (!session) {
+    session = {
+      group_id: groupId,
+      platform_id: platformId,
+      total: 0,
+      page: 1,
+      page_size: 20,
+      batches: [],
+      cursor: {
+        group_id: groupId,
+        timestamp: 0,
+        last_analyzed_timestamp: 0,
+        last_message_timestamp: 0,
+        tracked_message_ids_count: 0,
+      },
+    };
+    mockIncrementalSessions.set(key, session);
+  }
+  return session;
+}

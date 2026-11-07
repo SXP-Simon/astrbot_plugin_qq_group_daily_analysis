@@ -3,7 +3,7 @@ import type {
   ManagedRecord,
   RecordLocator,
 } from "../../entities/plugin-data/api/managedRecordsApi";
-import { mockCheckpoints, mockIncrementalBatches } from "./pluginData";
+import { mockCheckpoints, mockIncrementalBatches, incrementalMockSession } from "./pluginData";
 
 let version = 0;
 const records = new Map<string, ManagedRecord>();
@@ -14,7 +14,7 @@ function put(locator: RecordLocator, data: ManagedRecord["data"]) {
 }
 for (const batch of mockIncrementalBatches.batches) {
   put(
-    { kind: "batch", group_id: batch.group_id, batch_id: batch.batch_id },
+    { kind: "batch", platform_id: "aiocqhttp", group_id: batch.group_id, batch_id: batch.batch_id },
     JSON.parse(JSON.stringify(batch)) as ManagedRecord["data"],
   );
 }
@@ -172,10 +172,10 @@ export const managedRecordMockHandlers = {
       return { status: "error", message: "记录已变化，请刷新" };
     if (body?.operation === "delete") {
       records.delete(key);
-      if (locator.kind === "batch")
-        mockIncrementalBatches.batches = mockIncrementalBatches.batches.filter(
-          (item) => item.group_id !== locator.group_id || item.batch_id !== locator.batch_id,
-        );
+      if (locator.kind === "batch") {
+        const session = incrementalMockSession(locator.group_id || "", locator.platform_id || "");
+        session.batches = session.batches.filter((item) => item.batch_id !== locator.batch_id);
+      }
       if (locator.kind === "checkpoint") {
         mockCheckpoints.items = mockCheckpoints.items.filter(
           (item) =>
@@ -201,15 +201,16 @@ export const managedRecordMockHandlers = {
           characters_count: Number(data.characters_count || 0),
           topics_count: Array.isArray(data.topics) ? data.topics.length : 0,
         };
-        const index = mockIncrementalBatches.batches.findIndex(
+        const session = incrementalMockSession(locator.group_id || "", locator.platform_id || "");
+        const index = session.batches.findIndex(
           (batch) => batch.group_id === item.group_id && batch.batch_id === item.batch_id,
         );
         if (index >= 0)
-          mockIncrementalBatches.batches[index] = {
-            ...mockIncrementalBatches.batches[index],
+          session.batches[index] = {
+            ...session.batches[index],
             ...item,
           };
-        else mockIncrementalBatches.batches.push(item);
+        else session.batches.push(item);
       }
     }
     return { status: "ok", data: { success: true } };

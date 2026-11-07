@@ -26,13 +26,17 @@ it("增量批次与游标遵守秒级时间契约，详情时间与列表一致"
 
 it("切换群和批次返回对应数据，不再总是返回第一份批次", () => {
   const other = extractData<IncrementalBatchesResponse>(
-    mockHandlers["GET data/incremental/batches"]({ group_id: "其他群" }),
+    mockHandlers["GET data/incremental/batches"]({ platform_id: "aiocqhttp", group_id: "其他群" }),
   );
   expect(other?.batches).toEqual([]);
-  expect(other?.cursor).toMatchObject({ group_id: "其他群", last_analyzed_timestamp: 0 });
+  expect(other?.cursor).toMatchObject({
+    group_id: "其他群",
+    last_analyzed_timestamp: 0,
+  });
   for (const batch of mockIncrementalBatches.batches) {
     const detail = extractData<IncrementalBatchItem>(
       mockHandlers["GET data/incremental/batch/detail"]({
+        platform_id: "aiocqhttp",
         group_id: batch.group_id,
         batch_id: batch.batch_id,
       }),
@@ -54,12 +58,14 @@ it("单批删除和整群重置同步到列表、详情及游标", () => {
     const first = original.batches[0];
     expect(
       mockHandlers["POST data/incremental/batch"]({
+        platform_id: "aiocqhttp",
         group_id: first.group_id,
         batch_id: first.batch_id,
       }).status,
     ).toBe("ok");
     expect(
       mockHandlers["GET data/incremental/batch/detail"]({
+        platform_id: "aiocqhttp",
         group_id: first.group_id,
         batch_id: first.batch_id,
       }).status,
@@ -69,14 +75,22 @@ it("单批删除和整群重置同步到列表、详情及游标", () => {
     );
     const remaining = mockIncrementalBatches.batches.length;
     expect(
-      mockHandlers["POST data/incremental/reset"]({ group_id: first.group_id }).data,
+      mockHandlers["POST data/incremental/reset"]({
+        platform_id: "aiocqhttp",
+        group_id: first.group_id,
+      }).data,
     ).toMatchObject({ deleted_batches: remaining });
     expect(mockIncrementalBatches.batches).toHaveLength(0);
     expect(mockIncrementalBatches.cursor.last_analyzed_timestamp).toBe(0);
   } finally {
     for (const batch of original.batches) {
       mockHandlers["POST plugin-data/records/mutate"]({
-        locator: { kind: "batch", group_id: batch.group_id, batch_id: batch.batch_id },
+        locator: {
+          kind: "batch",
+          platform_id: "aiocqhttp",
+          group_id: batch.group_id,
+          batch_id: batch.batch_id,
+        },
         operation: "create",
         data: batch,
       });
@@ -88,7 +102,12 @@ it("单批删除和整群重置同步到列表、详情及游标", () => {
 it("多页示例按时间倒序，分页条目不重复且页码越界会修正", () => {
   const get = (page: number) =>
     extractData<IncrementalBatchesResponse>(
-      mockHandlers["GET data/incremental/batches"]({ group_id: "123456789", page, page_size: 20 }),
+      mockHandlers["GET data/incremental/batches"]({
+        platform_id: "aiocqhttp",
+        group_id: "123456789",
+        page,
+        page_size: 20,
+      }),
     )!;
   const first = get(1),
     last = get(99);
@@ -104,4 +123,23 @@ it("多页示例按时间倒序，分页条目不重复且页码越界会修正"
       expect(topic).not.toHaveProperty("heat_score");
     }
   }
+});
+
+it("增量群聊目录分开同号平台，另一平台重置不会删除现有批次", () => {
+  const directory = mockHandlers["GET data/incremental/groups"]().data;
+  const details = directory.group_details.filter((group) => group.group_id === "123456789");
+  expect(details.map((group) => group.platform_id).sort()).toEqual(["aiocqhttp", "telegram"]);
+  expect(details.find((group) => group.platform_id === "telegram")?.group_name).toBe(
+    "摄影交流示例群",
+  );
+  const before = mockIncrementalBatches.batches.length;
+  expect(
+    mockHandlers["POST data/incremental/reset"]({ group_id: "123456789", platform_id: "telegram" })
+      .data,
+  ).toMatchObject({ deleted_batches: 0 });
+  expect(mockIncrementalBatches.batches).toHaveLength(before);
+  expect(
+    mockHandlers["GET data/incremental/batches"]({ group_id: "123456789", platform_id: "telegram" })
+      .data?.batches,
+  ).toEqual([]);
 });

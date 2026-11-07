@@ -16,7 +16,12 @@ import { mockGroups } from "./data/groups";
 import { mockSSEService } from "./sseMock";
 import { TAG_STYLE_MAP } from "../entities/log/model/types";
 import type { AvailableTag } from "../entities/log/model/types";
-import { mockPluginDataOverview, mockIncrementalBatches, mockCheckpoints } from "./data/pluginData";
+import {
+  mockPluginDataOverview,
+  mockCheckpoints,
+  mockIncrementalSessions,
+  incrementalMockSession,
+} from "./data/pluginData";
 
 /**
  * 标准化的 Mock Handlers 路由匹配表
@@ -743,22 +748,33 @@ export const mockHandlers = {
       : { status: "error", message: "备份不存在" };
   },
   "POST plugin-data/:section/clear": () => ({ status: "ok", data: { deleted: 10 } }),
-  "GET data/incremental/groups": () => ({
-    status: "ok",
-    data: {
-      groups: [
-        ...new Set([
-          "123456789",
-          "8899001122",
-          "987654321",
-          "-1001987654321",
-          ...mockIncrementalBatches.batches.map((item) => item.group_id),
-        ]),
-      ],
-    },
-  }),
+  "GET data/incremental/groups": () => {
+    const history = new Map(
+      mockTraces.map((item) => [
+        JSON.stringify([item.platform, item.group_id]),
+        {
+          group_id: item.group_id,
+          group_name: item.group_name || "",
+          platform_id: item.platform || "",
+        },
+      ]),
+    );
+    for (const key of mockIncrementalSessions.keys()) {
+      if (!history.has(key)) {
+        const [platform_id, group_id] = JSON.parse(key) as [string, string];
+        history.set(key, { group_id, platform_id, group_name: "" });
+      }
+    }
+    const group_details = [...history.values()];
+    const groups = [...new Set(group_details.map((item) => item.group_id))].sort();
+    return { status: "ok", data: { groups, group_details } };
+  },
   "GET data/incremental/batches": (params?: Record<string, unknown>) => {
-    const batches = mockIncrementalBatches.batches
+    const session = incrementalMockSession(
+      String(params?.group_id || ""),
+      String(params?.platform_id || ""),
+    );
+    const batches = session.batches
       .filter((item) => item.group_id === params?.group_id)
       .sort((a, b) => b.timestamp - a.timestamp || b.batch_id.localeCompare(a.batch_id));
     const pageSize = Math.min(100, Math.max(1, Number(params?.page_size) || 20));
@@ -770,16 +786,8 @@ export const mockHandlers = {
       status: "ok",
       data: {
         group_id: params?.group_id,
-        cursor:
-          params?.group_id === mockIncrementalBatches.group_id
-            ? mockIncrementalBatches.cursor
-            : {
-                group_id: String(params?.group_id || ""),
-                timestamp: 0,
-                last_analyzed_timestamp: 0,
-                last_message_timestamp: 0,
-                tracked_message_ids_count: 0,
-              },
+        platform_id: String(params?.platform_id || ""),
+        cursor: session.cursor,
         total: batches.length,
         page,
         page_size: pageSize,
@@ -791,12 +799,18 @@ export const mockHandlers = {
     const response = managedRecordMockHandlers["GET plugin-data/records/detail"]({
       kind: "batch",
       group_id: params?.group_id,
+      platform_id: params?.platform_id,
       batch_id: params?.batch_id,
     });
     return response.status === "ok" ? { status: "ok", data: response.data?.data } : response;
   },
   "POST data/incremental/batch": (params?: Record<string, unknown>) => {
-    const locator = { kind: "batch", group_id: params?.group_id, batch_id: params?.batch_id };
+    const locator = {
+      kind: "batch",
+      group_id: params?.group_id,
+      platform_id: params?.platform_id,
+      batch_id: params?.batch_id,
+    };
     const current = managedRecordMockHandlers["GET plugin-data/records/detail"](locator);
     if (current.status !== "ok") return current;
     const result = managedRecordMockHandlers["POST plugin-data/records/mutate"]({
@@ -807,11 +821,18 @@ export const mockHandlers = {
     return result.status === "ok" ? { status: "ok", data: { deleted: true } } : result;
   },
   "POST data/incremental/reset": (params?: Record<string, unknown>) => {
-    const batches = mockIncrementalBatches.batches.filter(
-      (batch) => batch.group_id === params?.group_id,
+    const session = incrementalMockSession(
+      String(params?.group_id || ""),
+      String(params?.platform_id || ""),
     );
+    const batches = session.batches.filter((batch) => batch.group_id === params?.group_id);
     for (const batch of batches) {
-      const locator = { kind: "batch", group_id: batch.group_id, batch_id: batch.batch_id };
+      const locator = {
+        kind: "batch",
+        group_id: batch.group_id,
+        platform_id: params?.platform_id,
+        batch_id: batch.batch_id,
+      };
       const current = managedRecordMockHandlers["GET plugin-data/records/detail"](locator);
       const result = managedRecordMockHandlers["POST plugin-data/records/mutate"]({
         locator,
@@ -820,9 +841,9 @@ export const mockHandlers = {
       });
       if (result.status !== "ok") return result;
     }
-    if (mockIncrementalBatches.group_id === params?.group_id) {
-      mockIncrementalBatches.cursor = {
-        group_id: mockIncrementalBatches.group_id,
+    {
+      session.cursor = {
+        group_id: session.group_id,
         timestamp: 0,
         last_analyzed_timestamp: 0,
         last_message_timestamp: 0,
