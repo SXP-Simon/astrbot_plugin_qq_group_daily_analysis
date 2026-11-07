@@ -20,9 +20,7 @@ import {
   theme,
 } from "antd";
 import {
-  DeleteOutlined,
   ReloadOutlined,
-  EyeOutlined,
   ClearOutlined,
   ClockCircleOutlined,
   ThunderboltOutlined,
@@ -33,6 +31,15 @@ import { usePluginDataViewModel } from "../../model/usePluginDataViewModel";
 import { SANS_NUM_STYLE } from "../constants";
 import { IncrementalCursorCards } from "./IncrementalCursorCards";
 
+import { IconEye, IconSettings, IconTrash } from "@tabler/icons-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "../../../../shared/ui/dialog";
+import { Button as ActionButton } from "../../../../shared/ui/button";
+
 const { Text } = Typography;
 
 interface IncrementalTabProps {
@@ -42,6 +49,8 @@ interface IncrementalTabProps {
 export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
   const [managedLocator, setManagedLocator] = useState<RecordLocator | null>(null);
   const [importing, setImporting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<IncrementalBatchItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { token } = theme.useToken();
   const { incrGroups, selectedIncrGroup, incrBatches, incrCursor, loadingIncremental } = vm;
 
@@ -172,54 +181,83 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
     {
       title: "操作",
       key: "action",
-      width: 140,
+      width: 260,
       align: "center" as const,
       render: (_: unknown, item: IncrementalBatchItem) => (
-        <Space size={4}>
-          <Button
-            size="small"
-            type="text"
-            icon={<EyeOutlined />}
+        <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+          <ActionButton
+            size="sm"
+            variant="ghost"
+            className="gap-1.5 bg-info/10 px-2.5 text-info hover:bg-info/15"
             onClick={() => vm.handleOpenBatchDetail(item)}
-            style={{ fontSize: 12 }}
           >
+            <IconEye aria-hidden="true" />
             详情
-          </Button>
-          <Button
-            size="small"
-            type="link"
+          </ActionButton>
+          <ActionButton
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-creative/20 bg-creative/5 px-2.5 text-creative hover:bg-creative/10"
             onClick={() =>
               setManagedLocator({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id })
             }
           >
+            <IconSettings aria-hidden="true" />
             管理
-          </Button>
-          <Popconfirm
-            title="确认删除该增量批次？"
-            description="删除后该批次的话题与统计数据将不再参与汇总计算。"
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true, size: "small" }}
-            cancelButtonProps={{ size: "small" }}
-            onConfirm={() => vm.handleDeleteBatch(item.group_id, item.batch_id)}
+          </ActionButton>
+          <ActionButton
+            size="sm"
+            variant="ghost"
+            className="gap-1.5 px-2.5 text-destructive hover:bg-destructive/10"
+            onClick={() => setDeleteTarget(item)}
           >
-            <Button
-              size="small"
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              style={{ fontSize: 12 }}
-            >
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
+            <IconTrash aria-hidden="true" />
+            删除
+          </ActionButton>
+        </div>
       ),
     },
   ];
 
   return (
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>确认删除该增量批次？</DialogTitle>
+          <DialogDescription>删除后该批次的话题与统计数据将不再参与汇总计算。</DialogDescription>
+          <p className="m-0 break-all font-mono text-sm">{deleteTarget?.batch_id}</p>
+          <div className="flex justify-end gap-2">
+            <ActionButton
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setDeleteTarget(null)}
+            >
+              取消
+            </ActionButton>
+            <ActionButton
+              variant="destructive"
+              disabled={deleting}
+              onClick={async () => {
+                if (!deleteTarget || deleting) return;
+                setDeleting(true);
+                try {
+                  await vm.handleDeleteBatch(deleteTarget.group_id, deleteTarget.batch_id);
+                  setDeleteTarget(null);
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? "正在删除…" : "删除"}
+            </ActionButton>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* 群号选择与操作栏 */}
       <Card size="small">
         <Row justify="space-between" align="middle" gutter={[8, 8]}>
@@ -330,7 +368,7 @@ export const IncrementalTab: React.FC<IncrementalTabProps> = ({ vm }) => {
               dataSource={incrBatches}
               pagination={false}
               size="small"
-              scroll={{ x: 1000 }}
+              scroll={{ x: 1120 }}
               loading={loadingIncremental}
               locale={{
                 emptyText: (
