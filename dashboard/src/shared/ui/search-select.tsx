@@ -35,7 +35,7 @@ export function SearchSelect({ label, value, options, onChange, disabled }: Sear
           variant="outline"
           disabled={disabled}
           aria-label={`${label}：${selected?.label ?? (value || "请选择")}`}
-          className="w-full justify-between text-left"
+          className="w-full min-w-0 max-w-full justify-between text-left"
         >
           <span className="truncate">{selected?.label ?? (value || "请选择")}</span>
           <IconChevronDown aria-hidden="true" />
