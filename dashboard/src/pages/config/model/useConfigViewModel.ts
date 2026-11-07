@@ -298,15 +298,16 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
       let matchCount = 0;
       if (q) {
         if (
+          key.toLowerCase().includes(q) ||
           groupDesc.toLowerCase().includes(q) ||
           (group.hint && group.hint.toLowerCase().includes(q))
         ) {
           matchCount += visibleItems.length;
         } else {
-          for (const [, item] of visibleItems) {
+          for (const [fieldKey, item] of visibleItems) {
             const desc = (item.description || "").toLowerCase();
             const hint = (item.hint || "").toLowerCase();
-            if (desc.includes(q) || hint.includes(q)) {
+            if (fieldKey.toLowerCase().includes(q) || desc.includes(q) || hint.includes(q)) {
               matchCount++;
             }
           }
@@ -323,17 +324,29 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
     });
   }, [schema, searchQuery, formData]);
 
+  const matchingCategories = categories.filter(
+    (category) => category.matchCount === undefined || category.matchCount > 0,
+  );
+  const displayedCategory = matchingCategories.some((category) => category.key === activeCategory)
+    ? activeCategory
+    : (matchingCategories[0]?.key ?? activeCategory);
+
   // 当前激活分组的字段列表（应用搜索过滤，并过滤 invisible 与 condition 条件隐藏项）
   const currentGroupFields = useMemo(() => {
-    if (!schema[activeCategory]) return [];
+    if (!schema[displayedCategory]) return [];
     const q = searchQuery.trim().toLowerCase();
-    const groupItems = schema[activeCategory].items || {};
+    const group = schema[displayedCategory];
+    const groupItems = group.items || {};
+    const groupMatches =
+      displayedCategory.toLowerCase().includes(q) ||
+      group.description.toLowerCase().includes(q) ||
+      (group.hint ?? "").toLowerCase().includes(q);
 
     return Object.entries(groupItems)
       .filter(([fieldKey, item]) => {
         // 过滤 schema 中声明为不可见或当前不满足 condition 的字段
         if (!isFieldVisible(item, formData)) return false;
-        if (!q) return true;
+        if (!q || groupMatches) return true;
         const desc = (item.description || "").toLowerCase();
         const hint = (item.hint || "").toLowerCase();
         const key = fieldKey.toLowerCase();
@@ -343,11 +356,11 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
         key: fieldKey,
         schema: item,
         value:
-          formData[activeCategory]?.[fieldKey] !== undefined
-            ? formData[activeCategory][fieldKey]
+          formData[displayedCategory]?.[fieldKey] !== undefined
+            ? formData[displayedCategory][fieldKey]
             : item.default,
       }));
-  }, [schema, activeCategory, formData, searchQuery]);
+  }, [schema, displayedCategory, formData, searchQuery]);
 
   const renderingConfig = renderingRuntimeSchema.safeParse(formData.t2i_rendering ?? {});
 
@@ -373,9 +386,9 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
     providers,
     personas,
     categories,
-    activeCategory,
+    activeCategory: displayedCategory,
     currentGroupFields,
-    activeGroupMeta: schema[activeCategory],
+    activeGroupMeta: schema[displayedCategory],
     searchQuery,
     errors,
     groupErrorCounts,
