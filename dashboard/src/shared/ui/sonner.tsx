@@ -20,9 +20,9 @@ export function Toaster() {
       visibleToasts={3}
       duration={5000}
       icons={{
-        success: <IconCheck size={18} aria-hidden="true" />,
-        info: <IconInfoCircle size={18} aria-hidden="true" />,
-        warning: <IconAlertTriangle size={18} aria-hidden="true" />,
+        success: <IconCheck size={18} className="text-success" aria-hidden="true" />,
+        info: <IconInfoCircle size={18} className="text-info" aria-hidden="true" />,
+        warning: <IconAlertTriangle size={18} className="text-warning" aria-hidden="true" />,
         error: <IconAlertCircle size={18} className="text-destructive" aria-hidden="true" />,
         loading: <IconLoader2 size={18} className="animate-spin" aria-hidden="true" />,
         close: <IconX size={14} aria-hidden="true" />,

@@ -23,9 +23,19 @@ export function StatusTag({ status }: { status: string }) {
   ]);
   const item = states.get(status);
   const Icon = item?.icon ?? IconAlertCircle;
+  const tone =
+    status === "failed"
+      ? "bg-destructive/10 text-destructive"
+      : status === "running"
+        ? "bg-info/10 text-info"
+        : ["succeeded", "completed"].includes(status)
+          ? "bg-success/10 text-success"
+          : ["warning", "partial_success"].includes(status)
+            ? "bg-warning/10 text-warning"
+            : "bg-muted text-muted-foreground";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-medium ${status === "failed" ? "bg-destructive/10 text-destructive" : status === "running" ? "bg-accent text-foreground" : "bg-muted text-foreground"}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-medium ${tone}`}
     >
       <Icon
         className={`size-3.5 ${status === "running" ? "animate-spin" : ""}`}
