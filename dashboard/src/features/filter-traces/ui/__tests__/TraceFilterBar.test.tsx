@@ -10,6 +10,7 @@ function props(): ComponentProps<typeof TraceFilterBar> {
     loading: false,
     onSearchChange: vi.fn(),
     onGroupChange: vi.fn(),
+    onPlatformChange: vi.fn(),
     onStatusChange: vi.fn(),
     onTriggerTypeChange: vi.fn(),
     onDateRangeChange: vi.fn(),
@@ -65,8 +66,8 @@ it("搜索、群聊、状态与触发方式都可选择，刷新禁用时不重�
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "摄影" } });
   expect(base.onSearchChange).toHaveBeenCalledWith("摄影");
   fireEvent.click(screen.getByRole("button", { name: "选择群聊：全部群聊" }));
-  fireEvent.click(screen.getByRole("button", { name: "示例摄影群（photo-group）" }));
-  expect(base.onGroupChange).toHaveBeenCalledWith("photo-group");
+  fireEvent.click(screen.getByRole("button", { name: "示例摄影群（photo-group） · Telegram" }));
+  expect(base.onGroupChange).toHaveBeenCalledWith("photo-group", "telegram");
   fireEvent.change(screen.getByLabelText("执行状态"), { target: { value: "failed" } });
   fireEvent.change(screen.getByLabelText("触发方式"), { target: { value: "rerender_report" } });
   expect(base.onStatusChange).toHaveBeenCalledWith("failed");

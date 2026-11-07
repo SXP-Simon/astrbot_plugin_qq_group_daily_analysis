@@ -2,17 +2,19 @@ import { useEffect, useId, useRef, useState } from "react";
 import { IconRefresh, IconX } from "@tabler/icons-react";
 import { Input } from "../../../shared/ui/input";
 import { Button } from "../../../shared/ui/button";
-import { SearchSelect } from "../../../shared/ui/search-select";
+import { GroupFilters } from "../../../entities/group/ui/GroupFilters";
 import type { GroupItem } from "../../../entities/group/model/types";
 
 interface ReportFilterBarProps {
   search: string;
   selectedGroup?: string;
+  selectedPlatform?: string;
+  onPlatformChange?: (value?: string) => void;
   dateRange: [number, number] | null;
   groups: GroupItem[];
   loading: boolean;
   onSearchChange: (value: string) => void;
-  onGroupChange: (value?: string) => void;
+  onGroupChange: (value?: string, platform?: string) => void;
   onDateRangeChange: (dates: [number, number] | null) => void;
   onReset: () => void;
   onRefresh: () => void;
@@ -34,7 +36,7 @@ export function ReportFilterBar(props: ReportFilterBarProps) {
   }, [props.dateRange]);
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[2fr_1fr_2fr]">
         <label className="grid gap-1 text-sm text-muted-foreground">
           搜索报告
           <Input
@@ -44,21 +46,13 @@ export function ReportFilterBar(props: ReportFilterBarProps) {
             onChange={(event) => props.onSearchChange(event.target.value)}
           />
         </label>
-        <div className="grid gap-1 text-sm text-muted-foreground">
-          <span>群聊</span>
-          <SearchSelect
-            label="选择群聊"
-            value={props.selectedGroup ?? ""}
-            options={[
-              { value: "", label: "全部群聊" },
-              ...props.groups.map((group) => ({
-                value: group.group_id,
-                label: `${group.group_name || "未知群"}（${group.group_id}）`,
-              })),
-            ]}
-            onChange={(value) => props.onGroupChange(value || undefined)}
-          />
-        </div>
+        <GroupFilters
+          groups={props.groups}
+          selectedGroup={props.selectedGroup}
+          selectedPlatform={props.selectedPlatform}
+          onPlatformChange={props.onPlatformChange}
+          onGroupChange={props.onGroupChange}
+        />
       </div>
       <div className="grid grid-cols-2 items-end gap-3 sm:flex sm:flex-wrap">
         {(["start", "end"] as const).map((key) => (

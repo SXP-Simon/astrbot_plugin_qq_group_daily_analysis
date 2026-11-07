@@ -3,19 +3,21 @@ import { IconRefresh, IconX } from "@tabler/icons-react";
 import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
 import { NativeSelect } from "../../../shared/ui/native-select";
-import { SearchSelect } from "../../../shared/ui/search-select";
+import { GroupFilters } from "../../../entities/group/ui/GroupFilters";
 import type { GroupItem } from "../../../entities/group/model/types";
 
 interface TraceFilterBarProps {
   search: string;
   selectedGroup?: string;
+  selectedPlatform?: string;
+  onPlatformChange?: (value?: string) => void;
   statusFilter?: string;
   triggerTypeFilter?: string;
   dateRange?: [number, number] | null;
   groups: GroupItem[];
   loading: boolean;
   onSearchChange: (value: string) => void;
-  onGroupChange: (value?: string) => void;
+  onGroupChange: (value?: string, platform?: string) => void;
   onStatusChange: (value?: string) => void;
   onTriggerTypeChange?: (value?: string) => void;
   onDateRangeChange: (dates: [number, number] | null) => void;
@@ -40,7 +42,7 @@ export function TraceFilterBar(props: TraceFilterBarProps) {
   }, [props.dateRange]);
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[2fr_1fr_2fr_1fr_1fr]">
         <label className="grid gap-1 text-sm text-muted-foreground">
           搜索
           <Input
@@ -50,21 +52,13 @@ export function TraceFilterBar(props: TraceFilterBarProps) {
             onChange={(event) => props.onSearchChange(event.target.value)}
           />
         </label>
-        <div className="grid gap-1 text-sm text-muted-foreground">
-          <span>群聊</span>
-          <SearchSelect
-            label="选择群聊"
-            value={props.selectedGroup ?? ""}
-            onChange={(value) => props.onGroupChange(value || undefined)}
-            options={[
-              { value: "", label: "全部群聊" },
-              ...props.groups.map((group) => ({
-                value: group.group_id,
-                label: `${group.group_name || "未知群"}（${group.group_id}）`,
-              })),
-            ]}
-          />
-        </div>
+        <GroupFilters
+          groups={props.groups}
+          selectedGroup={props.selectedGroup}
+          selectedPlatform={props.selectedPlatform}
+          onPlatformChange={props.onPlatformChange}
+          onGroupChange={props.onGroupChange}
+        />
         {props.onTriggerTypeChange && (
           <label className="grid gap-1 text-sm text-muted-foreground">
             触发方式
