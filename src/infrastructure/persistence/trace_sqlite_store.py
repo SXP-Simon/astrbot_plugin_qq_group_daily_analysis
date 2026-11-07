@@ -843,6 +843,7 @@ class TraceSQLiteStore:
         start_time: float | None = None,
         end_time: float | None = None,
         sort_order: str = "desc",
+        platform: str | None = None,
     ) -> list[dict[str, object]]:
         """从数据库高效分页拉取历史报告产物（纯索引有序扫描，支持按群过滤与模糊检索）"""
         with self._get_connection() as conn:
@@ -850,29 +851,34 @@ class TraceSQLiteStore:
             params: list[object] = []
 
             if group_id:
-                conditions.append("group_id = ?")
+                conditions.append("a.group_id = ?")
                 params.append(group_id)
 
             if search and search.strip():
                 kw = f"%{search.strip()}%"
                 conditions.append(
-                    "(filename LIKE ? OR trace_id LIKE ? OR group_id LIKE ?)"
+                    "(a.filename LIKE ? OR a.trace_id LIKE ? OR a.group_id LIKE ?)"
                 )
                 params.extend([kw, kw, kw])
 
             if start_time is not None:
-                conditions.append("created_at >= ?")
+                conditions.append("a.created_at >= ?")
                 params.append(start_time)
             if end_time is not None:
-                conditions.append("created_at <= ?")
+                conditions.append("a.created_at <= ?")
                 params.append(end_time)
+            if platform is not None:
+                conditions.append("COALESCE(t.platform, '') = ?")
+                params.append(platform)
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
             direction = "ASC" if sort_order == "asc" else "DESC"
             query = f"""
-                SELECT filename, trace_id, group_id, file_format, relative_path, created_at
-                FROM report_artifacts
+                SELECT a.filename, a.trace_id, a.group_id, a.file_format, a.relative_path, a.created_at,
+                       COALESCE(t.platform, '') AS platform, COALESCE(t.group_name, '') AS group_name
+                FROM report_artifacts a
+                LEFT JOIN analysis_traces t ON a.trace_id = t.trace_id AND a.group_id = t.group_id
                 {where_clause}
-                ORDER BY created_at {direction}, filename {direction}
+                ORDER BY a.created_at {direction}, a.filename {direction}
             """
             if limit is not None:
                 query += " LIMIT ? OFFSET ?"
@@ -1154,6 +1160,7 @@ class TraceSQLiteStore:
         sort_order: str = "desc",
         before_time: float | None = None,
         before_id: str | None = None,
+        platform: str | None = None,
     ) -> tuple[list[dict[str, object]], int]:
         """分页筛选查询 Trace 列表（支持按群组、状态、触发方式、关键词、时间范围筛选与排序）"""
         conditions: list[str] = []
@@ -1162,6 +1169,9 @@ class TraceSQLiteStore:
         if group_id:
             conditions.append("t.group_id = ?")
             params.append(str(group_id))
+        if platform is not None:
+            conditions.append("COALESCE(t.platform, '') = ?")
+            params.append(platform)
         if status:
             if status == TaskStatus.SUCCEEDED.value:
                 conditions.append("t.status IN (?, ?)")
