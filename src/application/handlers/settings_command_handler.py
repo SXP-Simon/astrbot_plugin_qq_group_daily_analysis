@@ -401,9 +401,10 @@ class SettingsCommandHandler:
         window_end = time_mod.time()
         window_start = window_end - (analysis_days * 24 * 3600)
 
-        batches = await self.incremental_store.query_batches(
-            group_id, window_start, window_end
+        store = await self.incremental_store.for_session(
+            group_id, event.get_platform_id()
         )
+        batches = await store.query_batches(group_id, window_start, window_end)
 
         if not batches:
             start_str = datetime.fromtimestamp(window_start).strftime("%m-%d %H:%M")
