@@ -133,52 +133,58 @@ class TaskGuard:
             trace.metadata["llm_stage"] = stage
             trace.metadata["llm_group_id"] = group_id
 
-        wait_started_at = time_mod.monotonic()
-        logger.debug(
-            f"[LLM 队列观测] 等待分析槽位: group={group_id}, stage={stage}, "
-            f"available={getattr(self.llm_semaphore, '_value', None)}/"
-            f"{self._max_concurrent}, active={len(self._active_tasks)}"
-        )
-
-        while True:
-            try:
-                await asyncio.wait_for(
-                    self.llm_semaphore.acquire(), timeout=_LLM_SEMAPHORE_WARN_SECONDS
-                )
-                break
-            except TimeoutError:
-                logger.warning(
-                    f"[LLM 队列观测] 等待分析槽位超过 "
-                    f"{time_mod.monotonic() - wait_started_at:.0f}s: "
-                    f"group={group_id}, stage={stage}, "
-                    f"available={getattr(self.llm_semaphore, '_value', None)}/"
-                    f"{self._max_concurrent}, active={len(self._active_tasks)}"
-                )
-
-        waited_seconds = time_mod.monotonic() - wait_started_at
-        log_method = (
-            logger.info
-            if waited_seconds >= _LLM_SEMAPHORE_INFO_SECONDS
-            else logger.debug
-        )
-        log_method(
-            f"[LLM 队列观测] 已进入分析槽位: group={group_id}, stage={stage}, "
-            f"wait={waited_seconds:.2f}s, "
-            f"available={getattr(self.llm_semaphore, '_value', None)}/"
-            f"{self._max_concurrent}, active={len(self._active_tasks)}"
-        )
-
+        acquired = False
         run_started_at = time_mod.monotonic()
         try:
-            yield
-        finally:
-            self.llm_semaphore.release()
+            wait_started_at = time_mod.monotonic()
             logger.debug(
-                f"[LLM 队列观测] 已释放分析槽位: group={group_id}, stage={stage}, "
-                f"duration={time_mod.monotonic() - run_started_at:.2f}s, "
+                f"[LLM 队列观测] 等待分析槽位: group={group_id}, stage={stage}, "
                 f"available={getattr(self.llm_semaphore, '_value', None)}/"
                 f"{self._max_concurrent}, active={len(self._active_tasks)}"
             )
+
+            while True:
+                try:
+                    await asyncio.wait_for(
+                        self.llm_semaphore.acquire(),
+                        timeout=_LLM_SEMAPHORE_WARN_SECONDS,
+                    )
+                    acquired = True
+                    break
+                except TimeoutError:
+                    logger.warning(
+                        f"[LLM 队列观测] 等待分析槽位超过 "
+                        f"{time_mod.monotonic() - wait_started_at:.0f}s: "
+                        f"group={group_id}, stage={stage}, "
+                        f"available={getattr(self.llm_semaphore, '_value', None)}/"
+                        f"{self._max_concurrent}, active={len(self._active_tasks)}"
+                    )
+
+            waited_seconds = time_mod.monotonic() - wait_started_at
+            log_method = (
+                logger.info
+                if waited_seconds >= _LLM_SEMAPHORE_INFO_SECONDS
+                else logger.debug
+            )
+            log_method(
+                f"[LLM 队列观测] 已进入分析槽位: group={group_id}, stage={stage}, "
+                f"wait={waited_seconds:.2f}s, "
+                f"available={getattr(self.llm_semaphore, '_value', None)}/"
+                f"{self._max_concurrent}, active={len(self._active_tasks)}"
+            )
+
+            run_started_at = time_mod.monotonic()
+            yield
+        finally:
+            # 排队阶段同样可能取消；只释放本请求确实取得的槽位。
+            if acquired:
+                self.llm_semaphore.release()
+                logger.debug(
+                    f"[LLM 队列观测] 已释放分析槽位: group={group_id}, stage={stage}, "
+                    f"duration={time_mod.monotonic() - run_started_at:.2f}s, "
+                    f"available={getattr(self.llm_semaphore, '_value', None)}/"
+                    f"{self._max_concurrent}, active={len(self._active_tasks)}"
+                )
             if trace:
                 if previous_stage is missing_marker:
                     trace.metadata.pop("llm_stage", None)
