@@ -1,0 +1,31 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { getDevBridgeMode, setDevBridgeMode } from "../devBridge";
+
+afterEach(() => vi.unstubAllGlobals());
+
+it("切换模式同时更新显式 URL 和缓存，再刷新；保留其他参数与锚点", () => {
+  const location = {
+    href: "http://localhost/?devMode=mock&theme=dark#page-content",
+    search: "?devMode=mock&theme=dark",
+    reload: vi.fn(),
+  };
+  const localStorage = { getItem: vi.fn(() => "mock"), setItem: vi.fn() };
+  const replaceState = vi.fn((_state, _unused, value: URL) => {
+    location.href = value.href;
+    location.search = value.search;
+  });
+  vi.stubGlobal("window", { location, localStorage, history: { replaceState } });
+  setDevBridgeMode("proxy");
+  expect(getDevBridgeMode()).toBe("proxy");
+  expect(localStorage.setItem).toHaveBeenCalledWith("astrbot_dev_bridge_mode", "proxy");
+  expect(location.href).toBe("http://localhost/?devMode=proxy&theme=dark#page-content");
+  expect(location.reload).toHaveBeenCalledOnce();
+});
+
+it("无显式参数时校验缓存模式，未知旧值不会进入虚假的代理模式", () => {
+  vi.stubGlobal("window", {
+    location: { search: "" },
+    localStorage: { getItem: () => "unexpected" },
+  });
+  expect(getDevBridgeMode()).toBe("mock");
+});

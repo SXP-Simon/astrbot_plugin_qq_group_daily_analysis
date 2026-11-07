@@ -14,7 +14,8 @@ export function getDevBridgeMode(): DevBridgeMode {
       return urlParam;
     }
     if (window.localStorage && typeof window.localStorage.getItem === "function") {
-      return (window.localStorage.getItem("astrbot_dev_bridge_mode") as DevBridgeMode) || "mock";
+      const saved = window.localStorage.getItem("astrbot_dev_bridge_mode");
+      if (saved === "mock" || saved === "proxy") return saved;
     }
   } catch {
     // ignore
@@ -31,6 +32,10 @@ export function setDevBridgeMode(mode: DevBridgeMode) {
     } catch {
       // ignore
     }
+    // 显式 URL 参数优先于缓存；只更新缓存再刷新会一直停在旧模式。
+    const url = new URL(window.location.href);
+    url.searchParams.set("devMode", mode);
+    window.history.replaceState(null, "", url);
     window.location.reload();
   }
 }
