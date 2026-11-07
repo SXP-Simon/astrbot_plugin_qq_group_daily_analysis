@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { IconCopy } from "@tabler/icons-react";
-import type { PluginLogItem } from "../../../entities/log/model/types";
+import { TAG_STYLE_MAP, type PluginLogItem } from "../../../entities/log/model/types";
 import { copyToClipboard } from "../../../shared/lib/clipboard";
 import { Button } from "../../../shared/ui/button";
 
@@ -58,7 +58,9 @@ export function TraceLogViewer({ logs }: { logs: PluginLogItem[] }) {
               >
                 <span className="text-muted-foreground">{log.time_str} </span>
                 <span>[{log.level}] </span>
-                {log.tag && <span>[{log.tag}] </span>}
+                {log.tag && (
+                  <span title={log.tag}>[{TAG_STYLE_MAP[log.tag]?.label ?? log.tag}] </span>
+                )}
                 <span className="text-muted-foreground">[{log.location || log.logger_name}] </span>
                 {log.function_name && <span>[{log.function_name}()] </span>}
                 {log.message}
