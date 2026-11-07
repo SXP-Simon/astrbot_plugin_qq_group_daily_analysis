@@ -48,7 +48,7 @@ export const PluginDataPage: React.FC<{
 
   return (
     <div className="grid min-w-0 gap-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
         <TabsList
           aria-label="数据管理分区"
           className="flex w-fit max-w-full flex-wrap justify-start"
