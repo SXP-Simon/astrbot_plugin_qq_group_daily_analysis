@@ -1,8 +1,17 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { testTemplateCdn } from "../../../../entities/config/api/configApi";
 import type { TemplateCdnProbe as ProbeResult } from "../../../../entities/config/model/cdnProbe";
 import { TemplateCdnProbe } from "../TemplateCdnProbe";
+import { useTemplateCdnProbe } from "../../model/useTemplateCdnProbe";
 
 vi.mock("../../../../entities/config/api/configApi", () => ({ testTemplateCdn: vi.fn() }));
 
@@ -65,6 +74,15 @@ describe("模板 CDN 检测", () => {
       await screen.findByText("1 / 2 个链接确认可访问，其他结果请看下方说明"),
     ).toBeInTheDocument();
     expect(screen.getByText("资源请求失败：HTTP 404")).toBeInTheDocument();
+    const items = within(screen.getByRole("list", { name: "资源检测结果" })).getAllByRole(
+      "listitem",
+    );
+    const details = items[1].querySelector("details")!;
+    expect(details.open).toBe(false);
+    fireEvent.click(within(items[1]).getByText("查看检测详情"));
+    expect(details.open).toBe(true);
+    expect(within(items[1]).getByText("用时 0.46 秒 · HTTP 404")).toBeVisible();
+    expect(within(items[1]).getByRole("link")).toHaveAttribute("href", result.checks[1].url);
   });
 
   it("已有成功结果时修改地址会清空结果，且不会自动发起新检测", async () => {
@@ -99,5 +117,34 @@ describe("模板 CDN 检测", () => {
     expect(await screen.findByText("请求超时")).toBeInTheDocument();
     view.rerender(<TemplateCdnProbe baseUrl="" />);
     expect(screen.queryByText("请求超时")).not.toBeInTheDocument();
+  });
+
+  it("同一批次只发一次检测，修改地址后可以立即测试新的输入", async () => {
+    let finish!: (value: ProbeResult) => void;
+    vi.mocked(testTemplateCdn)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({ ...result, base_url: "https://new.example.com" });
+    const { result: hook, rerender } = renderHook(({ url }) => useTemplateCdnProbe(url), {
+      initialProps: { url: result.base_url },
+    });
+    let old!: Promise<void>;
+    act(() => {
+      old = hook.current.run();
+      void hook.current.run();
+    });
+    expect(testTemplateCdn).toHaveBeenCalledTimes(1);
+    rerender({ url: "https://new.example.com" });
+    await act(async () => hook.current.run());
+    await act(async () => {
+      finish(result);
+      await old;
+    });
+    expect(testTemplateCdn).toHaveBeenCalledTimes(2);
+    expect(hook.current.result?.base_url).toBe("https://new.example.com");
+    expect(hook.current.loading).toBe(false);
   });
 });
