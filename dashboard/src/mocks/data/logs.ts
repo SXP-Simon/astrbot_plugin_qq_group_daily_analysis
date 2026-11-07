@@ -3,7 +3,7 @@ import { PluginLogItem } from "../../entities/log/model/types";
 /**
  * 结构化拟真 Mock 插件日志矩阵 (全级别、多标签、多链路、多平台覆盖)
  * 包含：DEBUG、INFO、WARNING、ERROR、CRITICAL 完整等级，
- * 涵盖：LLM, Comic, Album, OneBot, QQOfficial, Telegram, Discord, Scheduler, Resilience, Render, WebUI 全标签
+ * 覆盖分析任务、渲染资源、平台接入、配置存储等功能分类
  */
 export const mockPluginLogs: PluginLogItem[] = [
   // 1. 系统初始化与 WebUI 交互日志
@@ -243,6 +243,33 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
     raw: "[00:59:00] [CRITICAL] [Resilience] SQLite database lock conflict detected after 5 retries.",
   },
 ];
+
+// 新增功能使用独立演示记录，避免只有筛选选项却没有可查看的内容。
+for (const [index, [tag, message]] of [
+  ["Typst", "演示：初音报告本地排版完成，生成 PNG。"],
+  ["T2I", "演示：自定义 T2I 请求成功，截图超时 20 秒，请求等待上限 40 秒。"],
+  ["Resources", "演示：已复用初音标题字体子集，大小 14.3 KiB。"],
+  ["Config", "演示：渲染方案已保存，配置备份已保留。"],
+  ["Storage", "演示：阶段检查点已保存，可用于续跑分析。"],
+  ["Messages", "演示：读取 1540 条消息，清洗后保留 1210 条。"],
+  ["Incremental", "演示：本轮增量摘要合并完成。"],
+  ["Tasks", "演示：任务已取消，后续渲染与发送已停止。"],
+  ["Dispatch", "演示：报告已发送，群文件上传完成。"],
+  ["Satori", "演示：Satori 已拉取群聊历史消息。"],
+  ["Platform", "演示：平台实例已就绪，群聊绑定配置已确认。"],
+  ["General", "演示：插件初始化完成。"],
+].entries()) {
+  mockPluginLogs.push({
+    id: `log-category-${tag}`,
+    timestamp: Date.now() - (index + 1) * 10000,
+    time_str: "",
+    level: "INFO",
+    logger_name: "demo",
+    tag,
+    message,
+    raw: "",
+  });
+}
 
 // 与后端日志的秒级时间戳和日期格式保持一致。
 for (const [index, entry] of mockPluginLogs.entries()) {

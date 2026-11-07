@@ -140,6 +140,25 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
     const filtered = mockHandlers["GET logs"]({ tag: "LLM" });
     expect(filtered.data.items.length).toBeGreaterThan(0);
     expect(filtered.data.items.every((item) => item.tag === "LLM")).toBe(true);
+    for (const key of [
+      "Typst",
+      "T2I",
+      "Resources",
+      "Config",
+      "Storage",
+      "Messages",
+      "Incremental",
+      "Tasks",
+      "Dispatch",
+      "Satori",
+      "Platform",
+      "General",
+    ]) {
+      expect(logs.data.available_tags.some((tag) => tag.key === key)).toBe(true);
+      const result = mockHandlers["GET logs"]({ tag: key });
+      expect(result.data.items.length).toBeGreaterThan(0);
+      expect(result.data.items.every((item) => item.tag === key)).toBe(true);
+    }
   });
 
   it("平台数据和真实接口一致，包含平台实例和显示名称", () => {
