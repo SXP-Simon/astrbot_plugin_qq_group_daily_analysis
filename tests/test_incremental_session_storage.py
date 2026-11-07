@@ -90,6 +90,20 @@ async def test_concurrent_sessions_do_not_lose_registry_entries():
 
 
 @pytest.mark.asyncio
+async def test_concurrent_batch_cleanup_and_saves_keep_complete_session_index():
+    root = IncrementalStore(MemoryStar())
+    first = await root.for_session("123", "first")
+    same = await root.for_session("123", "first")
+    await first.save_batch(IncrementalBatch(group_id="123", batch_id="old", timestamp=10))
+    results = await asyncio.gather(
+        *(first.save_batch(IncrementalBatch(group_id="123", batch_id=f"new-{i}", timestamp=200)) for i in range(20)),
+        same.cleanup_old_batches("123", 50),
+    )
+    assert all(results[:20])
+    assert {batch.batch_id for batch in await same.query_batches("123", 0, 300)} == {f"new-{i}" for i in range(20)}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("broken", [[{"timestamp": 1}], "not-an-index"])
 async def test_malformed_legacy_index_is_not_claimed_as_empty(broken):
     star = MemoryStar()

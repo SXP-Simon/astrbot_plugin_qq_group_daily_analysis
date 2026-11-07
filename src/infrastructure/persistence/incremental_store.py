@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import weakref
 from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
 from ...domain.entities.incremental_state import (
@@ -86,6 +87,26 @@ class IncrementalStore(IIncrementalStore):
             _root._migration_locks if _root else {}
         )
         self._registry_lock = _root._registry_lock if _root else asyncio.Lock()
+        self._data_locks: weakref.WeakValueDictionary[GroupSession, asyncio.Lock] = (
+            _root._data_locks if _root else weakref.WeakValueDictionary()
+        )
+
+    def _data_lock(self, group_id: str) -> asyncio.Lock:
+        """为批次索引读改写和完整读取共享短锁，不占用 LLM 执行时间。
+
+        Args:
+            group_id: 当前仓储范围内的群标识。
+
+        Returns:
+            同一会话共享、无引用后自动回收的进程内锁。
+        """
+        self._group_namespace(group_id)
+        session = self._scope or GroupSession("", group_id)
+        lock = self._data_locks.get(session)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._data_locks[session] = lock
+        return lock
 
     async def _register_group(self, group_id: str) -> bool:
         """在同一仓储实例的并发任务间完整更新注册表。
@@ -366,47 +387,54 @@ class IncrementalStore(IIncrementalStore):
         Returns:
             bool: 保存是否成功
         """
-        group_id = batch.group_id
-        await self._assert_scope(group_id)
-        batch_key = self._batch_key(group_id, batch.batch_id)
+        async with self._data_lock(batch.group_id):
+            group_id = batch.group_id
+            await self._assert_scope(group_id)
+            batch_key = self._batch_key(group_id, batch.batch_id)
 
-        try:
-            # 1. 保存批次数据
-            await cast("KeyValueWriter", self.plugin).put_kv_data(
-                batch_key, batch.to_dict()
-            )
-
-            # 2. 更新索引
-            index = await self._get_index(group_id)
-            existing_entry = next(
-                (entry for entry in index if entry.get("batch_id") == batch.batch_id),
-                None,
-            )
-            if existing_entry is None:
-                index.append(
-                    {
-                        "batch_id": batch.batch_id,
-                        "timestamp": batch.timestamp,
-                        "last_message_timestamp": batch.last_message_timestamp,
-                    }
+            try:
+                # 1. 保存批次数据
+                await cast("KeyValueWriter", self.plugin).put_kv_data(
+                    batch_key, batch.to_dict()
                 )
-            else:
-                existing_entry["timestamp"] = batch.timestamp
-                existing_entry["last_message_timestamp"] = batch.last_message_timestamp
-            await self._save_index(group_id, index)
-            await self._register_group(group_id)
 
-            logger.debug(
-                f"已保存批次 {batch.batch_id[:8]}... "
-                f"(群 {group_id}, 消息数={batch.messages_count})"
-            )
-            return True
-        except Exception as e:
-            logger.error(
-                f"保存批次失败 (群 {group_id}, 批次 {batch.batch_id[:8]}...): {e}",
-                exc_info=True,
-            )
-            return False
+                # 2. 更新索引
+                index = await self._get_index(group_id)
+                existing_entry = next(
+                    (
+                        entry
+                        for entry in index
+                        if entry.get("batch_id") == batch.batch_id
+                    ),
+                    None,
+                )
+                if existing_entry is None:
+                    index.append(
+                        {
+                            "batch_id": batch.batch_id,
+                            "timestamp": batch.timestamp,
+                            "last_message_timestamp": batch.last_message_timestamp,
+                        }
+                    )
+                else:
+                    existing_entry["timestamp"] = batch.timestamp
+                    existing_entry["last_message_timestamp"] = (
+                        batch.last_message_timestamp
+                    )
+                await self._save_index(group_id, index)
+                await self._register_group(group_id)
+
+                logger.debug(
+                    f"已保存批次 {batch.batch_id[:8]}... "
+                    f"(群 {group_id}, 消息数={batch.messages_count})"
+                )
+                return True
+            except Exception as e:
+                logger.error(
+                    f"保存批次失败 (群 {group_id}, 批次 {batch.batch_id[:8]}...): {e}",
+                    exc_info=True,
+                )
+                return False
 
     async def query_batches(
         self,
@@ -428,47 +456,48 @@ class IncrementalStore(IIncrementalStore):
         Returns:
             list[IncrementalBatch]: 符合窗口范围的批次列表，按时间戳升序
         """
-        index = await self._get_index(group_id)
+        async with self._data_lock(group_id):
+            index = await self._get_index(group_id)
 
-        # 筛选在窗口范围内的批次
-        matching_entries = [
-            entry
-            for entry in index
-            if window_start <= entry.get("timestamp", 0) <= window_end
-        ]
+            # 筛选在窗口范围内的批次
+            matching_entries = [
+                entry
+                for entry in index
+                if window_start <= entry.get("timestamp", 0) <= window_end
+            ]
 
-        # 按时间戳升序排列
-        matching_entries.sort(key=lambda x: x.get("timestamp", 0))
+            # 按时间戳升序排列
+            matching_entries.sort(key=lambda x: x.get("timestamp", 0))
 
-        batches: list[IncrementalBatch] = []
-        for entry in matching_entries:
-            batch_id = entry.get("batch_id", "")
-            if not batch_id:
-                continue
+            batches: list[IncrementalBatch] = []
+            for entry in matching_entries:
+                batch_id = entry.get("batch_id", "")
+                if not batch_id:
+                    continue
 
-            batch_key = self._batch_key(group_id, batch_id)
-            try:
-                data = await self.plugin.get_kv_data(batch_key, None)
-                if data is not None:
-                    batch = IncrementalBatch.from_dict(data)
-                    batches.append(batch)
-                else:
-                    logger.warning(
-                        f"批次数据缺失 (群 {group_id}, 批次 {batch_id[:8]}...)"
+                batch_key = self._batch_key(group_id, batch_id)
+                try:
+                    data = await self.plugin.get_kv_data(batch_key, None)
+                    if data is not None:
+                        batch = IncrementalBatch.from_dict(data)
+                        batches.append(batch)
+                    else:
+                        logger.warning(
+                            f"批次数据缺失 (群 {group_id}, 批次 {batch_id[:8]}...)"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"加载批次数据失败 (群 {group_id}, 批次 {batch_id[:8]}...): {e}",
+                        exc_info=True,
                     )
-            except Exception as e:
-                logger.error(
-                    f"加载批次数据失败 (群 {group_id}, 批次 {batch_id[:8]}...): {e}",
-                    exc_info=True,
-                )
 
-        logger.debug(
-            f"窗口查询完成: 群 {group_id}, "
-            f"窗口 [{window_start:.0f}, {window_end:.0f}], "
-            f"匹配 {len(batches)}/{len(index)} 个批次"
-        )
+            logger.debug(
+                f"窗口查询完成: 群 {group_id}, "
+                f"窗口 [{window_start:.0f}, {window_end:.0f}], "
+                f"匹配 {len(batches)}/{len(index)} 个批次"
+            )
 
-        return batches
+            return batches
 
     # ================================================================
     # 最后分析消息游标（跨批次去重用）
@@ -595,22 +624,23 @@ class IncrementalStore(IIncrementalStore):
         Returns:
             bool: 是否成功删除。
         """
-        try:
-            index = await self._get_index(group_id)
-            retained = [e for e in index if e.get("batch_id") != batch_id]
-            if len(retained) == len(index):
-                return False
+        async with self._data_lock(group_id):
+            try:
+                index = await self._get_index(group_id)
+                retained = [e for e in index if e.get("batch_id") != batch_id]
+                if len(retained) == len(index):
+                    return False
 
-            await self._save_index(group_id, retained)
-            batch_key = self._batch_key(group_id, batch_id)
-            await cast("KeyValueWriter", self.plugin).put_kv_data(batch_key, None)
-            logger.info(f"已删除增量批次: 群 {group_id}, 批次 {batch_id}")
-            return True
-        except Exception as e:
-            logger.error(
-                f"删除批次失败 (群 {group_id}, 批次 {batch_id}): {e}", exc_info=True
-            )
-            return False
+                await self._save_index(group_id, retained)
+                batch_key = self._batch_key(group_id, batch_id)
+                await cast("KeyValueWriter", self.plugin).put_kv_data(batch_key, None)
+                logger.info(f"已删除增量批次: 群 {group_id}, 批次 {batch_id}")
+                return True
+            except Exception as e:
+                logger.error(
+                    f"删除批次失败 (群 {group_id}, 批次 {batch_id}): {e}", exc_info=True
+                )
+                return False
 
     async def reset_group(self, group_id: str) -> int:
         """一键清空指定群的所有增量批次数据并将分析游标归零。
@@ -621,29 +651,30 @@ class IncrementalStore(IIncrementalStore):
         Returns:
             int: 已删除的批次总数。
         """
-        try:
-            index = await self._get_index(group_id)
-            count = len(index)
-            for entry in index:
-                b_id = entry.get("batch_id")
-                if b_id:
-                    await cast("KeyValueWriter", self.plugin).put_kv_data(
-                        self._batch_key(group_id, b_id), None
-                    )
+        async with self._data_lock(group_id):
+            try:
+                index = await self._get_index(group_id)
+                count = len(index)
+                for entry in index:
+                    b_id = entry.get("batch_id")
+                    if b_id:
+                        await cast("KeyValueWriter", self.plugin).put_kv_data(
+                            self._batch_key(group_id, b_id), None
+                        )
 
-            # 清空索引与游标
-            await self._save_index(group_id, [])
-            await cast("KeyValueWriter", self.plugin).put_kv_data(
-                self._last_ts_key(group_id),
-                {"timestamp": 0, "message_ids": []},
-            )
-            logger.info(
-                f"已重置群 {group_id} 的全部增量批次数据与游标 (共清理 {count} 条批次)"
-            )
-            return count
-        except Exception as e:
-            logger.error(f"重置群增量数据失败 (群 {group_id}): {e}", exc_info=True)
-            return 0
+                # 清空索引与游标
+                await self._save_index(group_id, [])
+                await cast("KeyValueWriter", self.plugin).put_kv_data(
+                    self._last_ts_key(group_id),
+                    {"timestamp": 0, "message_ids": []},
+                )
+                logger.info(
+                    f"已重置群 {group_id} 的全部增量批次数据与游标 (共清理 {count} 条批次)"
+                )
+                return count
+            except Exception as e:
+                logger.error(f"重置群增量数据失败 (群 {group_id}): {e}", exc_info=True)
+                return 0
 
     async def cleanup_old_batches(self, group_id: str, before_timestamp: float) -> int:
         """
@@ -661,47 +692,50 @@ class IncrementalStore(IIncrementalStore):
         Returns:
             int: 已清理的批次数量
         """
-        index = await self._get_index(group_id)
-        if not index:
-            return 0
+        async with self._data_lock(group_id):
+            index = await self._get_index(group_id)
+            if not index:
+                return 0
 
-        # 分离过期和保留
-        expired: list[BatchIndexEntry] = []
-        retained: list[BatchIndexEntry] = []
-        for entry in index:
-            if entry.get("timestamp", 0) < before_timestamp:
-                expired.append(entry)
-            else:
-                retained.append(entry)
+            # 分离过期和保留
+            expired: list[BatchIndexEntry] = []
+            retained: list[BatchIndexEntry] = []
+            for entry in index:
+                if entry.get("timestamp", 0) < before_timestamp:
+                    expired.append(entry)
+                else:
+                    retained.append(entry)
 
-        if not expired:
-            return 0
+            if not expired:
+                return 0
 
-        # 删除过期批次数据
-        deleted_count = 0
-        for entry in expired:
-            batch_id = entry.get("batch_id", "")
-            if not batch_id:
-                continue
-            batch_key = self._batch_key(group_id, batch_id)
-            try:
-                await cast("KeyValueWriter", self.plugin).put_kv_data(batch_key, None)
-                deleted_count += 1
-            except Exception as e:
-                logger.error(
-                    f"删除过期批次失败 (群 {group_id}, 批次 {batch_id[:8]}...): {e}",
-                    exc_info=True,
-                )
+            # 删除过期批次数据
+            deleted_count = 0
+            for entry in expired:
+                batch_id = entry.get("batch_id", "")
+                if not batch_id:
+                    continue
+                batch_key = self._batch_key(group_id, batch_id)
+                try:
+                    await cast("KeyValueWriter", self.plugin).put_kv_data(
+                        batch_key, None
+                    )
+                    deleted_count += 1
+                except Exception as e:
+                    logger.error(
+                        f"删除过期批次失败 (群 {group_id}, 批次 {batch_id[:8]}...): {e}",
+                        exc_info=True,
+                    )
 
-        # 更新索引（仅保留未过期条目）
-        await self._save_index(group_id, retained)
+            # 更新索引（仅保留未过期条目）
+            await self._save_index(group_id, retained)
 
-        logger.debug(
-            f"清理过期批次: 群 {group_id}, "
-            f"删除 {deleted_count} 个, 保留 {len(retained)} 个"
-        )
+            logger.debug(
+                f"清理过期批次: 群 {group_id}, "
+                f"删除 {deleted_count} 个, 保留 {len(retained)} 个"
+            )
 
-        return deleted_count
+            return deleted_count
 
     # ================================================================
     # 状态查询
@@ -751,36 +785,40 @@ class IncrementalStore(IIncrementalStore):
         Returns:
             当前页与索引总数。旧索引缺少消息时间时返回未知，不全量读取补算。
         """
-        page_size = min(100, max(1, page_size))
-        index = await self._get_index(group_id)
-        index.sort(
-            key=lambda entry: (entry["timestamp"], entry["batch_id"]), reverse=True
-        )
-        total = len(index)
-        page = min(max(1, page), max(1, (total + page_size - 1) // page_size))
-        items: list[IncrementalBatchPayload] = []
-        for entry in index[(page - 1) * page_size : page * page_size]:
-            batch = await self.get_batch_detail(group_id, entry["batch_id"])
-            if batch is None:
-                # 并发删除或失效索引不能冒充完整的一页。
-                raise ValueError("批次记录已变化或缺失，请刷新后重试")
-            items.append(
-                {
-                    "batch_id": batch.batch_id,
-                    "group_id": batch.group_id,
-                    "timestamp": batch.timestamp,
-                    "last_message_timestamp": batch.last_message_timestamp,
-                    "messages_count": batch.messages_count,
-                    "characters_count": batch.characters_count,
-                    "topics": [
-                        {"topic": topic.get("topic", "")} for topic in batch.topics
-                    ],
-                    "token_usage": batch.token_usage,
-                }
+        async with self._data_lock(group_id):
+            page_size = min(100, max(1, page_size))
+            index = await self._get_index(group_id)
+            index.sort(
+                key=lambda entry: (entry["timestamp"], entry["batch_id"]), reverse=True
             )
-        latest = (
-            max((entry.get("last_message_timestamp", 0) for entry in index), default=0)
-            if all("last_message_timestamp" in entry for entry in index)
-            else None
-        )
-        return IncrementalBatchPage(items, total, page, page_size, latest)
+            total = len(index)
+            page = min(max(1, page), max(1, (total + page_size - 1) // page_size))
+            items: list[IncrementalBatchPayload] = []
+            for entry in index[(page - 1) * page_size : page * page_size]:
+                batch = await self.get_batch_detail(group_id, entry["batch_id"])
+                if batch is None:
+                    # 并发删除或失效索引不能冒充完整的一页。
+                    raise ValueError("批次记录已变化或缺失，请刷新后重试")
+                items.append(
+                    {
+                        "batch_id": batch.batch_id,
+                        "group_id": batch.group_id,
+                        "timestamp": batch.timestamp,
+                        "last_message_timestamp": batch.last_message_timestamp,
+                        "messages_count": batch.messages_count,
+                        "characters_count": batch.characters_count,
+                        "topics": [
+                            {"topic": topic.get("topic", "")} for topic in batch.topics
+                        ],
+                        "token_usage": batch.token_usage,
+                    }
+                )
+            latest = (
+                max(
+                    (entry.get("last_message_timestamp", 0) for entry in index),
+                    default=0,
+                )
+                if all("last_message_timestamp" in entry for entry in index)
+                else None
+            )
+            return IncrementalBatchPage(items, total, page, page_size, latest)

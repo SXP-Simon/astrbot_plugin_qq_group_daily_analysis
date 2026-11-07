@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import time
 from pathlib import Path
 from typing import Any
@@ -851,12 +853,18 @@ async def test_incremental_page_reads_only_selected_records(dummy_plugin_kv):
     assert page.last_message_timestamp == 1044
     # 总数和排序源于同一次索引读取，新增批次在下次刷新才出现。
     original = store.get_batch_detail
+    pending_write = None
     async def concurrent_read(group_id, batch_id):
+        nonlocal pending_write
         if batch_id == "b-44":
-            await store.save_batch(IncrementalBatch(group_id="g", batch_id="new", timestamp=200))
+            pending_write = asyncio.create_task(store.save_batch(IncrementalBatch(group_id="g", batch_id="new", timestamp=200)))
+            await asyncio.sleep(0)
+            assert not pending_write.done()
         return await original(group_id, batch_id)
     with patch.object(store, "get_batch_detail", side_effect=concurrent_read):
         snapshot = await store.list_batch_page("g", 1, 20)
+    assert pending_write is not None
+    assert await pending_write
     assert snapshot.total == 45
     assert snapshot.items[0]["batch_id"] == "b-44"
     assert (await store.list_batch_page("g", 1, 20)).total == 46
