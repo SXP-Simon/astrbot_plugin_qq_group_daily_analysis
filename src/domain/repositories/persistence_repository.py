@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..entities.incremental_state import IncrementalBatch
+    from ..entities.incremental_state import IncrementalBatch, IncrementalBatchPage
     from ..value_objects.analysis_results import (
         CheckpointDetailPayload,
         CheckpointSummaryPayload,
@@ -62,10 +62,19 @@ class IIncrementalStore(ABC):
         """获取所有已记录增量批次的群组列表"""
 
     @abstractmethod
-    async def get_all_batches_with_details(
-        self, group_id: str
-    ) -> list[dict[str, object]]:
-        """获取指定群组的所有增量批次详情列表"""
+    async def list_batch_page(
+        self, group_id: str, page: int = 1, page_size: int = 20
+    ) -> IncrementalBatchPage:
+        """读取一页批次；分页总数与排序使用同一份索引。
+
+        Args:
+            group_id: 群组 ID。
+            page: 从 1 开始的页码。
+            page_size: 每页数量。
+
+        Returns:
+            分页概览及全部索引可确认的最新消息时间。
+        """
 
     @abstractmethod
     async def get_batch_detail(
