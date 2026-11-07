@@ -833,10 +833,34 @@ export const mockHandlers = {
   },
   "GET data/checkpoints/groups": () => ({
     status: "ok",
-    data: { groups: [...new Set(mockCheckpoints.items.map((item) => item.group_id))] },
+    data: {
+      groups: [...new Set(mockCheckpoints.items.map((item) => item.group_id))],
+      sessions: [
+        ...new Map(
+          mockCheckpoints.items.map((item) => {
+            const trace = mockTraces.find(
+              (trace) => trace.trace_id === item.trace_id && trace.group_id === item.group_id,
+            );
+            const session = {
+              group_id: item.group_id,
+              group_name: trace?.group_name || "",
+              platform: trace?.platform || "",
+            };
+            return [JSON.stringify([session.platform, session.group_id]), session];
+          }),
+        ).values(),
+      ],
+    },
   }),
   "GET data/checkpoints": (params?: Record<string, unknown>) => {
-    let items = [...mockCheckpoints.items];
+    let items = mockCheckpoints.items.map((item) => {
+      const trace = mockTraces.find(
+        (trace) => trace.trace_id === item.trace_id && trace.group_id === item.group_id,
+      );
+      return { ...item, platform: trace?.platform || "", group_name: trace?.group_name || "" };
+    });
+    if (typeof params?.platform === "string")
+      items = items.filter((item) => item.platform === params.platform);
     for (const key of ["group_id", "date_str", "stage_name", "trace_id"] as const) {
       if (params?.[key]) items = items.filter((item) => item[key] === params[key]);
     }

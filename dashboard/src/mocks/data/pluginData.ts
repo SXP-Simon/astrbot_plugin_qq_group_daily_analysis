@@ -198,4 +198,14 @@ mockCheckpoints.items.push({
   data_size_bytes: 0,
   created_at: Math.floor(Date.now() / 1000) - 86400,
 });
+mockCheckpoints.items.push({
+  checkpoint_id: "demo-platform-same-group-checkpoint",
+  group_id: "123456789",
+  date_str: "2026-11-06",
+  stage_name: "LLM_ANALYSIS",
+  trace_id: "trace-platform-same-group-example",
+  data_size_bytes: 128,
+  created_at: Math.floor(Date.now() / 1000) - 86400,
+  has_data: true,
+});
 mockCheckpoints.total = mockCheckpoints.items.length;

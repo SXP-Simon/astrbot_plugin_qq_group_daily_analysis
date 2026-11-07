@@ -58,3 +58,21 @@ it("删除快照同步到列表与详情，不影响同一天其他任务", () =
     Object.assign(mockCheckpoints, original);
   }
 });
+
+it("快照会话列表与分页记录使用同一任务身份", () => {
+  const sessions = mockHandlers["GET data/checkpoints/groups"]().data.sessions;
+  expect(sessions.length).toBeGreaterThan(0);
+  for (const session of sessions) {
+    const result = mockHandlers["GET data/checkpoints"]({
+      platform: session.platform,
+      group_id: session.group_id,
+      limit: 1000,
+    }).data;
+    expect(result.total).toBeGreaterThan(0);
+    expect(
+      result.items.every(
+        (item) => item.platform === session.platform && item.group_id === session.group_id,
+      ),
+    ).toBe(true);
+  }
+});
