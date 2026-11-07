@@ -88,3 +88,40 @@ it("清空先确认，默认焦点在取消；失败保留弹窗和记录，成�
   expect(screen.getByText("暂无匹配的插件运行日志")).toBeInTheDocument();
   await waitFor(() => expect(trigger).toHaveFocus());
 });
+
+it("各等级保留明确文字，警告与错误突出整行，实时与暂停状态可区分", async () => {
+  const levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const;
+  vi.mocked(fetchPluginLogs).mockResolvedValue({
+    items: levels.map((level, index) => ({
+      id: `example-${level}`,
+      timestamp: index,
+      time_str: "12:00:00.000",
+      level,
+      logger_name: "Render",
+      tag: "Render",
+      message: `示例 ${level} 正文`,
+      raw: `[${level}] 示例正文`,
+    })),
+    total: levels.length,
+    available_tags: [],
+  });
+  render(<Page />);
+  const region = screen.getByRole("region", { name: "日志内容" });
+  await within(region).findByText("CRITICAL");
+  for (const level of levels) {
+    expect(within(region).getByText(level)).toBeVisible();
+    expect(within(region).getByText(`示例 ${level} 正文`)).toBeVisible();
+  }
+  expect(within(region).getByText("DEBUG")).toHaveClass("text-creative");
+  expect(within(region).getByText("INFO")).toHaveClass("text-info");
+  expect(within(region).getByText("WARNING").parentElement?.parentElement).toHaveClass(
+    "border-warning",
+  );
+  expect(within(region).getByText("ERROR").parentElement?.parentElement).toHaveClass(
+    "border-destructive",
+  );
+  expect(within(region).getByText("CRITICAL")).toHaveClass("text-destructive-foreground");
+  expect(screen.getByText("实时更新")).toHaveClass("text-success");
+  fireEvent.click(screen.getByRole("button", { name: "暂停更新" }));
+  expect(screen.getByText("已暂停更新")).toHaveClass("text-warning");
+});

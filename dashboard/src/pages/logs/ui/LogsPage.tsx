@@ -1,5 +1,10 @@
 import { useRef, useState } from "react";
-import { IconAlertTriangle, IconArrowUp } from "@tabler/icons-react";
+import {
+  IconAlertCircle,
+  IconAlertTriangle,
+  IconArrowUp,
+  IconPlayerPause,
+} from "@tabler/icons-react";
 import type { useLogsViewModel } from "../model/useLogsViewModel";
 import { LogFilterBar } from "../../../features/filter-logs/ui/LogFilterBar";
 import { TAG_STYLE_MAP } from "../../../entities/log/model/types";
@@ -10,6 +15,14 @@ interface LogsPageProps {
   viewModel: ReturnType<typeof useLogsViewModel>;
   onViewTrace: (traceId: string) => void;
 }
+
+const levelStyles: Record<string, string> = {
+  DEBUG: "bg-creative/15 text-creative",
+  INFO: "bg-info/15 text-info",
+  WARNING: "bg-warning/15 text-warning",
+  ERROR: "bg-destructive/15 text-destructive",
+  CRITICAL: "bg-destructive text-destructive-foreground",
+};
 
 export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
   const logBox = useRef<HTMLDivElement>(null);
@@ -46,10 +59,21 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
         </p>
       )}
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span>
-          显示 {vm.logs.length} 条 / 匹配 {vm.total} 条 ·{" "}
-          {vm.autoRefresh ? "实时更新" : "已暂停更新"}
-        </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span>
+            显示 {vm.logs.length} 条 / 匹配 {vm.total} 条
+          </span>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium ${vm.autoRefresh ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}
+          >
+            {vm.autoRefresh ? (
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
+            ) : (
+              <IconPlayerPause aria-hidden="true" className="size-3.5" />
+            )}
+            {vm.autoRefresh ? "实时更新" : "已暂停更新"}
+          </span>
+        </div>
         {scrolled && (
           <Button
             size="sm"
@@ -81,7 +105,7 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
             selection?.addRange(range);
           }
         }}
-        className="h-[60dvh] min-h-80 overflow-auto rounded-xl border border-solid border-border bg-card p-3 font-mono text-xs leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-4"
+        className="h-[60dvh] min-h-80 space-y-1 overflow-auto rounded-xl border border-solid border-border bg-card p-3 font-mono text-[13px] leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-4"
       >
         {!vm.logs.length ? (
           <p className="py-12 text-center text-muted-foreground">
@@ -91,22 +115,24 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
           vm.logs.map((item) => (
             <div
               key={item.id}
-              className="border-0 border-b border-solid border-border/50 py-2 last:border-0"
+              className={`border-0 border-l-2 border-solid px-3 py-2 ${
+                ["ERROR", "CRITICAL"].includes(item.level)
+                  ? "border-destructive bg-destructive/5"
+                  : item.level === "WARNING"
+                    ? "border-warning bg-warning/5"
+                    : "border-transparent"
+              }`}
             >
               <div className="flex flex-wrap items-center gap-x-3 text-muted-foreground">
                 <time>{item.time_str}</time>
                 <span
-                  className={
-                    ["ERROR", "CRITICAL"].includes(item.level)
-                      ? "text-destructive"
-                      : "text-foreground"
-                  }
+                  className={`inline-flex items-center gap-1 rounded-md px-2 text-xs font-medium ${levelStyles[item.level] ?? "bg-muted text-muted-foreground"}`}
                 >
                   {item.level === "WARNING" && (
-                    <IconAlertTriangle
-                      aria-hidden="true"
-                      className="mr-1 inline size-3.5 align-middle"
-                    />
+                    <IconAlertTriangle aria-hidden="true" className="size-3.5" />
+                  )}
+                  {["ERROR", "CRITICAL"].includes(item.level) && (
+                    <IconAlertCircle aria-hidden="true" className="size-3.5" />
                   )}
                   {item.level}
                 </span>
@@ -117,7 +143,7 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
                   <Button
                     size="sm"
                     variant="link"
-                    className="h-auto whitespace-normal break-all p-0 font-mono text-xs"
+                    className="h-auto whitespace-normal break-all p-0 font-mono text-xs text-info decoration-info/40 hover:text-info hover:decoration-info"
                     onClick={() => {
                       if (item.trace_id) onViewTrace(item.trace_id);
                     }}
