@@ -26,6 +26,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-creative: var(--creative);
   --font-sans: "LXGW WenKai Screen", sans-serif;
   --font-mono: "Cascadia Code", Consolas, "Liberation Mono", monospace;
   --radius-sm: calc(var(--radius) - 4px);
@@ -49,6 +53,12 @@
   --border: #dedfd7;
   --input: #c7cabf;
   --ring: #6a852e;
+  --info: #446d91;
+  --success: #477360;
+  --warning: #91692f;
+  --creative: #796397;
+  --chart-input: rgba(90, 145, 172, 0.58);
+  --chart-output: rgba(149, 122, 177, 0.54);
   --radius: 0.75rem;
   color-scheme: light;
 }
@@ -68,6 +78,12 @@
   --border: #38383d;
   --input: #52525b;
   --ring: #b5ce85;
+  --info: #a3c6df;
+  --success: #a0c9b1;
+  --warning: #dfc296;
+  --creative: #c7b3df;
+  --chart-input: rgba(126, 181, 207, 0.58);
+  --chart-output: rgba(177, 151, 204, 0.54);
   color-scheme: dark;
 }
 
