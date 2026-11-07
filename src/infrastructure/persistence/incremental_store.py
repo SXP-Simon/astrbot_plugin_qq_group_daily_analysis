@@ -15,6 +15,9 @@ KV 键设计：
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import json
 from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
 from ...domain.entities.incremental_state import (
@@ -23,6 +26,7 @@ from ...domain.entities.incremental_state import (
     IncrementalBatchPayload,
 )
 from ...domain.repositories.persistence_repository import IIncrementalStore
+from ...domain.value_objects.incremental_session import IncrementalSession
 from ...shared.type_guards import is_object_list, is_string_mapping
 from ...utils.logger import logger
 
@@ -60,31 +64,197 @@ class IncrementalStore(IIncrementalStore):
 
     plugin: Star
 
-    def __init__(self, star_instance: Star) -> None:
+    def __init__(
+        self,
+        star_instance: Star,
+        *,
+        _scope: IncrementalSession | None = None,
+        _root: IncrementalStore | None = None,
+    ) -> None:
         """
         初始化批次持久化仓储。
 
         Args:
-            star_instance: Star 插件实例，用于访问底层 KV 存储引擎
+            star_instance: Star 插件实例，用于访问底层 KV 存储引擎。
+            _scope: 仅由 for_session 创建的会话身份。
+            _root: 共享注册表锁和迁移锁的根仓储。
         """
         self.plugin = star_instance
+        self._scope = _scope
+        self._root = _root or self
+        self._migration_locks: dict[str, asyncio.Lock] = (
+            _root._migration_locks if _root else {}
+        )
+        self._registry_lock = _root._registry_lock if _root else asyncio.Lock()
 
-    async def _register_group(self, group_id: str) -> None:
-        """记录拥有增量数据的群号到全局注册表"""
+    async def _register_group(self, group_id: str) -> bool:
+        """在同一仓储实例的并发任务间完整更新注册表。
+
+        Args:
+            group_id: 当前会话中的群号。
+
+        Returns:
+            注册成功返回真，失败时由调用方决定是否中止迁移。
+        """
         try:
-            groups_data = await self.plugin.get_kv_data(self.GROUPS_REGISTRY_KEY, [])
-            current_groups = (
-                {str(item) for item in groups_data}
-                if is_object_list(groups_data)
-                else set[str]()
-            )
-            if group_id not in current_groups:
-                current_groups.add(str(group_id))
-                await cast("KeyValueWriter", self.plugin).put_kv_data(
-                    self.GROUPS_REGISTRY_KEY, sorted(current_groups)
+            async with self._registry_lock:
+                key = (
+                    "incr_tracked_sessions_v2"
+                    if self._scope
+                    else self.GROUPS_REGISTRY_KEY
                 )
-        except Exception as e:
-            logger.debug(f"注册增量群组记录异常: {e}")
+                raw = await self.plugin.get_kv_data(key, [])
+                if self._scope:
+                    sessions: set[IncrementalSession] = set()
+                    for item in raw if is_object_list(raw) else []:
+                        if (
+                            is_string_mapping(item)
+                            and isinstance(item.get("group_id"), str)
+                            and isinstance(item.get("platform_id"), str)
+                        ):
+                            sessions.add(
+                                IncrementalSession(
+                                    str(item["platform_id"]), str(item["group_id"])
+                                )
+                            )
+                    if self._scope in sessions:
+                        return True
+                    sessions.add(self._scope)
+                    await cast("KeyValueWriter", self.plugin).put_kv_data(
+                        key,
+                        [
+                            {"group_id": item.group_id, "platform_id": item.platform_id}
+                            for item in sorted(sessions)
+                        ],
+                    )
+                else:
+                    groups = (
+                        {str(item) for item in raw}
+                        if is_object_list(raw)
+                        else set[str]()
+                    )
+                    if group_id in groups:
+                        return True
+                    groups.add(group_id)
+                    await cast("KeyValueWriter", self.plugin).put_kv_data(
+                        key, sorted(groups)
+                    )
+            return True
+        except Exception as exc:
+            logger.debug(f"注册增量会话记录失败: {exc}")
+            return False
+
+    def _legacy_owner_key(self, group_id: str) -> str:
+        """构造旧数据一次归属标记，编码防止任意群号混淆键空间。"""
+        return (
+            "incr_legacy_owner_" + base64.urlsafe_b64encode(group_id.encode()).decode()
+        )
+
+    def _group_namespace(self, group_id: str) -> str:
+        """会话字段分别编码，避免拼接分隔符导致碰撞。"""
+        if self._scope is None:
+            return group_id
+        if self._scope.group_id != group_id:
+            raise ValueError("增量仓储会话与目标群号不一致")
+        encoded = json.dumps(
+            [self._scope.platform_id, group_id],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode()
+        return base64.urlsafe_b64encode(encoded).decode()
+
+    async def _assert_scope(self, group_id: str) -> None:
+        """已归属的数据不能继续通过未指定平台的旧入口访问。"""
+        if self._scope:
+            self._group_namespace(group_id)
+        elif await self.plugin.get_kv_data(self._legacy_owner_key(group_id), None):
+            raise ValueError("该群的增量数据已按平台隔离，请指定平台会话")
+
+    async def for_session(self, group_id: str, platform_id: str) -> IIncrementalStore:
+        """绑定会话并一次接管旧数据，原始键保留为迁移备份。
+
+        Args:
+            group_id: 平台内原始群号。
+            platform_id: AstrBot 平台实例标识，空值仅访问尚未归属的旧数据。
+
+        Returns:
+            只能操作指定群号的会话仓储，或未归属旧数据仓储。
+
+        Raises:
+            ValueError: 群号为空、旧批次身份错误或数据缺失。
+            RuntimeError: 会话目录注册失败，可重试修复目录。
+        """
+        root = self._root
+        if not group_id:
+            raise ValueError("增量会话缺少群号")
+        if not platform_id:
+            await root._assert_scope(group_id)
+            return root
+        scoped = IncrementalStore(
+            root.plugin, _scope=IncrementalSession(platform_id, group_id), _root=root
+        )
+        async with root._migration_locks.setdefault(group_id, asyncio.Lock()):
+            owner = cast(
+                "object",
+                await root.plugin.get_kv_data(root._legacy_owner_key(group_id), None),
+            )
+            if not owner:
+                index = await root._get_index(group_id, strict=True)
+                # 复制完整后提交归属；后续注册失败可重试，但其他平台不能再次领取旧数据。
+                for entry in index:
+                    raw = await root.plugin.get_kv_data(
+                        root._batch_key(group_id, entry["batch_id"]), None
+                    )
+                    if raw is None:
+                        raise ValueError("旧增量批次缺失，迁移未完成，请检查原始数据")
+                    batch = IncrementalBatch.from_dict(raw)
+                    if (
+                        batch.group_id != group_id
+                        or batch.batch_id != entry["batch_id"]
+                    ):
+                        raise ValueError("旧增量批次身份不一致，迁移未完成")
+                    await cast("KeyValueWriter", root.plugin).put_kv_data(
+                        scoped._batch_key(group_id, batch.batch_id), batch.to_dict()
+                    )
+                await scoped._save_index(group_id, index)
+                cursor = await root.plugin.get_kv_data(root._last_ts_key(group_id), 0)
+                await cast("KeyValueWriter", root.plugin).put_kv_data(
+                    scoped._last_ts_key(group_id), cursor
+                )
+            if not owner:
+                await cast("KeyValueWriter", root.plugin).put_kv_data(
+                    root._legacy_owner_key(group_id), platform_id
+                )
+            if not await scoped._register_group(group_id):
+                raise RuntimeError("增量会话目录暂时无法保存，请重试；已复制的数据保留")
+        return scoped
+
+    async def get_tracked_sessions(self) -> list[IncrementalSession]:
+        """列出新会话及尚未归属的旧群号。
+
+        Returns:
+            去重会话身份列表，不将同号的多个平台合并。
+        """
+        sessions: set[IncrementalSession] = set()
+        raw = await self.plugin.get_kv_data("incr_tracked_sessions_v2", [])
+        for item in raw if is_object_list(raw) else []:
+            if (
+                is_string_mapping(item)
+                and isinstance(item.get("group_id"), str)
+                and isinstance(item.get("platform_id"), str)
+            ):
+                sessions.add(
+                    IncrementalSession(str(item["platform_id"]), str(item["group_id"]))
+                )
+        for group_id in await self.get_tracked_groups():
+            owner = cast(
+                "object",
+                await self.plugin.get_kv_data(self._legacy_owner_key(group_id), None),
+            )
+            sessions.add(
+                IncrementalSession(owner if isinstance(owner, str) else "", group_id)
+            )
+        return sorted(sessions)
 
     async def get_tracked_groups(self) -> list[str]:
         """获取所有记录过增量状态/批次的群号列表"""
@@ -105,36 +275,44 @@ class IncrementalStore(IIncrementalStore):
 
     def _index_key(self, group_id: str) -> str:
         """构建批次索引键"""
-        return f"{self.INDEX_PREFIX}_{group_id}"
+        return f"{'v2_' if self._scope else ''}{self.INDEX_PREFIX}_{self._group_namespace(group_id)}"
 
     def _batch_key(self, group_id: str, batch_id: str) -> str:
         """构建单个批次数据键"""
-        return f"{self.BATCH_PREFIX}_{group_id}_{batch_id}"
+        return f"{'v2_' if self._scope else ''}{self.BATCH_PREFIX}_{self._group_namespace(group_id)}_{batch_id}"
 
     def _last_ts_key(self, group_id: str) -> str:
         """构建最后分析消息时间戳键"""
-        return f"{self.LAST_TS_PREFIX}_{group_id}"
+        return f"{'v2_' if self._scope else ''}{self.LAST_TS_PREFIX}_{self._group_namespace(group_id)}"
 
     # ================================================================
     # 批次索引操作
     # ================================================================
 
-    async def _get_index(self, group_id: str) -> list[BatchIndexEntry]:
+    async def _get_index(
+        self, group_id: str, *, strict: bool = False
+    ) -> list[BatchIndexEntry]:
         """
         获取指定群的批次索引列表。
 
         Args:
-            group_id: 群组 ID
+            group_id: 群组 ID。
+            strict: 迁移时拒绝读失败或不完整索引，避免误把旧数据当成空数据。
 
         Returns:
             list[BatchIndexEntry]: 索引条目列表，每项包含 batch_id 和 timestamp
         """
+        await self._assert_scope(group_id)
         key = self._index_key(group_id)
         try:
             data = await self.plugin.get_kv_data(key, default=[])
+            if strict and not is_object_list(data):
+                raise ValueError("旧增量索引格式错误，迁移未完成")
             entries: list[BatchIndexEntry] = []
             for item in data if is_object_list(data) else []:
                 if not is_string_mapping(item):
+                    if strict:
+                        raise ValueError("旧增量索引条目格式错误，迁移未完成")
                     continue
                 batch_id, timestamp = item.get("batch_id"), item.get("timestamp", 0)
                 if isinstance(batch_id, str) and isinstance(timestamp, (int, float)):
@@ -146,8 +324,12 @@ class IncrementalStore(IIncrementalStore):
                         last_message, bool
                     ):
                         entries[-1]["last_message_timestamp"] = last_message
+                elif strict:
+                    raise ValueError("旧增量索引条目缺少批次身份，迁移未完成")
             return entries
         except Exception as e:
+            if strict:
+                raise
             logger.error(f"读取批次索引失败 (Key: {key}): {e}", exc_info=True)
             return []
 
@@ -185,6 +367,7 @@ class IncrementalStore(IIncrementalStore):
             bool: 保存是否成功
         """
         group_id = batch.group_id
+        await self._assert_scope(group_id)
         batch_key = self._batch_key(group_id, batch.batch_id)
 
         try:
@@ -302,6 +485,7 @@ class IncrementalStore(IIncrementalStore):
         Returns:
             最后分析时间戳，以及该时间戳下已经处理的消息 ID 集合。
         """
+        await self._assert_scope(group_id)
         key = self._last_ts_key(group_id)
         try:
             data = await self.plugin.get_kv_data(key, 0)
@@ -334,6 +518,7 @@ class IncrementalStore(IIncrementalStore):
             timestamp: 最后分析消息的 epoch 时间戳。
             message_ids: 该时间戳下已经处理的消息 ID。
         """
+        await self._assert_scope(group_id)
         key = self._last_ts_key(group_id)
         try:
             await cast("KeyValueWriter", self.plugin).put_kv_data(
@@ -367,6 +552,7 @@ class IncrementalStore(IIncrementalStore):
         Returns:
             IncrementalBatch | None: 完整批次实体，不存在时返回 None。
         """
+        await self._assert_scope(group_id)
         batch_key = self._batch_key(group_id, batch_id)
         try:
             data = await self.plugin.get_kv_data(batch_key, default=None)
@@ -522,7 +708,8 @@ class IncrementalStore(IIncrementalStore):
         用于状态查询命令展示批次概览。
 
         Args:
-            group_id: 群组 ID
+            group_id: 群组 ID。
+            strict: 迁移时拒绝读失败或不完整索引，避免误把旧数据当成空数据。
 
         Returns:
             list[BatchIndexEntry]: 批次摘要列表，按时间升序
