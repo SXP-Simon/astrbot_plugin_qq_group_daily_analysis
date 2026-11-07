@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { useManagedFiles } from "../useManagedFiles";
 import {
   deleteManagedFiles,
+  fetchManagedContent,
   fetchManagedFiles,
   fetchManagedPartitions,
   mutateManagedFile,
@@ -16,7 +17,7 @@ vi.mock("../../../../entities/plugin-data/api/managedFilesApi", () => ({
   mutateManagedFile: vi.fn(),
   deleteManagedFiles: vi.fn(),
 }));
-vi.mock("antd", () => ({ message: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const partitions: ManagedPartition[] = ["custom_templates", "config_files"].map((key) => ({
   key,
   name: key,
@@ -119,4 +120,92 @@ it.each(["save", "delete"])("切换分区后忽略旧 %s 的列表和详情更�
     "custom_templates",
     "config_files",
   ]);
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (cause: Error) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+it("同步阻止重复写入，失败保留编辑稿与修订号", async () => {
+  const pending = deferred<void>();
+  vi.mocked(mutateManagedFile).mockReturnValueOnce(pending.promise);
+  const { result } = renderHook(useManagedFiles);
+  act(() => result.current.select(partitions[0]));
+  act(() =>
+    result.current.setEditor({ name: "custom_templates/report.typ", text: "修订", revision: "v1" }),
+  );
+  act(() => {
+    void result.current.saveEditor();
+    void result.current.saveEditor();
+  });
+  expect(mutateManagedFile).toHaveBeenCalledTimes(1);
+  expect(mutateManagedFile).toHaveBeenCalledWith(
+    expect.objectContaining({ revision: "v1", operation: "replace" }),
+  );
+  await act(async () => pending.reject(new Error("修订已过期")));
+  expect(result.current.actionError).toBe("修订已过期");
+  expect(result.current.editor?.text).toBe("修订");
+  expect(result.current.busy).toBe(false);
+});
+it("旧详情完成不清除新分区的操作锁，返回文件名必须匹配", async () => {
+  const first = deferred<Awaited<ReturnType<typeof fetchManagedContent>>>();
+  const second = deferred<Awaited<ReturnType<typeof fetchManagedContent>>>();
+  vi.mocked(fetchManagedContent)
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(second.promise);
+  const { result } = renderHook(useManagedFiles);
+  act(() => result.current.select(partitions[0]));
+  act(() => {
+    void result.current.inspect("old.typ");
+  });
+  act(() => result.current.select(partitions[1]));
+  act(() => {
+    void result.current.inspect("new.png");
+  });
+  await act(async () =>
+    first.resolve({
+      name: "old.typ",
+      revision: "v1",
+      content_base64: "",
+      text: "old",
+      media_type: "text/plain",
+    }),
+  );
+  expect(result.current.busy).toBe(true);
+  expect(result.current.content).toBeNull();
+  await act(async () =>
+    second.resolve({
+      name: "wrong.png",
+      revision: "v2",
+      content_base64: "",
+      text: null,
+      media_type: "image/png",
+    }),
+  );
+  expect(result.current.content).toBeNull();
+  expect(result.current.busy).toBe(false);
+});
+it("读取替换文件期间不能保存，取消编辑后不恢复上传草稿", async () => {
+  const { result } = renderHook(useManagedFiles);
+  act(() => result.current.select(partitions[0]));
+  act(() =>
+    result.current.setEditor({ name: "report.typ", text: "", encoded: "old", revision: "v1" }),
+  );
+  let reading!: Promise<void>;
+  act(() => {
+    reading = result.current.prepareUpload(new File(["new"], "new.typ"), true);
+    void result.current.saveEditor();
+  });
+  expect(result.current.uploading).toBe(true);
+  await act(async () => result.current.saveEditor());
+  expect(mutateManagedFile).not.toHaveBeenCalled();
+  act(() => result.current.cancelEditor());
+  await act(async () => reading);
+  expect(result.current.editor).toBeNull();
+  expect(result.current.uploading).toBe(false);
 });
