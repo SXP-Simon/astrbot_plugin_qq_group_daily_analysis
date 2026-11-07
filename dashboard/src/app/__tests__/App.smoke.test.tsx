@@ -80,6 +80,19 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
           await Promise.allSettled(pending);
         });
       }
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "报告" }), { button: 0, ctrlKey: false });
+      await screen.findByRole("list", { name: "报告文件" });
+      const reportCalls = getSpy.mock.calls.filter(([path]) => path === "reports/history").length;
+      act(() =>
+        receiveEvent?.({ parsed: { event: "task_finished", data: { task_id: "ANOTHER-TASK" } } }),
+      );
+      await act(async () => {
+        await Promise.allSettled(pending);
+      });
+      expect(getSpy.mock.calls.filter(([path]) => path === "reports/history")).toHaveLength(
+        reportCalls,
+      );
+      expect(screen.getByText(/报告有更新/)).toBeVisible();
       fireEvent.mouseDown(screen.getByRole("tab", { name: "日志" }), { button: 0, ctrlKey: false });
       expect(screen.getByRole("tabpanel")).toHaveAccessibleName("日志");
       await act(async () => {

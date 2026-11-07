@@ -125,17 +125,11 @@ export const App: React.FC = () => {
           }
           invalidateGroupsCache();
 
-          // 仅拉取当前视口激活的 Tab，未激活 Tab 在用户点击切换时再拉取（Lazy Tab Sync）
-          const currentTab = activeTabRef.current;
-          if (currentTab === "traces") {
-            currentVMs.tracesVM.refresh(true);
-          } else if (currentTab === "context") {
-            currentVMs.contextInsightVM.refresh(true);
-          } else if (currentTab === "reports") {
-            currentVMs.reportsVM.refresh(true, true);
-          } else if (currentTab === "logs") {
-            currentVMs.logsVM.refresh(true);
-          }
+          // 历史列表保留阅读位置，只标记更新；用户主动刷新时才重新查询和排序。
+          currentVMs.tracesVM.markUpdated();
+          currentVMs.contextInsightVM.markUpdated();
+          currentVMs.reportsVM.markUpdated();
+          if (activeTabRef.current === "logs") currentVMs.logsVM.refresh(true);
         }
       },
     });
@@ -152,15 +146,9 @@ export const App: React.FC = () => {
   const handleTabChange = (key: string) => {
     activeTabRef.current = key;
     navigate(key);
-    // 标签页按需激活（Lazy Tab Sync）：切换到对应 Tab 时触发该 Tab 的静默刷新
+    // 总览和日志按需同步；历史列表保留分页与选择，更新由用户确认。
     if (key === "overview") {
       overviewVM.refresh(true);
-    } else if (key === "traces") {
-      tracesVM.refresh(true);
-    } else if (key === "context") {
-      contextInsightVM.refresh(true);
-    } else if (key === "reports") {
-      reportsVM.refresh(true);
     } else if (key === "logs") {
       logsVM.refresh(true);
     }
