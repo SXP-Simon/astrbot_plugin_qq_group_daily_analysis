@@ -44,9 +44,11 @@ export function useManagedFiles() {
   const activeUpload = useRef<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [overviewLoading, setOverviewLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     const request = ++overviewSequence.current;
+    setOverviewLoading(true);
     try {
       const result = await fetchManagedPartitions();
       if (request !== overviewSequence.current) return;
@@ -55,6 +57,8 @@ export function useManagedFiles() {
     } catch (cause) {
       if (request === overviewSequence.current)
         setError(cause instanceof Error ? cause.message : "存储概览读取失败");
+    } finally {
+      if (request === overviewSequence.current) setOverviewLoading(false);
     }
   }, []);
 
@@ -300,6 +304,7 @@ export function useManagedFiles() {
   );
   return {
     partitions,
+    overviewLoading,
     partition,
     files,
     groups,

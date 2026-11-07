@@ -131,6 +131,28 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+it("概览旧响应不覆盖最新结果或提前解除读取状态，失败保留已有分区", async () => {
+  const old = deferred<ManagedPartition[]>();
+  const current = deferred<ManagedPartition[]>();
+  vi.mocked(fetchManagedPartitions)
+    .mockReturnValueOnce(old.promise)
+    .mockReturnValueOnce(current.promise);
+  const { result } = renderHook(useManagedFiles);
+  expect(result.current.overviewLoading).toBe(true);
+  act(() => {
+    void result.current.refresh();
+  });
+  await act(async () => old.resolve([]));
+  expect(result.current.overviewLoading).toBe(true);
+  await act(async () => current.resolve(partitions));
+  expect(result.current.partitions).toEqual(partitions);
+  expect(result.current.overviewLoading).toBe(false);
+  vi.mocked(fetchManagedPartitions).mockRejectedValueOnce(new Error("暂时无法读取概览"));
+  await act(async () => result.current.refresh());
+  expect(result.current.partitions).toEqual(partitions);
+  expect(result.current.error).toBe("暂时无法读取概览");
+  expect(result.current.overviewLoading).toBe(false);
+});
 it("同步阻止重复写入，失败保留编辑稿与修订号", async () => {
   const pending = deferred<void>();
   vi.mocked(mutateManagedFile).mockReturnValueOnce(pending.promise);
