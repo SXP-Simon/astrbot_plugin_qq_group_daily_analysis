@@ -7,6 +7,7 @@ interface Palette {
   border: string;
   background: string;
   accent: string;
+  providerColors: string[];
 }
 
 export function createOverviewTrendOptions(
@@ -114,26 +115,8 @@ export function createOverviewTrendOptions(
     },
     {
       ...common,
-      grid: { top: 12, bottom: 28, left: 8, right: 20, containLabel: true },
-      xAxis: {
-        type: "value",
-        splitLine: { lineStyle: { color: colors.border } },
-        axisLabel: {
-          color: colors.muted,
-          fontSize: 12,
-          hideOverlap: true,
-          formatter: (value: number) =>
-            value >= 10000 ? `${Number((value / 10000).toFixed(1))}万` : `${value}`,
-        },
-      },
-      yAxis: {
-        type: "category",
-        inverse: true,
-        data: providers.map((item) => item.name),
-        axisTick: { show: false },
-        axisLine: { show: false },
-        axisLabel: { width: 100, overflow: "truncate", color: colors.muted, fontSize: 12 },
-      },
+      xAxis: { show: false },
+      yAxis: { show: false },
       tooltip: {
         ...tooltip,
         trigger: "item",
@@ -154,10 +137,19 @@ export function createOverviewTrendOptions(
       series: [
         {
           name: "服务商消耗",
-          type: "bar",
-          data: providers.map((item) => item.total_tokens),
-          barMaxWidth: 18,
-          itemStyle: { color: colors.accent },
+          type: "pie",
+          radius: ["54%", "80%"],
+          center: ["50%", "50%"],
+          stillShowZeroSum: false,
+          label: { show: false },
+          labelLine: { show: false },
+          emphasis: { scale: false },
+          itemStyle: { borderColor: colors.background, borderWidth: 2 },
+          data: providers.map((item, index) => ({
+            name: item.name,
+            value: item.total_tokens,
+            itemStyle: { color: colors.providerColors[index % colors.providerColors.length] },
+          })),
         },
       ],
     },

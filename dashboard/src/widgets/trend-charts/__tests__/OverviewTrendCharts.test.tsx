@@ -34,7 +34,10 @@ describe("趋势图与明细", () => {
       within(screen.getByRole("region", { name: "趋势明细" })).getAllByRole("row"),
     ).toHaveLength(15);
     fireEvent.click(screen.getByText("查看服务商明细"));
-    expect(screen.getByText("零消耗示例")).toBeVisible();
+    expect(
+      within(screen.getByRole("region", { name: "服务商明细" })).getByText("零消耗示例"),
+    ).toBeVisible();
+    expect(screen.getByText("暂无消耗记录")).toBeVisible();
     expect(screen.getByText("未记录消耗")).toBeVisible();
     expect(screen.queryByText("999 次")).not.toBeInTheDocument();
   });
@@ -68,6 +71,7 @@ describe("趋势图与明细", () => {
       border: "#ddd",
       background: "#fff",
       accent: "#abc",
+      providerColors: ["#abc", "#def"],
     };
     const options = createOverviewTrendOptions(data.points, data.provider_breakdown, colors);
     for (const option of options) {
@@ -87,7 +91,39 @@ describe("趋势图与明细", () => {
       { name: "输出", data: data.points.map((point) => point.completion_tokens) },
     ]);
     expect(options[2].series).toMatchObject([
-      { data: data.provider_breakdown.map((item) => item.total_tokens) },
+      {
+        type: "pie",
+        stillShowZeroSum: false,
+        data: data.provider_breakdown.map((item) => ({
+          name: item.name,
+          value: item.total_tokens,
+        })),
+      },
     ]);
   });
+});
+
+it("多渠道显示前六名与聚合占比，全部长名称和数值仍可在明细读取", () => {
+  const providers = Array.from({ length: 12 }, (_, index) => ({
+    name: `示例渠道 ${index} / 一个很长的自定义服务商名称`,
+    total_tokens: (12 - index) * 100,
+    request_count: 1,
+  }));
+  render(
+    <OverviewTrendCharts
+      initialTrends={{ ...createMockAnalyticsTrends(), provider_breakdown: providers }}
+    />,
+  );
+  const legend = screen.getByRole("list", { name: "服务商占比图例" });
+  expect(within(legend).getAllByRole("listitem")).toHaveLength(7);
+  expect(within(legend).getByText("其他服务商（6个）")).toBeVisible();
+  expect(within(legend).getByText("26.9%")).toBeVisible();
+  expect(within(legend).getByText(providers[0].name)).toHaveAttribute(
+    "title",
+    expect.stringContaining("1,200 Tokens"),
+  );
+  fireEvent.click(screen.getByText("查看服务商明细"));
+  const table = screen.getByRole("region", { name: "服务商明细" });
+  expect(within(table).getAllByRole("row")).toHaveLength(13);
+  expect(within(table).getByText(providers[11].name)).toBeVisible();
 });

@@ -19,12 +19,23 @@ export function OverviewTrendCharts({ initialTrends }: OverviewTrendChartsProps)
   useTheme();
   const style = getComputedStyle(document.documentElement);
   const color = (name: string) => style.getPropertyValue(name).trim() || "currentColor";
+  const providerColors = [
+    "--ring",
+    "--info",
+    "--creative",
+    "--warning",
+    "--success",
+    "--chart-output",
+    "--muted-foreground",
+  ].map(color);
+  const providerTotal = vm.providers.reduce((sum, item) => sum + item.total_tokens, 0);
   const options = createOverviewTrendOptions(vm.points, vm.providerChart, {
     text: color("--foreground"),
     muted: color("--muted-foreground"),
     border: color("--border"),
     background: color("--card"),
     accent: color("--ring"),
+    providerColors,
   });
   const selectedLabel = TREND_RANGES.find((item) => item.value === vm.range)!.label;
   const displayedLabel = TREND_RANGES.find((item) => item.value === vm.displayedRange)?.label;
@@ -36,7 +47,7 @@ export function OverviewTrendCharts({ initialTrends }: OverviewTrendChartsProps)
       hasData: vm.points.length > 0,
     },
     {
-      label: "服务商消耗分布",
+      label: "服务商消耗占比",
       value: `${vm.providers.length} 个渠道`,
       hasData: vm.providers.length > 0,
     },
@@ -92,7 +103,48 @@ export function OverviewTrendCharts({ initialTrends }: OverviewTrendChartsProps)
                 {vm.displayedRange ? chart.value : "未读取"}
               </span>
             </div>
-            {chart.hasData ? (
+            {chart.hasData && index === 2 ? (
+              <div className="grid min-h-[230px] grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] items-center gap-3">
+                {providerTotal > 0 ? (
+                  <ReactECharts
+                    option={options[index]}
+                    notMerge
+                    style={{ height: 200, width: "100%" }}
+                    opts={{ renderer: "svg" }}
+                  />
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground">暂无消耗记录</p>
+                )}
+                <ul
+                  aria-label="服务商占比图例"
+                  className="m-0 grid max-h-[230px] list-none gap-2 overflow-y-auto p-0"
+                >
+                  {vm.providerChart.map((provider, providerIndex) => (
+                    <li
+                      key={`${provider.name}-${providerIndex}`}
+                      className="flex min-w-0 items-center gap-2 text-xs"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-2 shrink-0 rounded-sm"
+                        style={{ backgroundColor: providerColors[providerIndex] }}
+                      />
+                      <span
+                        className="min-w-0 flex-1 truncate"
+                        title={`${provider.name} · ${provider.total_tokens.toLocaleString()} Tokens · 分析 ${provider.request_count} 次`}
+                      >
+                        {provider.name}
+                      </span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {providerTotal > 0
+                          ? `${((provider.total_tokens / providerTotal) * 100).toFixed(1)}%`
+                          : "—"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : chart.hasData ? (
               <ReactECharts
                 option={options[index]}
                 notMerge
