@@ -320,8 +320,8 @@ class CheckpointStore(ICheckpointStore):
                         str(trace_id),
                     ),
                 )
-                if cursor.rowcount > 0:
-                    return True
+                # 指定任务的删除只能命中该任务，不能回退删除旧共享记录。
+                return cursor.rowcount > 0
 
             legacy_id = f"{group_id}_{date_str}_{stage_name}"
             cursor = conn.execute(
@@ -483,11 +483,11 @@ class CheckpointStore(ICheckpointStore):
                 ).fetchone()
                 if not row:
                     row = conn.execute(
-                        "SELECT * FROM stage_checkpoints WHERE trace_id = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
-                        (str(trace_id), stage_name, now),
+                        "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND trace_id = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                        (str(group_id), str(date_str), str(trace_id), stage_name, now),
                     ).fetchone()
 
-            if not row:
+            if not row and not trace_id:
                 legacy_id = f"{group_id}_{date_str}_{stage_name}"
                 row = conn.execute(
                     "SELECT * FROM stage_checkpoints WHERE checkpoint_id = ?",
