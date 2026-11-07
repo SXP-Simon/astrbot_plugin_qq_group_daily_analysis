@@ -1,34 +1,16 @@
-import React, { useState } from "react";
-import {
-  Card,
-  Button,
-  Space,
-  Tag,
-  Typography,
-  Dropdown,
-  Popconfirm,
-  Empty,
-  MenuProps,
-  theme,
-} from "antd";
-import {
-  PlusOutlined,
-  DeleteOutlined,
-  ArrowUpOutlined,
-  ArrowDownOutlined,
-  SettingOutlined,
-  DownOutlined,
-} from "@ant-design/icons";
+import { useRef, useState } from "react";
+import { IconArrowDown, IconArrowUp, IconPlus, IconTrash } from "@tabler/icons-react";
 import { isFieldVisible } from "../../../entities/config/model/visibility";
-import { SchemaFieldItem } from "../../../entities/config/model/types";
-import { AvailableProvider, AvailablePersona } from "../../../entities/config/api/configApi";
+import type { SchemaFieldItem } from "../../../entities/config/model/types";
+import type { AvailableProvider, AvailablePersona } from "../../../entities/config/api/configApi";
 import { FieldRenderer } from "./FieldRenderer";
 import { T2iProbe } from "../../../features/test-t2i/ui/T2iProbe";
 import { TemplateResources } from "../../../features/manage-template-resources/ui/TemplateResources";
 import { TypstFonts } from "../../../features/manage-typst-fonts/ui/TypstFonts";
 import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
-
-const { Text } = Typography;
+import { Button } from "../../../shared/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
+import { useTemplateListModel } from "../model/useTemplateListModel";
 
 interface TemplateListRendererProps {
   fieldKey: string;
@@ -40,7 +22,7 @@ interface TemplateListRendererProps {
   onChange: (val: unknown) => void;
 }
 
-export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
+export function TemplateListRenderer({
   fieldKey,
   fieldSchema,
   value,
@@ -48,370 +30,251 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
   personas = [],
   fullKeyPath,
   onChange,
-}) => {
-  const { token } = theme.useToken();
-  const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
-
-  const rawList: Record<string, unknown>[] = Array.isArray(value)
-    ? (value as Record<string, unknown>[])
-    : Array.isArray(fieldSchema.default)
-      ? (fieldSchema.default as Record<string, unknown>[])
-      : [];
-
-  const templates =
-    (fieldSchema.templates as Record<
-      string,
-      {
-        name?: string;
-        description?: string;
-        display_item?: string;
-        items?: Record<string, SchemaFieldItem>;
-      }
-    >) || {};
-
-  const templateKeys = Object.keys(templates);
-
-  // 根据条目数据匹配模板 Key
-  const findTemplateKey = (item: Record<string, unknown>): string | null => {
-    if (item.__template_key && templates[String(item.__template_key)]) {
-      return String(item.__template_key);
-    }
-    if (item.name && templates[String(item.name)]) {
-      return String(item.name);
-    }
-    for (const [key, tpl] of Object.entries(templates)) {
-      if (tpl.name === item.name || key === item.name) {
-        return key;
-      }
-    }
-    return templateKeys.length > 0 ? templateKeys[0] : null;
-  };
-
-  // 根据条目数据匹配模板定义
-  const findTemplateForItem = (item: Record<string, unknown>) => {
-    const key = findTemplateKey(item);
-    return key ? templates[key] || null : null;
-  };
-
-  // 添加新条目
-  const nativePlan = rawList.find((item) => findTemplateKey(item) === "typst");
+}: TemplateListRendererProps) {
+  const vm = useTemplateListModel(fieldSchema, value, onChange);
+  const [adding, setAdding] = useState(false);
+  const [deleting, setDeleting] = useState<{
+    index: number;
+    item: Record<string, unknown>;
+    name: string;
+  } | null>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const deleted = useRef(false);
+  const nativePlan = vm.items.find((item) => vm.templateKey(item) === "typst");
   const nativeCdn = String(
     (nativePlan?.cdn_base_url === "__custom__"
       ? nativePlan?.custom_cdn_base_url
       : nativePlan?.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL,
   );
-
-  const handleAddItem = (templateKey: string) => {
-    const tpl = templates[templateKey];
-    if (!tpl) return;
-
-    const newItem: Record<string, unknown> = {
-      __template_key: templateKey,
-      name: tpl.name || templateKey,
-    };
-
-    if (tpl.items) {
-      for (const [subKey, subField] of Object.entries(tpl.items)) {
-        if (subField.default !== undefined) {
-          newItem[subKey] = subField.default;
-        }
-      }
-    }
-
-    const nextList = [...rawList, newItem].map((item) => ({
-      ...item,
-      __template_key: findTemplateKey(item) || templateKey,
-    }));
-    onChange(nextList);
-    setActiveItemIndex(nextList.length - 1);
-  };
-
-  // 修改条目内字段
-  const handleItemFieldChange = (index: number, subFieldKey: string, subVal: unknown) => {
-    const nextList = rawList.map((item, idx) => {
-      const tplKey = findTemplateKey(item) || templateKeys[0] || "character";
-      if (idx !== index) {
-        return {
-          ...item,
-          __template_key: tplKey,
-        };
-      }
-      return {
-        ...item,
-        __template_key: tplKey,
-        [subFieldKey]: subVal,
-      };
-    });
-    onChange(nextList);
-  };
-
-  // 删除条目
-  const handleDeleteItem = (index: number) => {
-    const nextList = rawList
-      .filter((_, idx) => idx !== index)
-      .map((item) => ({
-        ...item,
-        __template_key: findTemplateKey(item) || templateKeys[0] || "character",
-      }));
-    onChange(nextList);
-    if (activeItemIndex === index) {
-      setActiveItemIndex(null);
-    } else if (activeItemIndex !== null && activeItemIndex > index) {
-      setActiveItemIndex(activeItemIndex - 1);
-    }
-  };
-
-  // 上移条目
-  const handleMoveUp = (index: number) => {
-    if (index <= 0) return;
-    const nextList = [...rawList].map((item) => ({
-      ...item,
-      __template_key: findTemplateKey(item) || templateKeys[0] || "character",
-    }));
-    const temp = nextList[index - 1];
-    nextList[index - 1] = nextList[index];
-    nextList[index] = temp;
-    onChange(nextList);
-    if (activeItemIndex === index) setActiveItemIndex(index - 1);
-  };
-
-  // 下移条目
-  const handleMoveDown = (index: number) => {
-    if (index >= rawList.length - 1) return;
-    const nextList = [...rawList].map((item) => ({
-      ...item,
-      __template_key: findTemplateKey(item) || templateKeys[0] || "character",
-    }));
-    const temp = nextList[index + 1];
-    nextList[index + 1] = nextList[index];
-    nextList[index] = temp;
-    onChange(nextList);
-    if (activeItemIndex === index) setActiveItemIndex(index + 1);
-  };
-
-  // 添加下拉菜单项
-  const menuItems: MenuProps["items"] = templateKeys.map((tplKey) => {
-    const tpl = templates[tplKey];
-    return {
-      key: tplKey,
-      label: (
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 12 }}>{tpl.name || tplKey}</div>
-          {tpl.description && (
-            <div style={{ fontSize: 11, color: token.colorTextSecondary }}>{tpl.description}</div>
-          )}
-        </div>
-      ),
-      onClick: () => handleAddItem(tplKey),
-    };
-  });
+  const deleteCurrent = deleting !== null && vm.items[deleting.index] === deleting.item;
+  const addLabel = fieldKey === "t2i_rendering_strategies" ? "添加渲染方案" : "添加配置项";
 
   return (
-    <div style={{ width: "100%" }}>
-      {rawList.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="暂无配置条目，请点击下方按钮添加"
-          style={{
-            margin: "12px 0",
-            padding: "16px",
-            background: token.colorFillAlter,
-            borderRadius: 6,
-            border: `1px dashed ${token.colorBorderSecondary}`,
-          }}
-        />
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
-          {rawList.map((item, index) => {
-            const itemTemplateKey = findTemplateKey(item) || templateKeys[0] || "character";
-            const tpl = findTemplateForItem(item);
-            const subItems = tpl?.items || {};
-            // 旧条目可能缺少新字段，条件显示应和控件一样使用 schema 默认值。
-            const itemContext = {
-              ...Object.fromEntries(
-                Object.entries(subItems).map(([key, field]) => [key, field.default]),
-              ),
-              ...item,
-            };
-
-            // 标题展示
-            const displayName = String(item.name || tpl?.name || `条目 #${index + 1}`);
-            const priorityVal = item.priority !== undefined ? item.priority : null;
-            const isEnable = item.enable !== undefined ? Boolean(item.enable) : true;
-
-            return (
-              <Card
-                key={`${fieldKey}_item_${index}`}
-                size="small"
-                style={{
-                  border: `1px solid ${token.colorBorderSecondary}`,
-                  borderRadius: 6,
-                  background: token.colorFillAlter,
-                }}
-                styles={{ body: { padding: "12px 14px" } }}
-              >
-                {/* 头部标题与控制按钮 */}
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 12,
-                    paddingBottom: 8,
-                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
-                  }}
-                >
-                  <Space size={8} align="center">
-                    <SettingOutlined style={{ color: "#2563eb", fontSize: 13 }} />
-                    <Text strong style={{ fontSize: 13 }}>
-                      {displayName}
-                    </Text>
-                    {priorityVal !== null && (
-                      <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>
-                        优先级: {String(priorityVal)}
-                      </Tag>
-                    )}
-                    {item.enable !== undefined && (
-                      <Tag
-                        color={isEnable ? "success" : "default"}
-                        style={{ margin: 0, fontSize: 10 }}
-                      >
-                        {isEnable ? "已启用" : "已禁用"}
-                      </Tag>
-                    )}
-                  </Space>
-
-                  <Space size={4}>
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<ArrowUpOutlined style={{ fontSize: 11 }} />}
-                      disabled={index === 0}
-                      onClick={() => handleMoveUp(index)}
-                    />
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<ArrowDownOutlined style={{ fontSize: 11 }} />}
-                      disabled={index === rawList.length - 1}
-                      onClick={() => handleMoveDown(index)}
-                    />
-                    <Popconfirm
-                      title="确认删除此配置条目？"
-                      onConfirm={() => handleDeleteItem(index)}
-                      okText="删除"
-                      cancelText="取消"
-                      okButtonProps={{ danger: true, size: "small" }}
-                      cancelButtonProps={{ size: "small" }}
-                    >
-                      <Button
-                        size="small"
-                        type="text"
-                        danger
-                        icon={<DeleteOutlined style={{ fontSize: 11 }} />}
-                      />
-                    </Popconfirm>
-                  </Space>
-                </div>
-
-                {/* 条目内部各字段渲染 */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                    gap: "10px 16px",
-                  }}
-                >
-                  {Object.entries(subItems)
-                    .filter(([, subField]) => isFieldVisible(subField, { item: itemContext }))
-                    .map(([subKey, subField]) => {
-                      const isFullWidth =
-                        subField.type === "template_list" ||
-                        subField.type === "text" ||
-                        subField.type === "file" ||
-                        subKey.includes("prompt") ||
-                        subKey.includes("image") ||
-                        subKey.includes("url") ||
-                        subKey.includes("key");
-
-                      return (
-                        <div
-                          key={subKey}
-                          style={{
-                            gridColumn: isFullWidth ? "1 / -1" : "auto",
-                          }}
-                        >
-                          <FieldRenderer
-                            fieldKey={subKey}
-                            fieldSchema={subField}
-                            value={item[subKey] !== undefined ? item[subKey] : subField.default}
-                            providers={providers}
-                            personas={personas}
-                            isSubField={true}
-                            fullKeyPath={`${fullKeyPath || fieldKey}.templates.${itemTemplateKey}.${subKey}`}
-                            onChange={(newSubVal) =>
-                              handleItemFieldChange(index, subKey, newSubVal)
-                            }
-                          />
-                        </div>
-                      );
-                    })}
-                </div>
-                {fieldKey === "t2i_rendering_strategies" && (
-                  <>
-                    {itemTemplateKey === "typst" && (
-                      <TypstFonts
-                        cdnBaseUrl={String(
-                          (item.cdn_base_url === "__custom__"
-                            ? item.custom_cdn_base_url
-                            : item.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL,
-                        )}
-                      />
-                    )}
-                    <T2iProbe
-                      input={{
-                        render_service:
-                          itemTemplateKey === "typst"
-                            ? "typst"
-                            : itemTemplateKey === "custom"
-                              ? "custom"
-                              : "astrbot",
-                        service_endpoint: item.service_endpoint,
-                        service_token: item.service_token,
-                        timeout: item.timeout,
-                        request_timeout: item.request_timeout,
-                        raster_ppi: item.raster_ppi,
-                      }}
-                    />
-                  </>
-                )}
-              </Card>
-            );
-          })}
-        </div>
+    <div className="min-w-0 space-y-4">
+      {!vm.valid && (
+        <p role="alert" className="text-sm text-destructive">
+          配置条目格式不正确，请检查原始配置。当前内容未被改写。
+        </p>
       )}
-
-      {/* 底部添加条目按钮 */}
-      {templateKeys.length > 1 ? (
-        <Dropdown menu={{ items: menuItems }} placement="bottomLeft" trigger={["click"]}>
-          <Button type="dashed" icon={<PlusOutlined />} style={{ width: "100%" }}>
-            {fieldKey === "t2i_rendering_strategies" ? "添加渲染方案" : "添加配置项"}{" "}
-            <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
-          </Button>
-        </Dropdown>
-      ) : templateKeys.length === 1 ? (
+      {vm.valid && !vm.items.length && (
+        <p className="py-3 text-sm text-muted-foreground">暂无配置条目，可在下方添加。</p>
+      )}
+      <div className="space-y-6">
+        {vm.items.map((item, index) => {
+          const itemTemplateKey = vm.templateKey(item) ?? "character";
+          const template = vm.templates[itemTemplateKey];
+          const subItems = template?.items ?? {};
+          const itemContext = {
+            ...Object.fromEntries(
+              Object.entries(subItems).map(([key, field]) => [key, field.default]),
+            ),
+            ...item,
+          };
+          const name = String(item.name || template?.name || `条目 ${index + 1}`);
+          return (
+            <section
+              key={`${fieldKey}_${index}`}
+              aria-label={`${index + 1}. ${name}`}
+              className="min-w-0 space-y-4 border-0 border-b border-solid border-border pb-5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-secondary/60 px-3 py-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <h3 className="m-0 break-words text-base font-medium">
+                    {index + 1}. {name}
+                  </h3>
+                  {item.priority !== undefined && (
+                    <span className="rounded-md bg-info/10 px-2 py-1 text-xs text-info">
+                      优先级 {String(item.priority)}
+                    </span>
+                  )}
+                  {item.enable !== undefined && (
+                    <span
+                      className={`rounded-md px-2 py-1 text-xs ${item.enable ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
+                    >
+                      {item.enable ? "已启用" : "已禁用"}
+                    </span>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`上移 ${name}`}
+                    disabled={index === 0}
+                    onClick={() => vm.move(index, -1)}
+                  >
+                    <IconArrowUp aria-hidden="true" />
+                    上移
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`下移 ${name}`}
+                    disabled={index === vm.items.length - 1}
+                    onClick={() => vm.move(index, 1)}
+                  >
+                    <IconArrowDown aria-hidden="true" />
+                    下移
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:bg-destructive/10"
+                    aria-label={`删除 ${name}`}
+                    onClick={() => {
+                      deleted.current = false;
+                      setDeleting({ index, item, name });
+                    }}
+                  >
+                    <IconTrash aria-hidden="true" />
+                    删除
+                  </Button>
+                </div>
+              </div>
+              <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+                {Object.entries(subItems)
+                  .filter(([, field]) => isFieldVisible(field, { item: itemContext }))
+                  .map(([key, field]) => {
+                    const fullWidth =
+                      ["template_list", "text", "file", "object"].includes(field.type) ||
+                      ["prompt", "image", "url", "key"].some((part) => key.includes(part));
+                    return (
+                      <div key={key} className={fullWidth ? "min-w-0 xl:col-span-2" : "min-w-0"}>
+                        <FieldRenderer
+                          fieldKey={key}
+                          fieldSchema={field}
+                          value={item[key] !== undefined ? item[key] : field.default}
+                          providers={providers}
+                          personas={personas}
+                          isSubField
+                          fullKeyPath={`${fullKeyPath || fieldKey}.templates.${itemTemplateKey}.${key}`}
+                          onChange={(next) => vm.change(index, key, next)}
+                        />
+                      </div>
+                    );
+                  })}
+              </div>
+              {fieldKey === "t2i_rendering_strategies" && (
+                <>
+                  {itemTemplateKey === "typst" && (
+                    <TypstFonts
+                      cdnBaseUrl={String(
+                        (item.cdn_base_url === "__custom__"
+                          ? item.custom_cdn_base_url
+                          : item.cdn_base_url) || DEFAULT_TEMPLATE_CDN_BASE_URL,
+                      )}
+                    />
+                  )}
+                  <T2iProbe
+                    input={{
+                      render_service:
+                        itemTemplateKey === "typst"
+                          ? "typst"
+                          : itemTemplateKey === "custom"
+                            ? "custom"
+                            : "astrbot",
+                      service_endpoint: item.service_endpoint,
+                      service_token: item.service_token,
+                      timeout: item.timeout,
+                      request_timeout: item.request_timeout,
+                      raster_ppi: item.raster_ppi,
+                    }}
+                  />
+                </>
+              )}
+            </section>
+          );
+        })}
+      </div>
+      {vm.templateKeys.length > 0 && (
         <Button
-          type="dashed"
-          icon={<PlusOutlined />}
-          style={{ width: "100%" }}
-          onClick={() => handleAddItem(templateKeys[0])}
+          ref={addButton}
+          variant="outline"
+          disabled={!vm.valid}
+          className="text-info"
+          onClick={() =>
+            vm.templateKeys.length === 1 ? vm.add(vm.templateKeys[0]) : setAdding(true)
+          }
         >
-          添加 {templates[templateKeys[0]]?.name || "新条目"}
+          <IconPlus aria-hidden="true" />
+          {addLabel}
         </Button>
-      ) : null}
+      )}
       {fieldKey === "t2i_rendering_strategies" && nativePlan && (
         <TemplateResources cdnBaseUrl={nativeCdn} />
       )}
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogContent>
+          <DialogTitle>{addLabel}</DialogTitle>
+          <DialogDescription>选择要添加的类型，添加后可继续调整各项设置。</DialogDescription>
+          <div className="grid gap-2">
+            {vm.templateKeys.map((key) => (
+              <Button
+                key={key}
+                variant="outline"
+                className="h-auto flex-col items-start gap-1 whitespace-normal py-3 text-left"
+                onClick={() => {
+                  vm.add(key);
+                  setAdding(false);
+                }}
+              >
+                <span>{vm.templates[key].name || key}</span>
+                {vm.templates[key].description && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {vm.templates[key].description}
+                  </span>
+                )}
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
+        }}
+      >
+        <DialogContent
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            cancelButton.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            if (deleted.current) {
+              event.preventDefault();
+              addButton.current?.focus();
+            }
+          }}
+        >
+          <DialogTitle>删除配置条目？</DialogTitle>
+          <DialogDescription>将移除“{deleting?.name}”。保存配置后生效。</DialogDescription>
+          {deleting && !deleteCurrent && (
+            <p role="alert" className="text-sm text-warning">
+              条目已变更，请关闭后重新选择。
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button ref={cancelButton} variant="outline" onClick={() => setDeleting(null)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!deleteCurrent}
+              onClick={() => {
+                if (deleting && deleteCurrent) {
+                  vm.remove(deleting.index);
+                  deleted.current = true;
+                  setDeleting(null);
+                }
+              }}
+            >
+              确认删除
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-};
+}

@@ -92,7 +92,7 @@
   * `AnalysisTimelinePicker.tsx`：按时间倒序的任务选择条，直接显示平台、状态与记录的消耗和耗时。支持原生触屏滑动、鼠标拖动与方向键、Home / End；仅选中项进入 Tab 顺序，切换取消旧滚动帧，尊重减少动态效果，不滚动整页或虚构缺失指标。
   * `OverviewTrendCharts.tsx`：分析次数、Token 消耗和服务商分布，使用共享范围选择器与原生明细表。`useOverviewTrends` 管理范围、校验响应及隔离迟到请求；旧图保留自身范围标识，零消耗不借用历史总量。图表配置独立于请求状态，沿用 ECharts、主题变量与纯文本提示。
   * `TokenChartWidget.tsx`：按模块比较记录的 Token 总数，保留输入、输出和零消耗明细。可仅接收概要总数，缺少明细不补零；模块合计不一致时展示原始记录与说明，不编造其他模块。ECharts 采用主题变量和纯文本提示，表格支持键盘访问。
-  * `FieldRenderer.tsx` & `TemplateListRenderer.tsx`：动态配置表单渲染器（支持 Provider/Persona 自动点选与模板列表）。
+  * `FieldRenderer.tsx` & `TemplateListRenderer.tsx`：动态配置表单渲染器（支持 Provider/Persona 自动点选与模板列表）。模板列表通过 `useTemplateListModel` 处理默认值、字段编辑和排序，保留未知字段；视图使用共享按钮和弹窗，删除确认绑定原条目，配置变化后不删除错位条目。T2I 测试、字体和素材管理继续复用各自功能模块。
 
 ### 2.5 `pages/`（页面与视图模型层）
 配置的 `useConfigViewModel` 隔离读取请求并在卸载后废弃回执；保存采用同步提交锁和版本号，保存期间的新编辑不会被旧提交覆盖。模型、人格选项失败独立提示，重新读取失败保留草稿并禁止未经加载的保存。持久化结果和后续页面刷新结果分别反馈，字段错误计数从校验结果派生；定位错误前清除搜索并尊重减少动态效果设置。
