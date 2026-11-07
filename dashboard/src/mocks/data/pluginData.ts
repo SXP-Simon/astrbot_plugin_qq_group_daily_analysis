@@ -13,20 +13,22 @@ export const mockPluginDataOverview: PluginDataOverview = {
   temp_files: { count: 8, size_bytes: 2400000 },
 };
 
+const incrementalNow = Math.floor(Date.now() / 1000);
+
 export const mockIncrementalBatches: IncrementalBatchesResponse = {
   group_id: "123456789",
   cursor: {
     group_id: "123456789",
-    last_analyzed_timestamp: Date.now() - 86400000,
-    last_message_timestamp: Date.now(),
+    last_analyzed_timestamp: incrementalNow - 86400,
+    last_message_timestamp: incrementalNow,
     tracked_message_ids_count: 2450,
   },
   batches: [
     {
       group_id: "123456789",
       batch_id: "batch-20260926-01",
-      timestamp: Date.now() - 43200000,
-      created_at_iso: "2026-09-26T12:00:05Z",
+      timestamp: incrementalNow - 43200,
+      created_at_iso: new Date((incrementalNow - 43200) * 1000).toISOString(),
       messages_count: 420,
       characters_count: 6850,
       topics_count: 3,
@@ -46,8 +48,8 @@ export const mockIncrementalBatches: IncrementalBatchesResponse = {
     {
       group_id: "123456789",
       batch_id: "batch-20260926-02",
-      timestamp: Date.now() - 21600000,
-      created_at_iso: "2026-09-26T18:00:04Z",
+      timestamp: incrementalNow - 21600,
+      created_at_iso: new Date((incrementalNow - 21600) * 1000).toISOString(),
       messages_count: 650,
       characters_count: 11200,
       topics_count: 4,
@@ -63,8 +65,8 @@ export const mockIncrementalBatches: IncrementalBatchesResponse = {
     {
       group_id: "123456789",
       batch_id: "batch-20260926-03",
-      timestamp: Date.now() - 3600000,
-      created_at_iso: "2026-09-26T23:00:00Z",
+      timestamp: incrementalNow - 3600,
+      created_at_iso: new Date((incrementalNow - 3600) * 1000).toISOString(),
       messages_count: 470,
       characters_count: 8900,
       topics_count: 2,
