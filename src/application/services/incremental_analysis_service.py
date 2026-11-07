@@ -132,6 +132,16 @@ class IncrementalAnalysisService:
             adapter = self.bot_manager.get_adapter(platform_id)
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
+            platform_id = (
+                self.bot_manager.get_adapter_platform_id(adapter)
+                or adapter.platform_id
+                or platform_id
+                or ""
+            )
+            if not platform_id:
+                raise ValueError("增量分析缺少平台实例标识")
+            trace.platform = platform_id
+            store = await self.incremental_store.for_session(group_id, platform_id)
 
             try:
                 if await adapter.is_group_muted(group_id):
@@ -145,7 +155,7 @@ class IncrementalAnalysisService:
             (
                 last_analyzed_ts,
                 last_analyzed_message_ids,
-            ) = await self.incremental_store.get_last_analyzed_cursor(group_id)
+            ) = await store.get_last_analyzed_cursor(group_id)
             days = self.config_manager.get_analysis_days()
             days_lookback_ts = int(
                 (dt.datetime.now() - dt.timedelta(days=days)).timestamp()
@@ -337,6 +347,7 @@ class IncrementalAnalysisService:
                 unified_messages,
                 last_analyzed_ts,
                 last_analyzed_message_ids,
+                store,
             )
             if safe_ts is None:
                 return {
@@ -361,7 +372,7 @@ class IncrementalAnalysisService:
                 "batch_summary": batch.get_summary(),
                 "messages_count": len(unified_messages),
                 "group_id": group_id,
-                "platform_id": adapter.platform_id if adapter else (platform_id or ""),
+                "platform_id": platform_id,
             }
 
     async def _persist_incremental_batch(
@@ -371,6 +382,7 @@ class IncrementalAnalysisService:
         unified_messages: list[UnifiedMessage],
         last_analyzed_ts: int,
         last_analyzed_message_ids: set[str],
+        store: IIncrementalStore,
     ) -> int | None:
         """保存增量批次，再保存可选检查点并推进消息游标。
 
@@ -380,16 +392,13 @@ class IncrementalAnalysisService:
             unified_messages: 批次包含的消息，用于构造同秒边界 ID。
             last_analyzed_ts: 上一次游标的时间戳。
             last_analyzed_message_ids: 上一次游标同秒已分析的消息 ID。
+            store: 已绑定本次平台会话的增量仓储。
 
         Returns:
             推进后的时间戳；批次保存失败时返回 None，且不更新游标。
 
-        Raises:
-            RuntimeError: 增量仓储未初始化。
         """
-        if self.incremental_store is None:
-            raise RuntimeError("增量分析未初始化：缺少 IncrementalStore")
-        if not await self.incremental_store.save_batch(batch):
+        if not await store.save_batch(batch):
             return None
         group_id = batch.group_id
         last_message_timestamp = batch.last_message_timestamp
@@ -420,7 +429,7 @@ class IncrementalAnalysisService:
         if safe_ts != last_message_timestamp:
             analyzed_ids_at_boundary.clear()
 
-        await self.incremental_store.update_last_analyzed_cursor(
+        await store.update_last_analyzed_cursor(
             group_id,
             safe_ts,
             analyzed_ids_at_boundary,
@@ -519,9 +528,19 @@ class IncrementalAnalysisService:
             window_end = time_mod.time()
             window_start = window_end - (analysis_days * 24 * 3600)
 
-            batches = await self.incremental_store.query_batches(
-                group_id, window_start, window_end
+            adapter = self.bot_manager.get_adapter(platform_id)
+            if not adapter:
+                raise ValueError(f"未找到平台 {platform_id} 的适配器")
+            platform_id = (
+                self.bot_manager.get_adapter_platform_id(adapter)
+                or adapter.platform_id
+                or platform_id
+                or ""
             )
+            if not platform_id:
+                raise ValueError("增量分析缺少平台实例标识")
+            store = await self.incremental_store.for_session(group_id, platform_id)
+            batches = await store.query_batches(group_id, window_start, window_end)
 
             if not batches:
                 logger.warning(
@@ -532,10 +551,6 @@ class IncrementalAnalysisService:
             state = self.incremental_merge_service.merge_batches(
                 batches, window_start, window_end
             )
-
-            adapter = self.bot_manager.get_adapter(platform_id)
-            if not adapter:
-                raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
             try:
                 if await adapter.is_group_muted(group_id):
@@ -653,5 +668,5 @@ class IncrementalAnalysisService:
                 "messages_count": state.total_message_count,
                 "adapter": adapter,
                 "group_id": group_id,
-                "platform_id": adapter.platform_id or platform_id,
+                "platform_id": platform_id,
             }

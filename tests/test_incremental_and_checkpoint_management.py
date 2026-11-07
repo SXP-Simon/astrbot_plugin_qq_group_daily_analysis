@@ -547,6 +547,7 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
 
     mock_bot_manager = MagicMock()
     mock_bot_manager.get_adapter = MagicMock(return_value=mock_adapter)
+    mock_bot_manager.get_adapter_platform_id = MagicMock(return_value="onebot_test")
 
     # 4. 模拟 LLM Analyzer 与 StatisticsService
     mock_llm_analyzer = AsyncMock()
@@ -613,6 +614,11 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
     assert unified_msgs_passed[0].text_content == "周三今天的话题消息"
     assert unified_msgs_passed[0].reply_to_id == "thread-before"
     assert unified_msgs_passed[0].contents[1].at_user_id == "member-openid"
+    assert result["platform_id"] == "onebot_test"
+    scoped = await inc_store.for_session("group_999", "onebot_test")
+    assert await scoped.get_batch_count("group_999") == 1
+    assert await scoped.get_last_analyzed_cursor("group_999") == (unified_msgs_passed[0].timestamp, {"msg_wed"})
+    assert await (await inc_store.for_session("group_999", "another-instance")).get_batch_count("group_999") == 0
 
 
 @pytest.mark.asyncio
@@ -757,6 +763,7 @@ async def test_incremental_final_report_aggregates_only_in_window_batches(
     mock_adapter.is_group_muted = AsyncMock(return_value=False)
     mock_bot_manager = MagicMock()
     mock_bot_manager.get_adapter = MagicMock(return_value=mock_adapter)
+    mock_bot_manager.get_adapter_platform_id = MagicMock(return_value="onebot_test")
 
     mock_history = AsyncMock()
 
@@ -788,6 +795,8 @@ async def test_incremental_final_report_aggregates_only_in_window_batches(
     assert "周一已结题旧话题" not in topic_titles
     # 验证消息量仅为周三当天的 40 条
     assert analysis_result["statistics"].message_count == 40
+    assert result["platform_id"] == "onebot_test"
+    assert await (await store.for_session("grp_final_test", "another-instance")).get_batch_count("grp_final_test") == 0
 
 
 def test_checkpoint_list_ties_and_read_snapshot(temp_db, monkeypatch):
