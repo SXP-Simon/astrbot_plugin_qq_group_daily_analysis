@@ -1,13 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import {
-  fetchIncrementalGroups,
+  fetchIncrementalGroupDirectory,
   fetchIncrementalBatches,
   fetchIncrementalBatchDetail,
   deleteIncrementalBatch,
   resetIncrementalGroup,
   IncrementalBatchItem,
   IncrementalCursorInfo,
+  IncrementalGroupDirectoryItem,
 } from "../../../entities/plugin-data/api/pluginDataApi";
 
 import { useCheckpointsViewModel } from "./useCheckpointsViewModel";
@@ -16,8 +17,10 @@ export function usePluginDataViewModel() {
   const checkpointVM = useCheckpointsViewModel();
   const { refreshCheckpointGroups } = checkpointVM;
   // 2. 增量分析批次管理
-  const [incrGroups, setIncrGroups] = useState<string[]>([]);
-  const [selectedIncrGroup, setSelectedIncrGroup] = useState<string>("");
+  const [incrGroupDetails, setIncrGroupDetails] = useState<IncrementalGroupDirectoryItem[]>([]);
+  const [selectedTarget, setSelectedTarget] = useState<IncrementalGroupDirectoryItem | null>(null);
+  const selectedIncrGroup = selectedTarget?.group_id || "";
+  const selectedIncrPlatform = selectedTarget?.platform_id || "";
   const [incrBatches, setIncrBatches] = useState<IncrementalBatchItem[]>([]);
   const [incrPagination, setIncrPagination] = useState({ page: 1, pageSize: 20, total: 0 });
   const incrementalQuery = useRef({ page: 1, pageSize: 20 });
@@ -31,6 +34,7 @@ export function usePluginDataViewModel() {
   const incrementalRequest = useRef(0);
   const groupsRequest = useRef(0);
   const currentGroup = useRef("");
+  const currentPlatform = useRef("");
   const mounted = useRef(true);
   const mutationLock = useRef(false);
   const [incrementalError, setIncrementalError] = useState("");
@@ -52,13 +56,18 @@ export function usePluginDataViewModel() {
     const request = ++groupsRequest.current;
     setIncrGroupsError("");
     try {
-      const groups = await fetchIncrementalGroups();
+      const directory = await fetchIncrementalGroupDirectory();
       if (request !== groupsRequest.current) return;
-      setIncrGroups(groups);
-      setSelectedIncrGroup((current) => {
-        if (current && groups.includes(current)) return current;
-        return groups[0] || "";
-      });
+      setIncrGroupDetails(directory.group_details);
+      setSelectedTarget(
+        (current) =>
+          directory.group_details.find(
+            (target) =>
+              target.group_id === current?.group_id && target.platform_id === current?.platform_id,
+          ) ||
+          directory.group_details[0] ||
+          null,
+      );
     } catch {
       if (request === groupsRequest.current) setIncrGroupsError("群聊列表读取失败，请刷新重试。");
     }
@@ -70,18 +79,26 @@ export function usePluginDataViewModel() {
       groupId: string,
       page = incrementalQuery.current.page,
       pageSize = incrementalQuery.current.pageSize,
+      platformId = currentPlatform.current,
     ) => {
-      if (!groupId || currentGroup.current !== groupId) return;
+      if (!groupId || currentGroup.current !== groupId || currentPlatform.current !== platformId)
+        return;
       incrementalQuery.current = { page, pageSize };
       const request = ++incrementalRequest.current;
       setLoadingIncremental(true);
       setIncrementalError("");
       try {
-        const res = await fetchIncrementalBatches(groupId, page, pageSize);
-        if (request !== incrementalRequest.current || currentGroup.current !== groupId) return;
+        const res = await fetchIncrementalBatches(groupId, page, pageSize, platformId);
+        if (
+          request !== incrementalRequest.current ||
+          currentGroup.current !== groupId ||
+          currentPlatform.current !== platformId
+        )
+          return;
         if (
           res &&
           (res.group_id !== groupId ||
+            (res.platform_id !== undefined && res.platform_id !== platformId) ||
             res.cursor.group_id !== groupId ||
             res.batches.some((batch) => batch.group_id !== groupId))
         )
@@ -102,6 +119,10 @@ export function usePluginDataViewModel() {
 
   useEffect(() => {
     currentGroup.current = selectedIncrGroup;
+    currentPlatform.current = selectedIncrPlatform;
+    batchDetailRequest.current += 1;
+    setBatchDetailModalOpen(false);
+    setSelectedBatchDetail(null);
     incrementalRequest.current += 1;
     incrementalQuery.current = { page: 1, pageSize: incrementalQuery.current.pageSize };
     setIncrPagination({ ...incrementalQuery.current, total: 0 });
@@ -110,23 +131,30 @@ export function usePluginDataViewModel() {
     setIncrementalError("");
     setLoadingIncremental(false);
     if (selectedIncrGroup) void loadIncrementalData(selectedIncrGroup);
-  }, [selectedIncrGroup, loadIncrementalData]);
+  }, [selectedIncrGroup, selectedIncrPlatform, loadIncrementalData]);
 
-  const handleSelectIncrGroup = (groupId: string) => {
+  const handleSelectIncrGroup = (groupId: string, platformId = currentPlatform.current) => {
+    const target = incrGroupDetails.find(
+      (item) => item.group_id === groupId && item.platform_id === platformId,
+    );
+    if (!target) return;
     currentGroup.current = groupId;
+    currentPlatform.current = platformId;
     incrementalRequest.current += 1;
-    setSelectedIncrGroup(groupId);
+    batchDetailRequest.current += 1;
+    setSelectedTarget(target);
   };
 
   // 请求编号同时隔离切换、关闭与卸载后的迟到响应。
   const handleOpenBatchDetail = async (item: IncrementalBatchItem) => {
     const request = ++batchDetailRequest.current;
+    const platformId = currentPlatform.current;
     setBatchDetailModalOpen(true);
     setSelectedBatchDetail(item);
     setLoadingBatchDetail(true);
     setBatchDetailError("");
     try {
-      const full = await fetchIncrementalBatchDetail(item.group_id, item.batch_id);
+      const full = await fetchIncrementalBatchDetail(item.group_id, item.batch_id, platformId);
       if (request !== batchDetailRequest.current) return;
       if (!full) {
         setBatchDetailError("这个批次已不存在，请刷新列表。");
@@ -152,17 +180,18 @@ export function usePluginDataViewModel() {
   };
 
   // 确认弹窗持有操作目标；完成后只刷新仍在查看的群聊。
-  const handleDeleteBatch = async (groupId: string, batchId: string) => {
+  const handleDeleteBatch = async (groupId: string, batchId: string, platformId: string) => {
     if (mutationLock.current) return false;
     mutationLock.current = true;
     setIncrementalBusy(true);
     setIncrementalMutationError("");
     try {
-      const ok = await deleteIncrementalBatch(groupId, batchId);
+      const ok = await deleteIncrementalBatch(groupId, batchId, platformId);
       if (!mounted.current) return false;
       if (!ok) throw new Error("批次不存在或已被移除");
       toast.success(`已删除批次 ${batchId}`);
-      if (currentGroup.current === groupId) await loadIncrementalData(groupId);
+      if (currentGroup.current === groupId && currentPlatform.current === platformId)
+        await loadIncrementalData(groupId, undefined, undefined, platformId);
       return true;
     } catch (reason) {
       if (mounted.current)
@@ -176,16 +205,17 @@ export function usePluginDataViewModel() {
     }
   };
 
-  const handleResetIncrGroup = async (groupId: string) => {
+  const handleResetIncrGroup = async (groupId: string, platformId: string) => {
     if (mutationLock.current) return false;
     mutationLock.current = true;
     setIncrementalBusy(true);
     setIncrementalMutationError("");
     try {
-      const res = await resetIncrementalGroup(groupId);
+      const res = await resetIncrementalGroup(groupId, platformId);
       if (!mounted.current) return false;
       toast.success(`已重置群 ${groupId}，清理了 ${res.deleted_batches} 个批次`);
-      if (currentGroup.current === groupId) await loadIncrementalData(groupId);
+      if (currentGroup.current === groupId && currentPlatform.current === platformId)
+        await loadIncrementalData(groupId, undefined, undefined, platformId);
       if (!mounted.current) return false;
       await refreshIncrGroups();
       return true;
@@ -208,8 +238,22 @@ export function usePluginDataViewModel() {
 
   return {
     // 2. 增量
-    incrGroups,
+    incrGroups: incrGroupDetails.map((item) => item.group_id),
+    incrGroupOptions: incrGroupDetails.map((item) => ({
+      value: JSON.stringify([item.platform_id, item.group_id]),
+      label: `${item.group_name || "群名未记录"}（${item.group_id}） · ${item.platform_id || "平台未记录"}`,
+    })),
     selectedIncrGroup,
+    selectedIncrPlatform,
+    selectedIncrSessionKey: selectedTarget
+      ? JSON.stringify([selectedIncrPlatform, selectedIncrGroup])
+      : "",
+    handleSelectIncrSession: (key: string) => {
+      const target = incrGroupDetails.find(
+        (item) => JSON.stringify([item.platform_id, item.group_id]) === key,
+      );
+      if (target) handleSelectIncrGroup(target.group_id, target.platform_id);
+    },
     incrBatches,
     incrCursor,
     incrPagination,

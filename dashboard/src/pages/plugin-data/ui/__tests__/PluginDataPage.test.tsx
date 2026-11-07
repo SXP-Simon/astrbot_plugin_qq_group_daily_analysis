@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PluginDataPage } from "../PluginDataPage";
 import type { FontManagementRequest } from "../../../../features/manage-typst-fonts/model/FontManagementContext";
 import {
-  fetchIncrementalGroups,
+  fetchIncrementalGroupDirectory,
   fetchCheckpointGroups,
   fetchCheckpointsList,
 } from "../../../../entities/plugin-data/api/pluginDataApi";
@@ -29,7 +29,7 @@ vi.mock("../checkpoints/CheckpointsTab", () => ({ CheckpointsTab: () => <div>阶
 vi.mock("../incremental/BatchDetailModal", () => ({ BatchDetailModal: () => null }));
 vi.mock("../checkpoints/CheckpointDetailModal", () => ({ CheckpointDetailModal: () => null }));
 beforeEach(() => {
-  vi.mocked(fetchIncrementalGroups).mockResolvedValue([]);
+  vi.mocked(fetchIncrementalGroupDirectory).mockResolvedValue({ groups: [], group_details: [] });
   vi.mocked(fetchCheckpointGroups).mockResolvedValue([]);
   vi.mocked(fetchCheckpointsList).mockResolvedValue({ items: [], total: 0 });
 });

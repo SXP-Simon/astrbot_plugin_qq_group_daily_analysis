@@ -9,7 +9,7 @@ import type { usePluginDataViewModel } from "../../model/usePluginDataViewModel"
 import { formatTimestamp, formatTokens } from "../../../../shared/lib/formatters";
 import { Button } from "../../../../shared/ui/button";
 import { Pagination } from "../../../../shared/ui/pagination";
-import { NativeSelect } from "../../../../shared/ui/native-select";
+import { SearchSelect } from "../../../../shared/ui/search-select";
 import {
   Dialog,
   DialogContent,
@@ -22,12 +22,22 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
   const [managedLocator, setManagedLocator] = useState<RecordLocator | null>(null);
   const [importing, setImporting] = useState(false);
   const [confirmation, setConfirmation] = useState<
-    { kind: "delete"; batch: IncrementalBatchItem } | { kind: "reset"; groupId: string } | null
+    | { kind: "delete"; batch: IncrementalBatchItem; platformId: string }
+    | { kind: "reset"; groupId: string; platformId: string }
+    | null
   >(null);
-  const { incrGroups, selectedIncrGroup, incrBatches, incrCursor, loadingIncremental } = vm;
+  const {
+    incrGroups,
+    selectedIncrGroup,
+    selectedIncrPlatform,
+    incrBatches,
+    incrCursor,
+    loadingIncremental,
+  } = vm;
   const selection = useRecordSelection(
     incrBatches.map((item) => ({
       kind: "batch",
+      platform_id: selectedIncrPlatform,
       group_id: item.group_id,
       batch_id: item.batch_id,
     })),
@@ -39,29 +49,35 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
   const clearSelection = selection.clear;
   useEffect(() => {
     clearSelection();
-  }, [selectedIncrGroup, clearSelection]);
+  }, [selectedIncrGroup, selectedIncrPlatform, clearSelection]);
   const busy = selection.busy || vm.incrementalBusy;
   const allKeys = incrBatches.map((item) =>
-    recordKey({ kind: "batch", group_id: item.group_id, batch_id: item.batch_id }),
+    recordKey({
+      kind: "batch",
+      platform_id: selectedIncrPlatform,
+      group_id: item.group_id,
+      batch_id: item.batch_id,
+    }),
   );
   return (
     <div className="grid min-w-0 gap-5">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="grid min-w-0 gap-1 text-sm sm:w-72">
+      <div className="flex min-w-0 flex-wrap items-end gap-3">
+        <div className="grid w-full min-w-0 max-w-full gap-1 text-sm sm:w-[min(100%,36rem)]">
           目标群聊
-          <NativeSelect
-            value={selectedIncrGroup}
-            disabled={busy}
-            onChange={(event) => vm.handleSelectIncrGroup(event.target.value)}
-          >
-            {!incrGroups.length && <option value="">暂无增量群聊</option>}
-            {incrGroups.map((group) => (
-              <option key={group} value={group}>
-                {group}
-              </option>
-            ))}
-          </NativeSelect>
-        </label>
+          <SearchSelect
+            label="选择增量群聊"
+            value={vm.selectedIncrSessionKey}
+            options={
+              vm.incrGroupOptions.length
+                ? vm.incrGroupOptions
+                : incrGroups.length
+                  ? incrGroups.map((group) => ({ value: group, label: `群名未记录（${group}）` }))
+                  : [{ value: "", label: "暂无增量群聊" }]
+            }
+            disabled={busy || !incrGroups.length}
+            onChange={vm.handleSelectIncrSession}
+          />
+        </div>
         <Button
           variant="outline"
           disabled={loadingIncremental || busy}
@@ -80,7 +96,11 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
             disabled={busy || loadingIncremental}
             onClick={() => {
               vm.clearIncrementalMutationError();
-              setConfirmation({ kind: "reset", groupId: selectedIncrGroup });
+              setConfirmation({
+                kind: "reset",
+                groupId: selectedIncrGroup,
+                platformId: selectedIncrPlatform,
+              });
             }}
           >
             <IconTrash aria-hidden="true" />
@@ -155,6 +175,7 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                 {incrBatches.map((item) => {
                   const key = recordKey({
                     kind: "batch",
+                    platform_id: selectedIncrPlatform,
                     group_id: item.group_id,
                     batch_id: item.batch_id,
                   });
@@ -235,6 +256,7 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                             onClick={() =>
                               setManagedLocator({
                                 kind: "batch",
+                                platform_id: selectedIncrPlatform,
                                 group_id: item.group_id,
                                 batch_id: item.batch_id,
                               })
@@ -250,7 +272,11 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                             disabled={busy || loadingIncremental}
                             onClick={() => {
                               vm.clearIncrementalMutationError();
-                              setConfirmation({ kind: "delete", batch: item });
+                              setConfirmation({
+                                kind: "delete",
+                                batch: item,
+                                platformId: selectedIncrPlatform,
+                              });
                             }}
                           >
                             <IconTrash aria-hidden="true" />
@@ -306,10 +332,11 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
           </DialogTitle>
           <DialogDescription>
             {confirmation?.kind === "reset"
-              ? "清空这个群的全部增量批次并重置分析时间，下次分析将重新拉取消息。"
+              ? "清空所选平台中这个群的全部增量批次并重置分析时间，下次分析将重新拉取消息。"
               : "删除后该批次的话题与统计数据将不再参与汇总计算。"}
           </DialogDescription>
           <p className="m-0 break-all font-mono text-sm">
+            {confirmation?.platformId || "平台未记录"} ·{" "}
             {confirmation?.kind === "reset" ? confirmation.groupId : confirmation?.batch.batch_id}
           </p>
           {vm.incrementalMutationError && (
@@ -332,10 +359,11 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                 if (!confirmation) return;
                 const success =
                   confirmation.kind === "reset"
-                    ? await vm.handleResetIncrGroup(confirmation.groupId)
+                    ? await vm.handleResetIncrGroup(confirmation.groupId, confirmation.platformId)
                     : await vm.handleDeleteBatch(
                         confirmation.batch.group_id,
                         confirmation.batch.batch_id,
+                        confirmation.platformId,
                       );
                 if (success) setConfirmation(null);
               }}

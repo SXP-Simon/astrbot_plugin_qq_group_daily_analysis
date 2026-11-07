@@ -70,7 +70,7 @@ it("操作按钮指向所在批次，删除仍需确认且可取消", async () =
   });
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(deleteBatch).toHaveBeenCalledTimes(1);
-  expect(deleteBatch).toHaveBeenCalledWith("group-a", "batch-b");
+  expect(deleteBatch).toHaveBeenCalledWith("group-a", "batch-b", "");
 });
 
 it("删除失败时确认框保持打开，重新处理仍绑定原批次", async () => {
@@ -100,7 +100,7 @@ it("删除失败时确认框保持打开，重新处理仍绑定原批次", asyn
   rerender(<IncrementalTab vm={{ ...vm, incrementalMutationError: "当前群有任务正在运行" }} />);
   expect(screen.getByRole("dialog")).toHaveTextContent("keep-me");
   expect(screen.getByRole("alert")).toHaveTextContent("当前群有任务正在运行");
-  expect(remove).toHaveBeenCalledWith("a", "keep-me");
+  expect(remove).toHaveBeenCalledWith("a", "keep-me", "");
 });
 
 it("超过选择上限时全选最多 200 条，并可再次点击取消", () => {
@@ -158,4 +158,30 @@ it("分页选择保留其他页，取消本页全选不会清空其他页", () =
   expect(screen.getByText(/已选 1 项/)).toBeVisible();
   rerender(<IncrementalTab vm={{ ...vm, incrBatches: [batch("first")] }} />);
   expect(screen.getByLabelText("选择批次 first")).toBeChecked();
+});
+
+it("增量群聊可按群名或群号搜索，同号群选择携带平台身份", () => {
+  const { result } = renderHook(usePluginDataViewModel);
+  const select = vi.fn();
+  render(
+    <IncrementalTab
+      vm={{
+        ...result.current,
+        incrGroups: ["123"],
+        selectedIncrGroup: "123",
+        selectedIncrPlatform: "onebot",
+        selectedIncrSessionKey: '["onebot","123"]',
+        incrGroupOptions: [
+          { value: '["onebot","123"]', label: "技术群（123） · onebot" },
+          { value: '["telegram","123"]', label: "摄影群（123） · telegram" },
+        ],
+        handleSelectIncrSession: select,
+      }}
+    />,
+  );
+  expect(screen.queryByText(/这个群号关联多个平台/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /选择增量群聊：技术群/ }));
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "摄影" } });
+  fireEvent.click(screen.getByRole("button", { name: "摄影群（123） · telegram" }));
+  expect(select).toHaveBeenCalledWith('["telegram","123"]');
 });

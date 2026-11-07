@@ -5,6 +5,7 @@ import { configBackupListSchema, configBackupDetailSchema } from "../model/confi
 import {
   PluginDataOverview,
   IncrementalBatchesResponse,
+  IncrementalGroupDirectory,
   IncrementalBatchItem,
   CheckpointsListResponse,
   CheckpointDetail,
@@ -69,20 +70,32 @@ export async function clearConfigBackups(): Promise<number> {
 
 // ---------------- 增量批次与游标管理 API ----------------
 
-export async function fetchIncrementalGroups(): Promise<string[]> {
-  const res = await apiGet<{ groups: string[] }>("data/incremental/groups");
-  const data = extractData<{ groups: string[] }>(res);
-  return data?.groups ?? [];
+export async function fetchIncrementalGroupDirectory(): Promise<IncrementalGroupDirectory> {
+  const res = await apiGet<unknown>("data/incremental/groups");
+  return z
+    .object({
+      groups: z.array(z.string()),
+      group_details: z.array(
+        z.object({
+          group_id: z.string(),
+          platform_id: z.string(),
+          group_name: z.string(),
+        }),
+      ),
+    })
+    .parse(extractData<unknown>(res));
 }
 
 export async function fetchIncrementalBatches(
   groupId: string,
   page = 1,
   pageSize = 20,
+  platformId = "",
 ): Promise<IncrementalBatchesResponse | null> {
   if (!groupId) return null;
   const res = await apiGet<IncrementalBatchesResponse>("data/incremental/batches", {
     group_id: groupId,
+    platform_id: platformId,
     page,
     page_size: pageSize,
   });
@@ -92,18 +105,25 @@ export async function fetchIncrementalBatches(
 export async function fetchIncrementalBatchDetail(
   groupId: string,
   batchId: string,
+  platformId = "",
 ): Promise<IncrementalBatchItem | null> {
   if (!groupId || !batchId) return null;
   const res = await apiGet<IncrementalBatchItem>("data/incremental/batch/detail", {
     group_id: groupId,
+    platform_id: platformId,
     batch_id: batchId,
   });
   return extractData<IncrementalBatchItem>(res);
 }
 
-export async function deleteIncrementalBatch(groupId: string, batchId: string): Promise<boolean> {
+export async function deleteIncrementalBatch(
+  groupId: string,
+  batchId: string,
+  platformId = "",
+): Promise<boolean> {
   const res = await apiPost<{ deleted: boolean }>("data/incremental/batch", {
     group_id: groupId,
+    platform_id: platformId,
     batch_id: batchId,
   });
   return extractData<{ deleted: boolean }>(res)?.deleted ?? false;
@@ -111,10 +131,11 @@ export async function deleteIncrementalBatch(groupId: string, batchId: string): 
 
 export async function resetIncrementalGroup(
   groupId: string,
+  platformId = "",
 ): Promise<{ deleted_batches: number; message: string }> {
   const res = await apiPost<{ deleted_batches: number; message: string }>(
     "data/incremental/reset",
-    { group_id: groupId },
+    { group_id: groupId, platform_id: platformId },
   );
   return (
     extractData<{ deleted_batches: number; message: string }>(res) ?? {

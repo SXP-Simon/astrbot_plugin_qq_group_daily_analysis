@@ -7,6 +7,7 @@ export function recordKey(locator: RecordLocator) {
   return JSON.stringify([
     locator.kind,
     locator.group_id || "",
+    locator.platform_id || "",
     locator.batch_id || "",
     locator.date_str || "",
     locator.stage_name || "",

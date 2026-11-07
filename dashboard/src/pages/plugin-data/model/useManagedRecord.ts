@@ -41,7 +41,7 @@ export function useManagedRecord(
             locator: {
               kind: importKind,
               ...(importKind === "batch"
-                ? { group_id: "", batch_id: "" }
+                ? { platform_id: "", group_id: "", batch_id: "" }
                 : { key: "analysis_群号_2026-11-03_12-00" }),
             },
             data: {},

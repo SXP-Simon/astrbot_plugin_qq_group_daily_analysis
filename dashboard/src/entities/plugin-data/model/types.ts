@@ -12,3 +12,6 @@ export type IncrementalBatchesResponse = components["schemas"]["IncrementalBatch
 export type CheckpointItem = components["schemas"]["CheckpointItem"];
 export type CheckpointsListResponse = components["schemas"]["CheckpointsListResponse"];
 export type CheckpointDetail = components["schemas"]["CheckpointDetail"];
+
+export type IncrementalGroupDirectoryItem = components["schemas"]["IncrementalGroupDirectoryItem"];
+export type IncrementalGroupDirectory = components["schemas"]["IncrementalGroupDirectory"];
