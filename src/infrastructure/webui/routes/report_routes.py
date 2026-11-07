@@ -630,6 +630,37 @@ class ReportRoutes:
             return error_response("分析服务未初始化", status_code=500)
 
         try:
+            if trace_id:
+                source = await asyncio.to_thread(self.trace_store.get_trace, trace_id)
+                if not source or str(source.get("group_id", "")) != group_id:
+                    return error_response(
+                        "无法确认原任务归属，请从分析记录选择报告后重试",
+                        status_code=400,
+                    )
+                source_platform = str(source.get("platform", ""))
+                if not source_platform:
+                    return error_response(
+                        "原任务未记录平台实例，无法安全重绘；已有报告仍可查看和下载",
+                        status_code=400,
+                    )
+                source_platform = self.analysis_service.bot_manager.resolve_platform_id(
+                    source_platform
+                )
+                if (
+                    platform_id
+                    and self.analysis_service.bot_manager.resolve_platform_id(
+                        platform_id
+                    )
+                    != source_platform
+                ):
+                    return error_response(
+                        "所选平台与原任务不一致，请刷新报告列表后重试", status_code=400
+                    )
+                rerender_dto["platform_id"] = source_platform
+            elif not platform_id:
+                return error_response(
+                    "请选择平台实例或具体分析任务后重绘", status_code=400
+                )
             result = await self.analysis_service.rerender_report(
                 group_id=rerender_dto["group_id"],
                 date_str=rerender_dto["date_str"],
@@ -643,6 +674,8 @@ class ReportRoutes:
                     str(result.get("reason", "重新渲染失败")), status_code=400
                 )
             return json_response({"status": "ok", "data": result})
+        except ValueError as e:
+            return error_response(str(e), status_code=400)
         except Exception as e:
             logger.error(f"重新渲染报告异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)

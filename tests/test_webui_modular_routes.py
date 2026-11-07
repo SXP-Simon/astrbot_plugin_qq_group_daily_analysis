@@ -125,6 +125,7 @@ async def test_resume_task_uses_new_trace_and_preserves_terminal_source(
 
     routes = TaskRoutes(mock_trace_store, mock_active_mgr, MagicMock())
     routes.analysis_service.bot_manager.resolve_platform_id.side_effect = lambda value: value
+    routes.analysis_service.is_group_running.return_value = False
     monkeypatch.setattr(routes, "_run_resumed_task", run_resumed_task)
 
     response = await routes.api_resume_task("resume-source")
@@ -635,6 +636,7 @@ async def test_rerender_date_does_not_guess_unrelated_latest_trace(
                     "group_id": "12345",
                     "date_str": "2026-10-01",
                     "template_name": "scrapbook",
+                    "platform_id": "first",
                 }
             ),
         ),
@@ -667,3 +669,21 @@ async def test_incremental_cursor_contract_preserves_message_time(mock_trace_sto
         "last_message_timestamp": 456,
         "tracked_message_ids_count": 2,
     }
+
+
+@pytest.mark.asyncio
+async def test_rerender_checks_source_session_before_calling_application(mock_trace_store, monkeypatch):
+    route_module = importlib.import_module(ReportRoutes.__module__)
+    mock_trace_store.save_trace({"trace_id": "source-session", "group_id": "123", "platform": "first", "status": "running"})
+    body = {"group_id": "123", "date_str": "2026-11-07", "trace_id": "source-session", "platform_id": "second", "template_name": "scrapbook"}
+    request = MagicMock(query={}, json=AsyncMock(return_value=body))
+    monkeypatch.setattr(route_module, "request", request)
+    monkeypatch.setattr(route_module, "error_response", lambda message, status_code: {"status_code": status_code, "message": message})
+    service = MagicMock(rerender_report=AsyncMock(return_value={"success": True}))
+    service.bot_manager.resolve_platform_id.side_effect = lambda value: value
+    route = ReportRoutes(mock_trace_store, service)
+    assert (await route.api_rerender_report())["status_code"] == 400
+    service.rerender_report.assert_not_awaited()
+    body.pop("platform_id")
+    await route.api_rerender_report()
+    assert service.rerender_report.call_args.kwargs["platform_id"] == "first"

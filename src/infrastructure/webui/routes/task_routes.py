@@ -126,10 +126,7 @@ class TaskRoutes:
             platform = self.analysis_service.bot_manager.resolve_platform_id(platform)
             if self.analysis_service.is_group_running(
                 group_id, "daily", platform
-            ) or any(
-                task.get("group_id") == group_id and task.get("platform") == platform
-                for task in self.active_task_manager.get_active_tasks()
-            ):
+            ) or self.active_task_manager.is_analysis_running(group_id, platform):
                 return error_response(
                     "此会话的分析任务正在执行中，请稍后再试", status_code=409
                 )
@@ -221,18 +218,19 @@ class TaskRoutes:
         """后台异步执行触发任务"""
         if not self.analysis_service:
             return
-        trace_ctx = await TraceContext.set_async(
-            trace_id=trace_id,
-            group_id=group_id,
-            group_name=group_name,
-            platform=platform,
-            trigger_type="web_ui",
-        )
-        if provider_id:
-            trace_ctx.metadata["override_provider_id"] = str(provider_id)
-        if template_name and template_name != "auto":
-            trace_ctx.metadata["override_template_name"] = str(template_name)
+        trace_ctx: TraceContext | None = None
         try:
+            trace_ctx = await TraceContext.set_async(
+                trace_id=trace_id,
+                group_id=group_id,
+                group_name=group_name,
+                platform=platform,
+                trigger_type="web_ui",
+            )
+            if provider_id:
+                trace_ctx.metadata["override_provider_id"] = str(provider_id)
+            if template_name and template_name != "auto":
+                trace_ctx.metadata["override_template_name"] = str(template_name)
             bot_mgr = self.analysis_service.bot_manager
             target_platform = bot_mgr.resolve_platform_id(platform)
             trace_ctx.platform = target_platform
@@ -284,7 +282,7 @@ class TaskRoutes:
                     )
         except asyncio.CancelledError:
             logger.info(f"触发分析任务已取消: {trace_id}")
-            if trace_ctx.status == "running":
+            if trace_ctx is not None and trace_ctx.status == "running":
                 try:
                     await asyncio.to_thread(
                         trace_ctx.finish,
@@ -294,7 +292,7 @@ class TaskRoutes:
                 except RuntimeError as transition_error:
                     logger.info(f"取消收尾时任务已由并发事件收敛: {transition_error}")
         except Exception as e:
-            if trace_ctx.status == "running":
+            if trace_ctx is not None and trace_ctx.status == "running":
                 await asyncio.to_thread(
                     trace_ctx.finish, event=TaskEvent.FAIL, error_message=str(e)
                 )
@@ -324,6 +322,12 @@ class TaskRoutes:
                     status_code=400,
                 )
             platform = self.analysis_service.bot_manager.resolve_platform_id(platform)
+            if self.analysis_service.is_group_running(
+                group_id, "daily", platform
+            ) or self.active_task_manager.is_analysis_running(group_id, platform):
+                return error_response(
+                    "此会话已有分析任务，结束后再续跑", status_code=409
+                )
             resume_trace_id = str(uuid.uuid4())
             # 归档日随源任务保留，避免历史续跑或跨日再次续跑误查当天快照。
             extra = trace_record.get("extra")
@@ -451,18 +455,19 @@ class TaskRoutes:
         """后台异步执行断点续跑"""
         if not self.analysis_service:
             return
-        trace_ctx = await TraceContext.set_async(
-            trace_id=trace_id,
-            group_id=group_id,
-            group_name=group_name,
-            platform=platform,
-            trigger_type="resume",
-        )
-        if provider_id:
-            trace_ctx.metadata["override_provider_id"] = str(provider_id)
-        if template_name and template_name != "auto":
-            trace_ctx.metadata["override_template_name"] = str(template_name)
+        trace_ctx: TraceContext | None = None
         try:
+            trace_ctx = await TraceContext.set_async(
+                trace_id=trace_id,
+                group_id=group_id,
+                group_name=group_name,
+                platform=platform,
+                trigger_type="resume",
+            )
+            if provider_id:
+                trace_ctx.metadata["override_provider_id"] = str(provider_id)
+            if template_name and template_name != "auto":
+                trace_ctx.metadata["override_template_name"] = str(template_name)
             bot_mgr = self.analysis_service.bot_manager
             target_platform = bot_mgr.resolve_platform_id(platform)
             trace_ctx.platform = target_platform
@@ -527,7 +532,7 @@ class TaskRoutes:
                         else "unknown",
                     )
         except Exception as e:
-            if trace_ctx.status == "running":
+            if trace_ctx is not None and trace_ctx.status == "running":
                 await asyncio.to_thread(
                     trace_ctx.finish, event=TaskEvent.FAIL, error_message=str(e)
                 )

@@ -8,6 +8,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+
+@pytest.mark.asyncio
+async def test_webui_trace_initialization_failure_does_not_leave_active_task(tmp_path, monkeypatch):
+    manager = ActiveTaskManager()
+    service = MagicMock(execute_daily_analysis=AsyncMock())
+    routes = TaskRoutes(TraceSQLiteStore(tmp_path / "traces.db"), manager, service)
+    await manager.register_task("init-failure", "123", platform="first", trigger_type="web_ui")
+    monkeypatch.setattr(TraceContext, "set_async", AsyncMock(side_effect=OSError("模拟快照存储不可写")))
+    await routes._run_triggered_task("init-failure", "123", "示例群", "first")
+    assert not manager.get_active_tasks()
+    service.execute_daily_analysis.assert_not_awaited()
+
 from src.application.services.task_guard import TaskGuard
 from src.application.services.task_lifecycle_service import TaskLifecycleService
 from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
