@@ -148,9 +148,16 @@ it("按方案选定模板并给出同版来源，上传上游原文件时自动�
   );
   await screen.findByText("已安装 0 / 1 个字体，缺少 1 个");
   const row = screen.getByText(name).closest("tr")!;
-  expect(screen.queryByText(preset.upstream_url)).not.toBeInTheDocument();
-  fireEvent.click(within(row).getByRole("button", { name: "查看上游" }));
-  expect(await screen.findByText(preset.upstream_url)).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "外部地址" })).not.toBeInTheDocument();
+  const upstream = within(row).getByRole("button", { name: "查看上游" });
+  upstream.focus();
+  fireEvent.click(upstream);
+  const address = await screen.findByRole("dialog", { name: "查看上游" });
+  expect(within(address).getByRole("textbox", { name: "外部地址" })).toHaveValue(
+    preset.upstream_url,
+  );
+  fireEvent.click(within(address).getByRole("button", { name: "关闭" }));
+  await waitFor(() => expect(upstream).toHaveFocus());
   expect(within(row).getByRole("button", { name: "直接下载" })).toBeVisible();
   expect(within(row).queryByRole("link")).not.toBeInTheDocument();
   fireEvent.change(row.querySelector<HTMLInputElement>("input[type=file]")!, {
