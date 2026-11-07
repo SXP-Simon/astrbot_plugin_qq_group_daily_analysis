@@ -52,16 +52,17 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
             ? `本页日期范围内 ${vm.reports.length} / ${vm.rawReports.length} 份`
             : `本页 ${vm.rawReports.length} 份报告`}
         </span>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        <label className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
           本页时间排序
-          <NativeSelect
-            value={vm.sortOrder}
-            className="w-36"
-            onChange={(event) => vm.setSortOrder(event.target.value === "asc" ? "asc" : "desc")}
-          >
-            <option value="desc">从新到旧</option>
-            <option value="asc">从旧到新</option>
-          </NativeSelect>
+          <span className="block w-36">
+            <NativeSelect
+              value={vm.sortOrder}
+              onChange={(event) => vm.setSortOrder(event.target.value === "asc" ? "asc" : "desc")}
+            >
+              <option value="desc">从新到旧</option>
+              <option value="asc">从旧到新</option>
+            </NativeSelect>
+          </span>
         </label>
       </div>
       {vm.loading && (
