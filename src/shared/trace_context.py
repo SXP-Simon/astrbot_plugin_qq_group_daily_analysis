@@ -163,8 +163,6 @@ def strip_control_characters(value: str) -> str:
     return _CONTROL_CHARS.sub("", str(value))
 
 
-sanitize_component = strip_control_characters
-
 # 用于匹配报告 Caption 中去重 Token 的正则模式
 REPORT_CAPTION_PATTERN = re.compile(r"\| (\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
