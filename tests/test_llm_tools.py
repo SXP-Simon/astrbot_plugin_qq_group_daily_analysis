@@ -24,6 +24,9 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from src.domain.value_objects.group_session import GroupSession
+from src.shared.trace_context import TraceContext
+
 import pytest
 
 from src.application.services.analysis_trigger_service import AnalysisTriggerService
@@ -241,10 +244,26 @@ async def test_query_reports_sliding_probe(report_query_service, mock_checkpoint
 # ==================== 4. AnalysisTriggerService 触发测试 ====================
 
 
+@pytest.mark.asyncio
+async def test_trigger_pending_session_is_independent_and_init_failure_releases_it(trigger_service, mock_analysis_service, monkeypatch):
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    mock_analysis_service.bot_manager.resolve_platform_id.return_value = "second"
+    trigger_service._pending_groups[GroupSession("first", "123456")] = "other-task"
+    monkeypatch.setattr(TraceContext, "set_async", AsyncMock(side_effect=OSError("模拟追踪初始化失败")))
+    result = await trigger_service.trigger_analysis(event)
+    assert "后台启动" in result
+    tasks = list(trigger_service._background_tasks)
+    await asyncio.gather(*tasks, return_exceptions=True)
+    assert trigger_service._pending_groups == {GroupSession("first", "123456"): "other-task"}
+
+
 @pytest.fixture
 def mock_analysis_service():
     srv = MagicMock()
     srv.is_group_running.return_value = False
+    srv.bot_manager.resolve_platform_id.return_value = "aiocqhttp"
     srv.execute_daily_analysis = AsyncMock(return_value={"success": True})
     return srv
 
@@ -497,7 +516,7 @@ async def test_trigger_preemption_lock(trigger_service):
     event.get_platform_id.return_value = "aiocqhttp"
 
     # 人工占用预占集合
-    trigger_service._pending_groups.add("123456")
+    trigger_service._pending_groups[GroupSession("aiocqhttp", "123456")] = "pending"
     msg = await trigger_service.trigger_analysis(event=event, group="123456")
     assert "[任务冲突]" in msg
     trigger_service._pending_groups.clear()
