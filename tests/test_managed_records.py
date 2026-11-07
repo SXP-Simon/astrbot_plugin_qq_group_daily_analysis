@@ -11,7 +11,33 @@ from src.application.services.task_guard import TaskGuard
 from src.domain.entities.incremental_state import IncrementalBatch
 from src.infrastructure.persistence.checkpoint_store import CheckpointStore
 from src.infrastructure.persistence.incremental_store import IncrementalStore
+from src.infrastructure.persistence.history_manager import HistoryManager
+from src.shared.trace_context import TraceContext
 from src.infrastructure.webui.routes import managed_record_routes as routes
+
+
+@pytest.mark.asyncio
+async def test_session_history_versions_remain_manageable_and_delete_repairs_only_own_pointer(record_endpoint, monkeypatch):
+    endpoint, request, plugin, _ = record_endpoint
+    manager = HistoryManager(plugin)
+    monkeypatch.setattr("src.shared.trace_context._global_trace_store", None)
+    for platform, task_id in [("first", "a1"), ("second", "b1"), ("first", "a2")]:
+        with TraceContext(trace_id=task_id, platform=platform, group_id="123"):
+            assert await manager.save_analysis("123", {"topics": []}, "2026-11-07", "12:00", platform_id=platform)
+    request.query = {"kind": "history"}
+    result = await endpoint.api_list()
+    assert result["data"]["total"] == 3
+    items = result["data"]["items"]
+    assert {item["locator"]["platform_id"] for item in items} == {"first", "second"}
+    latest_key = plugin.values[manager.latest_key("123", "2026-11-07", "first")]
+    locator = next(item["locator"] for item in items if item["locator"]["key"] == latest_key)
+    request.query = locator
+    detail = (await endpoint.api_detail())["data"]
+    request.json.return_value = {"locator": locator, "operation": "delete", "revision": detail["revision"]}
+    assert (await endpoint.api_mutate())["status"] == "ok"
+    assert (await manager.get_analysis("123", "2026-11-07", platform_id="first"))["trace_id"] == "a1"
+    assert (await manager.get_analysis("123", "2026-11-07", platform_id="second"))["trace_id"] == "b1"
+    assert await manager.get_analysis("123", "2026-11-07", platform_id="first", trace_id="a2") is None
 
 
 class FakePlugin:
