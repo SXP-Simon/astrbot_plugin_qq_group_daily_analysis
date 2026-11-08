@@ -98,7 +98,7 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
     const view = render(<App />);
     try {
       // 验证顶部标题栏
-      expect(screen.getByText("群聊分析")).toBeInTheDocument();
+      expect(screen.getByText("AstrBot 群分析总结插件")).toBeInTheDocument();
 
       // 验证核心导航 Tab 标签
       for (const name of ["总览", "分析记录", "统计", "报告", "配置", "数据", "日志"])

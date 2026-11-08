@@ -104,8 +104,12 @@ export function AppShell({
       </a>
       <header className="app-header">
         <div className="app-brand">
-          <img src={logo} alt="群聊日常分析插件" className="size-8 rounded-lg object-contain" />
-          <span>群聊分析</span>
+          <img
+            src={logo}
+            alt="AstrBot 群分析总结插件"
+            className="size-8 rounded-lg object-contain"
+          />
+          <span>AstrBot 群分析总结插件</span>
         </div>
         <div className="app-navigation" ref={navigation} onClick={centerSelected}>
           <TabsList aria-label="主导航" className="bg-transparent p-0">

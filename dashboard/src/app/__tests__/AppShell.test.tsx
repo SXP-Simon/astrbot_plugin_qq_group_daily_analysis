@@ -69,7 +69,7 @@ describe("正式页面导航", () => {
     );
     vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     const view = render(<Fixture />);
-    expect(screen.getByRole("img", { name: "群聊日常分析插件" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "AstrBot 群分析总结插件" })).toBeVisible();
     const container = screen.getByRole("tablist", { name: "主导航" }).parentElement!;
     Object.defineProperties(container, {
       clientWidth: { configurable: true, value: 200 },
