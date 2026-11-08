@@ -7,7 +7,7 @@ vi.mock("../../../../shared/api/bridge", async (original) => ({
   apiGet: vi.fn(),
 }));
 afterEach(() => vi.resetAllMocks());
-it("报告接收不重复传输 Base64 的 HTML，并对文件读取设置独立等待上限", async () => {
+it("报告接收不重复传输 Base64 的 HTML，不因传输超过三十秒主动失败", async () => {
   const report = {
     filename: "example.html",
     size_bytes: 20,
@@ -16,9 +16,9 @@ it("报告接收不重复传输 Base64 的 HTML，并对文件读取设置独立
   };
   vi.mocked(apiGet).mockResolvedValue({ data: report });
   expect(await fetchReportContent(report.filename)).toEqual(report);
-  expect(apiGet).toHaveBeenCalledWith("reports/content", { filename: report.filename }, 30000);
+  expect(apiGet).toHaveBeenCalledWith("reports/content", { filename: report.filename });
 });
-it("文件管理读取同样限制等待并保留真实修订号", async () => {
+it("文件管理读取持续等待并保留真实修订号", async () => {
   const file = {
     name: "image.png",
     content_base64: "YWJj",
@@ -28,9 +28,8 @@ it("文件管理读取同样限制等待并保留真实修订号", async () => {
   };
   vi.mocked(apiGet).mockResolvedValue({ data: file });
   expect(await fetchManagedContent("reports", file.name)).toEqual(file);
-  expect(apiGet).toHaveBeenCalledWith(
-    "plugin-data/files/content",
-    { partition: "reports", name: file.name },
-    30000,
-  );
+  expect(apiGet).toHaveBeenCalledWith("plugin-data/files/content", {
+    partition: "reports",
+    name: file.name,
+  });
 });

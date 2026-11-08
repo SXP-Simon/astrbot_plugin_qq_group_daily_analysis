@@ -38,7 +38,7 @@ export async function fetchReportHistory(
 }
 
 export async function fetchReportContent(filename: string): Promise<ReportItem | null> {
-  const res = await apiGet<ReportItem>("reports/content", { filename }, 30_000);
+  const res = await apiGet<ReportItem>("reports/content", { filename });
   const data = extractData<ReportItem>(res);
   return data || null;
 }
@@ -57,13 +57,9 @@ export async function fetchReportTemplates(
 
 export async function fetchTemplatePreview(templateName: string): Promise<string | null> {
   try {
-    const res = await apiGet<{ data_url?: string }>(
-      "templates/preview",
-      {
-        template_name: templateName,
-      },
-      30_000,
-    );
+    const res = await apiGet<{ data_url?: string }>("templates/preview", {
+      template_name: templateName,
+    });
     const data = extractData<{ data_url?: string }>(res);
     if (data && typeof data === "object" && typeof data.data_url === "string") {
       return data.data_url;
