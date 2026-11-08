@@ -1,7 +1,8 @@
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "./button";
+import { Input } from "./input";
 import { NativeSelect } from "./native-select";
-import { Fragment } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 
 interface PaginationProps {
   page: number;
@@ -9,6 +10,7 @@ interface PaginationProps {
   total: number;
   pageSizes?: number[];
   disabled?: boolean;
+  loading?: boolean;
   onChange: (page: number, pageSize: number) => void;
 }
 
@@ -18,9 +20,16 @@ export function Pagination({
   total,
   pageSizes = [10, 15, 20, 50, 100],
   disabled = false,
+  loading = false,
   onChange,
 }: PaginationProps) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
+  const [jump, setJump] = useState("");
+  const jumpId = useId();
+  const jumpPage = Number(jump);
+  const validJump =
+    /^\d+$/.test(jump) && Number.isSafeInteger(jumpPage) && jumpPage >= 1 && jumpPage <= pages;
+  useEffect(() => setJump(""), [page, pageSize, pages]);
   const visiblePages = [...new Set([1, page - 1, page, page + 1, pages])]
     .filter((value) => value >= 1 && value <= pages)
     .sort((a, b) => a - b);
@@ -29,7 +38,20 @@ export function Pagination({
       aria-label="分页"
       className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm"
     >
-      <span className="text-muted-foreground">共 {total.toLocaleString()} 条记录</span>
+      <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+        <span>共 {total.toLocaleString()} 条记录</span>
+        <span aria-live="polite" className="inline-flex items-center gap-1.5">
+          {loading && (
+            <>
+              <IconLoader2
+                aria-hidden="true"
+                className="size-4 animate-spin motion-reduce:animate-none"
+              />
+              正在读取第 {page} 页…
+            </>
+          )}
+        </span>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-28">
           <NativeSelect
@@ -82,6 +104,43 @@ export function Pagination({
         >
           <IconChevronRight aria-hidden="true" />
         </Button>
+        {pages > 1 && (
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!disabled && validJump && jumpPage !== page) {
+                onChange(jumpPage, pageSize);
+                setJump("");
+              }
+            }}
+          >
+            <label htmlFor={jumpId} className="whitespace-nowrap">
+              跳到页码
+            </label>
+            <Input
+              id={jumpId}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={jump}
+              disabled={disabled}
+              onChange={(event) => setJump(event.target.value)}
+              className="w-16 text-center"
+              aria-describedby={`${jumpId}-total`}
+            />
+            <span id={`${jumpId}-total`} className="whitespace-nowrap text-muted-foreground">
+              / {pages} 页
+            </span>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={disabled || !validJump || jumpPage === page}
+            >
+              跳转
+            </Button>
+          </form>
+        )}
       </div>
     </nav>
   );

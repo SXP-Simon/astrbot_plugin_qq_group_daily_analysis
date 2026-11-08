@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { SearchSelect } from "../search-select";
@@ -164,4 +165,58 @@ it("选项在后台重排时活动项跟随值，移除后不会误选新索引�
   );
   fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
   expect(change).not.toHaveBeenCalled();
+});
+
+it("读取期间可以连续翻页和输入跳转，目标页立即更新且每页条数不丢失", () => {
+  const change = vi.fn();
+  function Example() {
+    const [page, setPage] = useState(1);
+    return (
+      <Pagination
+        page={page}
+        pageSize={20}
+        total={600}
+        loading
+        onChange={(next, size) => {
+          change(next, size);
+          setPage(next);
+        }}
+      />
+    );
+  }
+  render(<Example />);
+  fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+  fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+  expect(change.mock.calls).toEqual([
+    [2, 20],
+    [3, 20],
+  ]);
+  expect(screen.getByRole("button", { name: "第 3 页" })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByText("正在读取第 3 页…")).toBeVisible();
+  const input = screen.getByLabelText("跳到页码");
+  fireEvent.change(input, { target: { value: "18" } });
+  fireEvent.submit(input.closest("form")!);
+  expect(change).toHaveBeenLastCalledWith(18, 20);
+  expect(input).toHaveValue("");
+});
+
+it("页码跳转拦截空值、小数、越界和非数字，禁用时不会提交，范围改变后清除草稿", () => {
+  const change = vi.fn();
+  const view = render(<Pagination page={1} pageSize={20} total={600} onChange={change} />);
+  const input = screen.getByLabelText("跳到页码");
+  for (const value of ["", "0", "-2", "2.5", "31", "abc", "2e1", "9007199254740992"]) {
+    fireEvent.change(input, { target: { value } });
+    expect(screen.getByRole("button", { name: "跳转" })).toBeDisabled();
+    fireEvent.submit(input.closest("form")!);
+  }
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { value: "18" } });
+  view.rerender(<Pagination page={1} pageSize={20} total={600} disabled onChange={change} />);
+  expect(input).toBeDisabled();
+  fireEvent.submit(input.closest("form")!);
+  expect(change).not.toHaveBeenCalled();
+  view.rerender(<Pagination page={1} pageSize={20} total={60} onChange={change} />);
+  expect(input).toHaveValue("");
+  view.rerender(<Pagination page={1} pageSize={20} total={1} onChange={change} />);
+  expect(screen.queryByLabelText("跳到页码")).not.toBeInTheDocument();
 });
