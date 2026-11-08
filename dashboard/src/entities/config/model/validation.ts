@@ -164,6 +164,14 @@ export function buildFieldZodSchema(fieldKey: string, field: SchemaFieldItem): z
         });
       });
 
+    case "object":
+      return z.unknown().superRefine((value, context) => {
+        if (value === undefined || value === null) return;
+        if (typeof value !== "object" || Array.isArray(value)) {
+          context.addIssue({ code: "custom", message: "请填写有效的 JSON 对象，修正后再保存。" });
+        }
+      });
+
     case "file":
       return z.any().superRefine((val, ctx) => {
         if (val === undefined || val === null || val === "") return;
