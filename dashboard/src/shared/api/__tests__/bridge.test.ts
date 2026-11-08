@@ -122,3 +122,32 @@ describe("API 通信网桥 (Shared API Bridge)", () => {
     await expect(apiPost("test")).rejects.toThrow("未收到");
   });
 });
+
+it("文件读取超时会结束等待；迟到响应不改变结果，正常响应清理定时器", async () => {
+  vi.useFakeTimers();
+  try {
+    let complete: (result: { data: string }) => void = () => {};
+    const api = vi.fn(
+      () =>
+        new Promise<{ data: string }>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    window.AstrBotPluginPage = { apiGet: api } as unknown as NonNullable<
+      Window["AstrBotPluginPage"]
+    >;
+    const request = apiGet("reports/content", { filename: "large.png" }, 30000);
+    const rejected = expect(request).rejects.toThrow("读取超过 30 秒");
+    await vi.advanceTimersByTimeAsync(30000);
+    await rejected;
+    complete({ data: "late" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+    api.mockResolvedValueOnce({ data: "ready" });
+    expect(await apiGet("reports/content", {}, 30000)).toEqual({ data: "ready" });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    delete window.AstrBotPluginPage;
+    vi.useRealTimers();
+  }
+});
