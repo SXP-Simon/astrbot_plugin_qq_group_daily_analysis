@@ -60,3 +60,42 @@ it("旧复制接口报错仍清理临时控件，不留下隐藏内容", async (
     Reflect.deleteProperty(document, "execCommand");
   }
 });
+
+it.each([true, false])(
+  "受限 iframe 复制结果为 %s 时仍恢复嵌套滚动并禁止焦点滚动",
+  async (successful) => {
+    vi.stubGlobal("navigator", {});
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    const logs = document.createElement("div");
+    const button = document.createElement("button");
+    logs.append(button);
+    dialog.append(logs);
+    document.body.append(dialog);
+    button.focus();
+    dialog.scrollTop = 900;
+    logs.scrollTop = 180;
+    logs.scrollLeft = 24;
+    const focus = vi.spyOn(HTMLTextAreaElement.prototype, "focus");
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: () => {
+        dialog.scrollTop = 0;
+        logs.scrollTop = 0;
+        logs.scrollLeft = 0;
+        return successful;
+      },
+    });
+    try {
+      expect(await copyToClipboard("示例日志")).toBe(successful);
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+      expect(document.activeElement).toBe(button);
+      expect(dialog.scrollTop).toBe(900);
+      expect(logs.scrollTop).toBe(180);
+      expect(logs.scrollLeft).toBe(24);
+      expect(document.querySelector("textarea")).toBeNull();
+    } finally {
+      Reflect.deleteProperty(document, "execCommand");
+    }
+  },
+);
