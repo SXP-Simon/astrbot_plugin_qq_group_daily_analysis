@@ -174,3 +174,38 @@ it("弹窗下载失败在对应报告内提示，不把另一份文件的失败�
   await act(async () => result.current.openPreview(html));
   expect(result.current.previewError).toBe("");
 });
+
+it("超过三十秒仍接受当前预览，关闭后同文件重开也不接收上一轮迟到结果", async () => {
+  const late = deferred<ReportItem | null>();
+  vi.mocked(fetchReportContent).mockReturnValueOnce(late.promise);
+  const { result } = renderHook(useReportActions);
+  act(() => {
+    void result.current.openPreview(image);
+  });
+  await act(async () => vi.advanceTimersByTimeAsync(45000));
+  expect(result.current.previewLoading).toBe(true);
+  expect(result.current.previewError).toBe("");
+  await act(async () => late.resolve(imageContent));
+  expect(result.current.selectedReport).toEqual(imageContent);
+  expect(result.current.previewLoading).toBe(false);
+
+  const old = deferred<ReportItem | null>();
+  const current = deferred<ReportItem | null>();
+  vi.mocked(fetchReportContent)
+    .mockReturnValueOnce(old.promise)
+    .mockReturnValueOnce(current.promise);
+  act(() => {
+    void result.current.openPreview(image);
+  });
+  await act(async () => vi.advanceTimersByTimeAsync(30001));
+  act(() => result.current.closePreview());
+  act(() => {
+    void result.current.openPreview(image);
+  });
+  await act(async () => old.resolve({ ...imageContent, data_url: "data:image/png;base64,old" }));
+  expect(result.current.selectedReport).toEqual(image);
+  expect(result.current.previewLoading).toBe(true);
+  await act(async () => current.resolve(imageContent));
+  expect(result.current.selectedReport).toEqual(imageContent);
+  expect(result.current.previewOpen).toBe(true);
+});
