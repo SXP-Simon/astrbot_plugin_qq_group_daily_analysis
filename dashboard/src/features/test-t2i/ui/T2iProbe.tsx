@@ -28,7 +28,7 @@ export function T2iProbe({ input }: { input: T2iProbeInput }) {
       )}
       <Button
         variant="outline"
-        className="border-info/20 bg-info/5 text-info hover:bg-info/10"
+        className="border-secondary-line bg-secondary-soft text-secondary-ink hover:bg-secondary-soft"
         disabled={loading}
         onClick={() => void run()}
       >

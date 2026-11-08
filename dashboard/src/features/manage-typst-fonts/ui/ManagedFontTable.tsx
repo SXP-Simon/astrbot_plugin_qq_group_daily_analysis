@@ -30,7 +30,7 @@ export function ManagedFontTable({
       aria-busy={vm.loading}
       className="min-w-0 overflow-x-auto rounded-xl border border-border"
     >
-      <table className="w-full min-w-[64rem] table-fixed border-collapse text-left text-sm">
+      <table className="ui-data-table w-full min-w-[64rem] table-fixed border-collapse text-left text-sm">
         <colgroup>
           <col className="w-12" />
           <col className="w-56" />
@@ -69,7 +69,11 @@ export function ManagedFontTable({
           {vm.pageRows.map((row) => {
             const preset = vm.status?.presets?.find((item) => item.name === row.name);
             return (
-              <tr key={row.name} className="border-t border-border align-top hover:bg-muted/30">
+              <tr
+                key={row.name}
+                aria-selected={selected.has(row.name)}
+                className="border-t border-border align-top"
+              >
                 <td className="p-3">
                   <input
                     type="checkbox"
@@ -108,7 +112,7 @@ export function ManagedFontTable({
                     ) : row.themes.length === vm.groups.length ? (
                       <span
                         title={row.themes.map(themeName).join("、")}
-                        className="rounded-md bg-info/10 px-2 py-0.5 text-xs text-info"
+                        className="rounded-md bg-secondary-soft px-2 py-0.5 text-xs text-secondary-ink"
                       >
                         所有内置模板共享
                       </span>
@@ -128,7 +132,7 @@ export function ManagedFontTable({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-info"
+                        className="text-secondary-ink"
                         disabled={locked || browserDownload.running}
                         onClick={() => browserDownload.download(preset)}
                       >

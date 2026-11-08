@@ -84,7 +84,7 @@ export function TemplateUninstallModal({
                     <span className="break-words font-medium">{item.label || item.id}</span>
                     <code className="break-all text-xs text-muted-foreground">{item.id}</code>
                     {item.desc && <p className="m-0 text-sm text-muted-foreground">{item.desc}</p>}
-                    <span className="text-xs text-info">
+                    <span className="text-xs text-secondary-ink">
                       {templateCapabilities(item).join(" / ")}
                     </span>
                   </div>

@@ -9,7 +9,7 @@ export function TemplateCdnProbe({ baseUrl }: { baseUrl: string }) {
     <section aria-label="CDN 可用性检测" className="min-w-0 space-y-3">
       <Button
         variant="outline"
-        className="border-info/20 bg-info/5 text-info hover:bg-info/10"
+        className="border-secondary-line bg-secondary-soft text-secondary-ink hover:bg-secondary-soft"
         onClick={() => void run()}
         disabled={loading}
       >
@@ -70,7 +70,7 @@ export function TemplateCdnProbe({ baseUrl }: { baseUrl: string }) {
                 <p className="m-0 text-muted-foreground">{check.description}</p>
                 {check.error && <p className="m-0">{check.error}</p>}
                 <details>
-                  <summary className="w-fit cursor-pointer rounded-sm py-1 text-info focus-visible:outline-2 focus-visible:outline-ring">
+                  <summary className="w-fit cursor-pointer rounded-sm py-1 text-secondary-ink focus-visible:outline-2 focus-visible:outline-ring">
                     查看检测详情
                   </summary>
                   <p className="m-0 py-1 text-muted-foreground">
@@ -78,7 +78,7 @@ export function TemplateCdnProbe({ baseUrl }: { baseUrl: string }) {
                     {check.status_code !== null && ` · HTTP ${check.status_code}`}
                   </p>
                   <a
-                    className="font-mono text-xs text-info underline underline-offset-4"
+                    className="font-mono text-xs text-secondary-ink underline underline-offset-4"
                     href={check.url}
                     target="_blank"
                     rel="noreferrer"

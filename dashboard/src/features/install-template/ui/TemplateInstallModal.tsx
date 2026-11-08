@@ -170,7 +170,7 @@ export function TemplateInstallModal({ open, onClose, onInstalled }: TemplateIns
               <code>src/infrastructure/reporting/templates/scrapbook/</code>。
             </p>
             <a
-              className="text-info underline underline-offset-4"
+              className="text-secondary-ink underline underline-offset-4"
               href="https://github.com/lingyun14beta/daily-analysis-report-theme"
               target="_blank"
               rel="noopener noreferrer"

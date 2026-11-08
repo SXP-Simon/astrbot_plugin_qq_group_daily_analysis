@@ -16,7 +16,12 @@ export function ConfigBackupsViewer() {
   const vm = useConfigBackups();
   return (
     <>
-      <Button variant="ghost" size="sm" className="text-info hover:bg-info/10" onClick={vm.load}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-secondary-ink hover:bg-secondary-soft"
+        onClick={vm.load}
+      >
         <IconHistory aria-hidden="true" />
         查看备份
       </Button>
@@ -81,9 +86,8 @@ export function ConfigBackupsViewer() {
                       )}
                     </div>
                     <Button
-                      variant={vm.selectedFilename === item.filename ? "secondary" : "outline"}
+                      variant={vm.selectedFilename === item.filename ? "default" : "tonal"}
                       size="sm"
-                      className="border-info/20 bg-info/5 text-info hover:bg-info/10"
                       disabled={Boolean(item.error)}
                       aria-pressed={vm.selectedFilename === item.filename}
                       onClick={() => vm.select(item.filename)}

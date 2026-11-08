@@ -127,7 +127,10 @@ export function TemplatePackages({
             </Button>
             {selected.template &&
               templateCapabilities(selected.template).map((label) => (
-                <span key={label} className="rounded-md bg-info/10 px-2 py-1 text-xs text-info">
+                <span
+                  key={label}
+                  className="rounded-md bg-secondary-soft px-2 py-1 text-xs text-secondary-ink"
+                >
                   {label}
                 </span>
               ))}
@@ -158,7 +161,7 @@ export function TemplatePackages({
             </span>
           </div>
           {directory === "." ? (
-            <p className="m-0 rounded-xl bg-info/10 p-3 text-sm text-info">
+            <p className="m-0 rounded-xl bg-secondary-soft p-3 text-sm text-secondary-ink">
               这些文件不属于模板包，可在下方逐项或多选删除；不移除整个模板存储根目录。
             </p>
           ) : !selected.template && !vm.loading && !vm.error ? (

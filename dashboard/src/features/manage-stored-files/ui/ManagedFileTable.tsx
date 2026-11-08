@@ -103,7 +103,10 @@ export function ManagedFileTable({
               )}
               <td className="p-3">
                 <span className="flex min-w-0 items-start gap-2">
-                  <IconFile aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-info" />
+                  <IconFile
+                    aria-hidden="true"
+                    className="mt-0.5 size-4 shrink-0 text-secondary-ink"
+                  />
                   <span
                     className="min-w-0 font-mono text-xs leading-relaxed [overflow-wrap:anywhere]"
                     title={file.name}
