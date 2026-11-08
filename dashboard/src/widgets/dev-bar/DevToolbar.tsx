@@ -1,110 +1,84 @@
-import React, { useState } from "react";
-import { Button, Tag, Space, Dropdown, MenuProps, message } from "antd";
-import {
-  ToolOutlined,
-  BulbOutlined,
-  ApiOutlined,
-  ThunderboltOutlined,
-  CheckCircleOutlined,
-} from "@ant-design/icons";
+import { IconAdjustments, IconBolt, IconSunMoon } from "@tabler/icons-react";
+import { toast } from "sonner";
 import { getDevBridgeMode, setDevBridgeMode } from "../../shared/api/devBridge";
-import { mockSSEService } from "../../mocks";
+import { mockSSEService } from "../../mocks/sseMock";
+import { Button } from "../../shared/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "../../shared/ui/dialog";
+import { NativeSelect } from "../../shared/ui/native-select";
 
-export const DevToolbar: React.FC = () => {
-  const [mode, setMode] = useState(getDevBridgeMode());
+export function DevToolbar() {
+  const mode = getDevBridgeMode();
 
-  // 生产环境或处于 AstrBot 宿主 iframe 内时不渲染
+  // 正式构建不包含此模块，宿主内也不显示独立开发操作。
   if (!import.meta.env.DEV || (typeof window !== "undefined" && window.AstrBotPluginPage)) {
     return null;
   }
 
-  const handleToggleTheme = () => {
-    const current = localStorage.getItem("astrbot_plugin_theme_is_dark") === "true";
-    const next = !current;
-    localStorage.setItem("astrbot_plugin_theme_is_dark", String(next));
-    window.location.reload();
-  };
-
-  const handleModeChange = (newMode: "mock" | "proxy") => {
-    setMode(newMode);
-    setDevBridgeMode(newMode);
-  };
-
-  const handleTriggerMockSSE = () => {
-    mockSSEService.emitManualEvent({
-      type: "TASK_UPDATE",
-      event: "task_progress",
-      data: {
-        task_id: "task-live-demo-manual",
-        trace_id: `trace-manual-${Date.now()}`,
-        group_id: "123456789",
-        stage: "llm_analysis",
-        progress: 85,
-        elapsed_seconds: 15,
-      },
-    });
-    message.success("已向前端注入模拟 SSE 阶段事件");
-  };
-
-  const menuItems: MenuProps["items"] = [
-    {
-      key: "mode-mock",
-      icon: <CheckCircleOutlined />,
-      label: <span>Mock 模式 {mode === "mock" && <Tag color="blue">当前</Tag>}</span>,
-      onClick: () => handleModeChange("mock"),
-    },
-    {
-      key: "mode-proxy",
-      icon: <ApiOutlined />,
-      label: <span>Proxy 直连后端 (:6185) {mode === "proxy" && <Tag color="blue">当前</Tag>}</span>,
-      onClick: () => handleModeChange("proxy"),
-    },
-    {
-      type: "divider",
-    },
-    {
-      key: "theme",
-      icon: <BulbOutlined />,
-      label: "切换亮色 / 暗黑主题",
-      onClick: handleToggleTheme,
-    },
-    {
-      key: "sse",
-      icon: <ThunderboltOutlined />,
-      label: "注入测试 SSE 任务事件",
-      onClick: handleTriggerMockSSE,
-    },
-  ];
-
   return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 16,
-        right: 16,
-        zIndex: 9999,
-        background: "rgba(0, 0, 0, 0.75)",
-        backdropFilter: "blur(8px)",
-        padding: "6px 12px",
-        borderRadius: 20,
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
-      }}
-    >
-      <Space size={8}>
-        <Tag color={mode === "mock" ? "purple" : "green"} style={{ margin: 0 }}>
+    <Dialog>
+      <div className="fixed bottom-3 right-3 z-50 flex items-center gap-2 rounded-xl border border-solid border-border bg-card px-3 py-1 text-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           {mode === "mock" ? "DEV: MOCK" : "DEV: PROXY (:6185)"}
-        </Tag>
-        <Dropdown menu={{ items: menuItems }} placement="topRight">
-          <Button
-            type="text"
-            size="small"
-            icon={<ToolOutlined style={{ color: "#fff" }} />}
-            style={{ color: "#fff", padding: "0 4px" }}
-          >
+        </span>
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="sm">
+            <IconAdjustments aria-hidden="true" />
             开发工具箱
           </Button>
-        </Dropdown>
-      </Space>
-    </div>
+        </DialogTrigger>
+      </div>
+      <DialogContent>
+        <DialogTitle>开发工具箱</DialogTitle>
+        <DialogDescription>
+          切换通信模式会刷新页面。Mock 使用示例数据，不请求真实业务。
+        </DialogDescription>
+        <label className="grid gap-2 text-sm">
+          通信模式
+          <NativeSelect
+            value={mode}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "mock" || value === "proxy") setDevBridgeMode(value);
+            }}
+          >
+            <option value="mock">Mock 示例数据</option>
+            <option value="proxy">Proxy 直连后端 (:6185)</option>
+          </NativeSelect>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const current = localStorage.getItem("astrbot_plugin_theme_is_dark") === "true";
+              localStorage.setItem("astrbot_plugin_theme_is_dark", String(!current));
+              window.location.reload();
+            }}
+          >
+            <IconSunMoon aria-hidden="true" />
+            切换亮色 / 暗黑主题
+          </Button>
+          <Button
+            variant="outline"
+            disabled={mode !== "mock"}
+            onClick={() => {
+              if (mockSSEService.emitTaskHeartbeat()) {
+                toast.success("已更新一个示例任务及其日志");
+              } else {
+                toast.info("没有运行中的示例任务，请先发起分析");
+              }
+            }}
+          >
+            <IconBolt aria-hidden="true" />
+            注入测试 SSE 任务事件
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
-};
+}
