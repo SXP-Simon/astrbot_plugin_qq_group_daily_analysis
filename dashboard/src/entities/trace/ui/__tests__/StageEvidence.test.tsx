@@ -4,6 +4,18 @@ import { SpanAlerts } from "../SpanAlerts";
 import { LlmAttemptsTable } from "../LlmAttemptsTable";
 import { StageMetric } from "../StageMetric";
 
+it("后续恢复提示与原始失败原因分别保留，不用成功提示替换故障证据", () => {
+  render(
+    <SpanAlerts
+      stageName="TYPST_COMPILE"
+      status="warning"
+      payload={{ failure_reason: "模板第 18 行类型错误", warning: "后续方案恢复成功" }}
+    />,
+  );
+  expect(screen.getByText("原始失败原因").parentElement).toHaveTextContent("模板第 18 行类型错误");
+  expect(screen.getByText("阶段警告").parentElement).toHaveTextContent("后续方案恢复成功");
+});
+
 it("警告提示与警告指标使用警告色，失败和停止保持各自含义", () => {
   const view = render(
     <SpanAlerts stageName="COMIC_DRAWING" status="warning" payload={{ warning: "请求限流" }} />,

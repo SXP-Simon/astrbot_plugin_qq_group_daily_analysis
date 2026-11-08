@@ -29,3 +29,16 @@ it("初次成功后失败不称为恢复，缺少失败原因保留轮次", () =
   expect(getRenderAttemptDiagnostic({ render_attempts: [{ status: "success" }] })).toBeNull();
   expect(getRenderAttemptDiagnostic({ render_attempts: {} })).toBeNull();
 });
+
+it("损坏的轮次不掩盖可用失败证据，也不能冒充末轮恢复成功", () => {
+  expect(
+    getRenderAttemptDiagnostic({
+      render_attempts: [null, 10, { status: "failed", error: "服务不可用" }],
+    }),
+  ).toEqual({ recovered: false, label: "存在失败轮次", reason: "服务不可用" });
+  expect(
+    getRenderAttemptDiagnostic({
+      render_attempts: [{ status: "failed", error: "首次超时" }, { status: "success" }, null],
+    })?.recovered,
+  ).toBe(false);
+});
