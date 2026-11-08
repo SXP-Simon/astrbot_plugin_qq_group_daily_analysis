@@ -1,19 +1,18 @@
 import { useId, useRef, type ReactNode } from "react";
 import { Button } from "./button";
 
-export function FilePicker({
-  label,
-  accept,
-  disabled = false,
-  onSelect,
-  children,
-}: {
+type FilePickerProps = {
   label: string;
   accept?: string;
   disabled?: boolean;
-  onSelect: (file: File) => void;
   children: ReactNode;
-}) {
+} & (
+  | { multiple?: false; onSelect: (file: File) => void }
+  | { multiple: true; onSelect: (files: File[]) => void }
+);
+
+export function FilePicker(props: FilePickerProps) {
+  const { label, accept, disabled = false, children } = props;
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   return (
@@ -26,12 +25,16 @@ export function FilePicker({
         tabIndex={-1}
         aria-label={label}
         accept={accept}
+        multiple={props.multiple}
         disabled={disabled}
         onChange={(event) => {
-          const file = event.target.files?.[0];
+          const files = Array.from(event.target.files ?? []);
           // 先复位，允许校验失败或取消后再次选择同一个文件。
           event.target.value = "";
-          if (file && !disabled) onSelect(file);
+          if (!disabled && files.length) {
+            if (props.multiple) props.onSelect(files);
+            else props.onSelect(files[0]);
+          }
         }}
       />
       <Button
