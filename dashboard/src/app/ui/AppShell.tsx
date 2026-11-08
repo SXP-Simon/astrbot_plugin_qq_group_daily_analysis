@@ -1,5 +1,6 @@
-import { useEffect, useRef, type ReactNode } from "react";
-import { IconStack2, IconPlus, IconRefresh } from "@tabler/icons-react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { IconPlus, IconRefresh } from "@tabler/icons-react";
+import logo from "../../shared/assets/logo.png";
 import { Button } from "../../shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/tabs";
 
@@ -23,16 +24,76 @@ export function AppShell({
   loading,
 }: AppShellProps) {
   const navigation = useRef<HTMLDivElement>(null);
+  const scrollFrame = useRef<number | null>(null);
+  const centerSelected = useCallback(() => {
+    if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = null;
+      const container = navigation.current;
+      const selected = container?.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!selected || !container) return;
+      // 使用相对几何位置，只滚动导航横轴，不干扰页面已恢复的滚动位置。
+      const left =
+        container.scrollLeft +
+        selected.getBoundingClientRect().left -
+        container.getBoundingClientRect().left +
+        selected.offsetWidth / 2 -
+        container.clientWidth / 2;
+      const target = Math.max(0, Math.min(container.scrollWidth - container.clientWidth, left));
+      if (Math.abs(target - container.scrollLeft) < 1) return;
+      container.scrollTo({
+        left: target,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
+    });
+  }, []);
   useEffect(() => {
-    const selected = navigation.current?.querySelector<HTMLElement>('[aria-selected="true"]');
+    centerSelected();
+    return () => {
+      if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
+    };
+  }, [activePage, centerSelected]);
+  useEffect(() => {
     const container = navigation.current;
-    if (!selected || !container) return;
-    // 只滚动导航自己的横轴，不能把已恢复的页面位置滚回顶部。
-    const left = selected.offsetLeft - container.offsetLeft;
-    if (left < container.scrollLeft) container.scrollLeft = left;
-    else if (left + selected.offsetWidth > container.scrollLeft + container.clientWidth)
-      container.scrollLeft = left + selected.offsetWidth - container.clientWidth;
-  }, [activePage]);
+    if (!container) return;
+    const observer = new ResizeObserver(centerSelected);
+    observer.observe(container);
+    const onWheel = (event: WheelEvent) => {
+      if (
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.deltaX !== 0 ||
+        !event.cancelable
+      )
+        return;
+      const max = container.scrollWidth - container.clientWidth;
+      if (
+        max <= 0 ||
+        (event.deltaY < 0 && container.scrollLeft <= 1) ||
+        (event.deltaY > 0 && container.scrollLeft >= max - 1)
+      )
+        return;
+      const unit =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? parseFloat(getComputedStyle(container).lineHeight) || 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? container.clientWidth
+            : 1;
+      const left = Math.max(0, Math.min(max, container.scrollLeft + event.deltaY * unit));
+      if (left === container.scrollLeft) return;
+      if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
+      scrollFrame.current = null;
+      event.preventDefault();
+      container.scrollLeft = left;
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      observer.disconnect();
+      container.removeEventListener("wheel", onWheel);
+      if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
+    };
+  }, [centerSelected]);
 
   return (
     <Tabs value={activePage} onValueChange={onNavigate} className="app-shell">
@@ -41,10 +102,10 @@ export function AppShell({
       </a>
       <header className="app-header">
         <div className="app-brand">
-          <IconStack2 size={23} aria-hidden="true" />
+          <img src={logo} alt="群聊日常分析插件" className="size-8 rounded-lg object-contain" />
           <span>群聊分析</span>
         </div>
-        <div className="app-navigation" ref={navigation}>
+        <div className="app-navigation" ref={navigation} onClick={centerSelected}>
           <TabsList aria-label="主导航" className="bg-transparent p-0">
             {items.map((item) => (
               <TabsTrigger key={item.key} value={item.key} className="rounded-xl px-3 py-2 text-sm">

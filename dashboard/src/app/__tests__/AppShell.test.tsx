@@ -23,7 +23,103 @@ function Fixture() {
 }
 
 describe("正式页面导航", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("选中项居中，快速切页取消旧帧，重按当前页或调整宽度都能重新定位", () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let sequence = 0;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.set(++sequence, callback);
+      return sequence;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+    let resize: (() => void) | undefined;
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: () => void) {
+          resize = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const view = render(<Fixture />);
+    expect(screen.getByRole("img", { name: "群聊日常分析插件" })).toBeVisible();
+    const container = screen.getByRole("tablist", { name: "主导航" }).parentElement!;
+    Object.defineProperties(container, {
+      clientWidth: { configurable: true, value: 200 },
+      scrollWidth: { configurable: true, value: 600 },
+      scrollLeft: { configurable: true, writable: true, value: 100 },
+    });
+    const scroll = vi.fn();
+    container.scrollTo = scroll;
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 0, 200, 32));
+    const target = screen.getByRole("tab", { name: "日志" });
+    Object.defineProperty(target, "offsetWidth", { configurable: true, value: 60 });
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue(new DOMRect(350, 0, 60, 32));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "配置" }), { button: 0 });
+    fireEvent.mouseDown(target, { button: 0 });
+    act(() => {
+      const pending = [...frames.values()];
+      frames.clear();
+      pending.forEach((callback) => callback(0));
+    });
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll).toHaveBeenLastCalledWith({ left: 280, behavior: "smooth" });
+    frames.clear();
+    vi.spyOn(window, "matchMedia").mockReturnValue({ ...window.matchMedia(""), matches: true });
+    fireEvent.click(target);
+    act(() => {
+      const pending = [...frames.values()];
+      frames.clear();
+      pending.forEach((callback) => callback(0));
+    });
+    expect(scroll).toHaveBeenLastCalledWith({ left: 280, behavior: "auto" });
+    frames.clear();
+    resize?.();
+    const resizeFrame = sequence;
+    expect(frames.has(resizeFrame)).toBe(true);
+    view.unmount();
+    expect(frames.has(resizeFrame)).toBe(false);
+  });
+
+  it("纵向滚轮横移溢出导航，边界放行整页滚动，卸载后不再拦截", () => {
+    const view = render(<Fixture />);
+    const container = screen.getByRole("tablist", { name: "主导航" }).parentElement!;
+    Object.defineProperties(container, {
+      clientWidth: { configurable: true, value: 200 },
+      scrollWidth: { configurable: true, value: 600 },
+    });
+    const wheel = new WheelEvent("wheel", { deltaY: 80, bubbles: true, cancelable: true });
+    container.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(container.scrollLeft).toBe(80);
+    for (const options of [
+      { deltaX: 10 },
+      { ctrlKey: true },
+      { shiftKey: true },
+      { metaKey: true },
+    ]) {
+      const event = new WheelEvent("wheel", { deltaY: 30, cancelable: true, ...options });
+      container.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    container.scrollLeft = 400;
+    const edge = new WheelEvent("wheel", { deltaY: 80, cancelable: true });
+    container.dispatchEvent(edge);
+    expect(edge.defaultPrevented).toBe(false);
+    view.unmount();
+    container.scrollLeft = 20;
+    const removed = new WheelEvent("wheel", { deltaY: 80, cancelable: true });
+    container.dispatchEvent(removed);
+    expect(removed.defaultPrevented).toBe(false);
+    expect(container.scrollLeft).toBe(20);
+  });
 
   it("快速切页以最后一次为准，往返保留输入和滚动位置", () => {
     const scroll = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
