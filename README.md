@@ -102,56 +102,68 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 ### 🎛️ WebUI 控制台
 
-- **内嵌管理面板**: 原生集成在 AstrBot 插件管理页面，无需额外部署，集中提供运行总览、分析记录、统计与消耗、历史报告、运行日志、配置中心与数据管理七大板块
+- **内嵌管理面板**: 原生集成在 AstrBot 插件管理页面，无需额外部署，集中提供总览、分析记录、统计、报告、日志、配置与数据七个页面
 - **插件配置中心**: 内置专属可视化配置界面，提供 12 个功能分组导航与即时搜索；支持已有人格与大模型服务商下拉点选、漫画参考图本地上传与灯箱预览，修改保存即时生效
 - **趋势分析与消耗看板**: 支持近48小时、近7天、近14天、近30天等不同时间跨度切换，直观呈现 API 请求走势、大模型 Tokens 消耗堆叠图与服务商消耗占比环形饼图
 - **报告浏览与主题重绘**: 历史报告支持长图与 HTML 在线预览及一键下载。图片可拖动查看，使用滚轮或双指缩放，也可选择原始尺寸；支持切换视觉主题（手账、亚托莉、蔚蓝档案、初音未来、黑客赛博、复古像素、极简等）重新生成报告，直接复用已有数据，0 Token 成本
-- **时序事件时间线**: 在统计与消耗页面提供连续水平时间轴，支持鼠标拖拽平移与快速回溯历史样本，直观查看各群聊的消息清洗留存与模块消耗
+- **时序事件时间线**: 在「统计」页面提供连续水平时间轴，支持鼠标拖拽平移与快速回溯历史样本，直观查看各群聊的消息清洗留存与模块消耗
 - **全流程可观测性与实时监控**: 运行中任务状态与步骤实时同步感知；任务详情按父子阶段展示分析、素材准备、排队、编译和发送过程，保留重试与恢复原因；Typst 可分别查看编译子进程内存、CPU 耗时与宿主内存净变化
-- **任务停止与断点续跑**: 群内手动分析沿用 AstrBot 内置 `stop`，WebUI 任务可在运行总览中止；续跑有有效快照的任务时复用已有分析，重复续跑也继承原任务数据与分析日期
+- **任务停止与断点续跑**: 群内手动分析沿用 AstrBot 内置 `stop`，WebUI 任务可在「总览」中止；续跑有有效快照的任务时复用已有分析，重复续跑也继承原任务数据与分析日期
 - **字体、素材与存储管理**: 可从 Typst 方案直达字体或素材管理，按主题补齐、上传及替换；报告文件支持搜索、类型筛选与多选删除，自定义模板按实际目录选择管理，详见[数据与资源管理](#数据与资源管理)
 - **任务与报告双向关联**: 在任务详情中可直接查看对应产生的所有报告文件；从历史报告中点击任务编号，可快速跳转到该次任务的执行明细与日志
 - **异常任务自动清理**: AstrBot 重启时自动标记并清理未正常结束的中断任务，不留烂尾
 
+部分截图使用示例数据。
+
 <table align="center" width="100%">
   <tr>
     <td align="center" width="50%" valign="top">
-      <p><b>运行总览</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png" alt="运行总览" width="100%"></a>
+      <p><b>总览</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview-20261108-b3eb04579d.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview-20261108-b3eb04579d.png" alt="总览" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
-      <p><b>配置中心</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png" alt="配置中心" width="100%"></a>
+      <p><b>配置与校验</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/config-20261108-3d36f42581.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/config-20261108-3d36f42581.png" alt="配置与校验" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>分析记录</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png" alt="分析记录" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/traces-20261108-de3b7d2ba0.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/traces-20261108-de3b7d2ba0.png" alt="分析记录" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
-      <p><b>历史报告列表</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png" alt="历史报告列表" width="100%"></a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%" valign="top">
-      <p><b>任务执行详情与断点续跑</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png" alt="任务执行详情与断点续跑" width="100%"></a>
-    </td>
-    <td align="center" width="50%" valign="top">
-      <p><b>任务执行详情（子模块状态与异常诊断）</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png" alt="子模块状态与异常诊断" width="100%"></a>
+      <p><b>报告与重绘</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/reports-20261108-29096c774f.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/reports-20261108-29096c774f.png" alt="报告与重绘" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>统计与消耗</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png" alt="统计与消耗" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/statistics-20261108-1ab5371b6c.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/statistics-20261108-1ab5371b6c.jpg" alt="统计与消耗" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
-      <p><b>运行日志</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png" alt="运行日志" width="100%"></a>
+      <p><b>日志</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/logs-20261108-8ce3608813.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/logs-20261108-8ce3608813.png" alt="日志" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>任务阶段与渲染回退</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/task-diagnosis-20261108-c6b0ca7c4a.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/task-diagnosis-20261108-c6b0ca7c4a.jpg" alt="任务阶段与渲染回退" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>继续分析</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume-20261108-ee6a4545b4.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume-20261108-ee6a4545b4.jpg" alt="继续分析" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>数据与阶段快照</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/data-checkpoints-20261108-299de32635.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/data-checkpoints-20261108-299de32635.png" alt="数据与阶段快照" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>Typst 字体管理</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png" alt="Typst 字体管理" width="100%"></a>
     </td>
   </tr>
 </table>
