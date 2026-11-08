@@ -84,7 +84,7 @@ export async function fetchManagedFiles(
 
 export async function fetchManagedContent(partition: string, name: string) {
   return contentSchema.parse(
-    checkedData(await apiGet("plugin-data/files/content", { partition, name })),
+    checkedData(await apiGet("plugin-data/files/content", { partition, name }, 30_000)),
   );
 }
 
