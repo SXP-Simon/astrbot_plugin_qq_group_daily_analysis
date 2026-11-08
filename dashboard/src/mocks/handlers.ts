@@ -420,6 +420,26 @@ export const mockHandlers = {
       };
     return { status: "error", data: null, message: "未找到任务记录" };
   },
+  "POST traces/:traceId/acknowledgement": (
+    body?: Record<string, unknown>,
+    pathParams?: Record<string, string>,
+  ) => {
+    const trace = mockTraces.find((item) => item.trace_id === pathParams?.traceId);
+    if (!trace) return { status: "error", message: "找不到这条任务记录" };
+    if (typeof body?.acknowledged !== "boolean")
+      return { status: "error", message: "请明确指定是否已知晓" };
+    if (
+      !["succeeded", "completed", "warning", "failed", "aborted", "cancelled", "skipped"].includes(
+        trace.status,
+      )
+    )
+      return { status: "error", message: "任务尚未结束" };
+    trace.acknowledged_at = body.acknowledged ? (trace.acknowledged_at ?? Date.now() / 1000) : null;
+    return {
+      status: "ok",
+      data: { trace_id: trace.trace_id, acknowledged_at: trace.acknowledged_at },
+    };
+  },
   "GET traces/:traceId/logs": (
     params?: Record<string, unknown>,
     pathParams?: Record<string, string>,
