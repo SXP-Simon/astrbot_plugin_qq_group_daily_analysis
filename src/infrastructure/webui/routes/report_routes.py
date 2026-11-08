@@ -484,13 +484,8 @@ class ReportRoutes:
     async def api_get_report_content(self) -> WebApiResponse:
         """获取单个历史报告文件（图片或 HTML）的内容用于在线预览与下载"""
         try:
-            try:
-                payload = await request.json()
-            except Exception:
-                payload = {}
-            filename = str(
-                request.query.get("filename") or payload.get("filename") or ""
-            ).strip()
+            # GET 只读取查询参数，不等待不存在的请求体。
+            filename = str(request.query.get("filename") or "").strip()
             if not filename:
                 return error_response("Missing filename parameter", status_code=400)
 
@@ -533,13 +528,13 @@ class ReportRoutes:
                 )
 
             ext = target_file.suffix.lower().lstrip(".")
-            is_html = ext == "html"
+            is_html = ext in {"html", "htm"}
             stat = target_file.stat()
 
             if is_html:
-                raw_text = target_file.read_text(encoding="utf-8", errors="replace")
-                b64_content = base64.b64encode(raw_text.encode("utf-8")).decode("utf-8")
-                data_url = f"data:text/html;charset=utf-8;base64,{b64_content}"
+                raw_text = await asyncio.to_thread(
+                    target_file.read_text, encoding="utf-8", errors="replace"
+                )
                 return json_response(
                     {
                         "status": "ok",
@@ -550,13 +545,13 @@ class ReportRoutes:
                             "absolute_path": str(target_file.resolve()),
                             "is_html": True,
                             "html_content": raw_text,
-                            "data_url": data_url,
                         },
-                    }
+                    },
+                    compress=True,
                 )
             mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
-            with open(target_file, "rb") as f:
-                b64_content = base64.b64encode(f.read()).decode("utf-8")
+            content = await asyncio.to_thread(target_file.read_bytes)
+            b64_content = base64.b64encode(content).decode("utf-8")
             return json_response(
                 {
                     "status": "ok",
@@ -568,7 +563,8 @@ class ReportRoutes:
                         "is_html": False,
                         "data_url": f"data:{mime_type};base64,{b64_content}",
                     },
-                }
+                },
+                compress=True,
             )
         except Exception as e:
             logger.error(f"读取历史报告内容异常: {e}", exc_info=True)

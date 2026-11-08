@@ -276,6 +276,7 @@ def json_response(
     *,
     status_code: int = 200,
     headers: dict[str, str] | None = None,
+    compress: bool = False,
 ) -> WebApiResponse:
     """构造 JSON HTTP 响应。
 
@@ -283,10 +284,58 @@ def json_response(
         data: 响应数据载荷。
         status_code: HTTP 状态码。
         headers: 附加 HTTP 响应标头字典。
+        compress: 对支持 gzip 的客户端压缩较大的文件内容响应。
 
     Returns:
         AstrBot Web 响应对象或兼容字典结构。
     """
+    if compress:
+        # 只压缩明确的文件读取响应；不改变其他业务接口或宿主 Bridge 协议。
+        import gzip
+        import hashlib
+        import json
+
+        accepted = False
+        for option in request.headers.get("accept-encoding", "").split(","):
+            name, *parameters = option.strip().lower().split(";")
+            if name != "gzip":
+                continue
+            quality = 1.0
+            for parameter in parameters:
+                if parameter.strip().startswith("q="):
+                    try:
+                        quality = float(parameter.strip()[2:])
+                    except ValueError:
+                        quality = 0.0
+            accepted = 0 < quality <= 1
+            break
+        if accepted:
+            payload = json.dumps(
+                data, ensure_ascii=False, separators=(",", ":")
+            ).encode("utf-8")
+            if len(payload) >= 65536:
+                try:
+                    from fastapi.responses import Response
+                except ImportError:
+                    pass
+                else:
+                    response_headers = dict(headers or {})
+                    # 浏览器可复用原响应，但每次都校验内容，文件替换后不会读到旧图。
+                    etag = '"' + hashlib.sha256(payload).hexdigest() + '"'
+                    response_headers["ETag"] = etag
+                    response_headers["Cache-Control"] = "private, no-cache"
+                    response_headers["Vary"] = ", ".join(
+                        filter(None, [response_headers.get("Vary"), "Accept-Encoding"])
+                    )
+                    if request.headers.get("if-none-match") == etag:
+                        return Response(status_code=304, headers=response_headers)
+                    response_headers["Content-Encoding"] = "gzip"
+                    return Response(
+                        content=gzip.compress(payload, compresslevel=1, mtime=0),
+                        status_code=status_code,
+                        media_type="application/json",
+                        headers=response_headers,
+                    )
     if _real_json_response is not None and callable(_real_json_response):
         try:
             return _real_json_response(data, status_code=status_code, headers=headers)  # type: ignore[no-any-return, return-value]
