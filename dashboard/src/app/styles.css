@@ -48,9 +48,11 @@
   --background: oklch(0.9892 0.0054 117.9205);
   --foreground: oklch(0.2077 0.0398 265.7549);
   --card: #fff;
-  --primary: oklch(0.8871 0.2122 128.5041);
+  --default-primary: #aff33e;
+  --default-secondary: #4b9994;
+  --primary: var(--default-primary);
   --primary-foreground: #263513;
-  --secondary-color: #4b9994;
+  --secondary-color: var(--default-secondary);
   --secondary: color-mix(in srgb, var(--secondary-color) 14%, var(--background));
   --primary-soft: color-mix(in srgb, var(--primary) 12%, transparent);
   --primary-line: color-mix(in srgb, var(--primary) 35%, var(--border));
@@ -83,9 +85,11 @@
   --background: #161618;
   --foreground: #e8e8ed;
   --card: #1e1e21;
-  --primary: #c5d7a8;
+  --default-primary: #c5d7a8;
+  --default-secondary: #7cb7af;
+  --primary: var(--default-primary);
   --primary-foreground: #202b14;
-  --secondary-color: #7cb7af;
+  --secondary-color: var(--default-secondary);
   --secondary: color-mix(in srgb, var(--secondary-color) 14%, var(--background));
   --secondary-ink: color-mix(in srgb, var(--secondary-color) 65%, #fff);
   --muted: #242427;
