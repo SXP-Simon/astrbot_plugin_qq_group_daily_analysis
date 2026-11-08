@@ -120,16 +120,16 @@ export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetPr
       <h2 className="m-0 text-lg font-medium">模型消耗</h2>
       <dl className="m-0 grid grid-cols-3 gap-2">
         {[
-          { label: "总 Tokens", value: total, tone: "bg-primary/10" },
+          { label: "总 Tokens", value: total, tone: "bg-card" },
           {
             label: "输入 Tokens",
             value: recordedCount(tokenUsage?.prompt_tokens),
-            tone: "bg-info/10",
+            tone: "bg-primary-soft",
           },
           {
             label: "输出 Tokens",
             value: recordedCount(tokenUsage?.completion_tokens),
-            tone: "bg-creative/10",
+            tone: "bg-secondary-soft",
           },
         ].map(({ label, value, tone }) => (
           <div key={label} className={`min-w-0 rounded-xl p-3 ${tone}`}>
@@ -187,7 +187,7 @@ export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetPr
           >
             <table className="w-full border-collapse text-sm">
               <caption className="sr-only">各模块模型消耗，单位 Tokens</caption>
-              <thead className="sticky top-0 bg-muted">
+              <thead className="sticky top-0 bg-secondary">
                 <tr>
                   {["分析模块", "输入", "输出", "合计"].map((label) => (
                     <th key={label} scope="col" className="px-3 py-2 text-left font-medium">
