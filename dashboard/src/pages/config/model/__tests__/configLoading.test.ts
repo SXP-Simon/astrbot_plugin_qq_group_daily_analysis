@@ -8,6 +8,7 @@ import {
 } from "../../../../entities/config/model/configContract";
 import { useConfigViewModel } from "../useConfigViewModel";
 import schema from "../../../../../../_conf_schema.json";
+import type { PluginSchema } from "../../../../entities/config/model/types";
 
 vi.mock("../../../../entities/config/api/configApi", () => ({
   fetchPluginConfig: vi.fn(),
@@ -18,6 +19,38 @@ vi.mock("../../../../entities/config/api/configApi", () => ({
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
 
 beforeEach(() => vi.clearAllMocks());
+
+it.each([
+  { group: "performance", field: "max_concurrent_llm", invalid: 0, valid: 2 },
+  {
+    group: "daily_comic",
+    field: "drawing_provider_overrides",
+    invalid: [{ __template_key: "openai", priority: 0.5 }],
+    valid: [{ __template_key: "openai", priority: 1 }],
+  },
+])(
+  "$group.$field 校验失败不发送保存请求，修正后可保存",
+  async ({ group, field, invalid, valid }) => {
+    vi.mocked(fetchPluginConfig).mockResolvedValue({
+      config: { [group]: { [field]: invalid } },
+      schema: schema as PluginSchema,
+    });
+    vi.mocked(savePluginConfig).mockResolvedValue({ success: true });
+    const { result } = renderHook(() => useConfigViewModel());
+    await waitFor(() => expect(result.current.configLoaded).toBe(true));
+    await act(async () => {
+      await result.current.handleSave();
+    });
+    expect(savePluginConfig).not.toHaveBeenCalled();
+    expect(result.current.errors[group][field]).toBeTruthy();
+    expect(result.current.activeCategory).toBe(group);
+    act(() => result.current.handleFieldChange(group, field, valid));
+    await act(async () => {
+      await result.current.handleSave();
+    });
+    expect(savePluginConfig).toHaveBeenCalledOnce();
+  },
+);
 
 it("加载失败要提示且禁止保存空配置", async () => {
   vi.mocked(fetchPluginConfig).mockRejectedValue(new Error("配置响应结构无效"));
