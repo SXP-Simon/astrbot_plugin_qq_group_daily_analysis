@@ -1,3 +1,5 @@
+import { HtmlPreview } from "../../../shared/ui/html-preview";
+import { ImagePreview } from "../../../shared/ui/image-preview";
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { IconAlertTriangle, IconDownload, IconEdit } from "@tabler/icons-react";
 import type { useManagedFiles } from "../model/useManagedFiles";
@@ -118,31 +120,14 @@ function ContentDialog({
               />
               <span className="text-sm text-muted-foreground">放大查看</span>
             </button>
-            <Dialog open={zoom} onOpenChange={setZoom}>
-              <DialogContent
-                className="max-w-6xl"
-                onEscapeKeyDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setZoom(false);
-                }}
-              >
-                <DialogTitle>图片预览</DialogTitle>
-                <DialogDescription className="break-all">{content.name}</DialogDescription>
-                <img
-                  src={preview.url || undefined}
-                  alt={`放大预览 ${content.name}`}
-                  className="mx-auto max-h-[70dvh] max-w-full object-contain"
-                />
-                <Button
-                  className="justify-self-end"
-                  variant="outline"
-                  onClick={() => setZoom(false)}
-                >
-                  返回文件
-                </Button>
-              </DialogContent>
-            </Dialog>
+            {zoom && (
+              <ImagePreview
+                src={preview.url || null}
+                title={content.name}
+                fitMode="width"
+                onClose={() => setZoom(false)}
+              />
+            )}
           </>
         ) : content.media_type === "text/html" ? (
           <Tabs defaultValue="preview">
@@ -151,10 +136,10 @@ function ContentDialog({
               <TabsTrigger value="source">HTML 源码</TabsTrigger>
             </TabsList>
             <TabsContent value="preview">
-              <iframe
+              <HtmlPreview
                 title="报告预览"
                 sandbox=""
-                srcDoc={content.text || ""}
+                html={content.text || ""}
                 className="h-[50dvh] min-h-64 w-full rounded-xl border border-border bg-white"
               />
             </TabsContent>

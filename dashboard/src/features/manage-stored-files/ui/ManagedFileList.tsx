@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useEffect, useRef, useState } from "react";
 import {
   IconLoader2,
@@ -191,6 +192,9 @@ export function ManagedFileList({
             {fileAction}所选
           </Button>
         </div>
+      )}
+      {vm.busy && !vm.content && (
+        <LoadingState className="text-sm text-muted-foreground">正在读取或处理文件…</LoadingState>
       )}
       {vm.deleteResult && (
         <div

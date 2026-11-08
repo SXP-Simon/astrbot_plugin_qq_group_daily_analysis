@@ -147,3 +147,24 @@ it("损坏内容给出重新读取入口，不生成可下载的错误文件", a
   await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   expect(screen.getByRole("button", { name: "下载原文件" })).toBeEnabled();
 });
+
+it("文件图片放大后使用相同的缩放手势查看器，Escape 只关闭放大窗口", async () => {
+  vi.mocked(fetchManagedContent).mockResolvedValue({
+    ...content,
+    media_type: "image/png",
+    text: null,
+    content_base64: "aW1hZ2U=",
+  });
+  render(<Harness />);
+  fireEvent.click(screen.getByText("选择分区"));
+  fireEvent.click(screen.getByText("读取文件"));
+  fireEvent.click(await screen.findByRole("button", { name: "放大图片" }));
+  const area = screen.getByRole("region", { name: "图片查看区域" });
+  expect(area).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "原始尺寸" })).toBeDisabled();
+  fireEvent.keyDown(document.activeElement || document.body, { key: "Escape" });
+  await waitFor(() =>
+    expect(screen.queryByRole("region", { name: "图片查看区域" })).not.toBeInTheDocument(),
+  );
+  expect(screen.getByRole("dialog", { name: content.name })).toBeInTheDocument();
+});

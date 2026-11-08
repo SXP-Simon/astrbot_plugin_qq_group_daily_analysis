@@ -177,3 +177,17 @@ it("长文件路径与配置引用保留完整内容，复制和预览仍操作�
   expect(inspect).toHaveBeenCalledWith(name);
   expect(screen.getByRole("checkbox", { name: `选择文件 ${name}` })).toBeEnabled();
 });
+
+it("读取文件时保留列表并显示等待状态，而非只有按钮被禁用", async () => {
+  const { result } = renderHook(useManagedFiles);
+  await act(async () => {});
+  render(
+    <ManagedFileList
+      vm={{ ...result.current, busy: true, files: [file] }}
+      partition={partition}
+      references={references}
+    />,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent("正在读取或处理文件");
+  expect(screen.getByText(file.name)).toBeInTheDocument();
+});
