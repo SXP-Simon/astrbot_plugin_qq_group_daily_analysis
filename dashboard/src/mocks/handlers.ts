@@ -470,7 +470,10 @@ export const mockHandlers = {
 
   // 4. 历史报告与海报模板
   "GET reports/history": (params?: Record<string, unknown>) => {
-    let items = [...mockReportHistory];
+    let items = mockReportHistory.map((item) => ({
+      ...item,
+      absolute_path: item.absolute_path ?? `/demo/plugin_data/reports/${item.filename}`,
+    }));
     const group = typeof params?.group_id === "string" ? params.group_id.trim() : "";
     const search = typeof params?.search === "string" ? params.search.trim().toLowerCase() : "";
     if (group) items = items.filter((item) => item.group_id === group);
@@ -514,6 +517,7 @@ export const mockHandlers = {
       status: "ok",
       data: {
         ...item,
+        absolute_path: item.absolute_path ?? `/demo/plugin_data/reports/${item.filename}`,
         is_html: isHtml,
         html_content: isHtml ? mockReportHtml : undefined,
         data_url: isHtml ? undefined : mockReportImage,

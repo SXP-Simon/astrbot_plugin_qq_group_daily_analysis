@@ -161,3 +161,16 @@ it("日期与升序先应用于全局数据，再分页；同一时间以文件�
     "global-5.png",
   ]);
 });
+
+it("报告列表已带示例绝对路径，无需读取图片内容，路径与内容接口一致", () => {
+  const list = mockHandlers["GET reports/history"]({ limit: 2 }).data;
+  for (const item of list.items) {
+    expect(item.absolute_path).toBe(`/demo/plugin_data/reports/${item.filename}`);
+    expect(item.data_url).toBeUndefined();
+    expect(item.html_content).toBeUndefined();
+    const content = extractData<ReportItem>(
+      mockHandlers["GET reports/content"]({ filename: item.filename }),
+    );
+    expect(content?.absolute_path).toBe(item.absolute_path);
+  }
+});
