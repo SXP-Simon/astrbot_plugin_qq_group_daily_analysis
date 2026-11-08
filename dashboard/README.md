@@ -113,3 +113,7 @@ npx lefthook run check-frontend
 前端构建不再由每次 commit 自动执行。修改正式 WebUI 后，在准备 PR 时运行 `pnpm build`（已单独通过类型检查时可用 `pnpm build:no-typecheck`），审阅并提交 `pages/daily-analysis/` 产物。
 
 发布工作流继续执行类型检查和构建。日常本地预览使用 `pnpm dev`，无需为了每个小修改反复生成 release 文件。
+
+### 开发配色预览
+
+在 `?devMode=mock` 页面打开右下角「开发工具箱」，启用「模拟宿主自定义配色」后选择主色和辅助色；可即时切换深浅主题，或恢复插件默认配色。预览设置只保存在当前浏览器，刷新后保留，不修改插件业务配置，也不会进入正式发布包。

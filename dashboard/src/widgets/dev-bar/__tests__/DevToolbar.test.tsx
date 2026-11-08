@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DevToolbar } from "../DevToolbar";
 import { mockSSEService } from "../../../mocks/sseMock";
 import { toast } from "sonner";
+import { getDevThemeContext } from "../../../shared/api/devThemeContext";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: vi.fn() } }));
 
@@ -58,4 +59,24 @@ describe("开发者工具悬浮栏组件 (DevToolbar Component)", () => {
     expect(screen.queryByRole("button", { name: "开发工具箱" })).not.toBeInTheDocument();
     delete (window as { AstrBotPluginPage?: unknown }).AstrBotPluginPage;
   });
+});
+
+it("自定义配色开关、颜色输入和恢复默认同步更新开发上下文", () => {
+  localStorage.clear();
+  delete window.AstrBotPluginPage;
+  render(<DevToolbar />);
+  fireEvent.click(screen.getByRole("button", { name: "开发工具箱" }));
+  const toggle = screen.getByRole("switch", { name: "模拟宿主自定义配色" });
+  expect(screen.getByLabelText("主色")).toBeDisabled();
+  fireEvent.click(toggle);
+  expect(getDevThemeContext().themeColors).toEqual({ primary: "#4f7fd9", secondary: "#a18ad1" });
+  fireEvent.change(screen.getByLabelText("主色"), { target: { value: "#123456" } });
+  fireEvent.change(screen.getByLabelText("辅助色"), { target: { value: "#abcdef" } });
+  expect(getDevThemeContext().themeColors).toEqual({ primary: "#123456", secondary: "#abcdef" });
+  fireEvent.click(screen.getByRole("button", { name: "切换亮色 / 暗黑主题" }));
+  expect(getDevThemeContext().themeColors?.primary).toBe("#123456");
+  fireEvent.click(screen.getByRole("button", { name: "恢复插件默认配色" }));
+  expect(getDevThemeContext().themeColors).toBeUndefined();
+  expect(toggle).not.toBeChecked();
+  expect(screen.getByLabelText("主色")).toBeDisabled();
 });

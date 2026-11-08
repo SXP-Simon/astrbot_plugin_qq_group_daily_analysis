@@ -1,4 +1,5 @@
 import { IconAdjustments, IconBolt, IconSunMoon } from "@tabler/icons-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { getDevBridgeMode, setDevBridgeMode } from "../../shared/api/devBridge";
 import { mockSSEService } from "../../mocks/sseMock";
@@ -11,9 +12,21 @@ import {
   DialogTrigger,
 } from "../../shared/ui/dialog";
 import { NativeSelect } from "../../shared/ui/native-select";
+import { Switch } from "../../shared/ui/switch";
+import { getDevThemeContext, setDevThemeContext } from "../../shared/api/devThemeContext";
+import { useTheme } from "../../shared/lib/useTheme";
 
 export function DevToolbar() {
   const mode = getDevBridgeMode();
+  const { isDark } = useTheme();
+  const [palette, setPalette] = useState(
+    () =>
+      getDevThemeContext().themeColors ?? {
+        primary: "#4f7fd9",
+        secondary: "#a18ad1",
+      },
+  );
+  const [customColors, setCustomColors] = useState(() => Boolean(getDevThemeContext().themeColors));
 
   // 正式构建不包含此模块，宿主内也不显示独立开发操作。
   if (!import.meta.env.DEV || (typeof window !== "undefined" && window.AstrBotPluginPage)) {
@@ -55,9 +68,10 @@ export function DevToolbar() {
           <Button
             variant="outline"
             onClick={() => {
-              const current = localStorage.getItem("astrbot_plugin_theme_is_dark") === "true";
-              localStorage.setItem("astrbot_plugin_theme_is_dark", String(!current));
-              window.location.reload();
+              setDevThemeContext({
+                isDark: !isDark,
+                ...(customColors ? { themeColors: palette } : {}),
+              });
             }}
           >
             <IconSunMoon aria-hidden="true" />
@@ -78,6 +92,52 @@ export function DevToolbar() {
             注入测试 SSE 任务事件
           </Button>
         </div>
+        <fieldset className="m-0 grid gap-3 rounded-xl border border-solid border-border p-4">
+          <legend className="px-1 text-sm">宿主配色预览</legend>
+          <label className="flex items-center justify-between gap-3 text-sm">
+            模拟宿主自定义配色
+            <Switch
+              aria-label="模拟宿主自定义配色"
+              checked={customColors}
+              onCheckedChange={(checked) => {
+                setCustomColors(checked);
+                setDevThemeContext({ isDark, ...(checked ? { themeColors: palette } : {}) });
+              }}
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-4">
+            {(["primary", "secondary"] as const).map((key) => (
+              <label key={key} className="grid gap-2 text-sm">
+                {key === "primary" ? "主色" : "辅助色"}
+                <input
+                  type="color"
+                  value={palette[key]}
+                  disabled={!customColors}
+                  className="h-10 w-full cursor-pointer rounded-lg border border-solid border-input bg-background disabled:opacity-50"
+                  onChange={(event) => {
+                    const next = { ...palette, [key]: event.target.value };
+                    setPalette(next);
+                    setDevThemeContext({ isDark, themeColors: next });
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!customColors}
+            onClick={() => {
+              setCustomColors(false);
+              setDevThemeContext({ isDark });
+            }}
+          >
+            恢复插件默认配色
+          </Button>
+          <p className="m-0 text-xs text-muted-foreground">
+            仅保存在当前浏览器，不修改插件配置。警告和错误色保持不变。
+          </p>
+        </fieldset>
       </DialogContent>
     </Dialog>
   );
