@@ -43,6 +43,36 @@ export function ReportPreviewModal({
         <DialogDescription className="break-all font-mono text-xs">
           {report?.filename || "正在读取报告"}
         </DialogDescription>
+        {report?.absolute_path && (
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+              服务器文件位置
+            </summary>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <code className="min-w-0 break-all text-xs">{report.absolute_path}</code>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  const path = report.absolute_path;
+                  if (!path) return;
+                  setCopyResult({
+                    path,
+                    message: (await copyToClipboard(path))
+                      ? "已复制路径"
+                      : "无法复制，请手动选择路径。",
+                  });
+                }}
+              >
+                <IconCopy aria-hidden="true" />
+                复制路径
+              </Button>
+              {copyResult?.path === report.absolute_path && (
+                <span role="status">{copyResult.message}</span>
+              )}
+            </div>
+          </details>
+        )}
         {error && (
           <p role="alert" className="m-0 text-sm text-destructive">
             {error}
@@ -64,36 +94,6 @@ export function ReportPreviewModal({
           </LoadingState>
         ) : (
           <>
-            {report?.absolute_path && (
-              <details className="text-sm">
-                <summary className="cursor-pointer text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
-                  服务器文件位置
-                </summary>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <code className="min-w-0 break-all text-xs">{report.absolute_path}</code>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      const path = report.absolute_path;
-                      if (!path) return;
-                      setCopyResult({
-                        path,
-                        message: (await copyToClipboard(path))
-                          ? "已复制路径"
-                          : "无法复制，请手动选择路径。",
-                      });
-                    }}
-                  >
-                    <IconCopy aria-hidden="true" />
-                    复制路径
-                  </Button>
-                  {copyResult?.path === report.absolute_path && (
-                    <span role="status">{copyResult.message}</span>
-                  )}
-                </div>
-              </details>
-            )}
             {isHtml && (report?.html_content || report?.data_url) ? (
               <HtmlPreview
                 title={report.filename}
