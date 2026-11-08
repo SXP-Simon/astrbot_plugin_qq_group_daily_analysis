@@ -7,6 +7,27 @@ import { logEntrySchema } from "../../entities/log/model/types";
 
 afterEach(() => vi.useRealTimers());
 
+it("手动注入更新已有任务并关联日志，不创造不存在的任务", () => {
+  vi.useFakeTimers();
+  const initialLogs = [...mockPluginLogs];
+  const tasks = mockActiveTasks.map((task) => ({ ...task }));
+  const receive = vi.fn();
+  const cleanup = mockSSEService.subscribe({ onMessage: receive });
+  try {
+    const task = mockActiveTasks[0];
+    expect(mockSSEService.emitTaskHeartbeat(task.task_id)).toBe(true);
+    expect(receive.mock.calls[0][0]).toEqual({ event: "task_progress", data: task });
+    expect(receive.mock.calls[1][0].data.trace_id).toBe(task.task_id);
+    expect(mockSSEService.emitTaskHeartbeat("not-an-active-task")).toBe(false);
+    expect(receive).toHaveBeenCalledTimes(2);
+    expect(mockActiveTasks).toHaveLength(tasks.length);
+  } finally {
+    cleanup();
+    mockPluginLogs.splice(0, mockPluginLogs.length, ...initialLogs);
+    mockActiveTasks.splice(0, mockActiveTasks.length, ...tasks);
+  }
+});
+
 it("实时事件、详情和日志查询引用同一个活跃任务，注销后不继续产生事件", () => {
   vi.useFakeTimers();
   const initialLogs = [...mockPluginLogs];
