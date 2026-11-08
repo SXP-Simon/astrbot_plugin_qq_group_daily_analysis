@@ -143,8 +143,9 @@ it("自定义方案独立编辑等待上限、凭据、字体和资源环境", (
   fireEvent.change(screen.getByLabelText("Google Fonts 地址", { selector: "input" }), {
     target: { value: "https://my-fonts.example" },
   });
-  fireEvent.mouseDown(screen.getByLabelText("资源环境", { selector: "input" }));
-  fireEvent.click(screen.getByText("内地（Mainland）", { exact: true }));
+  fireEvent.change(screen.getByRole("combobox", { name: "资源环境" }), {
+    target: { value: "Mainland" },
+  });
   const data: unknown = JSON.parse(screen.getByTestId("strategies").textContent || "[]");
   expect(data).toMatchObject([
     {

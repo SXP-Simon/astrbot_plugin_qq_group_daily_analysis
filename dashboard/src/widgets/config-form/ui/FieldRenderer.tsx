@@ -1,121 +1,27 @@
-import React, { useState, useRef } from "react";
-import {
-  Switch,
-  InputNumber,
-  Select,
-  Input,
-  AutoComplete,
-  Tag,
-  Space,
-  Typography,
-  Tooltip,
-  Button,
-  Image,
-  theme,
-  message,
-} from "antd";
-import {
-  PlusOutlined,
-  UndoOutlined,
-  ApartmentOutlined,
-  UserOutlined,
-  FileOutlined,
-  UploadOutlined,
-  DeleteOutlined,
-  EyeOutlined,
-  ExclamationCircleFilled,
-} from "@ant-design/icons";
+import { useId, useState } from "react";
+import { IconEye, IconEyeOff, IconPlus, IconRestore, IconX } from "@tabler/icons-react";
 import { resolveOptionLabel } from "../../../entities/config/model/optionLabel";
 import {
   CUSTOM_RESOURCE_OPTION,
   TEMPLATE_CDN_PRESETS,
 } from "../../../entities/config/model/renderingConfig";
-import { SchemaFieldItem } from "../../../entities/config/model/types";
-import {
-  AvailableProvider,
-  AvailablePersona,
-  uploadConfigFile,
-  fetchConfigFileContent,
-} from "../../../entities/config/api/configApi";
-import { useTheme } from "../../../shared/lib/useTheme";
+import type { SchemaFieldItem } from "../../../entities/config/model/types";
+import type { AvailableProvider, AvailablePersona } from "../../../entities/config/api/configApi";
+import type { TemplateRequirements } from "../../../entities/report/model/templates";
 import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
+import { Button } from "../../../shared/ui/button";
+import { Input } from "../../../shared/ui/input";
+import { NativeSelect } from "../../../shared/ui/native-select";
+import { Switch } from "../../../shared/ui/switch";
+import { SearchSelect } from "../../../shared/ui/search-select";
+import { cn } from "../../../shared/lib/cn";
+import { TemplateCdnProbe } from "../../../features/test-template-cdn/ui/TemplateCdnProbe";
 import { TemplateListRenderer } from "./TemplateListRenderer";
 import { TemplateSelectorRenderer } from "./TemplateSelectorRenderer";
-import { TemplateCdnProbe } from "../../../features/test-template-cdn/ui/TemplateCdnProbe";
+import { ConfigFileField } from "./ConfigFileField";
 
-const { Text } = Typography;
-const { TextArea } = Input;
-
-const SANS_MONO_FONT =
-  "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace";
-
-const ConfigImageThumbnail: React.FC<{
-  filePath: string;
-  isDark: boolean;
-  borderColor: string;
-}> = ({ filePath, isDark, borderColor }) => {
-  const [src, setSrc] = useState<string>(filePath);
-
-  React.useEffect(() => {
-    if (
-      filePath.startsWith("data:image/") ||
-      filePath.startsWith("http://") ||
-      filePath.startsWith("https://")
-    ) {
-      setSrc(filePath);
-      return;
-    }
-
-    let active = true;
-    fetchConfigFileContent(filePath)
-      .then((res) => {
-        if (active && res && res.data_url) {
-          setSrc(res.data_url);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      active = false;
-    };
-  }, [filePath]);
-
-  return (
-    <div
-      style={{
-        width: 36,
-        height: 36,
-        borderRadius: 4,
-        overflow: "hidden",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: isDark ? "#1e293b" : "#f1f5f9",
-        border: `1px solid ${borderColor}`,
-        flexShrink: 0,
-      }}
-    >
-      <Image
-        src={src}
-        width={36}
-        height={36}
-        style={{
-          width: 36,
-          height: 36,
-          objectFit: "cover",
-          borderRadius: 4,
-          display: "block",
-        }}
-        fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.5'/><polyline points='21 15 16 10 5 21'/></svg>"
-        preview={{
-          mask: <EyeOutlined style={{ fontSize: 13 }} />,
-        }}
-      />
-    </div>
-  );
-};
-
-import type { TemplateRequirements } from "../../../entities/report/model/templates";
+const TEXTAREA_CLASS =
+  "min-h-28 max-h-96 w-full resize-y rounded-xl border border-solid border-input bg-background p-3 font-mono text-sm leading-relaxed text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 interface FieldRendererProps {
   templateRequirements?: TemplateRequirements;
@@ -129,10 +35,11 @@ interface FieldRendererProps {
   fullKeyPath?: string;
   error?: string;
   subErrors?: Record<string, string>;
-  onChange: (val: unknown) => void;
+  scope?: Readonly<Record<string, unknown>>;
+  onChange: (value: unknown) => void;
 }
 
-export const FieldRenderer: React.FC<FieldRendererProps> = ({
+export function FieldRenderer({
   templateCdnBaseUrl,
   templateRequirements,
   fieldKey,
@@ -144,88 +51,124 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   fullKeyPath,
   error,
   subErrors,
+  scope,
   onChange,
-}) => {
-  const { token } = theme.useToken();
-  const { isDark } = useTheme();
-  const [newTagInput, setNewTagInput] = useState("");
-  const [isAddingTag, setIsAddingTag] = useState(false);
-  const [newFileInput, setNewFileInput] = useState("");
-  const [isAddingFile, setIsAddingFile] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
+}: FieldRendererProps) {
+  const id = useId();
+  const [showToken, setShowToken] = useState(false);
+  const [newTag, setNewTag] = useState("");
   const title = fieldSchema.description || fieldKey;
   const hint = fieldSchema.hint || "";
   const type = fieldSchema.type;
   const options = fieldSchema.options;
   const defaultValue = fieldSchema.default;
-
-  // 1. 判断是否为 Provider 选择字段
-  const isProviderField =
+  const current = value === undefined ? defaultValue : value;
+  const stringValue = current === undefined || current === null ? "" : String(current);
+  const common = {
+    id,
+    "aria-label": title,
+    "aria-invalid": Boolean(error),
+    "aria-describedby": error ? `${id}-error` : hint ? `${id}-hint` : undefined,
+  };
+  const resource = ["cdn_base_url", "google_fonts", "gstatic"].includes(fieldKey);
+  const provider =
     type === "string" &&
-    (fieldKey.toLowerCase().includes("provider") ||
-      fieldKey.toLowerCase().includes("provider_id") ||
-      fieldSchema._special === "select_provider");
-
-  // 2. 判断是否为 Persona 人设选择字段
-  const isPersonaField =
+    (fieldKey.toLowerCase().includes("provider") || fieldSchema._special === "select_provider");
+  const persona =
     type === "string" &&
-    (fieldKey.toLowerCase().includes("persona") ||
-      fieldKey.toLowerCase().includes("persona_id") ||
-      fieldSchema._special === "select_persona");
+    (fieldKey.toLowerCase().includes("persona") || fieldSchema._special === "select_persona");
 
-  // 渲染不同的表单控件
   const renderControl = () => {
-    if (fieldKey === "service_token") {
+    if (fieldKey === "service_token")
       return (
-        <Input.Password
-          aria-label={title}
-          value={value === undefined ? "" : String(value)}
-          onChange={(event) => onChange(event.target.value)}
-          autoComplete="new-password"
-        />
-      );
-    }
-    if (["cdn_base_url", "google_fonts", "gstatic"].includes(fieldKey)) {
-      const currentValue =
-        value === undefined
-          ? typeof defaultValue === "string"
-            ? defaultValue
-            : ""
-          : String(value);
-      const isCdn = fieldKey !== "google_fonts" && fieldKey !== "gstatic";
-      const options =
-        fieldSchema.options
-          ?.map((option, index) => ({
-            value: String(option),
-            label: fieldSchema.labels?.[index] || String(option),
-          }))
-          .filter((option) => option.value !== CUSTOM_RESOURCE_OPTION) ||
-        (isCdn ? TEMPLATE_CDN_PRESETS : []);
-      return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <AutoComplete
-            value={currentValue}
-            options={options}
-            onChange={onChange}
-            status={error ? "error" : undefined}
+        <div className="flex items-center gap-2">
+          <Input
+            {...common}
+            type={showToken ? "text" : "password"}
+            autoComplete="new-password"
+            value={stringValue}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={showToken ? "隐藏 Token" : "显示 Token"}
+            aria-pressed={showToken}
+            onClick={() => setShowToken((visible) => !visible)}
           >
-            <Input aria-label={title} placeholder="选择一个预设地址，也可以自己填写" allowClear />
-          </AutoComplete>
-          {isCdn &&
-            (currentValue.trim() ? (
-              <TemplateCdnProbe baseUrl={currentValue} />
+            {showToken ? <IconEyeOff aria-hidden="true" /> : <IconEye aria-hidden="true" />}
+          </Button>
+        </div>
+      );
+    if (resource || provider || persona) {
+      const presets = resource
+        ? (options
+            ?.map((option, index) => ({
+              value: String(option),
+              label: fieldSchema.labels?.[index] || String(option),
+            }))
+            .filter((option) => option.value !== CUSTOM_RESOURCE_OPTION) ??
+          (fieldKey === "cdn_base_url" ? TEMPLATE_CDN_PRESETS : []))
+        : provider
+          ? [
+              { value: "", label: "使用当前会话默认模型" },
+              ...providers.map((item) => ({
+                value: item.id,
+                label: `${item.name || item.id} [${item.id}]${item.type ? ` (${item.type})` : ""}`,
+              })),
+            ]
+          : [
+              { value: "", label: "使用当前会话默认人格" },
+              ...personas.map((item) => ({
+                value: item.id,
+                label: `${item.name || item.id} [${item.id}]`,
+              })),
+            ];
+      return (
+        <div className="grid min-w-0 gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Input
+              {...common}
+              className="min-w-40 basis-64 grow font-mono"
+              value={stringValue}
+              placeholder={
+                resource ? "选择预设，也可直接填写地址" : "选择已有配置，也可直接填写 ID"
+              }
+              onChange={(event) => onChange(event.target.value)}
+            />
+            {stringValue && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`清空 ${title}`}
+                onClick={() => onChange("")}
+              >
+                <IconX aria-hidden="true" />
+              </Button>
+            )}
+            <div className="w-32 shrink-0">
+              <SearchSelect
+                label={`${title}预设`}
+                triggerText="选择预设"
+                value={stringValue}
+                options={presets}
+                onChange={onChange}
+                virtual
+              />
+            </div>
+          </div>
+          {fieldKey === "cdn_base_url" &&
+            (stringValue.trim() ? (
+              <TemplateCdnProbe baseUrl={stringValue} />
             ) : (
-              <Typography.Text type="secondary">
+              <p className="m-0 text-sm text-muted-foreground">
                 先选择或填写地址，即可检测 CDN；留空使用当前资源环境的预设。
-              </Typography.Text>
+              </p>
             ))}
         </div>
       );
     }
-
-    // 0. 特殊结构：template_list (如 drawing_provider_overrides / comic_characters)
-    if (type === "template_list") {
+    if (type === "template_list")
       return (
         <TemplateListRenderer
           fieldKey={fieldKey}
@@ -237,173 +180,55 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           onChange={onChange}
         />
       );
-    }
-
-    // 0.1 特殊结构：嵌套 object 对象（如 topic_analysis_prompts / user_title_analysis_prompts / golden_quote_analysis_prompts）
     if (
       type === "object" &&
       fieldSchema.items &&
       typeof fieldSchema.items === "object" &&
-      !Array.isArray(fieldSchema.items)
+      !Array.isArray(fieldSchema.items) &&
+      typeof fieldSchema.items.type !== "string"
     ) {
-      const subItems = fieldSchema.items as Record<string, SchemaFieldItem>;
-      const objVal =
-        typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-
+      const items = fieldSchema.items as Record<string, SchemaFieldItem>;
+      const object =
+        current !== null && typeof current === "object" && !Array.isArray(current)
+          ? (current as Record<string, unknown>)
+          : {};
       return (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-            width: "100%",
-          }}
-        >
-          {Object.entries(subItems).map(([subKey, subField]) => {
-            if (subField.invisible) return null;
-            const subValue = objVal[subKey] !== undefined ? objVal[subKey] : subField.default;
-            const subKeyPath = `${fullKeyPath || fieldKey}.${subKey}`;
-            const subErrorMsg = subErrors?.[subKey] || subErrors?.[subKeyPath] || undefined;
-
+        <div className="grid min-w-0 gap-4 border-0 border-l border-solid border-border pl-4">
+          {Object.entries(items).map(([key, definition]) => {
+            if (definition.invisible || definition.hidden) return null;
+            const path = `${fullKeyPath || fieldKey}.${key}`;
             return (
               <FieldRenderer
-                key={subKey}
-                fieldKey={subKey}
-                fieldSchema={subField}
-                value={subValue}
-                templateCdnBaseUrl={templateCdnBaseUrl}
-                templateRequirements={templateRequirements}
+                key={key}
+                fieldKey={key}
+                fieldSchema={definition}
+                value={object[key] === undefined ? definition.default : object[key]}
                 providers={providers}
                 personas={personas}
-                isSubField={true}
-                fullKeyPath={subKeyPath}
-                error={subErrorMsg}
-                onChange={(newSubVal) => {
-                  const nextObj = { ...objVal, [subKey]: newSubVal };
-                  onChange(nextObj);
-                }}
+                isSubField
+                fullKeyPath={path}
+                templateCdnBaseUrl={templateCdnBaseUrl}
+                templateRequirements={templateRequirements}
+                scope={scope}
+                error={subErrors?.[key] || subErrors?.[path]}
+                subErrors={subErrors}
+                onChange={(next) => onChange({ ...object, [key]: next })}
               />
             );
           })}
         </div>
       );
     }
-
-    // 1. Provider 智能选择输入框 (支持选择已装配的 AstrBot Provider 或自由手输)
-    if (isProviderField) {
-      const currentVal =
-        typeof value === "string" ? value : typeof defaultValue === "string" ? defaultValue : "";
-      const providerOptions = [
-        {
-          value: "",
-          label: "（留空使用当前会话默认 Provider）",
-        },
-        ...providers.map((p) => ({
-          value: p.id,
-          label: `${p.name || p.id} [${p.id}]${p.type ? ` (${p.type})` : ""}`,
-        })),
-      ];
-
-      return (
-        <AutoComplete
-          value={currentVal}
-          options={providerOptions}
-          onChange={(v) => onChange(v)}
-          style={{ width: "100%" }}
-          status={error ? "error" : undefined}
-          filterOption={(inputValue, option) =>
-            String(option?.label || "")
-              .toLowerCase()
-              .includes(inputValue.toLowerCase()) ||
-            String(option?.value || "")
-              .toLowerCase()
-              .includes(inputValue.toLowerCase())
-          }
-        >
-          <Input
-            prefix={<ApartmentOutlined style={{ color: "#2563eb", marginRight: 6 }} />}
-            placeholder="从下拉列表选择已有 Provider，或直接输入 ID"
-            allowClear
-            status={error ? "error" : undefined}
-            style={{ fontFamily: SANS_MONO_FONT }}
-          />
-        </AutoComplete>
-      );
-    }
-
-    // 2. Persona 人设智能选择输入框 (支持选择 AstrBot 内部已定义人设或手输)
-    if (isPersonaField) {
-      const currentVal =
-        typeof value === "string" ? value : typeof defaultValue === "string" ? defaultValue : "";
-      const personaOptions = [
-        {
-          value: "",
-          label: "（留空使用当前群聊会话/全局默认人设）",
-        },
-        ...personas.map((p) => ({
-          value: p.id,
-          label: `${p.name || p.id} [${p.id}]`,
-        })),
-      ];
-
-      return (
-        <AutoComplete
-          value={currentVal}
-          options={personaOptions}
-          onChange={(v) => onChange(v)}
-          style={{ width: "100%" }}
-          status={error ? "error" : undefined}
-          filterOption={(inputValue, option) =>
-            String(option?.label || "")
-              .toLowerCase()
-              .includes(inputValue.toLowerCase()) ||
-            String(option?.value || "")
-              .toLowerCase()
-              .includes(inputValue.toLowerCase())
-          }
-        >
-          <Input
-            prefix={<UserOutlined style={{ color: "#7c3aed", marginRight: 6 }} />}
-            placeholder="从下拉列表选择已有 Persona 人设，或直接输入人设 ID"
-            allowClear
-            status={error ? "error" : undefined}
-            style={{ fontFamily: SANS_MONO_FONT }}
-          />
-        </AutoComplete>
-      );
-    }
-
-    // 3. 布尔类型开关 Switch
     if (type === "bool") {
-      const boolVal = typeof value === "boolean" ? value : Boolean(defaultValue);
+      const checked = typeof current === "boolean" ? current : Boolean(defaultValue);
       return (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            minHeight: 32,
-          }}
-        >
-          <Switch checked={boolVal} onChange={(checked) => onChange(checked)} />
-          <Text
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: boolVal ? "#16a34a" : token.colorTextTertiary,
-            }}
-          >
-            {boolVal ? "已启用" : "已关闭"}
-          </Text>
+        <div className="flex items-center gap-3">
+          <Switch {...common} checked={checked} onCheckedChange={onChange} />
+          <span className="text-sm text-muted-foreground">{checked ? "已启用" : "已关闭"}</span>
         </div>
       );
     }
-
-    // 3.5 报告模板选择器 (带实时缩略图预览与 CDN 画廊选型弹窗)
-    if (
-      fieldKey === "report_template" ||
-      (type === "string" && fieldKey.includes("report_template"))
-    ) {
+    if (fieldKey.includes("report_template"))
       return (
         <TemplateSelectorRenderer
           cdnBaseUrl={templateCdnBaseUrl}
@@ -411,617 +236,263 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           value={value}
           options={options}
           defaultValue={defaultValue}
-          onChange={(newVal) => onChange(newVal)}
+          onChange={onChange}
         />
       );
-    }
-
-    // 4. 单选下拉框保留字符串或数值选项的原始类型。
-    if (["string", "int", "float"].includes(type) && Array.isArray(options) && options.length > 0) {
-      const currentVal =
-        type === "string"
-          ? typeof value === "string"
-            ? value
-            : typeof defaultValue === "string"
-              ? defaultValue
-              : ""
-          : typeof value === "number"
-            ? value
-            : typeof defaultValue === "number"
-              ? defaultValue
-              : Number(options[0]);
-      // 显示名走官方键 labels（与 options 顺序一一对应）；缺标签时回退显示原始值
-      const labels = fieldSchema.labels;
+    if (["string", "int", "float"].includes(type) && options?.length) {
+      const selected = String(current ?? options[0]);
       return (
-        <Select
-          aria-label={title}
-          value={currentVal}
-          onChange={(v) => onChange(v)}
-          style={{ width: "100%" }}
-          status={error ? "error" : undefined}
-          options={options.map((opt) => {
-            const raw = String(opt);
-            return {
-              label: resolveOptionLabel(raw, options, labels),
-              value: type === "string" ? raw : Number(opt),
-            };
-          })}
-        />
+        <NativeSelect
+          {...common}
+          value={selected}
+          onChange={(event) =>
+            onChange(type === "string" ? event.target.value : Number(event.target.value))
+          }
+        >
+          {!options.some((option) => String(option) === selected) && (
+            <option value={selected}>{selected}（已有值）</option>
+          )}
+          {options.map((option) => (
+            <option key={String(option)} value={String(option)}>
+              {resolveOptionLabel(String(option), options, fieldSchema.labels)}
+            </option>
+          ))}
+        </NativeSelect>
       );
     }
-
-    // 5. 纯文本 / 提示词模板 (text 或 multiline)
     if (
       type === "text" ||
       (type === "string" && (fieldKey.includes("template") || fieldKey.includes("prompt")))
-    ) {
-      const currentVal =
-        typeof value === "string" ? value : typeof defaultValue === "string" ? defaultValue : "";
+    )
       return (
-        <TextArea
-          value={currentVal}
-          onChange={(e) => onChange(e.target.value)}
-          autoSize={{ minRows: 4, maxRows: 16 }}
-          status={error ? "error" : undefined}
-          placeholder={hint || "请输入文本内容"}
-          style={{
-            fontFamily: SANS_MONO_FONT,
-            fontSize: 12,
-            lineHeight: 1.6,
-          }}
+        <textarea
+          {...common}
+          className={TEXTAREA_CLASS}
+          rows={6}
+          value={typeof current === "string" ? current : ""}
+          onChange={(event) => onChange(event.target.value)}
         />
       );
-    }
-
-    // 6. 数值类型 InputNumber (int / float)
-    if (type === "int" || type === "float") {
-      const numVal =
-        typeof value === "number" ? value : typeof defaultValue === "number" ? defaultValue : 0;
+    if (type === "int" || type === "float")
       return (
-        <InputNumber
-          value={numVal}
+        <Input
+          {...common}
+          type="number"
+          className="max-w-60 tabular-nums"
           step={type === "float" ? 0.1 : 1}
-          precision={type === "float" ? 2 : 0}
-          status={error ? "error" : undefined}
-          onChange={(v) => onChange(v ?? 0)}
-          style={{ width: "100%", maxWidth: 240 }}
+          min={typeof fieldSchema.min === "number" ? fieldSchema.min : undefined}
+          max={typeof fieldSchema.max === "number" ? fieldSchema.max : undefined}
+          value={typeof current === "number" ? current : 0}
+          onChange={(event) => onChange(event.target.value === "" ? 0 : Number(event.target.value))}
         />
       );
-    }
-
-    // 7. 带有预设选项的多选列表 (list with options / enum，如 output_format)
-    const listOptions: string[] | null =
-      Array.isArray(options) && options.length > 0
-        ? options.map(String)
-        : fieldSchema.items &&
-            typeof fieldSchema.items === "object" &&
-            Array.isArray((fieldSchema.items as Record<string, unknown>).options)
-          ? ((fieldSchema.items as Record<string, unknown>).options as unknown[]).map(String)
-          : fieldSchema.items &&
-              typeof fieldSchema.items === "object" &&
-              Array.isArray((fieldSchema.items as Record<string, unknown>).enum)
-            ? ((fieldSchema.items as Record<string, unknown>).enum as unknown[]).map(String)
-            : null;
-
-    if (type === "list" && listOptions && listOptions.length > 0) {
-      const selectedVals: string[] = Array.isArray(value)
-        ? (value as unknown[]).map(String)
-        : Array.isArray(defaultValue)
-          ? (defaultValue as unknown[]).map(String)
-          : typeof value === "string" && value
-            ? [value]
-            : [];
-
-      return (
-        <Select
-          aria-label={title}
-          mode="multiple"
-          allowClear
-          style={{ width: "100%" }}
-          status={error ? "error" : undefined}
-          placeholder="请选择配置项（支持多选）"
-          value={selectedVals}
-          onChange={(vals) => onChange(vals)}
-          options={listOptions.map((opt: string) => {
-            let optLabel = opt;
-            if (fieldKey === "output_format") {
-              if (opt === "image") optLabel = "图片报告 (image)";
-              else if (opt === "text") optLabel = "纯文本摘要 (text)";
-              else if (opt === "html") optLabel = "HTML网页报告 (html)";
-            }
-            return {
-              label: optLabel,
-              value: opt,
-            };
-          })}
-        />
-      );
-    }
-
-    // 7.1 自由输入的字符串列表 (list / tags)
-    if (type === "list") {
-      const listVal: string[] = Array.isArray(value)
-        ? (value as string[])
-        : Array.isArray(defaultValue)
-          ? (defaultValue as string[])
-          : [];
-
-      const handleRemoveTag = (removedTag: string) => {
-        const nextList = listVal.filter((tag) => tag !== removedTag);
-        onChange(nextList);
-      };
-
-      const handleAddTagConfirm = () => {
-        if (newTagInput && !listVal.includes(newTagInput.trim())) {
-          onChange([...listVal, newTagInput.trim()]);
-        }
-        setNewTagInput("");
-        setIsAddingTag(false);
-      };
-
-      return (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 8px", alignItems: "center" }}>
-          {listVal.map((tag) => (
-            <Tag
-              key={tag}
-              closable
-              onClose={() => handleRemoveTag(tag)}
-              style={{
-                margin: 0,
-                fontSize: 12,
-                padding: "2px 8px",
-                borderRadius: 4,
-                fontFamily: SANS_MONO_FONT,
-              }}
-            >
-              {tag}
-            </Tag>
-          ))}
-          {isAddingTag ? (
-            <Input
-              size="small"
-              style={{ width: 140, fontFamily: SANS_MONO_FONT }}
-              value={newTagInput}
-              onChange={(e) => setNewTagInput(e.target.value)}
-              onBlur={handleAddTagConfirm}
-              onPressEnter={handleAddTagConfirm}
-              autoFocus
-            />
-          ) : (
-            <Tag
-              onClick={() => setIsAddingTag(true)}
-              style={{
-                borderStyle: "dashed",
-                cursor: "pointer",
-                margin: 0,
-                padding: "2px 8px",
-                borderRadius: 4,
-              }}
-            >
-              <PlusOutlined style={{ marginRight: 4 }} /> 添加条目
-            </Tag>
-          )}
-        </div>
-      );
-    }
-
-    // 7.1 文件 / 图片上传与列表 (file / image_list)
     if (
       type === "file" ||
       fieldSchema._special === "image_list" ||
       fieldKey === "reference_images" ||
       fieldKey === "drawing_reference_image"
-    ) {
-      const fileList: string[] = Array.isArray(value)
-        ? (value as string[]).filter((x) => typeof x === "string" && x.trim().length > 0)
-        : typeof value === "string" && value.trim().length > 0
-          ? [value.trim()]
-          : [];
-
-      const handleRemoveFile = (indexToRemove: number) => {
-        const nextList = fileList.filter((_, idx) => idx !== indexToRemove);
-        onChange(Array.isArray(defaultValue) ? nextList : nextList[0] || "");
-      };
-
-      const handleAddFileUrl = () => {
-        if (!newFileInput.trim()) return;
-        const target = newFileInput.trim();
-        const nextList = [...fileList, target];
-        onChange(Array.isArray(defaultValue) ? nextList : target);
-        setNewFileInput("");
-        setIsAddingFile(false);
-      };
-
-      const handleUploadLocal = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
-
-        const targetKeyPath =
-          fullKeyPath ||
-          (fieldKey === "reference_images"
-            ? "daily_comic.comic_characters.templates.character.reference_images"
-            : fieldKey);
-
-        const uploadPromises = Array.from(files).map(async (file) => {
-          try {
-            const res = await uploadConfigFile(file, targetKeyPath);
-            if (res && res.path) {
-              return res.path;
-            }
-          } catch (err) {
-            console.error("Upload error:", err);
-          }
-          return null;
-        });
-
-        const uploadedPaths = (await Promise.all(uploadPromises)).filter(Boolean) as string[];
-        if (uploadedPaths.length > 0) {
-          // 清理历史中残存的旧 Base64 Data URL，防止原生格式校验失败
-          const cleanExisting = fileList.filter((item) => !item.startsWith("data:image/"));
-          const nextList = [...cleanExisting, ...uploadedPaths];
-          onChange(Array.isArray(defaultValue) ? nextList : nextList[0] || "");
-          message.success(`成功添加 ${uploadedPaths.length} 个参考文件`);
-        } else {
-          message.error("上传参考文件失败，请确保 AstrBot 处于运行状态");
-        }
-
-        e.target.value = "";
-      };
-
+    )
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
-          {/* 文件/图片条目列表 */}
-          {fileList.length > 0 ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              {fileList.map((filePath, idx) => {
-                const isImage =
-                  filePath.startsWith("data:image/") ||
-                  filePath.startsWith("http://") ||
-                  filePath.startsWith("https://") ||
-                  filePath.startsWith("files/") ||
-                  /\.(png|jpe?g|webp|gif|svg)$/i.test(filePath);
-
-                let displayLabel = filePath;
-                if (filePath.startsWith("data:image/")) {
-                  const approxSize = Math.round((filePath.length * 3) / 4 / 1024);
-                  displayLabel = `已上传图片 (${approxSize} KB)`;
-                } else if (filePath.startsWith("files/")) {
-                  displayLabel = filePath.split("/").pop() || filePath;
-                } else if (filePath.length > 35) {
-                  displayLabel = `${filePath.slice(0, 18)}...${filePath.slice(-12)}`;
-                }
-
-                return (
-                  <div
-                    key={`${filePath}-${idx}`}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      background: token.colorFillAlter,
-                      border: `1px solid ${token.colorBorderSecondary}`,
-                      borderRadius: 6,
-                      padding: "4px 8px 4px 6px",
-                      boxShadow: "0 1px 2px rgba(0, 0, 0, 0.03)",
-                      maxWidth: "100%",
-                    }}
-                  >
-                    {/* 图片缩略图预览 (支持点击放大预览) */}
-                    {isImage ? (
-                      <ConfigImageThumbnail
-                        filePath={filePath}
-                        isDark={isDark}
-                        borderColor={token.colorBorderSecondary}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 4,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          background: token.colorFillSecondary,
-                          flexShrink: 0,
-                        }}
-                      >
-                        <FileOutlined style={{ color: token.colorTextSecondary, fontSize: 16 }} />
-                      </div>
-                    )}
-
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        minWidth: 0,
-                        marginRight: 4,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 500,
-                          fontFamily: SANS_MONO_FONT,
-                          color: token.colorText,
-                          maxWidth: 220,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                        title={filePath}
-                      >
-                        {displayLabel}
-                      </span>
-                      {isImage && (
-                        <span style={{ fontSize: 10, color: token.colorTextTertiary }}>
-                          点击缩略图可全屏预览
-                        </span>
-                      )}
-                    </div>
-
-                    <Button
-                      type="text"
-                      size="small"
-                      danger
-                      icon={<DeleteOutlined style={{ fontSize: 11 }} />}
-                      style={{ width: 22, height: 22, padding: 0 }}
-                      onClick={() => handleRemoveFile(idx)}
-                    />
-                  </div>
-                );
-              })}
+        <ConfigFileField
+          value={value}
+          multiple={Array.isArray(defaultValue) || Array.isArray(value)}
+          path={
+            fullKeyPath ||
+            (fieldKey === "reference_images"
+              ? "daily_comic.comic_characters.templates.character.reference_images"
+              : fieldKey)
+          }
+          fileTypes={
+            Array.isArray(fieldSchema.file_types)
+              ? fieldSchema.file_types.filter((item): item is string => typeof item === "string")
+              : undefined
+          }
+          scope={scope}
+          onChange={onChange}
+        />
+      );
+    if (type === "list") {
+      const items = fieldSchema.items as SchemaFieldItem | undefined;
+      const choices = options?.length
+        ? options.map(String)
+        : Array.isArray(items?.options)
+          ? items.options.map(String)
+          : Array.isArray(items?.enum)
+            ? items.enum.map(String)
+            : null;
+      const values = Array.isArray(current)
+        ? current.map(String)
+        : typeof current === "string" && current
+          ? [current]
+          : [];
+      const labels: Record<string, string> =
+        fieldKey === "output_format"
+          ? { image: "图片报告 (image)", text: "纯文本摘要 (text)", html: "HTML 网页报告 (html)" }
+          : {};
+      if (choices?.length)
+        return (
+          <div className="grid gap-2">
+            <div role="group" aria-label={title} className="flex flex-wrap gap-2">
+              {[...new Set([...choices, ...values])].map((choice) => (
+                <label
+                  key={choice}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-lg border border-solid px-3 py-2 text-sm",
+                    values.includes(choice) ? "border-primary/50 bg-primary/10" : "border-border",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary focus-visible:outline-2 focus-visible:outline-ring"
+                    checked={values.includes(choice)}
+                    onChange={(event) =>
+                      onChange(
+                        event.target.checked
+                          ? [...values, choice]
+                          : values.filter((entry) => entry !== choice),
+                      )
+                    }
+                  />
+                  {labels[choice] || resolveOptionLabel(choice, choices, fieldSchema.labels)}
+                </label>
+              ))}
             </div>
-          ) : (
-            <div
-              style={{
-                padding: "8px 12px",
-                background: token.colorFillAlter,
-                border: `1px dashed ${token.colorBorderSecondary}`,
-                borderRadius: 4,
-                fontSize: 11,
-                color: token.colorTextTertiary,
-              }}
-            >
-              暂未添加参考图片或文件（支持上传本地图片、输入图片 URL 或相对路径）
-            </div>
-          )}
-
-          {/* 添加控制栏 */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={
-                Array.isArray(fieldSchema.file_types)
-                  ? fieldSchema.file_types.map((ext) => `.${ext}`).join(",")
-                  : "image/*"
-              }
-              style={{ display: "none" }}
-              onChange={handleUploadLocal}
-            />
-            <Button
-              size="small"
-              icon={<UploadOutlined />}
-              onClick={() => {
-                fileInputRef.current?.click();
-              }}
-            >
-              上传本地图片
-            </Button>
-
-            {isAddingFile ? (
-              <Space.Compact style={{ maxWidth: 360 }}>
-                <Input
-                  size="small"
-                  placeholder="输入 http:// 链接或本地相对路径"
-                  value={newFileInput}
-                  onChange={(e) => setNewFileInput(e.target.value)}
-                  onPressEnter={handleAddFileUrl}
-                  style={{ fontFamily: SANS_MONO_FONT, fontSize: 11 }}
-                  autoFocus
-                />
-                <Button size="small" type="primary" onClick={handleAddFileUrl}>
-                  确认
-                </Button>
-                <Button size="small" onClick={() => setIsAddingFile(false)}>
-                  取消
-                </Button>
-              </Space.Compact>
-            ) : (
-              <Button
-                size="small"
-                type="dashed"
-                icon={<PlusOutlined />}
-                onClick={() => setIsAddingFile(true)}
-              >
-                添加图片 URL / 路径
-              </Button>
+            {fieldKey === "output_format" && values.length > 0 && (
+              <p className="m-0 text-xs text-muted-foreground">
+                发送顺序：{values.map((entry) => labels[entry] || entry).join(" → ")}
+              </p>
             )}
+          </div>
+        );
+      const add = () => {
+        const next = newTag.trim();
+        if (next && !values.includes(next)) onChange([...values, next]);
+        setNewTag("");
+      };
+      return (
+        <div className="grid gap-2">
+          <div className="flex flex-wrap gap-2">
+            {values.map((entry, index) => (
+              <span
+                key={`${entry}:${index}`}
+                className="inline-flex max-w-full items-center gap-1 rounded-lg bg-secondary px-2 py-1 text-sm"
+              >
+                <code className="break-all text-xs">{entry}</code>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-1"
+                  aria-label={`移除 ${entry}`}
+                  onClick={() => onChange(values.filter((_, i) => i !== index))}
+                >
+                  <IconX aria-hidden="true" />
+                </Button>
+              </span>
+            ))}
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <Input
+              className="max-w-sm font-mono"
+              aria-label={`添加${title}`}
+              value={newTag}
+              onChange={(event) => setNewTag(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  add();
+                }
+              }}
+            />
+            <Button variant="outline" disabled={!newTag.trim()} onClick={add}>
+              <IconPlus aria-hidden="true" />
+              添加条目
+            </Button>
           </div>
         </div>
       );
     }
-
-    // 8. 普通单行字符串输入 (string)
-    if (type === "string") {
-      const currentVal = value !== undefined ? String(value) : String(defaultValue ?? "");
+    if (type === "string")
       return (
-        <Input
-          aria-label={title}
-          value={currentVal}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={hint || `请输入 ${title}`}
-          allowClear
-          status={error ? "error" : undefined}
-          style={{
-            fontFamily:
-              fieldKey.includes("id") ||
-              fieldKey.includes("key") ||
-              fieldKey.includes("url") ||
-              fieldKey.includes("path")
-                ? SANS_MONO_FONT
-                : undefined,
-          }}
-        />
+        <div className="flex min-w-0 items-center gap-2">
+          <Input
+            {...common}
+            value={stringValue}
+            className={/id|key|url|path/i.test(fieldKey) ? "font-mono" : undefined}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          {stringValue && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`清空 ${title}`}
+              onClick={() => onChange("")}
+            >
+              <IconX aria-hidden="true" />
+            </Button>
+          )}
+        </div>
       );
-    }
-
-    // 9. 复杂对象兜底 (JSON 格式化输入)
-    const jsonStr =
-      typeof value === "object" ? JSON.stringify(value, null, 2) : String(value ?? "");
     return (
-      <TextArea
-        value={jsonStr}
-        onChange={(e) => {
+      <textarea
+        {...common}
+        className={TEXTAREA_CLASS}
+        rows={6}
+        value={
+          typeof current === "object" ? JSON.stringify(current, null, 2) : String(current ?? "")
+        }
+        onChange={(event) => {
           try {
-            const parsed = JSON.parse(e.target.value);
+            const parsed: unknown = JSON.parse(event.target.value);
             onChange(parsed);
           } catch {
-            // 保持临时输入
+            onChange(event.target.value);
           }
         }}
-        autoSize={{ minRows: 2, maxRows: 6 }}
-        status={error ? "error" : undefined}
-        style={{ fontFamily: SANS_MONO_FONT, fontSize: 11 }}
       />
     );
   };
 
-  const isDifferentFromDefault =
-    defaultValue !== undefined && JSON.stringify(value) !== JSON.stringify(defaultValue);
-
-  const containerDomId = `cfg-field-${fullKeyPath ? fullKeyPath.replace(/\./g, "-") : fieldKey}`;
-
   return (
-    <div
-      id={containerDomId}
+    <section
+      id={`cfg-field-${fullKeyPath ? fullKeyPath.replace(/\./g, "-") : fieldKey}`}
       data-field-key={fieldKey}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        marginBottom: isSubField ? 8 : 12,
-        padding: isSubField ? "8px 10px" : "12px 14px",
-        background: isSubField
-          ? "transparent"
-          : error
-            ? isDark
-              ? "rgba(255, 77, 79, 0.06)"
-              : "#fffbfb"
-            : token.colorBgContainer,
-        border: error
-          ? "1px solid #ff4d4f"
-          : isSubField
-            ? `1px dashed ${token.colorBorderSecondary}`
-            : `1px solid ${token.colorBorderSecondary}`,
-        borderRadius: 6,
-        boxShadow: error
-          ? "0 0 0 2px rgba(255, 77, 79, 0.15)"
-          : isSubField
-            ? "none"
-            : "0 1px 2px rgba(0, 0, 0, 0.02)",
-        width: "100%",
-        boxSizing: "border-box",
-        transition: "border-color 0.2s, box-shadow 0.2s, background 0.2s",
-      }}
+      className={cn(
+        "grid min-w-0 gap-3 border-0 border-b border-solid border-border",
+        isSubField ? "pb-3" : "pb-5",
+        error && "rounded-xl border border-destructive/40 bg-destructive/5 p-3",
+      )}
     >
-      {/* 头部标题与恢复默认控制 */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          width: "100%",
-        }}
-      >
-        <Space size={6} wrap style={{ flex: 1 }}>
-          <Text
-            strong
-            style={{
-              fontSize: isSubField ? 12 : 13,
-              color: error ? "#ff4d4f" : token.colorText,
-              letterSpacing: "-0.2px",
-            }}
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <label
+          htmlFor={id}
+          title={fullKeyPath || fieldKey}
+          className={cn("text-sm font-medium", error && "text-destructive")}
+        >
+          {title}
+        </label>
+        {defaultValue !== undefined && JSON.stringify(value) !== JSON.stringify(defaultValue) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            title="重置为此项默认值"
+            onClick={() => onChange(structuredClone(defaultValue))}
           >
-            {title}
-          </Text>
-          {!isSubField && (
-            <span
-              style={{
-                fontSize: 11,
-                fontFamily: SANS_MONO_FONT,
-                color: token.colorTextTertiary,
-              }}
-            >
-              ({fieldKey})
-            </span>
-          )}
-        </Space>
-
-        {isDifferentFromDefault && (
-          <Tooltip title="重置为此项默认值">
-            <Button
-              type="link"
-              size="small"
-              icon={<UndoOutlined style={{ fontSize: 10 }} />}
-              style={{
-                padding: "0 4px",
-                height: "auto",
-                fontSize: 11,
-                color: token.colorTextTertiary,
-              }}
-              onClick={() => onChange(defaultValue)}
-            >
-              恢复默认
-            </Button>
-          </Tooltip>
+            <IconRestore aria-hidden="true" />
+            恢复默认
+          </Button>
         )}
       </div>
-
-      {/* 核心控件区域 (Full Width) */}
-      <div style={{ width: "100%", marginTop: 2 }}>{renderControl()}</div>
-
-      {/* 校验错误提示条 */}
+      {renderControl()}
       {error && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            marginTop: 4,
-            padding: "4px 8px",
-            background: isDark ? "rgba(255, 77, 79, 0.12)" : "#fff2f0",
-            border: `1px solid ${isDark ? "rgba(255, 77, 79, 0.3)" : "#ffccc7"}`,
-            borderRadius: 4,
-            fontSize: 12,
-            color: "#ff4d4f",
-            fontWeight: 500,
-          }}
-        >
-          <ExclamationCircleFilled style={{ fontSize: 13, color: "#ff4d4f", flexShrink: 0 }} />
-          <span>{error}</span>
-        </div>
+        <p id={`${id}-error`} role="alert" className="m-0 text-sm text-destructive">
+          {error}
+        </p>
       )}
-
-      {/* 底部详细说明文字：支持 Markdown 语法高亮与超链接渲染 */}
       {hint && (
-        <div
-          style={{
-            fontSize: 11,
-            lineHeight: "1.6",
-            color: token.colorTextSecondary,
-            background: token.colorFillAlter,
-            padding: "6px 10px",
-            borderRadius: 4,
-            marginTop: 4,
-            wordBreak: "break-word",
-          }}
-        >
+        <div id={`${id}-hint`} className="text-sm leading-relaxed text-muted-foreground">
           <MarkdownHint content={hint} />
         </div>
       )}
-    </div>
+    </section>
   );
-};
+}

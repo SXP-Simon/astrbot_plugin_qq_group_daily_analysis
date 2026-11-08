@@ -148,6 +148,7 @@ export function TemplateListRenderer({
                           providers={providers}
                           personas={personas}
                           isSubField
+                          scope={item}
                           fullKeyPath={`${fullKeyPath || fieldKey}.templates.${itemTemplateKey}.${key}`}
                           onChange={(next) => vm.change(index, key, next)}
                         />

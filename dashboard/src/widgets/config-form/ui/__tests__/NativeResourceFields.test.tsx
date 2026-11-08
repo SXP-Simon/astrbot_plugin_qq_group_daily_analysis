@@ -27,10 +27,9 @@ it.each(["google_fonts", "gstatic"] as const)(
   "%s 保留已有自定义值、预设选择与新地址输入",
   (fieldKey) => {
     render(<FontField fieldKey={fieldKey} />);
-    const input = screen.getByRole("combobox");
+    const input = screen.getByRole("textbox");
     expect(input).toHaveValue("https://saved.example/proxy");
-    fireEvent.mouseDown(input);
-    fireEvent.focus(input);
+    fireEvent.click(screen.getByRole("button", { name: /预设：/ }));
     const field =
       schema.t2i_rendering.items.t2i_rendering_strategies.templates.strategy.items[fieldKey];
     expect(screen.getAllByText(field.labels[0]).length).toBeGreaterThan(0);
@@ -56,7 +55,6 @@ it("清晰度仅提供三个档位，选择后保持数值类型，最高 1410px
     />,
   );
   expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
-  fireEvent.mouseDown(screen.getByRole("combobox"));
-  fireEvent.click(screen.getByText("高清 · 1410px（216 PPI）"));
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "216" } });
   expect(onChange).toHaveBeenCalledWith(216);
 });
