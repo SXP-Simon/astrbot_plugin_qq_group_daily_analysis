@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
 
 const devOnlyModule =
-  /[/\\]src[/\\](?:mocks[/\\]|shared[/\\]api[/\\]devBridge\.ts$|widgets[/\\]dev-bar[/\\])/;
+  /[/\\]src[/\\](?:mocks[/\\]|shared[/\\]api[/\\]dev(?:Bridge|ThemeContext)\.ts$|widgets[/\\]dev-bar[/\\])/;
 
 const classicScriptPlugin = (): Plugin => ({
   name: "classic-script-plugin",

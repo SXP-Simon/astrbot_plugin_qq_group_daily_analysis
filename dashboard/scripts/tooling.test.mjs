@@ -48,6 +48,7 @@ test("生产构建裁掉开发分支，同时保留经典脚本入口", async (t
 for (const modulePath of [
   "src/mocks/example.js",
   "src/shared/api/devBridge.ts",
+  "src/shared/api/devThemeContext.ts",
   "src/widgets/dev-bar/DevToolbar.tsx",
 ]) {
   test(`生产构建拒绝意外带入 ${modulePath}`, async (t) => {
