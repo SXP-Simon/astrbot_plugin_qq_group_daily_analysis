@@ -34,7 +34,7 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
         onRefresh={() => vm.refresh(false)}
       />
       {vm.hasUpdates && (
-        <p role="status" className="text-sm text-info">
+        <p role="status" className="text-sm text-secondary-ink">
           分析记录有更新，点击“刷新”查看。当前选择保持不变。
         </p>
       )}

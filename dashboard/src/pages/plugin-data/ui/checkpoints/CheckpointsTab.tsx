@@ -121,7 +121,7 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                   </td>
                   <td className="whitespace-nowrap p-3 text-xs tabular-nums">{item.date_str}</td>
                   <td className="p-3">
-                    <span className="text-creative">{formatStageName(item.stage_name)}</span>
+                    <span className="text-primary-ink">{formatStageName(item.stage_name)}</span>
                     <div className="mt-1 font-mono text-xs text-muted-foreground">
                       {item.stage_name}
                     </div>
@@ -152,7 +152,7 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-creative/20 bg-creative/5 text-creative hover:bg-creative/10"
+                        className="border-secondary-line bg-secondary-soft text-secondary-ink hover:bg-secondary"
                         disabled={busy || vm.loadingCheckpoints}
                         onClick={() => setManagedLocator(locators[index])}
                       >

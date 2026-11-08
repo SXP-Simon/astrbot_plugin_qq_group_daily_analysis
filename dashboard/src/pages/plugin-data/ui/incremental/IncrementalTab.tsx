@@ -213,7 +213,9 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                         {formatTimestamp(item.timestamp)}
                       </td>
                       <td className="whitespace-nowrap p-3 tabular-nums">
-                        <span className="text-info">{item.messages_count.toLocaleString()} 条</span>
+                        <span className="text-secondary-ink">
+                          {item.messages_count.toLocaleString()} 条
+                        </span>
                         <div className="text-xs text-muted-foreground">
                           {item.characters_count.toLocaleString()} 字
                         </div>
@@ -254,7 +256,7 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                           <Button
                             size="sm"
                             variant="outline"
-                            className="border-creative/20 bg-creative/5 text-creative hover:bg-creative/10"
+                            className="border-secondary-line bg-secondary-soft text-secondary-ink hover:bg-secondary"
                             disabled={busy || loadingIncremental}
                             onClick={() =>
                               setManagedLocator({

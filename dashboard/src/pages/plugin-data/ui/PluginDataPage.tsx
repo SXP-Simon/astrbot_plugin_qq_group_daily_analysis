@@ -88,7 +88,7 @@ export const PluginDataPage: React.FC<{
           <CheckpointsTab vm={vm} />
         </TabsContent>
       </Tabs>
-      <div className="flex items-start gap-3 rounded-xl bg-info/10 p-4 text-sm text-info">
+      <div className="flex items-start gap-3 rounded-xl bg-secondary-soft p-4 text-sm text-secondary-ink">
         <IconInfoCircle aria-hidden="true" size={18} className="mt-0.5 shrink-0" />
         <p className="m-0 leading-relaxed">
           字体和素材变更会影响后续渲染；增量批次和快照变更会影响汇总与续跑。操作前请查看对应分区的影响说明。宿主共享临时目录不在本插件管理范围内。

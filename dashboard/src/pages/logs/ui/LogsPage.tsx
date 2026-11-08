@@ -148,7 +148,7 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
                   <Button
                     size="sm"
                     variant="link"
-                    className="mr-2 inline h-auto max-w-full whitespace-normal p-0 align-baseline font-sans text-xs font-normal text-info decoration-info/40 [overflow-wrap:anywhere] hover:text-info hover:decoration-info"
+                    className="mr-2 inline h-auto max-w-full whitespace-normal p-0 align-baseline font-sans text-xs font-normal text-secondary-ink decoration-secondary-line [overflow-wrap:anywhere] hover:text-secondary-ink hover:decoration-secondary-ink"
                     onClick={() => {
                       if (item.trace_id) onViewTrace(item.trace_id);
                     }}

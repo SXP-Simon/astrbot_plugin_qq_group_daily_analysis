@@ -140,7 +140,7 @@ export function BatchDetailModal({
                     {Array.isArray(quality.dimensions) ? (
                       quality.dimensions.map((dimension, index) => (
                         <div key={index} className="grid gap-1">
-                          <span className="text-creative">
+                          <span className="text-primary-ink">
                             {dimension.name || `维度 ${index + 1}`} ·{" "}
                             {dimension.percentage === undefined
                               ? "未记录"

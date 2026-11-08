@@ -33,7 +33,7 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
         onRefresh={() => vm.refresh(false)}
       />
       {vm.hasUpdates && (
-        <p role="status" className="text-sm text-info">
+        <p role="status" className="text-sm text-secondary-ink">
           报告有更新，点击“刷新”查看。当前页保持不变。
         </p>
       )}

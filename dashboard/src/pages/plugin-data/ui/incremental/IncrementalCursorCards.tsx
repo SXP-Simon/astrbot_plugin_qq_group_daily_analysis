@@ -31,13 +31,13 @@ export function IncrementalCursorCards({
       label: "已记录去重消息",
       value: `${cursor.tracked_message_ids_count.toLocaleString()} 条`,
       hint: "用于避免跨批次重复统计。",
-      color: "text-info",
+      color: "text-secondary-ink",
     },
     {
       label: "暂存批次",
       value: `${batchCount.toLocaleString()} 个`,
       hint: "等待合并到总结中的分析批次。",
-      color: "text-creative",
+      color: "text-primary-ink",
     },
   ];
   return (
