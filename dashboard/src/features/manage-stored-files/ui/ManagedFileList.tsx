@@ -194,7 +194,14 @@ export function ManagedFileList({
         </div>
       )}
       {vm.busy && !vm.content && (
-        <LoadingState className="text-sm text-muted-foreground">正在读取或处理文件…</LoadingState>
+        <LoadingState
+          key={`${partition.key}:${vm.directory}`}
+          slowAfterMs={30_000}
+          slowMessage="等待时间较长，仍在读取或处理文件，请稍候…"
+          className="text-sm text-muted-foreground"
+        >
+          正在读取或处理文件…
+        </LoadingState>
       )}
       {vm.deleteResult && (
         <div
