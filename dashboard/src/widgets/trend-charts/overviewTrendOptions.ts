@@ -7,6 +7,8 @@ interface Palette {
   border: string;
   background: string;
   accent: string;
+  input?: string;
+  output?: string;
   providerColors: string[];
 }
 
@@ -130,14 +132,14 @@ export function createOverviewTrendOptions(
           type: "bar",
           stack: "tokens",
           data: points.map((point) => point.prompt_tokens),
-          itemStyle: { color: colors.accent },
+          itemStyle: { color: colors.input ?? colors.accent },
         },
         {
           name: "输出",
           type: "bar",
           stack: "tokens",
           data: points.map((point) => point.completion_tokens),
-          itemStyle: { color: colors.muted },
+          itemStyle: { color: colors.output ?? colors.providerColors[1] ?? colors.accent },
         },
       ],
     },

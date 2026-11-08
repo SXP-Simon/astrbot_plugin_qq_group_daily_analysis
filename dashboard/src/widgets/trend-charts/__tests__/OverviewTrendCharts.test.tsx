@@ -99,6 +99,19 @@ describe("趋势图与明细", () => {
       { name: "输入", data: data.points.map((point) => point.prompt_tokens) },
       { name: "输出", data: data.points.map((point) => point.completion_tokens) },
     ]);
+    expect(options[1].series).toMatchObject([
+      { name: "输入", itemStyle: { color: colors.accent } },
+      { name: "输出", itemStyle: { color: colors.providerColors[1] } },
+    ]);
+    const custom = createOverviewTrendOptions(data.points, data.provider_breakdown, {
+      ...colors,
+      input: "#4f7fd9",
+      output: "#a18ad1",
+    });
+    expect(custom[1].series).toMatchObject([
+      { name: "输入", itemStyle: { color: "#4f7fd9" } },
+      { name: "输出", itemStyle: { color: "#a18ad1" } },
+    ]);
     expect(options[1].aria).toMatchObject({
       enabled: true,
       label: {
@@ -191,4 +204,26 @@ it("多渠道显示前六名与聚合占比，全部长名称和数值仍可在�
   const table = screen.getByRole("region", { name: "服务商明细" });
   expect(within(table).getAllByRole("row")).toHaveLength(13);
   expect(within(table).getByText(providers[11].name)).toBeVisible();
+});
+
+it("组件读取宿主主辅色变量传入输入输出系列，图例沿用系列颜色", () => {
+  document.documentElement.style.setProperty("--chart-trend-input", "#123456");
+  document.documentElement.style.setProperty("--chart-trend-output", "#987654");
+  try {
+    render(<OverviewTrendCharts initialTrends={createMockAnalyticsTrends()} />);
+    expect(
+      chartRender.mock.calls.some(([option]) => {
+        const series = option.series;
+        return (
+          Array.isArray(series) &&
+          series[0]?.name === "输入" &&
+          series[0].itemStyle.color === "#123456" &&
+          series[1].itemStyle.color === "#987654"
+        );
+      }),
+    ).toBe(true);
+  } finally {
+    document.documentElement.style.removeProperty("--chart-trend-input");
+    document.documentElement.style.removeProperty("--chart-trend-output");
+  }
 });

@@ -39,6 +39,8 @@ export const OverviewTrendCharts = memo(function OverviewTrendCharts({
     border: color("--border"),
     background: color("--card"),
     accent: color("--ring"),
+    input: style.getPropertyValue("--chart-trend-input").trim() || undefined,
+    output: style.getPropertyValue("--chart-trend-output").trim() || undefined,
     providerColors,
   });
   const selectedLabel = TREND_RANGES.find((item) => item.value === vm.range)!.label;
