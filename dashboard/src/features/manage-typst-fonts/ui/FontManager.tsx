@@ -253,7 +253,8 @@ export function FontManager({
         pageSize={15}
         pageSizes={[15]}
         total={vm.rows.length}
-        disabled={disabled}
+        loading={vm.loading}
+        disabled={vm.busy}
         onChange={(page) => vm.setPage(page)}
       />
       <p className="m-0 text-sm text-muted-foreground">

@@ -226,7 +226,8 @@ export function ManagedFileList({
         pageSize={20}
         pageSizes={[20]}
         total={vm.total}
-        disabled={vm.loading || locked}
+        loading={vm.loading}
+        disabled={locked}
         onChange={(page) => vm.setPage(page)}
       />
       <ManagedFileDeleteDialog
