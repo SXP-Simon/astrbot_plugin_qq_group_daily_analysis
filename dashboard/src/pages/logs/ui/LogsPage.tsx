@@ -105,7 +105,7 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
             selection?.addRange(range);
           }
         }}
-        className="h-[65dvh] min-h-80 overflow-auto rounded-xl border border-solid border-border bg-card p-2 font-mono text-[13px] leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-[65dvh] min-h-80 overflow-auto rounded-xl border border-solid border-border bg-card p-2 font-sans text-[13px] leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {!vm.logs.length ? (
           <p className="py-12 text-center text-muted-foreground">
@@ -148,7 +148,7 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
                   <Button
                     size="sm"
                     variant="link"
-                    className="mr-2 inline h-auto max-w-full whitespace-normal p-0 align-baseline font-mono text-xs font-normal text-info decoration-info/40 [overflow-wrap:anywhere] hover:text-info hover:decoration-info"
+                    className="mr-2 inline h-auto max-w-full whitespace-normal p-0 align-baseline font-sans text-xs font-normal text-info decoration-info/40 [overflow-wrap:anywhere] hover:text-info hover:decoration-info"
                     onClick={() => {
                       if (item.trace_id) onViewTrace(item.trace_id);
                     }}

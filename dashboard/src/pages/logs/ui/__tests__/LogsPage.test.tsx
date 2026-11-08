@@ -45,6 +45,8 @@ it("筛选、暂停、复制与关联任务入口保留；日志区域全选不�
   render(<Page />);
   const region = screen.getByRole("region", { name: "日志内容" });
   await waitFor(() => expect(region).toHaveTextContent("备用服务继续渲染"));
+  expect(region).toHaveClass("font-sans");
+  expect(region.querySelector(".font-mono")).toBeNull();
   expect(region).toHaveTextContent("WARNING");
   expect(region).toHaveTextContent("render:20");
   expect(region).toHaveTextContent("Renderer.generate()");

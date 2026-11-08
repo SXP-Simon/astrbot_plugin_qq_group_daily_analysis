@@ -49,7 +49,7 @@ export function TraceLogViewer({ logs }: { logs: PluginLogItem[] }) {
                 void copyLogs();
               }
             }}
-            className="max-h-80 overflow-auto rounded-xl bg-muted p-3 font-mono text-xs leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="max-h-80 overflow-auto rounded-xl bg-muted p-3 font-sans text-xs leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {logs.map((log) => (
               <div
