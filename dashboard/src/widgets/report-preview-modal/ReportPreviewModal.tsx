@@ -1,3 +1,5 @@
+import { HtmlPreview } from "../../shared/ui/html-preview";
+import { ImageViewer } from "../../shared/ui/image-preview";
 import { LoadingState } from "../../shared/ui/loading-state";
 import { useState } from "react";
 import { IconDownload, IconCopy } from "@tabler/icons-react";
@@ -14,6 +16,7 @@ interface ReportPreviewModalProps {
   downloading?: boolean;
   onClose: () => void;
   onDownload: (report: ReportItem) => void;
+  onRetry?: () => void;
 }
 
 export function ReportPreviewModal({
@@ -24,6 +27,7 @@ export function ReportPreviewModal({
   downloading,
   onClose,
   onDownload,
+  onRetry,
 }: ReportPreviewModalProps) {
   const [copyResult, setCopyResult] = useState<{ path: string; message: string } | null>(null);
   const isHtml = Boolean(report?.is_html || /\.html?$/i.test(report?.filename || ""));
@@ -34,7 +38,7 @@ export function ReportPreviewModal({
         if (!next) onClose();
       }}
     >
-      <DialogContent className={isHtml ? "max-w-5xl" : "max-w-3xl"}>
+      <DialogContent className="max-w-6xl">
         <DialogTitle>报告预览</DialogTitle>
         <DialogDescription className="break-all font-mono text-xs">
           {report?.filename || "正在读取报告"}
@@ -42,6 +46,11 @@ export function ReportPreviewModal({
         {error && (
           <p role="alert" className="m-0 text-sm text-destructive">
             {error}
+            {onRetry && (
+              <Button className="ml-2" variant="outline" onClick={onRetry}>
+                重新加载
+              </Button>
+            )}
           </p>
         )}
         {loading ? (
@@ -81,21 +90,15 @@ export function ReportPreviewModal({
               </details>
             )}
             {isHtml && (report?.html_content || report?.data_url) ? (
-              <iframe
+              <HtmlPreview
                 title={report.filename}
-                srcDoc={report.html_content || undefined}
-                src={!report.html_content ? (report.data_url ?? undefined) : undefined}
+                html={report.html_content || undefined}
+                src={report.data_url || undefined}
                 sandbox="allow-scripts allow-same-origin"
                 className="block h-[65dvh] w-full rounded-xl border border-solid border-border bg-white"
               />
             ) : report?.data_url ? (
-              <div className="max-h-[65dvh] overflow-auto rounded-xl bg-muted p-2">
-                <img
-                  src={report.data_url}
-                  alt={report.filename}
-                  className="mx-auto block h-auto max-w-full"
-                />
-              </div>
+              <ImageViewer src={report.data_url} title={report.filename} fitMode="width" />
             ) : (
               !error && <p className="py-12 text-center text-muted-foreground">未找到报告内容</p>
             )}

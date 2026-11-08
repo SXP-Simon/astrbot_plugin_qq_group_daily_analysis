@@ -171,6 +171,10 @@ export function TraceDrawer({ traceId, open, onClose }: TraceDrawerProps) {
           error={vm.previewError || vm.actionError}
           downloading={vm.downloading}
           onClose={vm.closePreview}
+          onRetry={() => {
+            if (vm.previewReport)
+              void vm.previewFile(vm.previewReport.filename, Boolean(vm.previewReport.is_html));
+          }}
           onDownload={(report) => void vm.downloadFile(report.filename, Boolean(report.is_html))}
         />
         <ResumeTaskModal

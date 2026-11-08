@@ -76,9 +76,13 @@ export function useTraceActions(
       if (epoch !== generation.current || request !== previewSequence.current) return;
       if (report) setPreviewReport({ ...base, ...report });
       else setPreviewError("没有找到报告内容，文件可能已被清理。");
-    } catch {
+    } catch (cause) {
       if (epoch === generation.current && request === previewSequence.current)
-        setPreviewError("报告暂时无法加载，请关闭后重试。");
+        setPreviewError(
+          cause instanceof Error
+            ? `报告暂时无法加载：${cause.message}`
+            : "报告暂时无法加载，请重试。",
+        );
     } finally {
       if (epoch === generation.current && request === previewSequence.current)
         setPreviewLoading(false);
