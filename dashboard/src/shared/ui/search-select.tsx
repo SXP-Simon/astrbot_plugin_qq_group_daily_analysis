@@ -5,6 +5,9 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "./dialog";
 import { Input } from "./input";
 
 interface SearchSelectProps {
+  id?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
   label: string;
   value: string;
   options: { value: string; label: string; searchText?: string }[];
@@ -15,6 +18,9 @@ interface SearchSelectProps {
 }
 
 export function SearchSelect({
+  id: triggerId,
+  "aria-invalid": invalid,
+  "aria-describedby": describedBy,
   label,
   value,
   options,
@@ -71,6 +77,9 @@ export function SearchSelect({
     >
       <DialogTrigger asChild>
         <Button
+          id={triggerId}
+          aria-invalid={invalid}
+          aria-describedby={describedBy}
           variant="outline"
           disabled={disabled}
           aria-label={`${label}：${selected?.label ?? (value || "请选择")}`}
