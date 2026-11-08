@@ -77,10 +77,10 @@
   --success: #477360;
   --warning: #91692f;
   --creative: #796397;
-  --chart-input: rgba(90, 145, 172, 0.58);
-  --chart-output: rgba(149, 122, 177, 0.54);
+  --chart-input: color-mix(in srgb, var(--primary) 62%, transparent);
+  --chart-output: color-mix(in srgb, var(--secondary-color) 62%, transparent);
   --chart-trend-input: var(--ring);
-  --chart-trend-output: #76a894;
+  --chart-trend-output: var(--secondary-color);
   --scrollbar-thumb: #8e9387;
   --scrollbar-thumb-hover: #686f5c;
   --radius: 0.75rem;
@@ -113,9 +113,6 @@
   --success: #a0c9b1;
   --warning: #dfc296;
   --creative: #c7b3df;
-  --chart-input: rgba(126, 181, 207, 0.58);
-  --chart-output: rgba(177, 151, 204, 0.54);
-  --chart-trend-output: #8db7a4;
   --scrollbar-thumb: #6b6b73;
   --scrollbar-thumb-hover: #9898a1;
   color-scheme: dark;
