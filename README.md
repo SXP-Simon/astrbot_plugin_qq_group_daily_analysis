@@ -166,6 +166,16 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
       <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png" alt="Typst 字体管理" width="100%"></a>
     </td>
   </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告模板画廊</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/template-gallery-20261108-9440eea52d.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/template-gallery-20261108-9440eea52d.png" alt="报告模板画廊" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告文件管理</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/report-file-management-20261108-14aca297cb.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/report-file-management-20261108-14aca297cb.png" alt="报告文件管理" width="100%"></a>
+    </td>
+  </tr>
 </table>
 
 ### 📊 可视化报告
