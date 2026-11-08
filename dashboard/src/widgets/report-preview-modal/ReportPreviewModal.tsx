@@ -54,7 +54,12 @@ export function ReportPreviewModal({
           </p>
         )}
         {loading ? (
-          <LoadingState skeleton className="py-12 text-center text-muted-foreground">
+          <LoadingState
+            key={report?.filename}
+            slowAfterMs={30_000}
+            skeleton
+            className="py-12 text-center text-muted-foreground"
+          >
             正在加载报告…
           </LoadingState>
         ) : (

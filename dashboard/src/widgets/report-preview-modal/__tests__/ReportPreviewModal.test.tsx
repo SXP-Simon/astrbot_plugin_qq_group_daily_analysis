@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { ReportPreviewModal } from "../ReportPreviewModal";
 
@@ -36,15 +36,42 @@ it("失败后允许重新加载，关闭仍可操作，不能把无内容当作�
       open
       loading={false}
       report={null}
-      error="读取超过 30 秒"
+      error="服务连接中断"
       onClose={close}
       onRetry={retry}
       onDownload={vi.fn()}
     />,
   );
-  expect(screen.getByRole("alert")).toHaveTextContent("读取超过 30 秒");
+  expect(screen.getByRole("alert")).toHaveTextContent("服务连接中断");
   fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
   expect(retry).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
   expect(close).toHaveBeenCalledOnce();
+});
+
+it("慢传输只改变提示，切换文件重新计时，最终收到内容仍正常展示", async () => {
+  vi.useFakeTimers();
+  try {
+    const props = { open: true, loading: true, report, onClose: vi.fn(), onDownload: vi.fn() };
+    const view = render(<ReportPreviewModal {...props} />);
+    await act(async () => vi.advanceTimersByTimeAsync(30000));
+    expect(screen.getByRole("status")).toHaveTextContent("加载时间较长，仍在等待结果");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关闭预览" })).toBeEnabled();
+    const next = { ...report, filename: "second.png" };
+    view.rerender(<ReportPreviewModal {...props} report={next} />);
+    expect(screen.getByRole("status")).toHaveTextContent("正在加载报告");
+    await act(async () => vi.advanceTimersByTimeAsync(30000));
+    view.rerender(<ReportPreviewModal {...props} loading={false} report={next} />);
+    const image = screen.getByRole("img", { hidden: true });
+    fireEvent.load(image);
+    expect(screen.queryByText(/加载时间较长/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载图片" })).toBeEnabled();
+    view.unmount();
+    // Radix 卸载后的焦点恢复会排入零延迟任务。
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
