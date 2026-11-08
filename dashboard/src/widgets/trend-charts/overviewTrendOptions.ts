@@ -9,13 +9,50 @@ interface Palette {
   accent: string;
   input?: string;
   output?: string;
+  success?: string;
+  danger?: string;
   providerColors: string[];
 }
 
-function tooltipText(content: string): HTMLDivElement {
+function tooltipText(
+  content: string,
+  rows: { label: string; value: string; color: string }[] = [],
+): HTMLDivElement {
   const element = document.createElement("div");
   // 服务商名称可能来自用户配置，仅写入文本，避免被当成 HTML 执行。
-  element.textContent = content;
+  if (!rows.length) {
+    element.textContent = content;
+    return element;
+  }
+  element.style.display = "grid";
+  element.style.gap = "6px";
+  element.style.minWidth = "160px";
+  const title = document.createElement("div");
+  title.textContent = content;
+  element.append(title);
+  for (const row of rows) {
+    const line = document.createElement("div");
+    line.style.display = "grid";
+    line.style.gridTemplateColumns = "8px minmax(0, 1fr) auto";
+    line.style.columnGap = "8px";
+    const marker = document.createElement("span");
+    marker.setAttribute("aria-hidden", "true");
+    Object.assign(marker.style, {
+      width: "8px",
+      height: "8px",
+      borderRadius: "50%",
+      alignSelf: "center",
+      backgroundColor: row.color,
+    });
+    const label = document.createElement("span");
+    label.textContent = row.label;
+    const value = document.createElement("span");
+    value.textContent = row.value;
+    value.style.fontWeight = "500";
+    value.style.fontVariantNumeric = "tabular-nums";
+    line.append(marker, label, value);
+    element.append(line);
+  }
   return element;
 }
 
@@ -78,11 +115,21 @@ export function createOverviewTrendOptions(
           )
             return "";
           const point = points[item.dataIndex];
-          return tooltipText(
-            point
-              ? `${point.date_full}\n分析 ${point.request_count} 次\n成功 ${point.succeeded_count} 次 · 失败 ${point.failed_count} 次`
-              : "",
-          );
+          return point
+            ? tooltipText(point.date_full, [
+                { label: "分析", value: `${point.request_count} 次`, color: colors.accent },
+                {
+                  label: "成功",
+                  value: `${point.succeeded_count} 次`,
+                  color: colors.success ?? colors.accent,
+                },
+                {
+                  label: "失败",
+                  value: `${point.failed_count} 次`,
+                  color: colors.danger ?? colors.accent,
+                },
+              ])
+            : "";
         },
       },
       series: [
@@ -119,11 +166,25 @@ export function createOverviewTrendOptions(
           )
             return "";
           const point = points[item.dataIndex];
-          return tooltipText(
-            point
-              ? `${point.date_full}\n总消耗 ${point.total_tokens.toLocaleString()} Tokens\n输入 ${point.prompt_tokens.toLocaleString()} · 输出 ${point.completion_tokens.toLocaleString()}`
-              : "",
-          );
+          return point
+            ? tooltipText(point.date_full, [
+                {
+                  label: "总消耗",
+                  value: `${point.total_tokens.toLocaleString()} Tokens`,
+                  color: colors.accent,
+                },
+                {
+                  label: "输入",
+                  value: point.prompt_tokens.toLocaleString(),
+                  color: colors.input ?? colors.accent,
+                },
+                {
+                  label: "输出",
+                  value: point.completion_tokens.toLocaleString(),
+                  color: colors.output ?? colors.providerColors[1] ?? colors.accent,
+                },
+              ])
+            : "";
         },
       },
       series: [

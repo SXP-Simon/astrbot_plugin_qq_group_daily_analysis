@@ -41,6 +41,8 @@ export const OverviewTrendCharts = memo(function OverviewTrendCharts({
     accent: color("--ring"),
     input: style.getPropertyValue("--chart-trend-input").trim() || undefined,
     output: style.getPropertyValue("--chart-trend-output").trim() || undefined,
+    success: color("--success"),
+    danger: color("--destructive"),
     providerColors,
   });
   const selectedLabel = TREND_RANGES.find((item) => item.value === vm.range)!.label;

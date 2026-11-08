@@ -16,6 +16,70 @@ vi.mock("../../../entities/metric/api/metricApi", () => ({ fetchAnalyticsTrends:
 vi.mock("../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 beforeEach(() => vi.resetAllMocks());
 
+it("悬浮提示用语义色和系列色标记分行数据，保留零值并拒绝越界记录", () => {
+  const data = createMockAnalyticsTrends();
+  const point = { ...data.points[0], failed_count: 0 };
+  const colors = {
+    text: "#111111",
+    muted: "#666666",
+    border: "#dddddd",
+    background: "#ffffff",
+    accent: "rgb(50, 80, 110)",
+    input: "rgb(20, 100, 150)",
+    output: "rgb(150, 100, 180)",
+    success: "rgb(40, 120, 70)",
+    danger: "rgb(180, 50, 40)",
+    providerColors: ["#123456"],
+  };
+  const options = createOverviewTrendOptions([point], [], colors);
+  for (const [index, labels, markers, values] of [
+    [
+      0,
+      ["分析", "成功", "失败"],
+      [colors.accent, colors.success, colors.danger],
+      [`${point.request_count} 次`, `${point.succeeded_count} 次`, "0 次"],
+    ],
+    [
+      1,
+      ["总消耗", "输入", "输出"],
+      [colors.accent, colors.input, colors.output],
+      [
+        `${point.total_tokens.toLocaleString()} Tokens`,
+        point.prompt_tokens.toLocaleString(),
+        point.completion_tokens.toLocaleString(),
+      ],
+    ],
+  ] as const) {
+    const tooltip = options[index].tooltip;
+    if (!tooltip || Array.isArray(tooltip) || typeof tooltip.formatter !== "function")
+      throw new Error("趋势提示格式化函数缺失");
+    const params = {
+      componentType: "series",
+      componentSubType: "line",
+      componentIndex: 0,
+      $vars: [],
+      seriesType: "line",
+      seriesIndex: 0,
+      name: point.date_full,
+      dataIndex: 0,
+      data: 0,
+      value: 0,
+    };
+    const content = tooltip.formatter(params, "test", () => {});
+    if (!(content instanceof HTMLElement)) throw new Error("提示内容不是文本容器");
+    expect(content.children[0]).toHaveTextContent(point.date_full);
+    for (let row = 0; row < 3; row++) {
+      const line = content.children[row + 1];
+      expect(line.children[1]).toHaveTextContent(labels[row]);
+      expect(line.children[2]).toHaveTextContent(values[row]);
+      expect(line.querySelector<HTMLElement>("[aria-hidden=true]")?.style.backgroundColor).toBe(
+        markers[row],
+      );
+    }
+    expect(tooltip.formatter({ ...params, dataIndex: 99 }, "test", () => {})).toBe("");
+  }
+});
+
 describe("趋势图与明细", () => {
   it("零数据不借用历史总量，保留每个时间点和全部服务商明细", () => {
     const data = createMockAnalyticsTrends();
