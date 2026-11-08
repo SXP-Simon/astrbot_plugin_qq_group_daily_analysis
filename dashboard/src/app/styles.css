@@ -59,6 +59,8 @@
   --creative: #796397;
   --chart-input: rgba(90, 145, 172, 0.58);
   --chart-output: rgba(149, 122, 177, 0.54);
+  --chart-trend-input: var(--ring);
+  --chart-trend-output: #76a894;
   --scrollbar-thumb: #8e9387;
   --scrollbar-thumb-hover: #686f5c;
   --radius: 0.75rem;
@@ -86,6 +88,7 @@
   --creative: #c7b3df;
   --chart-input: rgba(126, 181, 207, 0.58);
   --chart-output: rgba(177, 151, 204, 0.54);
+  --chart-trend-output: #8db7a4;
   --scrollbar-thumb: #6b6b73;
   --scrollbar-thumb-hover: #9898a1;
   color-scheme: dark;
