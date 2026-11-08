@@ -17,6 +17,12 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-line: var(--primary-line);
+  --color-primary-ink: var(--ring);
+  --color-secondary-soft: var(--secondary-soft);
+  --color-secondary-line: var(--secondary-line);
+  --color-secondary-ink: var(--secondary-ink);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
@@ -44,7 +50,13 @@
   --card: #fff;
   --primary: oklch(0.8871 0.2122 128.5041);
   --primary-foreground: #263513;
-  --secondary: #eeece5;
+  --secondary-color: #4b9994;
+  --secondary: color-mix(in srgb, var(--secondary-color) 14%, var(--background));
+  --primary-soft: color-mix(in srgb, var(--primary) 12%, transparent);
+  --primary-line: color-mix(in srgb, var(--primary) 35%, var(--border));
+  --secondary-soft: color-mix(in srgb, var(--secondary-color) 8%, transparent);
+  --secondary-line: color-mix(in srgb, var(--secondary-color) 30%, var(--border));
+  --secondary-ink: color-mix(in srgb, var(--secondary-color) 60%, #000);
   --muted: #f1f1ec;
   --muted-foreground: #62666c;
   --accent: #edf2e2;
@@ -73,7 +85,9 @@
   --card: #1e1e21;
   --primary: #c5d7a8;
   --primary-foreground: #202b14;
-  --secondary: #29292d;
+  --secondary-color: #7cb7af;
+  --secondary: color-mix(in srgb, var(--secondary-color) 14%, var(--background));
+  --secondary-ink: color-mix(in srgb, var(--secondary-color) 65%, #fff);
   --muted: #242427;
   --muted-foreground: #aaaab4;
   --accent: #30372a;
@@ -225,6 +239,25 @@
 }
 .page-content:not([hidden]) {
   animation: page-enter 180ms ease-out;
+}
+
+/* 淡色只提示表头、交互焦点和真实选中项，普通数据行保持留白。 */
+.ui-data-table thead {
+  background: var(--secondary-soft);
+}
+.ui-data-table tbody tr:hover,
+.ui-data-table tbody tr:focus-within,
+.ui-list-row:hover,
+.ui-list-row:focus-within {
+  background: var(--secondary-soft);
+}
+.ui-data-table tbody tr[aria-selected="true"] {
+  background: var(--primary-soft);
+  outline: 1px solid var(--primary-line);
+  outline-offset: -1px;
+}
+.ui-data-table tbody tr[aria-selected="true"]:hover {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
 }
 .skip-link {
   position: absolute;
