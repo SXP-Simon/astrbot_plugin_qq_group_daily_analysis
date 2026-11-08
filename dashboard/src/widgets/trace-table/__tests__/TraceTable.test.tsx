@@ -88,7 +88,7 @@ it("成功任务可标记警告，但不能覆盖失败和取消；零值、全�
   expect(screen.getByText(/未找到历史快照/).closest("details")).toHaveAttribute("open");
 });
 
-it("加载与空数据分别展示，加载期间禁止翻页", () => {
+it("加载与空数据分别展示，已知总数时读取期间允许继续翻页", () => {
   const base = {
     traces: [],
     total: 0,
@@ -102,6 +102,10 @@ it("加载与空数据分别展示，加载期间禁止翻页", () => {
   expect(screen.getByRole("status")).toHaveTextContent("正在更新分析记录");
   expect(screen.queryByText("暂无符合条件的分析记录")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
+  view.rerender(<TraceTable {...base} total={45} loading />);
+  expect(screen.getByRole("button", { name: "下一页" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+  expect(base.onPageChange).toHaveBeenLastCalledWith(2, 15);
   view.rerender(<TraceTable {...base} loading={false} />);
   expect(screen.getByText("暂无符合条件的分析记录")).toBeInTheDocument();
 });

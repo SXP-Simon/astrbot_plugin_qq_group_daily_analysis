@@ -199,7 +199,7 @@ export function TraceTable({
         page={page}
         pageSize={pageSize}
         total={total}
-        disabled={loading}
+        loading={loading}
         onChange={onPageChange}
       />
     </div>
