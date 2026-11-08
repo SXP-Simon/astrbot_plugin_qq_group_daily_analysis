@@ -79,7 +79,7 @@
   --creative: #796397;
   --chart-input: color-mix(in srgb, var(--primary) 62%, transparent);
   --chart-output: color-mix(in srgb, var(--secondary-color) 62%, transparent);
-  --chart-trend-input: var(--ring);
+  --chart-trend-input: var(--primary);
   --chart-trend-output: var(--secondary-color);
   --scrollbar-thumb: #8e9387;
   --scrollbar-thumb-hover: #686f5c;
