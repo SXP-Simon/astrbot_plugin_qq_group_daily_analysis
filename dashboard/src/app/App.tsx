@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ConfigProvider, theme } from "antd";
 import {
   IconLayoutDashboard,
   IconStack2,
@@ -13,7 +12,6 @@ import { AppShell } from "./ui/AppShell";
 import { Toaster } from "../shared/ui/sonner";
 import { usePageNavigation } from "./model/usePageNavigation";
 import { subscribeSSE } from "../shared/api/bridge";
-import { useTheme } from "../shared/lib/useTheme";
 import { TraceDrawer } from "../widgets/trace-drawer/TraceDrawer";
 import { TriggerTaskModal } from "../features/trigger-task/ui/TriggerTaskModal";
 import { useTriggerTask } from "../features/trigger-task/model/useTriggerTask";
@@ -44,7 +42,6 @@ import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
 
 export const App: React.FC = () => {
-  const { isDark } = useTheme();
   const { page: activeTab, visited, navigate } = usePageNavigation("overview");
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [fontRequest, setFontRequest] = useState<FontManagementRequest | null>(null);
@@ -212,93 +209,79 @@ export const App: React.FC = () => {
   ];
 
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: {
-          colorPrimary: isDark ? "#b5ce85" : "#6a852e",
-          colorBgLayout: isDark ? "#161618" : "#fafbf7",
-          borderRadius: 12,
-          fontFamily: "'LXGW WenKai Screen', sans-serif",
-          fontFamilyCode:
-            "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+    <FontManagementContext.Provider
+      value={{
+        open: (selection) => {
+          setFontRequest({ ...selection, sequence: ++fontNavigationSequence.current });
+          handleTabChange("plugin-data");
         },
+        changed: () => setFontVersion((value) => value + 1),
+        version: fontVersion,
       }}
     >
-      <FontManagementContext.Provider
+      <ResourceManagementContext.Provider
         value={{
           open: (selection) => {
-            setFontRequest({ ...selection, sequence: ++fontNavigationSequence.current });
+            setResourceRequest({ ...selection, sequence: ++resourceNavigationSequence.current });
             handleTabChange("plugin-data");
           },
-          changed: () => setFontVersion((value) => value + 1),
-          version: fontVersion,
+          request: resourceRequest,
+          handled: () => setResourceRequest(null),
+          changed: () => setResourceVersion((value) => value + 1),
+          version: resourceVersion,
         }}
       >
-        <ResourceManagementContext.Provider
-          value={{
-            open: (selection) => {
-              setResourceRequest({ ...selection, sequence: ++resourceNavigationSequence.current });
-              handleTabChange("plugin-data");
-            },
-            request: resourceRequest,
-            handled: () => setResourceRequest(null),
-            changed: () => setResourceVersion((value) => value + 1),
-            version: resourceVersion,
-          }}
-        >
-          <div>
-            <Toaster />
-            <AppShell
-              activePage={activeTab}
-              visited={visited}
-              onNavigate={handleTabChange}
-              items={tabItems}
-              onRefresh={handleRefreshAll}
-              onOpenTrigger={triggerVM.handleOpen}
-              loading={overviewVM.loading}
-            />
+        <div>
+          <Toaster />
+          <AppShell
+            activePage={activeTab}
+            visited={visited}
+            onNavigate={handleTabChange}
+            items={tabItems}
+            onRefresh={handleRefreshAll}
+            onOpenTrigger={triggerVM.handleOpen}
+            loading={overviewVM.loading}
+          />
 
-            {/* 触发任务模态框 (Feature) */}
-            <TriggerTaskModal
-              open={triggerVM.open}
-              groupId={triggerVM.groupId}
-              groupName={triggerVM.groupName}
-              platform={triggerVM.platform}
-              providerId={triggerVM.providerId}
-              templateName={triggerVM.templateName}
-              submitting={triggerVM.submitting}
-              connectedPlatforms={triggerVM.connectedPlatforms}
-              loadingPlatforms={triggerVM.loadingPlatforms}
-              providers={triggerVM.providers}
-              loadingProviders={triggerVM.loadingProviders}
-              templates={triggerVM.templates}
-              loadingTemplates={triggerVM.loadingTemplates}
-              templatesError={triggerVM.templatesError}
-              optionsError={triggerVM.optionsError}
-              onRefreshOptions={triggerVM.refreshOptions}
-              onRefreshTemplates={() => void triggerVM.refreshTemplates()}
-              onGroupIdChange={triggerVM.setGroupId}
-              onGroupNameChange={triggerVM.setGroupName}
-              onPlatformChange={triggerVM.setPlatform}
-              onProviderChange={triggerVM.setProviderId}
-              onTemplateChange={triggerVM.setTemplateName}
-              onClose={triggerVM.handleClose}
-              onSubmit={triggerVM.handleSubmit}
-            />
+          {/* 触发任务模态框 (Feature) */}
+          <TriggerTaskModal
+            open={triggerVM.open}
+            groupId={triggerVM.groupId}
+            groupName={triggerVM.groupName}
+            platform={triggerVM.platform}
+            providerId={triggerVM.providerId}
+            templateName={triggerVM.templateName}
+            submitting={triggerVM.submitting}
+            connectedPlatforms={triggerVM.connectedPlatforms}
+            loadingPlatforms={triggerVM.loadingPlatforms}
+            providers={triggerVM.providers}
+            loadingProviders={triggerVM.loadingProviders}
+            templates={triggerVM.templates}
+            loadingTemplates={triggerVM.loadingTemplates}
+            templatesError={triggerVM.templatesError}
+            optionsError={triggerVM.optionsError}
+            onRefreshOptions={triggerVM.refreshOptions}
+            onRefreshTemplates={() => void triggerVM.refreshTemplates()}
+            onGroupIdChange={triggerVM.setGroupId}
+            onGroupNameChange={triggerVM.setGroupName}
+            onPlatformChange={triggerVM.setPlatform}
+            onProviderChange={triggerVM.setProviderId}
+            onTemplateChange={triggerVM.setTemplateName}
+            onClose={triggerVM.handleClose}
+            onSubmit={triggerVM.handleSubmit}
+          />
 
-            {/* 链路追溯抽屉 (Widget) */}
-            <TraceDrawer
-              traceId={selectedTraceId}
-              open={!!selectedTraceId}
-              onClose={() => setSelectedTraceId(null)}
-            />
+          {/* 链路追溯抽屉 (Widget) */}
+          <TraceDrawer
+            traceId={selectedTraceId}
+            open={!!selectedTraceId}
+            onClose={() => setSelectedTraceId(null)}
+          />
 
-            {/* 独立开发调试浮动工具栏 (Dev Only) */}
-            {import.meta.env.DEV && <DevToolbar />}
-          </div>
-        </ResourceManagementContext.Provider>
-      </FontManagementContext.Provider>
-    </ConfigProvider>
+          {/* 独立开发调试浮动工具栏 (Dev Only) */}
+          {import.meta.env.DEV && <DevToolbar />}
+        </div>
+      </ResourceManagementContext.Provider>
+    </FontManagementContext.Provider>
   );
 };

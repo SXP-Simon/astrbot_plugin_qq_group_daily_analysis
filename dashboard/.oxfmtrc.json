@@ -6,11 +6,5 @@
   "singleQuote": false,
   "endOfLine": "lf",
   "sortImports": false,
-  "ignorePatterns": [
-    "node_modules/**",
-    "dist/**",
-    "design-preview/**",
-    "src/shared/api/generated/**",
-    "pnpm-lock.yaml"
-  ]
+  "ignorePatterns": ["node_modules/**", "dist/**", "src/shared/api/generated/**", "pnpm-lock.yaml"]
 }
