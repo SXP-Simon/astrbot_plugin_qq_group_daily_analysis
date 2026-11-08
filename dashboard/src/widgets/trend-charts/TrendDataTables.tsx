@@ -24,7 +24,7 @@ export function TrendDataTables({
         >
           <table className="w-full min-w-[650px] border-collapse text-left text-sm">
             <caption className="p-3 text-left">{rangeLabel} · 分析次数与模型消耗</caption>
-            <thead className="bg-muted">
+            <thead className="bg-secondary">
               <tr>
                 {["时间", "分析", "成功", "失败", "输入 Tokens", "输出 Tokens", "总 Tokens"].map(
                   (label) => (
@@ -72,7 +72,7 @@ export function TrendDataTables({
         >
           <table className="w-full min-w-[420px] border-collapse text-left text-sm">
             <caption className="p-3 text-left">{rangeLabel} · 全部服务商</caption>
-            <thead className="bg-muted">
+            <thead className="bg-secondary">
               <tr>
                 {["服务商", "分析次数", "Tokens", "消耗占比"].map((label) => (
                   <th key={label} scope="col" className="px-3 py-2 font-medium">

@@ -33,10 +33,8 @@ export function ReportList({
         const isHtml = Boolean(report.is_html || /\.html?$/i.test(report.filename));
         const isComic = Boolean(report.is_comic || /^(comic_|漫画_)/i.test(report.filename));
         const fileTone = isComic
-          ? "bg-creative/10 text-creative"
-          : isHtml
-            ? "bg-warning/10 text-warning"
-            : "bg-info/10 text-info";
+          ? "bg-primary-soft text-primary-ink"
+          : "bg-secondary-soft text-secondary-ink";
         const Icon = isHtml ? IconFileText : IconPhoto;
         const time = report.modified_at ?? report.created_at;
         const busy = downloadingFiles.has(report.filename);
@@ -55,7 +53,7 @@ export function ReportList({
                 <span className="break-all font-mono text-sm">{report.filename}</span>
               </div>
               <p className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span className={isComic ? "text-creative" : isHtml ? "text-warning" : "text-info"}>
+                <span className={isComic ? "text-primary-ink" : "text-secondary-ink"}>
                   {isComic ? "群漫画" : isHtml ? "交互式 HTML" : "图片报告"}
                 </span>
                 <span>
@@ -107,12 +105,7 @@ export function ReportList({
                 预览
               </Button>
               {!isComic && (
-                <Button
-                  variant="outline"
-                  className="border-creative/20 bg-creative/5 text-creative hover:bg-creative/10"
-                  size="sm"
-                  onClick={() => onRerender(report)}
-                >
+                <Button variant="tonal" size="sm" onClick={() => onRerender(report)}>
                   <IconPalette aria-hidden="true" />
                   换模板
                 </Button>

@@ -84,7 +84,7 @@ export function TemplateListRenderer({
                     {index + 1}. {name}
                   </h3>
                   {item.priority !== undefined && (
-                    <span className="rounded-md bg-info/10 px-2 py-1 text-xs text-info">
+                    <span className="rounded-md bg-secondary-soft px-2 py-1 text-xs text-secondary-ink">
                       优先级 {String(item.priority)}
                     </span>
                   )}
@@ -193,7 +193,7 @@ export function TemplateListRenderer({
           ref={addButton}
           variant="outline"
           disabled={!vm.valid}
-          className="text-info"
+          className="text-secondary-ink"
           onClick={() =>
             vm.templateKeys.length === 1 ? vm.add(vm.templateKeys[0]) : setAdding(true)
           }

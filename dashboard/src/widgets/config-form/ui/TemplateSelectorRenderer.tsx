@@ -277,7 +277,7 @@ export function TemplateSelectorRenderer({
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="m-0 break-words text-base font-medium">{item.name}</h3>
                   {item.custom && (
-                    <span className="rounded-md bg-info/10 px-2 py-1 text-xs text-info">
+                    <span className="rounded-md bg-secondary-soft px-2 py-1 text-xs text-secondary-ink">
                       自定义
                     </span>
                   )}

@@ -16,7 +16,7 @@ function ReferenceImage({ path }: { path: string }) {
         type="button"
         aria-label={`预览参考图片 ${path}`}
         onClick={() => setOpen(true)}
-        className="flex size-12 shrink-0 cursor-zoom-in items-center justify-center overflow-hidden rounded-lg border border-solid border-border bg-muted/40 text-info focus-visible:outline-2 focus-visible:outline-ring"
+        className="flex size-12 shrink-0 cursor-zoom-in items-center justify-center overflow-hidden rounded-lg border border-solid border-border bg-muted/40 text-secondary-ink focus-visible:outline-2 focus-visible:outline-ring"
       >
         {image.src && failed !== image.src ? (
           <img
