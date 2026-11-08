@@ -67,7 +67,7 @@ export async function acknowledgeTrace(traceId: string, acknowledged: boolean) {
   const parsed = z
     .object({
       trace_id: z.literal(traceId),
-      acknowledged_at: acknowledged ? z.number().finite().positive() : z.null(),
+      acknowledged_at: acknowledged ? z.number().positive() : z.null(),
     })
     .safeParse(extractData<unknown>(response));
   if (!parsed.success) throw new Error("知晓状态未能确认，请刷新后重试。");

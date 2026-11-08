@@ -7,7 +7,7 @@ export type PluginLogResponse = components["schemas"]["PluginLogResponse"];
 
 export const logEntrySchema: z.ZodType<PluginLogItem> = z.object({
   id: z.string().min(1),
-  timestamp: z.number().finite(),
+  timestamp: z.number(),
   time_str: z.string(),
   level: z.enum(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
   logger_name: z.string(),

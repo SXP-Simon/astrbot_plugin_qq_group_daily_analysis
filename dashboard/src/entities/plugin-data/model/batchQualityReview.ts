@@ -9,7 +9,7 @@ export const batchQualityReviewSchema = z.looseObject({
     .array(
       z.looseObject({
         name: z.string().optional(),
-        percentage: z.number().finite().optional(),
+        percentage: z.number().optional(),
         comment: z.string().optional(),
       }),
     )

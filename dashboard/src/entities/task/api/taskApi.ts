@@ -75,7 +75,7 @@ export async function triggerNewTask(
       message: z.string().optional(),
       status: z.enum(["ok", "success"]).optional(),
     })
-    .passthrough()
+    .loose()
     .safeParse(extractData<unknown>(res));
   if (!result.success) throw new Error("未收到有效的任务提交回执，请刷新任务列表后确认。");
   return {

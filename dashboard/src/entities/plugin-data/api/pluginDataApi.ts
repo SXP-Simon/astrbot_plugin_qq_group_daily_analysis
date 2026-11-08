@@ -196,7 +196,7 @@ export async function fetchCheckpointDetail(
   const detail = data && "detail" in data ? data.detail : data;
   const parsed = z
     .object({ group_id: z.string(), date_str: z.string(), stage_name: z.string() })
-    .passthrough()
+    .loose()
     .safeParse(detail);
   if (!parsed.success) throw new Error("快照详情格式异常，请刷新后重试。");
   return parsed.data;

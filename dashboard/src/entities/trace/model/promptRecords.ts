@@ -12,9 +12,9 @@ const promptDetailSchema = z.object({
   provider_id: z.string().optional().catch(undefined),
   model: z.string().optional().catch(undefined),
   provider_type: z.string().optional().catch(undefined),
-  tokens: z.number().finite().nonnegative().optional().catch(undefined),
-  prompt_tokens: z.number().finite().nonnegative().optional().catch(undefined),
-  completion_tokens: z.number().finite().nonnegative().optional().catch(undefined),
+  tokens: z.number().nonnegative().optional().catch(undefined),
+  prompt_tokens: z.number().nonnegative().optional().catch(undefined),
+  completion_tokens: z.number().nonnegative().optional().catch(undefined),
   retry_count: z.number().int().nonnegative().optional().catch(undefined),
 });
 

@@ -5,7 +5,7 @@ import { resolveSpanOutcome } from "./spanOutcome";
 export const renderAttemptSchema = z.object({
   attempt: z.number().int().positive().optional().catch(undefined),
   strategy_name: z.string().optional().catch(undefined),
-  priority: z.number().finite().nullable().optional().catch(undefined),
+  priority: z.number().nullable().optional().catch(undefined),
   service_type: z.enum(["astrbot", "custom", "typst"]).optional().catch(undefined),
   font_mode: z.enum(["network", "local"]).optional().catch(undefined),
   resource_environment: z.string().optional().catch(undefined),
@@ -18,9 +18,9 @@ export const renderAttemptSchema = z.object({
     .nullable()
     .optional()
     .catch(undefined),
-  render_timeout_ms: z.number().finite().nonnegative().nullable().optional().catch(undefined),
-  request_timeout_ms: z.number().finite().nonnegative().nullable().optional().catch(undefined),
-  duration_ms: z.number().finite().nonnegative().optional().catch(undefined),
+  render_timeout_ms: z.number().nonnegative().nullable().optional().catch(undefined),
+  request_timeout_ms: z.number().nonnegative().nullable().optional().catch(undefined),
+  duration_ms: z.number().nonnegative().optional().catch(undefined),
   status: z.string().optional().catch(undefined),
   type: z.string().optional().catch(undefined),
   viewport: z.string().optional().catch(undefined),

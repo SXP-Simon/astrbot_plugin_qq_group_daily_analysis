@@ -5,8 +5,8 @@ export type TypstFontStatus = components["schemas"]["TypstFontStatus"];
 export type TypstFontPreset = components["schemas"]["TypstFontPreset"];
 const fontPresetSchema: z.ZodType<TypstFontPreset> = z.object({
   name: z.string(),
-  download_url: z.string().url(),
-  upstream_url: z.string().url(),
+  download_url: z.url(),
+  upstream_url: z.url(),
   cdn_path: z.string().nullable(),
 });
 export type FontDownloadSource = "cdn" | "github";
