@@ -159,6 +159,8 @@ it("分页采用服务端总数与修正页码，旧页响应不能覆盖新页"
   act(() => {
     void result.current.changeIncrementalPage(2, 20);
   });
+  expect(result.current.incrPagination).toEqual({ page: 2, pageSize: 20, total: 45 });
+  expect(result.current.loadingIncremental).toBe(true);
   await act(async () => result.current.changeIncrementalPage(3, 20));
   expect(fetchIncrementalBatches).toHaveBeenLastCalledWith("a", 3, 20, "");
   expect(result.current.incrPagination).toEqual({ page: 2, pageSize: 20, total: 40 });

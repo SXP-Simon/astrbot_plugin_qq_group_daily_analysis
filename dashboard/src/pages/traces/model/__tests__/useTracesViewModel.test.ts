@@ -190,3 +190,47 @@ it("平台变更清空群聊，群聊选择携带平台身份", async () => {
     expect.objectContaining({ group_id: undefined, platform: "" }),
   );
 });
+
+it("连续切页立即更新目标，旧页成功或失败都不能覆盖最终选择", async () => {
+  vi.mocked(fetchTraceList).mockResolvedValueOnce({ items: [trace], total: 60 });
+  const { result } = renderHook(useTracesViewModel);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  let resolve!: (value: Awaited<ReturnType<typeof fetchTraceList>>) => void;
+  let reject!: (error: Error) => void;
+  vi.mocked(fetchTraceList)
+    .mockReturnValueOnce(
+      new Promise((done, fail) => {
+        resolve = done;
+        reject = fail;
+      }),
+    )
+    .mockResolvedValueOnce({ items: [{ ...trace, trace_id: "example-page-3" }], total: 60 });
+  act(() => result.current.changePage(2, 15));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(result.current.page).toBe(2);
+  expect(result.current.total).toBe(60);
+  expect(result.current.loading).toBe(true);
+  act(() => result.current.changePage(3, 15));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  await act(async () => resolve({ items: [trace], total: 1 }));
+  expect(result.current.page).toBe(3);
+  expect(result.current.traces[0].trace_id).toBe("example-page-3");
+  expect(result.current.total).toBe(60);
+  expect(result.current.loading).toBe(false);
+
+  vi.mocked(fetchTraceList)
+    .mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+    )
+    .mockResolvedValueOnce({ items: [trace], total: 60 });
+  act(() => result.current.changePage(2, 15));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  act(() => result.current.changePage(1, 15));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  await act(async () => reject(new Error("迟到的失败")));
+  expect(result.current.page).toBe(1);
+  expect(result.current.error).toBe("");
+  expect(result.current.loading).toBe(false);
+});

@@ -48,6 +48,9 @@ it("清空筛选明确移除旧条件，快速翻页只保留最后一次结果"
   act(() => {
     previous = result.current.loadCheckpoints({ page: 2 });
   });
+  expect(result.current.checkpointsPage).toBe(2);
+  expect(result.current.checkpointsTotal).toBe(60);
+  expect(result.current.loadingCheckpoints).toBe(true);
   await act(async () =>
     result.current.loadCheckpoints({
       page: 3,

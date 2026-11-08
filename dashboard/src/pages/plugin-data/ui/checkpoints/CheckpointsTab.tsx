@@ -9,7 +9,6 @@ import type { CheckpointItem } from "../../../../entities/plugin-data/model/type
 import type { usePluginDataViewModel } from "../../model/usePluginDataViewModel";
 import { formatBytes, formatTimestamp, formatStageName } from "../../../../shared/lib/formatters";
 import { Button } from "../../../../shared/ui/button";
-import { Input } from "../../../../shared/ui/input";
 import { Pagination } from "../../../../shared/ui/pagination";
 import {
   Dialog,
@@ -22,7 +21,6 @@ import { CheckpointFilterBar } from "./CheckpointFilterBar";
 export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataViewModel> }) {
   const [managedLocator, setManagedLocator] = useState<RecordLocator | null>(null);
   const [deleting, setDeleting] = useState<CheckpointItem | null>(null);
-  const [jump, setJump] = useState("");
   const locators: RecordLocator[] = vm.checkpoints.map((item) => ({
     kind: "checkpoint",
     group_id: item.group_id,
@@ -194,36 +192,10 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
         pageSize={vm.checkpointsPageSize}
         total={vm.checkpointsTotal}
         pageSizes={[10, 20, 50, 100]}
-        disabled={vm.loadingCheckpoints || busy}
+        loading={vm.loadingCheckpoints}
+        disabled={busy}
         onChange={(page, pageSize) => void vm.loadCheckpoints({ page, pageSize })}
       />
-      {vm.checkpointsTotal > vm.checkpointsPageSize && (
-        <form
-          className="flex items-center justify-end gap-2 text-sm"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const page = Number(jump);
-            if (Number.isInteger(page) && page >= 1)
-              void vm.loadCheckpoints({
-                page: Math.min(page, Math.ceil(vm.checkpointsTotal / vm.checkpointsPageSize)),
-              });
-          }}
-        >
-          <label htmlFor="checkpoint-page">跳到页码</label>
-          <Input
-            id="checkpoint-page"
-            type="number"
-            min={1}
-            max={Math.ceil(vm.checkpointsTotal / vm.checkpointsPageSize)}
-            value={jump}
-            onChange={(event) => setJump(event.target.value)}
-            className="w-20"
-          />
-          <Button variant="outline" type="submit" disabled={vm.loadingCheckpoints || busy || !jump}>
-            跳转
-          </Button>
-        </form>
-      )}
       <ManagedRecordDialog
         locator={managedLocator}
         onClose={() => setManagedLocator(null)}

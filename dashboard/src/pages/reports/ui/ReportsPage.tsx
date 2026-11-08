@@ -96,7 +96,7 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
           pageSize={vm.pageSize}
           total={vm.total}
           pageSizes={[10, 20, 50]}
-          disabled={vm.loading}
+          loading={vm.loading}
           onChange={vm.handlePageChange}
         />
       )}

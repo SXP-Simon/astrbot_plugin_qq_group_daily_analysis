@@ -17,12 +17,15 @@ export function useStoredRecords(initialKind: RecordKind = "history") {
     const next = { ...current.current, ...changes };
     if (!Number.isSafeInteger(next.page) || next.page < 1) next.page = 1;
     if (JSON.stringify(next) === JSON.stringify(current.current)) return;
+    const filtersChanged =
+      next.kind !== current.current.kind || next.search !== current.current.search;
     sequence.current++;
     current.current = next;
     setQuery(next);
     setLoading(true);
     setItems([]);
-    setTotal(0);
+    // 只切页时保留已知总数，允许继续选择目标页。
+    if (filtersChanged) setTotal(0);
     setError("");
   }, []);
   const refresh = useCallback(async () => {

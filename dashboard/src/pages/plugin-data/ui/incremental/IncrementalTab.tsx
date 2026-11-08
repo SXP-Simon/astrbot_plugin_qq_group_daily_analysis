@@ -306,7 +306,8 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
           </div>
           <Pagination
             {...vm.incrPagination}
-            disabled={loadingIncremental || busy}
+            loading={loadingIncremental}
+            disabled={busy}
             onChange={(page, pageSize) => void vm.changeIncrementalPage(page, pageSize)}
           />
         </>

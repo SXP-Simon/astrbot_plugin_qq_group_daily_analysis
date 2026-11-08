@@ -165,3 +165,47 @@ it("平台变更清空群聊，群聊选择携带平台身份", async () => {
     expect.objectContaining({ group_id: undefined, platform: "" }),
   );
 });
+
+it("连续切页立即更新目标，旧页成功或失败都不能覆盖最终选择", async () => {
+  vi.mocked(fetchReportHistory).mockResolvedValueOnce({ items: [first], total: 80 });
+  const { result } = renderHook(useReportsViewModel);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  let resolve!: (value: Awaited<ReturnType<typeof fetchReportHistory>>) => void;
+  let reject!: (error: Error) => void;
+  vi.mocked(fetchReportHistory)
+    .mockReturnValueOnce(
+      new Promise((done, fail) => {
+        resolve = done;
+        reject = fail;
+      }),
+    )
+    .mockResolvedValueOnce({ items: [{ ...first, filename: "page-3.png" }], total: 80 });
+  act(() => result.current.handlePageChange(2, 20));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(result.current.page).toBe(2);
+  expect(result.current.total).toBe(80);
+  expect(result.current.loading).toBe(true);
+  act(() => result.current.handlePageChange(3, 20));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  await act(async () => resolve({ items: [first], total: 1 }));
+  expect(result.current.page).toBe(3);
+  expect(result.current.reports[0].filename).toBe("page-3.png");
+  expect(result.current.total).toBe(80);
+  expect(result.current.loading).toBe(false);
+
+  vi.mocked(fetchReportHistory)
+    .mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+    )
+    .mockResolvedValueOnce({ items: [first], total: 80 });
+  act(() => result.current.handlePageChange(2, 20));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  act(() => result.current.handlePageChange(1, 20));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  await act(async () => reject(new Error("迟到的失败")));
+  expect(result.current.page).toBe(1);
+  expect(result.current.error).toBe("");
+  expect(result.current.loading).toBe(false);
+});

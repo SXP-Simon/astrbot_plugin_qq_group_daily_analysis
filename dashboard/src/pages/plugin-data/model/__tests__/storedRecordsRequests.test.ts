@@ -98,3 +98,23 @@ it("切换限定分区同步类型并清空搜索，非法页码回到首页", a
   act(() => result.current.setPage(NaN));
   await waitFor(() => expect(result.current.page).toBe(1));
 });
+
+it("切页保留已知总数，慢页返回前可继续翻页，旧页不覆盖新页", async () => {
+  vi.mocked(fetchManagedRecords).mockResolvedValueOnce({ items: [entry], total: 80 });
+  const { result } = renderHook(() => useStoredRecords());
+  await waitFor(() => expect(result.current.total).toBe(80));
+  const old = deferred<Awaited<ReturnType<typeof fetchManagedRecords>>>();
+  vi.mocked(fetchManagedRecords)
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValueOnce({ items: [{ ...entry, name: "第三页" }], total: 80 });
+  act(() => result.current.setPage(2));
+  expect(result.current.page).toBe(2);
+  expect(result.current.total).toBe(80);
+  expect(result.current.loading).toBe(true);
+  act(() => result.current.setPage(3));
+  await waitFor(() => expect(result.current.items[0]?.name).toBe("第三页"));
+  await act(async () => old.resolve({ items: [entry], total: 1 }));
+  expect(result.current.page).toBe(3);
+  expect(result.current.total).toBe(80);
+  expect(result.current.items[0]?.name).toBe("第三页");
+});

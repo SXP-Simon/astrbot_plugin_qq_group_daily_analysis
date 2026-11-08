@@ -52,7 +52,7 @@ it("筛选清空与页码跳转使用明确参数，删除确认绑定原任务�
   });
   fireEvent.change(screen.getByLabelText("跳到页码"), { target: { value: "3" } });
   fireEvent.click(screen.getByRole("button", { name: "跳转" }));
-  expect(load).toHaveBeenLastCalledWith({ page: 3 });
+  expect(load).toHaveBeenLastCalledWith({ page: 3, pageSize: 20 });
   fireEvent.click(screen.getByRole("button", { name: "产物 JSON" }));
   expect(detail).toHaveBeenCalledWith(item);
   fireEvent.click(screen.getByRole("button", { name: "管理" }));

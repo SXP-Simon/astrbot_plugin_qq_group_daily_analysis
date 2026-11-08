@@ -84,6 +84,7 @@ export function usePluginDataViewModel() {
       if (!groupId || currentGroup.current !== groupId || currentPlatform.current !== platformId)
         return;
       incrementalQuery.current = { page, pageSize };
+      setIncrPagination((current) => ({ ...current, page, pageSize }));
       const request = ++incrementalRequest.current;
       setLoadingIncremental(true);
       setIncrementalError("");

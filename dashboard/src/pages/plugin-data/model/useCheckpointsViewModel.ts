@@ -66,6 +66,11 @@ export function useCheckpointsViewModel() {
     const changed = Object.entries(next).some(
       ([key, value]) => queryRef.current[key as keyof CheckpointQuery] !== value,
     );
+    const filtersChanged =
+      next.group !== queryRef.current.group ||
+      next.platform !== queryRef.current.platform ||
+      next.date !== queryRef.current.date ||
+      next.stage !== queryRef.current.stage;
     queryRef.current = next;
     setQuery(next);
     const request = ++listRequest.current;
@@ -73,7 +78,7 @@ export function useCheckpointsViewModel() {
     setError("");
     if (changed) {
       setItems([]);
-      setTotal(0);
+      if (filtersChanged) setTotal(0);
     }
     try {
       let result = await fetchCheckpointsList({

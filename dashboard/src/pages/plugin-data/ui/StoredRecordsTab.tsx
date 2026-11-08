@@ -230,13 +230,14 @@ export function StoredRecordsTab({ onlyKind }: { onlyKind?: "avatar" | "history"
           </p>
         )}
       </div>
-      {(items.length > 0 || (!loading && !error)) && (
+      {(total > 0 || (!loading && !error)) && (
         <Pagination
           page={page}
           pageSize={20}
           pageSizes={[20]}
           total={total}
-          disabled={loading || selection.busy}
+          loading={loading}
+          disabled={selection.busy}
           onChange={setPage}
         />
       )}
