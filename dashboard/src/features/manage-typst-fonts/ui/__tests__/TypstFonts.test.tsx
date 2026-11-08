@@ -36,10 +36,12 @@ it("管理入口保留模板与来源，管理完成后刷新状态", async () =
     </FontManagementContext.Provider>,
   );
   await screen.findByText("所选模板还需下载 7 / 9 个字体文件");
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "字体模板" }));
-  fireEvent.click(screen.getByText("ATRI (亚托莉)"));
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "字体下载来源" }));
-  fireEvent.click(screen.getByText("GitHub Raw 直连（全部字体）"));
+  fireEvent.change(screen.getByRole("combobox", { name: "字体模板" }), {
+    target: { value: "ATRI" },
+  });
+  fireEvent.change(screen.getByRole("combobox", { name: "字体下载来源" }), {
+    target: { value: "github" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "管理 / 上传字体" }));
   expect(open).toHaveBeenCalledWith({
     theme: "ATRI",
@@ -59,7 +61,7 @@ it("管理入口保留模板与来源，管理完成后刷新状态", async () =
 
 it("CDN 失败自动切换 Raw，而固定 Raw 大字库失败只尝试一次", async () => {
   const fonts = structuredClone(initial);
-  const names = ["Outfit.ttf", "cjkFonts_allseto_v1.11.ttf"];
+  const names = ["Outfit.ttf", "cjkFonts-AllSeto-Title-v1.11.ttf", "LXGWWenKai.ttf"];
   fonts.missing = [...names];
   fonts.groups = [{ theme: "HatsuneMiku", required: names, missing: [...names], ready: false }];
   vi.mocked(fetchTypstFonts).mockImplementation(async () => structuredClone(fonts));
@@ -70,13 +72,15 @@ it("CDN 失败自动切换 Raw，而固定 Raw 大字库失败只尝试一次", 
     return structuredClone(fonts);
   });
   render(<TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" />);
-  await screen.findByText("所选模板还需下载 2 / 2 个字体文件");
+  await screen.findByText("所选模板还需下载 3 / 3 个字体文件");
   fireEvent.click(screen.getByRole("button", { name: "下载所选模板字体" }));
-  expect(await screen.findByText("字体处理 2/2，成功 1，失败 1")).toBeVisible();
+  expect(await screen.findByText("字体处理 3/3，成功 1，失败 2")).toBeVisible();
   expect(vi.mocked(downloadTypstFonts).mock.calls.map((call) => [call[2], call[4]])).toEqual([
     [names[0], "cdn"],
     [names[0], "github"],
     [names[1], "cdn"],
+    [names[1], "github"],
+    [names[2], "cdn"],
   ]);
   expect(screen.getByText(/已自动改用 GitHub Raw 重试：Outfit.ttf/)).toBeVisible();
 });
@@ -100,8 +104,9 @@ it("选择 Raw 后传递来源，展示真实字节与等待时间，失败原�
   });
   render(<TypstFonts cdnBaseUrl="https://cdn.jsdelivr.net" />);
   await screen.findByText("所选模板还需下载 7 / 9 个字体文件");
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "字体下载来源" }));
-  fireEvent.click(screen.getByText("GitHub Raw 直连（全部字体）"));
+  fireEvent.change(screen.getByRole("combobox", { name: "字体下载来源" }), {
+    target: { value: "github" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "下载所选模板字体" }));
   expect(await screen.findByText(/正在接收字体：1\.0 MB \/ 5\.0 MB/)).toBeVisible();
   expect(screen.getByText(/已 7 秒未收到新数据/)).toBeVisible();

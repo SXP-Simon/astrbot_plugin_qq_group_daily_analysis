@@ -116,7 +116,7 @@ class ManagedFileRoutes:
                 request.query.get("partition", ""),
                 request.query.get("name", ""),
             )
-            return json_response({"status": "ok", "data": content})
+            return json_response({"status": "ok", "data": content}, compress=True)
         except FileNotFoundError:
             return error_response("文件已不存在，请刷新列表", status_code=404)
         except (ValueError, UnicodeError) as error:

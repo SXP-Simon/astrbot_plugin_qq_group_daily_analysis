@@ -215,7 +215,12 @@ async def test_scheduler_does_not_freeze_qq_fallback_or_mix_platform_names():
         get_group_info=AsyncMock(return_value=SimpleNamespace(group_name="其他平台群")),
     )
     adapters = {"official-a": first, "other": second}
-    resolver = ScheduledTargetResolver(None, SimpleNamespace(get_adapter=adapters.get))
+    resolver = ScheduledTargetResolver(None, SimpleNamespace(
+        get_adapter=adapters.get,
+        get_adapter_platform_id=lambda adapter: next(
+            key for key, value in adapters.items() if value is adapter
+        ),
+    ))
     assert await resolver.get_group_name_safe("GROUP", "official-a") == "QQ 群"
     first._group_info_cache.clear()
     first.bot.api.get_group_info.return_value = {"group_name": "QQ 改名"}
@@ -257,7 +262,8 @@ async def test_web_trigger_enriches_trace_and_persists_name(
     service._task_guard = TaskGuard()
     service.task_guard = service._task_guard
     service.bot_manager = SimpleNamespace(
-        get_adapter=lambda _: adapter, get_adapter_platform_id=lambda _: "official-a"
+        get_adapter=lambda _: adapter, get_adapter_platform_id=lambda _: "official-a",
+        resolve_platform_id=lambda platform: platform,
     )
     service.config_manager = SimpleNamespace(
         get_analysis_days=lambda: 1,
@@ -266,7 +272,9 @@ async def test_web_trigger_enriches_trace_and_persists_name(
     )
     service.checkpoint_store = None
     service.incremental_store = SimpleNamespace(
-        get_last_analyzed_cursor=AsyncMock(return_value=(0, []))
+        for_session=AsyncMock(return_value=SimpleNamespace(
+            get_last_analyzed_cursor=AsyncMock(return_value=(0, []))
+        ))
     )
     trace = TraceContext(
         trace_id="web-test",

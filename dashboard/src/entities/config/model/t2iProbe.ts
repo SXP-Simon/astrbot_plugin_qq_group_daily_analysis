@@ -65,5 +65,5 @@ export const t2iProbeRequestSchema = renderingStrategySchema
 
 export const t2iProbeSchema: z.ZodType<T2iProbe> = z.object({
   image_data_url: z.string().regex(/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/),
-  elapsed_ms: z.number().finite().nonnegative(),
+  elapsed_ms: z.number().nonnegative(),
 });

@@ -39,6 +39,61 @@ def generate_openapi_spec() -> dict[str, object]:
         "paths": {
             **_file_paths,
             **_record_paths,
+            "/data/incremental/batches": {
+                "get": {
+                    "summary": "按页读取群聊增量批次",
+                    "operationId": "getIncrementalBatchPage",
+                    "parameters": [
+                        {
+                            "name": "platform_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "group_id",
+                            "in": "query",
+                            "required": True,
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "page",
+                            "in": "query",
+                            "schema": {"type": "integer", "minimum": 1, "default": 1},
+                        },
+                        {
+                            "name": "page_size",
+                            "in": "query",
+                            "schema": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100,
+                                "default": 20,
+                            },
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "分页总数与页码来自同一次索引读取",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"const": "ok"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/IncrementalBatchesResponse"
+                                            },
+                                        },
+                                        "required": ["status", "data"],
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "缺少群号或分页参数格式错误"},
+                        "500": {"description": "批次读取失败或索引对应内容已变化"},
+                    },
+                },
+            },
             "/config": {
                 "get": {
                     "summary": "读取插件配置、表单定义和内容版本",
@@ -633,11 +688,139 @@ def generate_openapi_spec() -> dict[str, object]:
                     },
                 }
             },
+            "/data/incremental/groups": {
+                "get": {
+                    "tags": ["Data"],
+                    "summary": "按平台区分的增量群聊目录",
+                    "responses": {
+                        "200": {
+                            "description": "群聊目录",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/IncrementalGroupDirectory"
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/data/checkpoints": {
+                "get": {
+                    "tags": ["Data"],
+                    "summary": "分页查询有效阶段快照",
+                    "parameters": [
+                        {
+                            "name": "group_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "platform",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "date_str",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "stage_name",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "trace_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "limit",
+                            "in": "query",
+                            "schema": {"type": "integer", "minimum": 1},
+                        },
+                        {
+                            "name": "offset",
+                            "in": "query",
+                            "schema": {"type": "integer", "minimum": 0},
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "查询结果",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/CheckpointsListResponse"
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/data/checkpoints/groups": {
+                "get": {
+                    "tags": ["Data"],
+                    "summary": "有效阶段快照的群聊身份",
+                    "responses": {
+                        "200": {
+                            "description": "查询结果",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "groups": {
+                                                        "type": "array",
+                                                        "items": {"type": "string"},
+                                                    },
+                                                    "sessions": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "$ref": "#/components/schemas/GroupItem"
+                                                        },
+                                                    },
+                                                },
+                                                "required": ["groups", "sessions"],
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            },
             "/traces": {
                 "get": {
                     "summary": "List execution traces with filters",
                     "operationId": "listTraces",
                     "parameters": [
+                        {
+                            "name": "platform",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                            "description": "按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台",
+                        },
                         {
                             "name": "group_id",
                             "in": "query",
@@ -663,6 +846,37 @@ def generate_openapi_spec() -> dict[str, object]:
                             "in": "query",
                             "schema": {"type": "integer", "default": 0},
                         },
+                        {"name": "search", "in": "query", "schema": {"type": "string"}},
+                        {
+                            "name": "start_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "end_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "sort_by",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "sort_order",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "before_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "before_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
                     ],
                     "responses": {
                         "200": {
@@ -683,6 +897,7 @@ def generate_openapi_spec() -> dict[str, object]:
                                                         },
                                                     },
                                                     "total": {"type": "integer"},
+                                                    "has_more": {"type": "boolean"},
                                                 },
                                                 "required": ["items", "total"],
                                             },
@@ -693,6 +908,65 @@ def generate_openapi_spec() -> dict[str, object]:
                         }
                     },
                 }
+            },
+            "/traces/{trace_id}/acknowledgement": {
+                "post": {
+                    "summary": "保存或撤销任务提醒的知晓状态",
+                    "operationId": "acknowledgeTrace",
+                    "parameters": [
+                        {
+                            "name": "trace_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"},
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["acknowledged"],
+                                    "properties": {"acknowledged": {"type": "boolean"}},
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "知晓状态已保存",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "type": "object",
+                                                "required": [
+                                                    "trace_id",
+                                                    "acknowledged_at",
+                                                ],
+                                                "properties": {
+                                                    "trace_id": {"type": "string"},
+                                                    "acknowledged_at": {
+                                                        "type": "number",
+                                                        "nullable": True,
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "请求格式无效"},
+                        "404": {"description": "任务不存在"},
+                        "409": {"description": "任务尚未结束"},
+                        "500": {"description": "保存失败"},
+                    },
+                },
             },
             "/traces/{trace_id}": {
                 "get": {
@@ -857,6 +1131,12 @@ def generate_openapi_spec() -> dict[str, object]:
                     "operationId": "getReportHistory",
                     "parameters": [
                         {
+                            "name": "platform",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                            "description": "按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台",
+                        },
+                        {
                             "name": "limit",
                             "in": "query",
                             "schema": {"type": "integer", "default": 20},
@@ -873,6 +1153,21 @@ def generate_openapi_spec() -> dict[str, object]:
                         },
                         {
                             "name": "search",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "start_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "end_time",
+                            "in": "query",
+                            "schema": {"type": "number"},
+                        },
+                        {
+                            "name": "sort_order",
                             "in": "query",
                             "schema": {"type": "string"},
                         },
@@ -1424,6 +1719,7 @@ def generate_openapi_spec() -> dict[str, object]:
                         "error_stage": {"type": "string", "nullable": True},
                         "error_message": {"type": "string", "nullable": True},
                         "stack_trace": {"type": "string", "nullable": True},
+                        "acknowledged_at": {"type": "number", "nullable": True},
                         "extra": {"type": "object", "additionalProperties": True},
                         "total_tokens": {"type": "number", "nullable": True},
                         "estimated_cost": {"type": "number", "nullable": True},
@@ -1639,6 +1935,7 @@ def generate_openapi_spec() -> dict[str, object]:
                         "trace_id": {"type": "string", "nullable": True},
                         "stage": {"type": "string", "nullable": True},
                         "location": {"type": "string", "nullable": True},
+                        "function_name": {"type": "string", "nullable": True},
                     },
                     "required": [
                         "id",
@@ -1751,20 +2048,39 @@ def generate_openapi_spec() -> dict[str, object]:
                         "temp_files",
                     ],
                 },
+                "IncrementalGroupDirectoryItem": {
+                    "type": "object",
+                    "properties": {
+                        "group_id": {"type": "string"},
+                        "platform_id": {"type": "string"},
+                        "group_name": {"type": "string"},
+                    },
+                    "required": ["group_id", "platform_id", "group_name"],
+                },
+                "IncrementalGroupDirectory": {
+                    "type": "object",
+                    "properties": {
+                        "groups": {"type": "array", "items": {"type": "string"}},
+                        "group_details": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/components/schemas/IncrementalGroupDirectoryItem"
+                            },
+                        },
+                    },
+                    "required": ["groups", "group_details"],
+                },
                 "IncrementalBatchTopic": {
                     "type": "object",
                     "properties": {
-                        "title": {"type": "string"},
-                        "summary": {"type": "string"},
-                        "description": {"type": "string"},
-                        "heat_score": {"type": "number"},
-                        "category": {"type": "string"},
-                        "keywords": {
+                        "topic": {"type": "string"},
+                        "detail": {"type": "string"},
+                        "contributors": {"type": "array", "items": {"type": "string"}},
+                        "contributor_ids": {
                             "type": "array",
                             "items": {"type": "string"},
                         },
                     },
-                    "additionalProperties": True,
                 },
                 "ChatQualityDimension": {
                     "type": "object",
@@ -1793,12 +2109,10 @@ def generate_openapi_spec() -> dict[str, object]:
                     "type": "object",
                     "properties": {
                         "content": {"type": "string"},
-                        "text": {"type": "string"},
-                        "sender_nickname": {"type": "string"},
-                        "sender_name": {"type": "string"},
-                        "author": {"type": "string"},
+                        "sender": {"type": "string"},
+                        "reason": {"type": "string"},
+                        "user_id": {"type": "string"},
                     },
-                    "additionalProperties": True,
                 },
                 "IncrementalBatchItem": {
                     "type": "object",
@@ -1852,16 +2166,16 @@ def generate_openapi_spec() -> dict[str, object]:
                         "timestamp",
                         "messages_count",
                         "characters_count",
-                        "topics_count",
                     ],
                     "additionalProperties": True,
                 },
                 "IncrementalCursorInfo": {
                     "type": "object",
                     "properties": {
+                        "timestamp": {"type": "number", "nullable": True},
                         "group_id": {"type": "string"},
                         "last_analyzed_timestamp": {"type": "number"},
-                        "last_message_timestamp": {"type": "number"},
+                        "last_message_timestamp": {"type": "number", "nullable": True},
                         "tracked_message_ids_count": {"type": "number"},
                     },
                     "required": [
@@ -1874,7 +2188,11 @@ def generate_openapi_spec() -> dict[str, object]:
                 "IncrementalBatchesResponse": {
                     "type": "object",
                     "properties": {
+                        "total": {"type": "integer"},
+                        "page": {"type": "integer"},
+                        "page_size": {"type": "integer"},
                         "group_id": {"type": "string"},
+                        "platform_id": {"type": "string"},
                         "cursor": {
                             "$ref": "#/components/schemas/IncrementalCursorInfo"
                         },
@@ -1885,13 +2203,22 @@ def generate_openapi_spec() -> dict[str, object]:
                             },
                         },
                     },
-                    "required": ["group_id", "cursor", "batches"],
+                    "required": [
+                        "group_id",
+                        "cursor",
+                        "batches",
+                        "total",
+                        "page",
+                        "page_size",
+                    ],
                 },
                 "CheckpointItem": {
                     "type": "object",
                     "properties": {
                         "checkpoint_id": {"type": "string"},
                         "group_id": {"type": "string"},
+                        "group_name": {"type": "string"},
+                        "platform": {"type": "string"},
                         "date_str": {"type": "string"},
                         "stage_name": {"type": "string"},
                         "trace_id": {"type": "string"},

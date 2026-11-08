@@ -1,134 +1,96 @@
-import React from "react";
-import { Table, Tag, Empty, Button, Tooltip } from "antd";
-import { EyeOutlined } from "@ant-design/icons";
-import { ActiveTask } from "../../entities/task/model/types";
+import { useId, useRef } from "react";
+import { IconArrowRight, IconPlus } from "@tabler/icons-react";
+import type { ActiveTask } from "../../entities/task/model/types";
 import { TaskStageBadge } from "../../entities/task/ui/TaskStageBadge";
 import { CancelTaskButton } from "../../features/cancel-task/ui/CancelTaskButton";
-import { SectionHeader } from "../../shared/ui/SectionHeader";
+import { Button } from "../../shared/ui/button";
 import { TriggerTypeTag } from "../../shared/ui/TriggerTypeTag";
 
 interface ActiveTaskBoardProps {
   tasks: ActiveTask[];
-  onCancelTask: (taskId: string) => Promise<void> | void;
+  onCancelTask: (taskId: string) => Promise<boolean | void> | boolean | void;
   onViewTrace: (traceId: string) => void;
   onOpenTrigger: () => void;
 }
 
-export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
+export function ActiveTaskBoard({
   tasks,
   onCancelTask,
   onViewTrace,
   onOpenTrigger,
-}) => {
-  const columns = [
-    {
-      title: "任务编号",
-      dataIndex: "task_id",
-      key: "task_id",
-      width: 170,
-      render: (id: string) => (
-        <a className="font-mono text-xs font-semibold" onClick={() => onViewTrace(id)}>
-          {id}
-        </a>
-      ),
-    },
-    {
-      title: "群聊",
-      dataIndex: "group_id",
-      key: "group_id",
-      render: (gid: string, r: ActiveTask) => (
-        <Tooltip title={`群号: ${gid}`}>
-          <span className="font-mono text-xs">
-            {r.group_name || "未知群"} ({gid})
-          </span>
-        </Tooltip>
-      ),
-    },
-    {
-      title: "平台",
-      dataIndex: "platform",
-      key: "platform",
-      width: 85,
-      render: (p: string) => {
-        const displayP = !p || p === "auto" || p === "default" ? "-" : p;
-        return <Tag>{displayP}</Tag>;
-      },
-    },
-    {
-      title: "触发源",
-      dataIndex: "trigger_type",
-      key: "trigger_type",
-      width: 100,
-      render: (t: string) => <TriggerTypeTag triggerType={t} />,
-    },
-    {
-      title: "当前进度",
-      dataIndex: "current_stage",
-      key: "current_stage",
-      render: (stage: string) => <TaskStageBadge stage={stage} />,
-    },
-    {
-      title: "已耗时",
-      dataIndex: "duration_s",
-      key: "duration_s",
-      width: 95,
-      render: (d: number) => (
-        <span className="font-mono text-xs font-semibold" style={{ color: "#fa8c16" }}>
-          {d}秒
-        </span>
-      ),
-    },
-    {
-      title: "操作",
-      key: "action",
-      width: 130,
-      render: (_value: unknown, r: ActiveTask) => (
-        <div style={{ display: "flex", gap: 4 }}>
-          <Button
-            size="small"
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => onViewTrace(r.task_id)}
-          >
-            查看
-          </Button>
-          <CancelTaskButton taskId={r.task_id} onCancel={onCancelTask} />
-        </div>
-      ),
-    },
-  ];
-
+}: ActiveTaskBoardProps) {
+  const headingId = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
   return (
-    <div>
-      <SectionHeader
-        title="正在执行中的分析任务"
-        badge={
-          <Tag color={tasks.length > 0 ? "processing" : "default"} className="font-mono text-xs">
-            {tasks.length} 运行中
-          </Tag>
-        }
-      />
-
-      {tasks.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="暂无正在执行的后台分析任务"
-          style={{ margin: "24px 0" }}
+    <section aria-labelledby={headingId} className="min-w-0">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2
+          id={headingId}
+          ref={heading}
+          tabIndex={-1}
+          className="m-0 rounded-md text-lg font-medium focus-visible:outline-2 focus-visible:outline-ring"
         >
-          <Button size="small" type="dashed" onClick={onOpenTrigger}>
-            手动触发一次分析
-          </Button>
-        </Empty>
+          正在执行中的分析任务{" "}
+          <span className="ml-2 text-sm text-muted-foreground">{tasks.length} 运行中</span>
+        </h2>
+        <Button size="sm" variant="outline" onClick={onOpenTrigger}>
+          <IconPlus aria-hidden="true" />
+          发起分析
+        </Button>
+      </div>
+      {tasks.length === 0 ? (
+        <p className="m-0 py-8 text-sm text-muted-foreground">暂无正在执行的后台分析任务</p>
       ) : (
-        <Table
-          size="small"
-          columns={columns}
-          dataSource={tasks}
-          rowKey="task_id"
-          scroll={{ x: 600 }}
-          pagination={false}
-        />
+        <ul className="m-0 list-none p-0">
+          {tasks.map((task) => (
+            <li
+              key={task.task_id}
+              className="grid min-w-0 gap-3 border-0 border-b border-solid border-border py-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_minmax(160px,0.65fr)_auto] lg:items-center"
+            >
+              <div className="min-w-0 space-y-1">
+                <h3 className="m-0 break-words text-base font-medium">
+                  {task.group_name || "未命名群聊"}
+                </h3>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span className="break-all font-mono">
+                    {task.platform && !["auto", "default"].includes(task.platform)
+                      ? task.platform
+                      : "平台未记录"}{" "}
+                    · {task.group_id}
+                  </span>
+                  <TriggerTypeTag triggerType={task.trigger_type} />
+                </div>
+                <p className="m-0 break-all font-mono text-xs text-muted-foreground">
+                  {task.task_id}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 lg:flex-col lg:items-start">
+                <TaskStageBadge stage={task.current_stage} />
+                <span className="text-xs text-muted-foreground">
+                  已运行{" "}
+                  <span className="font-mono tabular-nums">
+                    {Number.isFinite(task.duration_s) && task.duration_s >= 0
+                      ? `${Math.round(task.duration_s * 10) / 10} 秒`
+                      : "未记录"}
+                  </span>
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
+                <Button size="sm" variant="outline" onClick={() => onViewTrace(task.task_id)}>
+                  查看详情
+                  <IconArrowRight aria-hidden="true" />
+                </Button>
+                <CancelTaskButton
+                  taskId={task.task_id}
+                  taskLabel={task.group_name || task.group_id}
+                  onCancel={onCancelTask}
+                  onRemovedFocus={() => heading.current?.focus()}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
-    </div>
+    </section>
   );
-};
+}

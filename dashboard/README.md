@@ -1,163 +1,106 @@
-# QQ 群日常分析插件 - WebUI 控制台 (Dashboard)
+# 群聊日常分析插件 WebUI
 
-本项目是 `astrbot_plugin_qq_group_daily_analysis` 的内嵌管理控制台前端工程，采用 **React 18 + TypeScript + Ant Design 5 + ECharts + Vite** 构建，完全遵循 **Feature-Sliced Design (FSD)**、**Atomic Design (原子设计)** 与 **MVVM (Model-View-ViewModel)** 现代前端架构范式。
+正式控制台使用 React 18、TypeScript、shadcn/ui 风格的源码组件、Tailwind CSS、Radix 与 ECharts。独立开发和 AstrBot 内嵌模式共用页面，只在通信边界切换数据来源。
 
----
-
-## 1. 架构设计与分层规范 (Architecture & FSD Layers)
-
-严格执行自底向上的六层单向依赖规范（下层不得反向依赖上层）：
-
-```
-dashboard/src/
-├── 1. shared/                      # [基础共享层]
-│   ├── api/bridge.ts               # 强类型 Iframe Bridge 通信与 SSE 订阅 (0 any)
-│   ├── lib/                        # 纯工具库 (formatters.ts, useTheme.ts)
-│   └── ui/                         # 【Atoms 原子组件】
-│       ├── MetricCard.tsx          #   - 数据密集型 KPI 指标卡片
-│       ├── StatusTag.tsx           #   - 统一状态指示器 (SUCCEEDED, FAILED...)
-│       └── SectionHeader.tsx       #   - 统一区块标题头
-│
-├── 2. entities/                    # [领域实体层]
-│   ├── task/                       # 活跃任务实体 (types / api / ui / TaskStageBadge)
-│   ├── trace/                      # 链路实体 (types / api / ui / SpanTimeline 分子组件)
-│   ├── group/                      # 群组实体 (types / api)
-│   ├── metric/                     # 统计大盘实体 (types / api)
-│   └── report/                     # 历史产物实体 (types / api)
-│
-├── 3. features/                    # [用户交互功能切片层]
-│   ├── trigger-task/               # 手动触发分析 (ViewModel 校验 + TriggerModal UI)
-│   ├── filter-traces/              # 多维筛选器 (【Molecules 分子组件】RangePicker + 群选择 + 状态)
-│   └── cancel-task/                # 中止任务操作 (二次确认气泡 + CancelButton)
-│
-├── 4. widgets/                     # [复合微件层 / Organisms]
-│   ├── header-bar/HeaderBar.tsx    # 顶部品牌导航与暗黑主题同步微件
-│   ├── active-task-board/          # 活跃任务看板微件 (集成实时 Duration 计时器)
-│   ├── trace-table/TraceTable.tsx  # 数据密集型链路表格微件 (服务端分页 + 排序)
-│   ├── trace-drawer/TraceDrawer.tsx# 链路详情抽屉微件 (瀑布流甘特图 + 调用栈)
-│   ├── context-funnel-widget/      # 上下文演进漏斗微件 (消息清洗漏斗与留存分析)
-│   └── token-chart-widget/         # Token 消耗占比 ECharts 微件
-│
-├── 5. pages/                       # [页面与组合视图层] (MVVM 模式落地)
-│   ├── overview/                   # useOverviewViewModel (VM) + OverviewPage (V)
-│   ├── traces/                     # useTracesViewModel (VM) + TracesPage (V)
-│   ├── context-insight/            # useContextInsightViewModel (VM) + ContextInsightPage (V)
-│   └── reports/                    # useReportsViewModel (VM) + ReportsPage (V)
-│
-└── 6. app/                         # [应用根层]
-    ├── App.tsx                     # 全局 Antd ConfigProvider、Tab 导航与 SSE 调度总线
-    └── main.tsx                    # React 18 入口挂载
-```
-
----
-
-## 2. 核心设计范式 (Design Patterns)
-
-### 2.1 MVVM 模式 (Model-View-ViewModel)
-
-- **Model (数据与实体层)**：定义在 `src/entities/*/model/types.ts` 与 `src/entities/*/api/` 中，负责声明数据结构以及与后端 REST 接口交互。
-- **ViewModel (视图逻辑与状态管理)**：通过自定义 Hooks 实现（如 `useTracesViewModel.ts`、`useOverviewViewModel.ts`），集中封装：
-  - 数据远程请求与错误捕获；
-  - 本地 UI 状态（搜索防抖、筛选条件、排序、分页）；
-  - 衍生计算逻辑（时间格式化、百分比换算、秒级时长自增计时器）；
-  - 暴露操作方法给 View 层。
-- **View (纯声明式渲染组件)**：`src/pages/*/ui/` 中的页面组件不直接包含任何底层 API 调用，只接收 ViewModel 的数据和回调，保持界面逻辑高度纯净。
-
-### 2.2 Atomic Design 组件粒度管理
-
-- **Atoms (原子)**：`StatusTag`、`MetricCard`、`TaskStageBadge`、`SectionHeader`。
-- **Molecules (分子)**：`TraceFilterBar`（复合筛选条）、`SpanTimeline`（阶段进度条与时间轴组合）、`CancelTaskButton`。
-- **Organisms / Widgets (微件)**：`TraceTable`、`ActiveTaskBoard`、`ContextFunnelWidget`、`TokenChartWidget`、`TraceDrawer`。
-
-### 2.3 UI 视觉与文案设计规范 (Zero-Emoji & Pure-Icon Policy)
-
-- **全站严禁使用 Unicode Emoji 作为 UI 视觉元素**：
-  - 所有页面标题、描述卡片、按钮前缀图标、时间轴标记一律使用 `@ant-design/icons` 提供的矢量矢量图标（如 `<BarChartOutlined />`、`<FolderOpenOutlined />`、`<ClockCircleOutlined />`、`<DatabaseOutlined />` 等）；
-  - 杜绝跨平台/跨操作系统因系统 Emoji 渲染差异导致的对齐错位、彩色割裂或样式不一致。
-- **文案清晰直观、小白友好（杜绝中英混杂与技术黑话）**：
-  - **禁止中英混杂括号**：界面文案严禁出现 `中文 (English)` 的冗余双语后缀（如禁止出现 `话题 (Topics)`、`群组 (Group)`、`调用栈 (Stack Trace)` 等）；
-  - **通俗化表达**：用用户熟悉的自然概念替代晦涩的后端内部黑话（如使用 `任务编号` 代替 `Trace ID`，使用 `模型消耗` 代替 `Tokens`，使用 `各阶段耗时明细` 代替 `Span Waterfall`）。
-
----
-
-## 3. 严格的 TypeScript 类型规范 (Zero `any` Policy)
-
-本项目全面禁止无意义的 `any` 类型：
-
-1. **宿主 Bridge 通信**：在 `shared/api/bridge.ts` 中声明了完整的 `AstrBotPluginPageBridge`、`AstrBotContext` 与泛型 `ApiResponse<T>` 接口；
-2. **未知数据兜底**：使用 `unknown` 代替 `any`，并在消费处通过 `instanceof` 或类型守卫进行类型收敛；
-3. **第三方组件参数**：精确使用 Ant Design 导出的 `TablePaginationConfig`、`FilterValue`、`SorterResult` 等强类型。
-
----
-
-## 4. 实时响应与数据流 (Data Flow & SSE Lifecycle)
-
-1. **暗黑模式自适应**：
-   - 通过 `useTheme` Hook 监听 AstrBot 宿主传入的 `isDark` 环境变量，自动在 Antd 的 `theme.darkAlgorithm` 和 `theme.defaultAlgorithm` 间无缝平滑切换。
-2. **SSE (Server-Sent Events) 实时响应**：
-   - 应用挂载时通过 `subscribeSSE` 连接后端的 `/events/stream` 实时事件管道；
-   - 当后端任务状态发生变化（如任务创建、阶段流转、任务超时或完成）时，自动触发各 ViewModel 的局部静默刷新，无需手动轮询。
-
----
-
-## 5. 本地开发与调试体验 (Developer Experience)
-
-本项目支持两种本地开发调试模式，提供极速热更新（HMR）：
-
-### 5.1 独立开发模式 (Standalone Mock Mode - 推荐)
-
-无需启动 AstrBot 后端，前端直接拥有全套模拟数据与实时 SSE 进度流：
+## 1. 本地开发
 
 ```bash
 cd dashboard
+pnpm install
 pnpm dev
 ```
 
-- 打开 `http://localhost:5175`，页面将自动激活 Mock 适配器并加载全套大盘、链路、任务与日志；
-- 页面右下角提供 **开发工具箱 (DevToolbar)**，可一键切换亮暗主题、切换 Proxy/Mock 模式或注入模拟 SSE 任务流。
+打开 `http://localhost:5175/?devMode=mock`。若端口被占用，以 Vite 输出为准。
 
-### 5.2 代理直连模式 (Proxy Mode)
+Mock 包含多平台并行任务、父子阶段、模型重试、渲染回退、Typst、报告、配置、文件及日志。示例操作只更新内存数据，刷新页面恢复初始状态；不会执行真实分析、上传或删除。开发工具箱可切换主题、通信模式及注入已有任务的心跳。
 
-若 AstrBot 后端正在运行（`localhost:6185`），前端开发服务器通过反向代理直接对接真实后端与 SQLite：
+需要真实后端时使用 `?devMode=proxy`，开发服务器代理到 `localhost:6185`。Proxy 操作会影响真实插件数据，请先确认使用的是测试环境。真实 AstrBot 内嵌页继续通过宿主 Bridge 通信，不走 Mock。
 
-- 在页面右下角工具箱中切换至 **Proxy 直连后端 (:6185)**，或在 URL 中添加 `?devMode=proxy`；
-- 享受 Vite 秒级热更新，无需重新打包或进入 AstrBot 网页手动点击。
+旧的 `dev:design`、`build:design` 与独立设计预览已移除，统一使用上述正式入口。
 
-### 5.3 生产构建
+## 2. 分层与职责
 
-```bash
-# 生产环境编译 (自动打包为单 Bundle 输出至 ../pages/daily-analysis/)
-pnpm build
+```text
+src/
+├── shared/       # 基础控件、通信 Bridge、主题及格式工具
+├── entities/     # 任务、阶段、报告、配置等模型、API 和实体展示
+├── features/     # 发起、中止、续跑、重绘、上传与资源管理
+├── widgets/      # 任务看板、诊断窗口、图表和动态表单
+├── pages/        # 七个页面及各自的 ViewModel
+├── app/          # 应用外壳、导航、跨页资源入口和 SSE 调度
+└── mocks/        # 仅开发使用的接口、数据与事件模拟
 ```
 
----
+依赖由上层指向下层。ViewModel 管理请求、筛选、分页、衍生状态与生命周期，视图负责展示和交互；不在 JSX 中新增直接请求。实体 API 通过共享通信层调用宿主。
 
-## 6. 前端自动化测试与契约体系 (Automated Tests & Contracts)
+基础控件源码在 `shared/ui` 维护，不为每个组件再写一层纯参数转发包装。按钮、表单、弹窗、分页、通知共用主题与状态；Radix 原语留在共享层，ECharts 等专用组件继续保留。组件参数使用具体类型，未知外部数据以 `unknown` 接收并校验。
 
-### 6.1 OpenAPI 契约与类型自动同步
+日志页与任务详情共用 `entities/log/ui/LogEntry` 展示等级、模块及调用位置。日志区域内 Ctrl+A / Command+A 仅选择当前区域，不自动复制；复制按钮使用共享剪贴板工具，受限 iframe 的兜底复制须保留焦点及祖先滚动位置，反馈显示在操作按钮旁。
 
-前端 `src/entities/*/model/types.ts` 中的所有实体类型直接由 `src/shared/api/generated/schema.d.ts` 派生，实现 100% 强类型保护：
+分页的 `loading` 只显示读取提示，不禁止切页；`disabled` 用于删除、上传等需要固定操作范围的阶段。切页时立即更新目标页，保留当前查询已知的总数；旧请求不得覆盖新页的数据、总数、错误或加载状态。多页列表共用页码跳转入口，输入合法页码后点击“跳转”或按回车，不在输入过程中发送请求。
+
+报告、文件管理和自定义模板预览的文件读取不使用插件自设的 30 秒失败期限。预览加载提示在 30 秒后改为慢加载说明，并继续接收当前请求；关闭、切换和卸载仍由原请求编号隔离迟到响应。`LoadingState` 的 `slowAfterMs` 只改变提示，调用方用请求对应的键重置计时，不改变业务请求状态；真实接口失败仍交给原错误与重试处理。
+
+## 3. 页面与交互
+
+正式页面包括总览、分析记录、统计、报告、日志、配置和数据。旧入口对应关系：
+
+| 原入口     | 现在的入口 |
+| ---------- | ---------- |
+| 运行总览   | 总览       |
+| 统计与消耗 | 统计       |
+| 历史报告   | 报告       |
+| 运行日志   | 日志       |
+| 配置中心   | 配置       |
+| 数据管理   | 数据       |
+| 分析记录   | 分析记录   |
+
+总览先展示统计与趋势，再展示并行任务和近期问题。关注提醒可勾选“已知晓”，保存到插件数据库，刷新或换设备仍保留；通过“显示已知晓”可查看并取消勾选。这只收起提醒，不改变任务结果。关注范围仍为最近 20 条记录。知晓状态按保存回执局部更新，不额外读取统计和任务；进行中的旧查询仅保留已保存的知晓字段，仍更新其他记录。任务终态事件在 100ms 窗口内合并自动刷新，慢请求期间的新事件最多补一轮；手动刷新立即执行，离开总览清除待执行刷新。Mock 仅在当前开发页面中模拟保存，重新加载会重置演示数据。任务详情保留阶段层级、耗时占比、调用与渲染轮次、提示词、日志、内存及产物；耗时占比不是进度，并行阶段不累计为任务耗时。缺失指标不补零。
+
+导航往返保留已访问页的输入、筛选和滚动位置；隐藏页面停止不必要的刷新。历史页面收到终态事件后提示有新记录，不强制跳页。文件、字体、素材、备份和模板操作沿用已有管理入口、确认与失败重试。
+
+报告、任务产物与文件管理复用图片查看器：长图按宽度展开，支持滚轮缩放、指针拖动、双指缩放和键盘操作。HTML 先展示可用内容，等待外链时单独提示；原有沙盒权限不变。文件读取通过 Bridge 设置 30 秒上限，区别于 T2I 渲染预算，关闭或切换目标后仍丢弃迟到结果。
+
+大文件响应按浏览器能力协商 gzip，并使用私有缓存与 ETag 每次校验；文件变更后重新传输。HTML 只传正文，下载时由前端生成文件，不再同时附带一份 Base64。Mock 文件管理使用与报告页相同的可读图片及 HTML 示例，可配合 `mockDelay` 检查等待过程。
+
+## 4. 主题、字体与可访问性
+
+默认主辅色与 AstrBot 对齐：浅色为 `#3c96ca` / `#2f86bd`，深色为 `#5ba4d4` / `#4a95c4`。页面保留温润浅底与中性黑灰深底，主色淡底提示当前选择，辅助色淡底提示关联入口和列表焦点，普通行保留留白。成功、警告和错误保持独立语义色，按钮仍以文字和图标明确操作。
+
+正文使用本地霞鹜文楷屏幕阅读版，按 Unicode 范围加载 WOFF2 分片并保留许可；日志沿用正文字体，代码与 JSON 使用等宽字体。不依赖外部字体服务。
+
+图标使用 Tabler 线性图标，纯图标按钮提供名称。弹层管理焦点并在关闭后返回入口；导航支持键盘与可见焦点。动效集中在共享样式，不对导航文字叠加整页快照，尊重系统减少动态效果设置。
+
+`useTheme` 接收宿主的深浅模式与 `themeColors`，同步更新页面、Portal 弹层和图表。按钮前景按主色亮度选择黑白文字，辅助色用于淡底和图表；警告、错误及其他状态语义色保持独立。旧版宿主未提供配色，或颜色缺失、无效时，移除对应覆盖，恢复 CSS 中原有的深浅色默认值。无需读取宿主 DOM 或存储，也不依赖版本号判断。
+
+## 5. 通信与异步状态
+
+`shared/api/bridge.ts` 保留宿主的请求、文件上传与 SSE 能力，开发模式才载入 Mock 或 Proxy。
+
+- 总览通过 SSE 更新任务；详情在打开且运行中时轮询，终态或关闭后停止。
+- 终态事件失效详情缓存，并提醒历史列表有更新。
+- 详情、预览和配置等异步请求隔离迟到结果，关闭或切换目标后不写回旧数据。
+- 保存失败保留草稿；持久化成功与后续刷新失败分别反馈。
+
+## 6. 类型与测试
+
+接口变化时在插件根目录导出 OpenAPI，然后生成前端契约：
 
 ```bash
-# 1. 导出后端最新 OpenAPI 3.1 规范
-python ../scripts/export_openapi.py
-
-# 2. 自动生成前端强类型 schema.d.ts
-pnpm generate:types
+python scripts/export_openapi.py
+pnpm --dir dashboard generate:types
 ```
 
-### 6.2 自动化测试矩阵 (Vitest + React Testing Library)
-
-项目内置 8 个测试套件，全面覆盖通信网桥、Mock 路由分发、格式化工具库、原子组件、业务小部件以及全景页面冒烟测试：
+稳定接口类型从生成契约派生；动态配置和历史原始数据在边界校验，并保留未知字段。不能只用泛型断言代替响应验证。
 
 ```bash
-pnpm test          # 运行全套自动化测试
-pnpm test:watch    # 开启 TDD 监听模式
+pnpm test
+pnpm test:watch
 ```
 
-### 6.3 MSW (Mock Service Worker) 零成本复用
+Vitest 与 Testing Library 覆盖模型、页面、通信、Mock、竞态、弹层和键盘行为；工具链另有 Node 测试。测试不等同于真实宿主验收：发布前还需用浏览器检查明暗、窄屏、快速切页、长内容与主要操作，并记录无法验证的宿主行为。
 
-在 `src/mocks/mswHandlers.ts` 中提供了标准 MSW Handler 适配器 `createMswHandlerDefinitions()`，可将内部 Mock Handlers 0 成本接入 MSW 的 `http.get` / `http.post`，方便后续编写 Playwright 端到端测试。
+构建使用单个经典 IIFE 脚本和 CSS，输出到 `pages/daily-analysis`，本地字体随包发布。构建插件会拒绝包含 Mock、开发通信或开发工具箱模块的生产包。
 
 ---
 
@@ -180,3 +123,7 @@ npx lefthook run check-frontend
 前端构建不再由每次 commit 自动执行。修改正式 WebUI 后，在准备 PR 时运行 `pnpm build`（已单独通过类型检查时可用 `pnpm build:no-typecheck`），审阅并提交 `pages/daily-analysis/` 产物。
 
 发布工作流继续执行类型检查和构建。日常本地预览使用 `pnpm dev`，无需为了每个小修改反复生成 release 文件。
+
+### 开发配色预览
+
+在 `?devMode=mock` 页面打开右下角「开发工具箱」，启用「模拟宿主自定义配色」后选择主色和辅助色；可即时切换深浅主题。开关控制是否模拟宿主；恢复按钮把颜色值重置为当前深浅主题的默认值，保留开关状态。预览设置只保存在当前浏览器，刷新后保留，不修改插件业务配置，也不会进入正式发布包。

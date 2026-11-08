@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ConfigProvider } from "antd";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ManagedFilesPanel } from "../ManagedFilesPanel";
 import { TemplatePackages } from "../../../../../features/install-template/ui/TemplatePackages";
 import {
@@ -92,56 +91,87 @@ afterEach(() => {
 });
 
 async function modalLayer(title: string) {
-  const heading = await screen.findByText(title, { selector: ".ant-modal-title" });
-  return heading.closest<HTMLElement>(".ant-modal-wrap")!;
+  return screen.findByRole("dialog", { name: title });
 }
 
 async function selectTemplate(label = "我的模板（demo）") {
-  fireEvent.mouseDown(await screen.findByLabelText("选择自定义模板", { selector: "input" }));
-  fireEvent.click(await screen.findByText(label, { selector: ".ant-select-item-option-content" }));
+  await screen.findByRole("button", { name: /^选择自定义模板：/ });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /^选择自定义模板：/ }));
+  });
+  await screen.findByRole("option", { name: label });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("option", { name: label }));
+  });
 }
 
-it("详情与子编辑弹窗继承父层级，关闭编辑后仍可查看详情", async () => {
+it("详情与子编辑弹窗保持关联，关闭编辑后仍可查看详情", async () => {
   render(
-    <ConfigProvider theme={{ token: { motion: false, zIndexPopupBase: 1500 } }}>
+    <>
       <ManagedFilesPanel />
-    </ConfigProvider>,
+    </>,
   );
-  fireEvent.click(await screen.findByText("管理"));
+  await screen.findByText("管理");
+  await act(async () => {
+    fireEvent.click(screen.getByText("管理"));
+  });
   await selectTemplate();
-  fireEvent.click(await screen.findByText("查看 / 编辑"));
+  await screen.findByText("查看 / 编辑");
+  await act(async () => {
+    fireEvent.click(screen.getByText("查看 / 编辑"));
+  });
   const detail = await modalLayer("demo/report.typ");
-  const drawer = document.querySelector<HTMLElement>(".ant-drawer")!;
-  const detailLayer = Number(getComputedStyle(detail).zIndex);
-  expect(detailLayer).toBeGreaterThan(Number(getComputedStyle(drawer).zIndex));
-  fireEvent.click(within(detail).getByText("编辑源码"));
+  const drawer = screen.getByText("存储目录").closest<HTMLElement>('[role="dialog"]')!;
+  expect(detail).toBeVisible();
+  expect(drawer).toBeInTheDocument();
+  await act(async () => {
+    fireEvent.click(within(detail).getByText("编辑源码"));
+  });
   const editor = await modalLayer("替换或编辑文件");
-  expect(Number(getComputedStyle(editor).zIndex)).toBeGreaterThan(detailLayer);
-  fireEvent.click(within(editor).getByText(/取.?消/));
+  expect(editor).toBeVisible();
+  await act(async () => {
+    fireEvent.click(within(editor).getByText(/取.?消/));
+  });
   await waitFor(() => expect(editor).not.toBeVisible());
   expect(detail).toBeVisible();
-  fireEvent.click(within(detail).getByText("重命名"));
+  await act(async () => {
+    fireEvent.click(within(detail).getByText("重命名"));
+  });
   const rename = await modalLayer("重命名文件");
-  expect(Number(getComputedStyle(rename).zIndex)).toBeGreaterThan(detailLayer);
+  expect(rename).toBeVisible();
 }, 20000);
 
 it("从抽屉新建源码与安装模板时，弹窗显示在抽屉上方", async () => {
   render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
+    <>
       <ManagedFilesPanel />
-    </ConfigProvider>,
+    </>,
   );
-  fireEvent.click(await screen.findByText("管理"));
-  fireEvent.click(await screen.findByText("新建模板源码"));
+  await screen.findByText("管理");
+  await act(async () => {
+    fireEvent.click(screen.getByText("管理"));
+  });
+  await screen.findByText("新建模板源码");
+  await act(async () => {
+    fireEvent.click(screen.getByText("新建模板源码"));
+  });
   const editor = await modalLayer("上传或新建文件");
-  const drawer = document.querySelector<HTMLElement>(".ant-drawer")!;
-  const drawerLayer = Number(getComputedStyle(drawer).zIndex);
-  expect(Number(getComputedStyle(editor).zIndex)).toBeGreaterThan(drawerLayer);
-  fireEvent.click(within(editor).getByText(/取.?消/));
-  fireEvent.click(screen.getByText("安装模板包"));
-  const installTitle = await screen.findByText("安装自定义报告模板");
-  const install = installTitle.closest(".ant-modal-wrap")!;
-  expect(Number(getComputedStyle(install).zIndex)).toBeGreaterThan(drawerLayer);
+  const drawer = screen.getByText("存储目录").closest<HTMLElement>('[role="dialog"]')!;
+  expect(editor).toBeVisible();
+  await act(async () => {
+    fireEvent.click(within(editor).getByText(/取.?消/));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText("安装模板包"));
+  });
+  const install = await screen.findByRole("dialog", { name: "安装自定义报告模板" });
+  expect(install).toBeVisible();
+  await waitFor(() => expect(install).toContainElement(document.activeElement as HTMLElement));
+  await act(async () => {
+    fireEvent.keyDown(install, { key: "Escape" });
+  });
+  await waitFor(() => expect(install).not.toBeVisible());
+  expect(drawer).toBeVisible();
 }, 20000);
 
 it("模板类型直接可见且筛选传给接口，报告区只提供相关类型", async () => {
@@ -151,9 +181,9 @@ it("模板类型直接可见且筛选传给接口，报告区只提供相关类�
     { ...template, key: "reports", name: "历史报告文件", writable: false },
   ]);
   render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
+    <>
       <ManagedFilesPanel />
-    </ConfigProvider>,
+    </>,
   );
   fireEvent.click(
     within((await screen.findByText("自定义报告模板")).closest("tr")!).getByText("管理"),
@@ -163,18 +193,26 @@ it("模板类型直接可见且筛选传给接口，报告区只提供相关类�
   const filters = document.querySelector<HTMLElement>('[role="group"][aria-label="文件类型筛选"]')!;
   const typ = within(filters).getByText("Typst 模板（.typ）").closest("button")!;
   expect(typ).toBeVisible();
-  fireEvent.click(typ);
+  await act(async () => {
+    fireEvent.click(typ);
+  });
   await waitFor(() =>
     expect(fetchManagedFiles).toHaveBeenLastCalledWith("custom_templates", "", 1, "typ", "demo"),
   );
   expect(typ).toHaveAttribute("aria-pressed", "true");
-  fireEvent.click(screen.getByLabelText("Close"));
-  fireEvent.click(within(screen.getByText("历史报告文件").closest("tr")!).getByText("管理"));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "关闭分区" }));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByText("历史报告文件").closest("tr")!).getByText("管理"));
+  });
   const reportFilters = document.querySelector<HTMLElement>(
     '[role="group"][aria-label="文件类型筛选"]',
   )!;
   expect(within(reportFilters).queryByText(/Typst/)).toBeNull();
-  fireEvent.click(within(reportFilters).getByText("JPG + PNG"));
+  await act(async () => {
+    fireEvent.click(within(reportFilters).getByText("JPG + PNG"));
+  });
   await waitFor(() =>
     expect(fetchManagedFiles).toHaveBeenLastCalledWith("reports", "", 1, "jpg,jpeg,png", ""),
   );
@@ -187,19 +225,26 @@ it("包内新建文件留在模板目录，选择另一个模板时清空筛选�
     groups: [...result.groups!, { directory: "other", count: 1, size_bytes: 8 }],
   });
   render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
+    <>
       <ManagedFilesPanel />
-    </ConfigProvider>,
+    </>,
   );
-  fireEvent.click(await screen.findByText("管理"));
+  await screen.findByText("管理");
+  await act(async () => {
+    fireEvent.click(screen.getByText("管理"));
+  });
   await selectTemplate();
-  fireEvent.click(screen.getByText("新建源码"));
+  await act(async () => {
+    fireEvent.click(screen.getByText("新建源码"));
+  });
   const editor = await modalLayer("上传或新建文件");
   expect(within(editor).getByText("demo/")).toBeInTheDocument();
   fireEvent.change(within(editor).getByLabelText("文件相对路径"), {
     target: { value: "helper.typ" },
   });
-  fireEvent.click(within(editor).getByText(/保.?存/));
+  await act(async () => {
+    fireEvent.click(within(editor).getByText(/保.?存/));
+  });
   await waitFor(() =>
     expect(mutateManagedFile).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -210,8 +255,14 @@ it("包内新建文件留在模板目录，选择另一个模板时清空筛选�
     ),
   );
   await waitFor(() => expect(editor).not.toBeVisible());
-  fireEvent.click(screen.getByText("Typst 模板（.typ）"));
-  fireEvent.click(document.querySelector('.ant-table-tbody input[type="checkbox"]')!);
+  await act(async () => {
+    fireEvent.click(screen.getByText("Typst 模板（.typ）"));
+  });
+  const fileRow = screen.getByText("report.typ", { exact: true }).closest("tr")!;
+  await waitFor(() => expect(within(fileRow).getByRole("checkbox")).toBeEnabled());
+  await act(async () => {
+    fireEvent.click(within(fileRow).getByRole("checkbox"));
+  });
   expect(screen.getByText("已选 1 项（最多 200，支持跨页）")).toBeInTheDocument();
   await selectTemplate("other");
   expect(screen.getByText("全部类型").closest("button")).toHaveAttribute("aria-pressed", "true");
@@ -234,19 +285,28 @@ it("手动模板与缺少入口的目录都提供整组移除，不要求安装�
   ]);
   vi.mocked(uninstallTemplate).mockResolvedValue({ name: "demo", removed: true });
   render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
+    <>
       <ManagedFilesPanel />
-    </ConfigProvider>,
+    </>,
   );
-  fireEvent.click(await screen.findByText("管理"));
+  await screen.findByText("管理");
+  await act(async () => {
+    fireEvent.click(screen.getByText("管理"));
+  });
   await selectTemplate();
-  fireEvent.click(screen.getByText("移除模板"));
+  await act(async () => {
+    fireEvent.click(screen.getByText("移除模板"));
+  });
   expect(await screen.findByText(/包括当前筛选未显示的文件/)).toBeInTheDocument();
-  fireEvent.click(screen.getByText("移除整个模板"));
+  await act(async () => {
+    fireEvent.click(screen.getByText("移除整个模板"));
+  });
   await waitFor(() => expect(uninstallTemplate).toHaveBeenCalledWith("demo"));
   await waitFor(() => expect(screen.queryByText("移除模板")).toBeNull());
   vi.mocked(fetchReportTemplates).mockResolvedValue([]);
-  fireEvent.click(screen.getByText("刷新模板"));
+  await act(async () => {
+    fireEvent.click(screen.getByText("刷新模板"));
+  });
   await waitFor(() => expect(fetchReportTemplates).toHaveLastResolvedWith([]));
   await selectTemplate("demo");
   expect(
@@ -262,14 +322,21 @@ it("从分区跳转业务页面时关闭抽屉，避免遮住目标页面", asyn
   ]);
   const navigate = vi.fn();
   render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
+    <>
       <ManagedFilesPanel onNavigate={navigate} />
-    </ConfigProvider>,
+    </>,
   );
-  fireEvent.click(await screen.findByText("管理"));
-  fireEvent.click(screen.getByText("打开历史报告预览与重绘"));
+  await screen.findByText("管理");
+  await act(async () => {
+    fireEvent.click(screen.getByText("管理"));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText("打开历史报告预览与重绘"));
+  });
   expect(navigate).toHaveBeenCalledWith("reports");
-  await waitFor(() => expect(document.querySelector(".ant-drawer-open")).toBeNull());
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "历史报告文件" })).not.toBeInTheDocument(),
+  );
 });
 
 it("大量模板通过虚拟下拉列表搜索选择，不把所有模板铺到页面", async () => {
@@ -280,7 +347,7 @@ it("大量模板通过虚拟下拉列表搜索选择，不把所有模板铺到�
     size_bytes: 20,
   }));
   render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
+    <>
       <TemplatePackages
         groups={groups}
         directory=""
@@ -291,14 +358,47 @@ it("大量模板通过虚拟下拉列表搜索选择，不把所有模板铺到�
         onCreate={vi.fn()}
         onRefresh={vi.fn()}
       />
-    </ConfigProvider>,
+    </>,
   );
-  const input = screen.getByLabelText("选择自定义模板", { selector: "input" });
-  fireEvent.mouseDown(input);
-  expect(document.querySelectorAll(".ant-select-item-option").length).toBeLessThan(30);
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /^选择自定义模板：/ }));
+  });
+  expect(screen.getAllByRole("option").length).toBeLessThan(30);
+  const input = screen.getByRole("combobox", { name: "搜索选择自定义模板" });
   fireEvent.change(input, { target: { value: "theme_499" } });
-  fireEvent.click(
-    await screen.findByText("theme_499", { selector: ".ant-select-item-option-content" }),
-  );
+  await screen.findByRole("option", { name: "theme_499" });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("option", { name: "theme_499" }));
+  });
   expect(select).toHaveBeenCalledWith("theme_499");
+});
+
+it("嵌套详情的 Escape 只关闭当前窗口，最终返回分区管理入口", async () => {
+  render(<ManagedFilesPanel />);
+  const trigger = await screen.findByRole("button", { name: "管理" });
+  trigger.focus();
+  await act(async () => {
+    fireEvent.click(trigger);
+  });
+  await selectTemplate();
+  const fileButton = await screen.findByRole("button", { name: "查看 / 编辑" });
+  fileButton.focus();
+  await act(async () => {
+    fireEvent.click(fileButton);
+  });
+  const detail = await modalLayer("demo/report.typ");
+  await act(async () => {
+    fireEvent.keyDown(detail, { key: "Escape" });
+  });
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "demo/report.typ" })).not.toBeInTheDocument(),
+  );
+  expect(fileButton).toHaveFocus();
+  const parent = screen.getByRole("dialog", { name: "自定义报告模板" });
+  expect(within(parent).getByRole("button", { name: "关闭分区" })).toBeVisible();
+  await act(async () => {
+    fireEvent.keyDown(parent, { key: "Escape" });
+  });
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(trigger).toHaveFocus();
 });

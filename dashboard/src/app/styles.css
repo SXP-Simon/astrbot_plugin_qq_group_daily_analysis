@@ -1,0 +1,308 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "lxgw-wenkai-screen-webfont/lxgwwenkaiscreen.css";
+@source "../";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-control: var(--primary-control);
+  --color-primary-control-foreground: var(--primary-control-foreground);
+  --color-primary-control-hover: var(--primary-control-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-line: var(--primary-line);
+  --color-primary-ink: var(--ring);
+  --color-secondary-soft: var(--secondary-soft);
+  --color-secondary-line: var(--secondary-line);
+  --color-secondary-ink: var(--secondary-ink);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-creative: var(--creative);
+  --font-sans: "LXGW WenKai Screen", sans-serif;
+  --font-mono: "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --background: oklch(0.9892 0.0054 117.9205);
+  --foreground: oklch(0.2077 0.0398 265.7549);
+  --card: #fff;
+  --default-primary: #3c96ca;
+  --default-secondary: #2f86bd;
+  --primary: var(--default-primary);
+  --primary-foreground: #000;
+  --primary-control: color-mix(in srgb, var(--primary) 14%, var(--background));
+  --primary-control-hover: color-mix(in srgb, var(--primary) 20%, var(--background));
+  --primary-control-foreground: color-mix(in srgb, var(--primary) 38%, #000);
+  --secondary-color: var(--default-secondary);
+  --secondary: color-mix(in srgb, var(--secondary-color) 14%, var(--background));
+  --primary-soft: color-mix(in srgb, var(--primary) 12%, transparent);
+  --primary-line: color-mix(in srgb, var(--primary) 35%, var(--border));
+  --secondary-soft: color-mix(in srgb, var(--secondary-color) 8%, transparent);
+  --secondary-line: color-mix(in srgb, var(--secondary-color) 30%, var(--border));
+  --secondary-ink: color-mix(in srgb, var(--secondary-color) 60%, #000);
+  --muted: #f1f1ec;
+  --muted-foreground: #62666c;
+  --accent: color-mix(in srgb, var(--primary) 14%, var(--background));
+  --destructive: #a63631;
+  --destructive-foreground: #fff;
+  --border: #dedfd7;
+  --input: #c7cabf;
+  --ring: color-mix(in srgb, var(--primary) 50%, #000);
+  --info: #446d91;
+  --success: #477360;
+  --warning: #91692f;
+  --creative: #796397;
+  --chart-input: color-mix(in srgb, var(--primary) 62%, transparent);
+  --chart-output: color-mix(in srgb, var(--secondary-color) 62%, transparent);
+  --chart-trend-input: var(--primary);
+  --chart-trend-output: var(--secondary-color);
+  --scrollbar-thumb: #8e9387;
+  --scrollbar-thumb-hover: #686f5c;
+  --radius: 0.75rem;
+  color-scheme: light;
+}
+
+:root.dark {
+  --background: #161618;
+  --foreground: #e8e8ed;
+  --card: #1e1e21;
+  --default-primary: #5ba4d4;
+  --default-secondary: #4a95c4;
+  --primary: var(--default-primary);
+  --primary-control: color-mix(in srgb, var(--primary) 18%, var(--background));
+  --primary-control-hover: color-mix(in srgb, var(--primary) 24%, var(--background));
+  --primary-control-foreground: color-mix(in srgb, var(--primary) 35%, #fff);
+  --secondary-color: var(--default-secondary);
+  --secondary: color-mix(in srgb, var(--secondary-color) 14%, var(--background));
+  --secondary-ink: color-mix(in srgb, var(--secondary-color) 65%, #fff);
+  --muted: #242427;
+  --muted-foreground: #aaaab4;
+  --destructive: #f2958d;
+  --destructive-foreground: #361512;
+  --border: #38383d;
+  --input: #52525b;
+  --ring: color-mix(in srgb, var(--primary) 50%, #fff);
+  --info: #a3c6df;
+  --success: #a0c9b1;
+  --warning: #dfc296;
+  --creative: #c7b3df;
+  --scrollbar-thumb: #6b6b73;
+  --scrollbar-thumb-hover: #9898a1;
+  color-scheme: dark;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    margin: 0;
+    min-height: 100%;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+  code,
+  pre,
+  kbd {
+    font-family: var(--font-mono);
+  }
+  [hidden] {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-property: none !important;
+  }
+}
+
+/* 保留原生滚动与拖动；高对比度模式交还系统绘制。 */
+@media (forced-colors: none) {
+  html,
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  @supports selector(::-webkit-scrollbar) {
+    html,
+    * {
+      scrollbar-width: auto;
+      scrollbar-color: auto;
+    }
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track,
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb);
+      background-clip: padding-box;
+      border: 2px solid transparent;
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: var(--scrollbar-thumb-hover);
+    }
+    ::-webkit-scrollbar-button {
+      display: none;
+    }
+  }
+}
+
+.app-shell {
+  min-height: 100dvh;
+  background: var(--background);
+  color: var(--foreground);
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  max-width: 1440px;
+  padding: 20px 32px;
+  margin: 0 auto;
+}
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.app-navigation {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.app-navigation::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.app-main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 16px 32px 48px;
+  outline: none;
+}
+.page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.page-heading h1 {
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0;
+}
+.page-content:not([hidden]) {
+  animation: page-enter 180ms ease-out;
+}
+
+/* 淡色只提示表头、交互焦点和真实选中项，普通数据行保持留白。 */
+.ui-data-table thead {
+  background: var(--secondary-soft);
+}
+.ui-data-table tbody tr:hover,
+.ui-data-table tbody tr:focus-within,
+.ui-list-row:hover,
+.ui-list-row:focus-within {
+  background: var(--secondary-soft);
+}
+.ui-data-table tbody tr[aria-selected="true"] {
+  background: var(--primary-soft);
+  outline: 1px solid var(--primary-line);
+  outline-offset: -1px;
+}
+.ui-data-table tbody tr[aria-selected="true"]:hover {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.skip-link {
+  position: absolute;
+  left: 16px;
+  top: -100px;
+  z-index: 60;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+}
+.skip-link:focus {
+  top: 8px;
+}
+@keyframes page-enter {
+  from {
+    opacity: 0.5;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 760px) {
+  .app-header {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px;
+  }
+  .app-navigation {
+    width: 100%;
+  }
+  .app-main {
+    padding: 8px 16px 32px;
+  }
+  .page-heading {
+    margin-bottom: 16px;
+  }
+}

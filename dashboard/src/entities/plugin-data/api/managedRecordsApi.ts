@@ -11,6 +11,7 @@ export const recordLocatorSchema: z.ZodType<RecordLocator> = z.object({
   kind: z.enum(["history", "batch", "checkpoint", "avatar"]),
   key: z.string().optional(),
   group_id: z.string().optional(),
+  platform_id: z.string().optional(),
   batch_id: z.string().optional(),
   date_str: z.string().optional(),
   stage_name: z.string().optional(),

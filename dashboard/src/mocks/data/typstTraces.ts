@@ -22,7 +22,7 @@ interface Scene {
 }
 const scenes: Scene[] = [
   { id: "cached", name: "本地素材命中", status: "succeeded", rasterPpi: 216 },
-  { id: "title-font", name: "缺全瀨體时标题回退", status: "warning", titleFontMissing: true },
+  { id: "title-font", name: "缺初音标题字体时回退", status: "warning", titleFontMissing: true },
   { id: "live", name: "CDN 下载中", status: "running" },
   { id: "network", name: "资源超时仍完成", status: "warning", rasterPpi: 216 },
   {
@@ -110,10 +110,10 @@ function nativeSteps(scene: Scene): Step[] {
       status: scene.id === "live" ? "running" : "success",
       payload: {
         ...(theme === "HatsuneMiku"
-          ? { title_font: scene.titleFontMissing ? "Noto Sans SC" : "cjkFonts" }
+          ? { title_font: scene.titleFontMissing ? "Noto Sans SC" : "Miku AllSeto Title" }
           : {}),
         ...(scene.titleFontMissing
-          ? { warning: "全瀨體尚未下载，中文标题暂用 Noto；可在 WebUI 补齐 Miku 模板字体" }
+          ? { warning: "初音标题字体尚未下载，中文标题暂用 Noto；可在 WebUI 补齐 Miku 模板字体" }
           : {}),
         local_resources: scene.id === "cached" ? 10 : 2,
         image_cache_hits: scene.id === "cached" ? 9 : 0,

@@ -36,6 +36,7 @@ def test_plugin_logger_records_business_call_site(monkeypatch):
     assert total >= 1
     latest = items[0]
     assert latest["location"] == f"test_plugin_logger.py:{expected_line}"
+    assert latest["function_name"] == "test_plugin_logger_records_business_call_site"
     assert f"[test_plugin_logger.py:{expected_line}]" in latest["raw"]
 
 
@@ -81,3 +82,28 @@ def test_host_info_filter_does_not_remove_plugin_debug_buffer(monkeypatch, caplo
     assert "请求摘要" in caplog.text
     items, _ = buffer.query(limit=10)
     assert any(item["level"] == "DEBUG" and "选择细节" in item["message"] for item in items)
+
+
+def test_stacklevel_keeps_function_and_line_on_same_business_frame(monkeypatch):
+    buffer = PluginLogBuffer()
+    monkeypatch.setattr(logger_module, "global_log_buffer", buffer)
+    monkeypatch.setattr(logger_module, "astrbot_logger", logging.getLogger("test.stacklevel"))
+
+    def wrapper():
+        logger_module.logger.warning("封装调用", stacklevel=2)
+
+    class Caller:
+        def run(self):
+            line = inspect.currentframe().f_lineno + 1
+            wrapper()
+            return line
+
+    expected_line = Caller().run()
+    items, _ = buffer.query()
+    assert items[0]["location"] == f"test_plugin_logger.py:{expected_line}"
+    assert items[0]["function_name"].endswith("Caller.run")
+
+
+def test_missing_frame_does_not_prevent_logging(monkeypatch):
+    monkeypatch.setattr(inspect, "currentframe", lambda: None)
+    assert logger_module._extract_caller() == (None, None)

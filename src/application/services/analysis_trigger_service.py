@@ -11,6 +11,7 @@ import re
 from typing import TYPE_CHECKING, cast
 
 from ...domain.repositories.platform_adapter_repository import PlatformAdapterProtocol
+from ...domain.value_objects.group_session import GroupSession
 from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
@@ -58,7 +59,7 @@ class AnalysisTriggerService:
         self.trace_store = trace_store
         self.report_dispatcher = report_dispatcher
         self._background_tasks: set[asyncio.Task[None]] = set()
-        self._pending_groups: set[str] = set()
+        self._pending_groups: dict[GroupSession, str] = {}
 
     async def trigger_analysis(
         self,
@@ -119,14 +120,33 @@ class AnalysisTriggerService:
                 )
             return f"未能定位到群聊 '{group}'。建议直接提供纯数字群号重新触发。"
 
+        try:
+            platform_id = self.analysis_service.bot_manager.resolve_platform_id(
+                group.rsplit(":GroupMessage:", 1)[0]
+                if ":GroupMessage:" in group
+                else str(event.get_platform_id() or "")
+            )
+        except ValueError as error:
+            return str(error)
+        session = GroupSession(platform_id, target_group_id)
+        target_umo = f"{platform_id}:GroupMessage:{target_group_id}"
+
         # 3. 群白名单/黑名单校验
-        if not self.config_manager.is_group_allowed(target_group_id):
+        if not self.config_manager.is_group_allowed(target_umo):
             return f"群聊 {matched_name or target_group_id} 未在群分析启用名单中，已拒绝触发分析。"
 
         # 4. 并发排他锁防重入与原子预占
         if (
-            target_group_id in self._pending_groups
-            or self.analysis_service.is_group_running(target_group_id, "daily")
+            session in self._pending_groups
+            or self.analysis_service.is_group_running(
+                target_group_id, "daily", platform_id
+            )
+            or (
+                self.active_task_manager is not None
+                and self.active_task_manager.is_analysis_running(
+                    target_group_id, platform_id
+                )
+            )
         ):
             return (
                 f"[任务冲突] 群聊 {matched_name or target_group_id} ({target_group_id}) "
@@ -160,9 +180,8 @@ class AnalysisTriggerService:
         )
 
         # 8. 预占群锁、派发异步任务并生成 TraceID
-        self._pending_groups.add(target_group_id)
         trace_id = TraceContext.generate(prefix="tool_trigger", group_name=matched_name)
-        platform_id = str(event.get_platform_id() or "")
+        self._pending_groups[session] = trace_id
 
         task = asyncio.create_task(
             self._run_async_analysis(
@@ -177,7 +196,18 @@ class AnalysisTriggerService:
             )
         )
         self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
+
+        def finished(completed: asyncio.Task[None]) -> None:
+            """仅清理本任务预占，覆盖启动前取消和追踪初始化失败。"""
+            self._background_tasks.discard(completed)
+            if self._pending_groups.get(session) == trace_id:
+                self._pending_groups.pop(session, None)
+            if not completed.cancelled() and completed.exception() is not None:
+                logger.error(
+                    "后台分析任务未能正常启动或结束: %s", completed.exception()
+                )
+
+        task.add_done_callback(finished)
 
         # 9. 500ms 内向宿主 LLM 返回任务受理凭证回执
         sec_names = ", ".join(effective_sections)
@@ -314,7 +344,6 @@ class AnalysisTriggerService:
                 exc_info=True,
             )
         finally:
-            self._pending_groups.discard(group_id)
             if self.trace_store:
                 try:
                     await asyncio.to_thread(

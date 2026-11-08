@@ -1,14 +1,18 @@
-import React from "react";
-import { Space, Input, Select, Switch, Button, Tooltip, Tag } from "antd";
 import {
-  SearchOutlined,
-  ReloadOutlined,
-  DeleteOutlined,
-  CopyOutlined,
-  SyncOutlined,
-} from "@ant-design/icons";
-import { AvailableTag, TAG_STYLE_MAP } from "../../../entities/log/model/types";
-import { useTheme } from "../../../shared/lib/useTheme";
+  IconCopy,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconRefresh,
+  IconTrash,
+} from "@tabler/icons-react";
+import {
+  LOG_TAG_GROUPS,
+  TAG_STYLE_MAP,
+  type AvailableTag,
+} from "../../../entities/log/model/types";
+import { Button } from "../../../shared/ui/button";
+import { Input } from "../../../shared/ui/input";
+import { NativeSelect } from "../../../shared/ui/native-select";
 
 interface LogFilterBarProps {
   search: string;
@@ -17,189 +21,104 @@ interface LogFilterBarProps {
   availableTags: AvailableTag[];
   autoRefresh: boolean;
   loading: boolean;
-  onSearchChange: (val: string) => void;
-  onLevelChange: (val?: string) => void;
-  onTagChange: (val?: string) => void;
-  onAutoRefreshChange: (val: boolean) => void;
+  clearing: boolean;
+  onSearchChange: (value: string) => void;
+  onLevelChange: (value?: string) => void;
+  onTagChange: (value?: string) => void;
+  onAutoRefreshChange: (value: boolean) => void;
   onRefresh: () => void;
   onClear: () => void;
   onCopyAll: () => void;
 }
 
-export const LogFilterBar: React.FC<LogFilterBarProps> = ({
-  search,
-  level,
-  tag,
-  availableTags,
-  autoRefresh,
-  loading,
-  onSearchChange,
-  onLevelChange,
-  onTagChange,
-  onAutoRefreshChange,
-  onRefresh,
-  onClear,
-  onCopyAll,
-}) => {
-  const { isDark } = useTheme();
-
+export function LogFilterBar(props: LogFilterBarProps) {
   return (
-    <Space
-      size="small"
-      style={{
-        marginBottom: 10,
-        width: "100%",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: 8,
-      }}
-    >
-      <Space wrap size="small">
-        <Input
-          size="small"
-          placeholder="搜索日志内容 / TraceID / 模块"
-          prefix={<SearchOutlined />}
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          style={{ width: 220 }}
-          allowClear
-        />
-
-        <Select
-          size="small"
-          placeholder="日志级别"
-          value={level}
-          onChange={onLevelChange}
-          style={{ width: 120 }}
-          allowClear
-          options={[
-            { label: "全部级别", value: undefined },
-            {
-              label: (
-                <Tag
-                  color="processing"
-                  style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px" }}
-                >
-                  INFO
-                </Tag>
-              ),
-              value: "INFO",
-            },
-            {
-              label: (
-                <Tag
-                  color="warning"
-                  style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px" }}
-                >
-                  WARNING
-                </Tag>
-              ),
-              value: "WARNING",
-            },
-            {
-              label: (
-                <Tag
-                  color="error"
-                  style={{ margin: 0, fontSize: 11, padding: "0 4px", lineHeight: "18px" }}
-                >
-                  ERROR
-                </Tag>
-              ),
-              value: "ERROR",
-            },
-            {
-              label: (
-                <Tag
-                  style={{
-                    margin: 0,
-                    fontSize: 11,
-                    padding: "0 4px",
-                    lineHeight: "18px",
-                    color: isDark ? "#8c8c8c" : "#595959",
-                  }}
-                >
-                  DEBUG
-                </Tag>
-              ),
-              value: "DEBUG",
-            },
-          ]}
-        />
-
-        <Select
-          size="small"
-          placeholder="功能分类"
-          value={tag}
-          onChange={onTagChange}
-          style={{ width: 180 }}
-          allowClear
-          options={[
-            { label: "全部分类", value: undefined },
-            ...availableTags.map((t) => {
-              const cfg = TAG_STYLE_MAP[t.key] || { label: t.label, color: "default" };
-              return {
-                label: (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <Tag
-                      color={cfg.color}
-                      style={{
-                        margin: 0,
-                        fontSize: 10,
-                        padding: "0 4px",
-                        lineHeight: "18px",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {t.key}
-                    </Tag>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {t.label}
-                    </span>
-                  </div>
-                ),
-                value: t.key,
-              };
-            }),
-          ]}
-        />
-
-        <Space size={4}>
-          <Switch size="small" checked={autoRefresh} onChange={onAutoRefreshChange} />
-          <span style={{ fontSize: 12, color: isDark ? "#bfbfbf" : "#595959" }}>
-            {autoRefresh ? (
-              <span>
-                <SyncOutlined spin style={{ color: "#1677ff", marginRight: 4 }} />
-                实时自动刷新
-              </span>
-            ) : (
-              "实时自动刷新"
-            )}
-          </span>
-        </Space>
-      </Space>
-
-      <Space size="small">
-        <Tooltip title="一键复制当前筛选出的日志文本">
-          <Button size="small" icon={<CopyOutlined />} onClick={onCopyAll}>
-            复制日志
-          </Button>
-        </Tooltip>
-
-        <Button size="small" icon={<ReloadOutlined spin={loading} />} onClick={onRefresh}>
-          刷新
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_220px]">
+        <label className="col-span-2 grid gap-1 text-sm text-muted-foreground lg:col-span-1">
+          搜索日志
+          <Input
+            type="search"
+            placeholder="内容 / 任务编号 / 文件 / 函数"
+            value={props.search}
+            onChange={(event) => props.onSearchChange(event.target.value)}
+          />
+        </label>
+        <label className="grid gap-1 text-sm text-muted-foreground">
+          日志级别
+          <NativeSelect
+            value={props.level ?? ""}
+            onChange={(event) => props.onLevelChange(event.target.value || undefined)}
+          >
+            <option value="">全部级别</option>
+            {["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"].map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+          </NativeSelect>
+        </label>
+        <label className="grid gap-1 text-sm text-muted-foreground">
+          功能分类
+          <NativeSelect
+            value={props.tag ?? ""}
+            onChange={(event) => props.onTagChange(event.target.value || undefined)}
+          >
+            <option value="">全部分类</option>
+            {LOG_TAG_GROUPS.map((group) => {
+              const tags = props.availableTags.filter(
+                (tag) => (TAG_STYLE_MAP[tag.key]?.group ?? "其他") === group,
+              );
+              return (
+                tags.length > 0 && (
+                  <optgroup key={group} label={group}>
+                    {tags.map((tag) => (
+                      <option key={tag.key} value={tag.key}>
+                        {tag.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                )
+              );
+            })}
+          </NativeSelect>
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          aria-pressed={props.autoRefresh}
+          onClick={() => props.onAutoRefreshChange(!props.autoRefresh)}
+        >
+          {props.autoRefresh ? (
+            <IconPlayerPause aria-hidden="true" />
+          ) : (
+            <IconPlayerPlay aria-hidden="true" />
+          )}
+          {props.autoRefresh ? "暂停更新" : "继续更新"}
         </Button>
-
-        <Button size="small" danger icon={<DeleteOutlined />} onClick={onClear}>
-          清空
+        <Button variant="ghost" onClick={props.onCopyAll}>
+          <IconCopy aria-hidden="true" />
+          复制日志
         </Button>
-      </Space>
-    </Space>
+        <Button
+          variant="ghost"
+          disabled={props.loading || props.clearing}
+          onClick={props.onRefresh}
+        >
+          <IconRefresh aria-hidden="true" />
+          {props.loading ? "刷新中…" : "刷新"}
+        </Button>
+        <Button
+          variant="ghost"
+          className="text-destructive sm:ml-auto"
+          disabled={props.clearing}
+          onClick={props.onClear}
+        >
+          <IconTrash aria-hidden="true" />
+          清空日志
+        </Button>
+      </div>
+    </div>
   );
-};
+}

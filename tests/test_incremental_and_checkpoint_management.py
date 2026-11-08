@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import time
 from pathlib import Path
 from typing import Any
@@ -63,6 +65,7 @@ async def test_incremental_store_crud_and_registration(dummy_plugin_kv: DummyPlu
     batch1 = IncrementalBatch(
         batch_id="batch_001",
         group_id="group_123",
+        last_message_timestamp=1725950000,
         timestamp=time.time() - 3600,
         messages_count=50,
         characters_count=300,
@@ -116,11 +119,12 @@ async def test_incremental_store_crud_and_registration(dummy_plugin_kv: DummyPlu
     assert len(detail1.topics) == 1
     assert detail1.topics[0]["topic"] == "架构讨论"
 
-    batch_list = await store.get_all_batches_with_details("group_123")
+    batch_list = (await store.list_batch_page("group_123")).items
     assert len(batch_list) == 2
     # 按时间倒序
     assert batch_list[0]["batch_id"] == "batch_002"
     assert batch_list[1]["batch_id"] == "batch_001"
+    assert batch_list[1]["last_message_timestamp"] == 1725950000
 
     # 4. 更新游标并检查
     await store.update_last_analyzed_cursor("group_123", 1725960000, {"msg_1", "msg_2"})
@@ -432,13 +436,13 @@ def test_checkpoint_store_corner_cases_expiration_and_fallback(temp_db: Path):
     assert store.get_checkpoint("legacy_grp", "2026-09-10", "LLM_ANALYSIS") == {
         "legacy": True
     }
-    # 传入新 trace_id 读取也能平滑回退到老格式
+    # 指定任务时不能借用归属不明的旧快照
     assert store.get_checkpoint(
         "legacy_grp",
         "2026-09-10",
         "LLM_ANALYSIS",
         trace_id="non_exist_trace_id",
-    ) == {"legacy": True}
+    ) is None
 
     # 4. 严防跨任务脏读：若存在 Task A 快照，Task B 查找缺失快照时绝不能脏读 Task A 的快照
     store.save_checkpoint(
@@ -545,6 +549,7 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
 
     mock_bot_manager = MagicMock()
     mock_bot_manager.get_adapter = MagicMock(return_value=mock_adapter)
+    mock_bot_manager.get_adapter_platform_id = MagicMock(return_value="onebot_test")
 
     # 4. 模拟 LLM Analyzer 与 StatisticsService
     mock_llm_analyzer = AsyncMock()
@@ -611,6 +616,11 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
     assert unified_msgs_passed[0].text_content == "周三今天的话题消息"
     assert unified_msgs_passed[0].reply_to_id == "thread-before"
     assert unified_msgs_passed[0].contents[1].at_user_id == "member-openid"
+    assert result["platform_id"] == "onebot_test"
+    scoped = await inc_store.for_session("group_999", "onebot_test")
+    assert await scoped.get_batch_count("group_999") == 1
+    assert await scoped.get_last_analyzed_cursor("group_999") == (unified_msgs_passed[0].timestamp, {"msg_wed"})
+    assert await (await inc_store.for_session("group_999", "another-instance")).get_batch_count("group_999") == 0
 
 
 @pytest.mark.asyncio
@@ -755,6 +765,7 @@ async def test_incremental_final_report_aggregates_only_in_window_batches(
     mock_adapter.is_group_muted = AsyncMock(return_value=False)
     mock_bot_manager = MagicMock()
     mock_bot_manager.get_adapter = MagicMock(return_value=mock_adapter)
+    mock_bot_manager.get_adapter_platform_id = MagicMock(return_value="onebot_test")
 
     mock_history = AsyncMock()
 
@@ -786,3 +797,94 @@ async def test_incremental_final_report_aggregates_only_in_window_batches(
     assert "周一已结题旧话题" not in topic_titles
     # 验证消息量仅为周三当天的 40 条
     assert analysis_result["statistics"].message_count == 40
+    assert result["platform_id"] == "onebot_test"
+    assert await (await store.for_session("grp_final_test", "another-instance")).get_batch_count("grp_final_test") == 0
+
+
+def test_checkpoint_list_ties_and_read_snapshot(temp_db, monkeypatch):
+    from contextlib import contextmanager
+    store = CheckpointStore(temp_db)
+    writer = CheckpointStore(temp_db)
+    for trace in ["a", "c", "b"]:
+        store.save_checkpoint("group", "2026-11-07", "LLM_ANALYSIS", {}, trace_id=trace)
+    with store._get_connection() as conn:
+        conn.execute("UPDATE stage_checkpoints SET created_at = 100")
+    first, total = store.list_all_checkpoints(limit=2)
+    second, _ = store.list_all_checkpoints(limit=2, offset=2)
+    assert total == 3
+    assert [item["trace_id"] for item in first + second] == ["c", "b", "a"]
+    original = store._get_connection
+    inserted = False
+    @contextmanager
+    def interleaved_connection():
+        with original() as conn:
+            def before_select(sql):
+                nonlocal inserted
+                if "SELECT checkpoint_id," in sql and not inserted:
+                    inserted = True
+                    writer.save_checkpoint("group", "2026-11-07", "LLM_ANALYSIS", {}, trace_id="new")
+            conn.set_trace_callback(before_select)
+            yield conn
+    with monkeypatch.context() as patch:
+        patch.setattr(store, "_get_connection", interleaved_connection)
+        items, count = store.list_all_checkpoints(limit=10)
+    assert inserted
+    assert count == len(items) == 3
+    assert all(item["trace_id"] != "new" for item in items)
+    assert store.list_all_checkpoints()[1] == 4
+
+
+@pytest.mark.asyncio
+async def test_incremental_page_reads_only_selected_records(dummy_plugin_kv):
+    store = IncrementalStore(dummy_plugin_kv)
+    for number in range(45):
+        await store.save_batch(IncrementalBatch(
+            group_id="g", batch_id=f"b-{number:02}", timestamp=100,
+            last_message_timestamp=1000 + number,
+            topics=[SummaryTopic(topic="周末出游", detail="分享路线", contributors=["小林"]).to_dict()],
+        ))
+    with patch.object(store, "get_batch_detail", wraps=store.get_batch_detail) as reader:
+        page = await store.list_batch_page("g", 2, 20)
+        assert reader.await_count == 20
+    assert page.total == 45
+    assert page.page == 2
+    assert [item["batch_id"] for item in page.items] == [f"b-{number:02}" for number in range(24, 4, -1)]
+    assert page.items[0]["topics"] == [{"topic": "周末出游"}]
+    assert page.last_message_timestamp == 1044
+    # 总数和排序源于同一次索引读取，新增批次在下次刷新才出现。
+    original = store.get_batch_detail
+    pending_write = None
+    async def concurrent_read(group_id, batch_id):
+        nonlocal pending_write
+        if batch_id == "b-44":
+            pending_write = asyncio.create_task(store.save_batch(IncrementalBatch(group_id="g", batch_id="new", timestamp=200)))
+            await asyncio.sleep(0)
+            assert not pending_write.done()
+        return await original(group_id, batch_id)
+    with patch.object(store, "get_batch_detail", side_effect=concurrent_read):
+        snapshot = await store.list_batch_page("g", 1, 20)
+    assert pending_write is not None
+    assert await pending_write
+    assert snapshot.total == 45
+    assert snapshot.items[0]["batch_id"] == "b-44"
+    assert (await store.list_batch_page("g", 1, 20)).total == 46
+    # 删除后请求原末页会回到新的末页；空群也保持第 1 页。
+    for number in range(5):
+        await store.delete_batch("g", f"b-{number:02}")
+    await store.delete_batch("g", "new")
+    last = await store.list_batch_page("g", 3, 20)
+    assert (last.page, last.total, len(last.items)) == (2, 40, 20)
+    empty = await store.list_batch_page("empty", 9, 20)
+    assert (empty.page, empty.total, empty.items) == (1, 0, [])
+
+
+@pytest.mark.asyncio
+async def test_incremental_page_legacy_index_and_missing_record(dummy_plugin_kv):
+    store = IncrementalStore(dummy_plugin_kv)
+    await store.save_batch(IncrementalBatch(group_id="g", batch_id="old", timestamp=10))
+    dummy_plugin_kv._kv[store._index_key("g")] = [{"batch_id": "old", "timestamp": 10}]
+    assert (await store.list_batch_page("g")).last_message_timestamp is None
+    dummy_plugin_kv._kv.pop(store._batch_key("g", "old"))
+    with pytest.raises(ValueError, match="记录已变化或缺失"):
+        await store.list_batch_page("g")
+

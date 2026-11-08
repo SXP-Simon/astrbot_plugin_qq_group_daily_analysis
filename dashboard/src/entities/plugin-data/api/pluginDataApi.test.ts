@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { apiGet } from "../../../shared/api/bridge";
-import { fetchCheckpointDetail } from "./pluginDataApi";
+import { fetchCheckpointDetail, fetchCheckpointsList } from "./pluginDataApi";
 
 vi.mock("../../../shared/api/bridge", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../shared/api/bridge")>()),
@@ -37,4 +37,11 @@ it("保留旧版 detail 包装并拒绝缺少快照元数据的响应", async ()
   await expect(fetchCheckpointDetail("GROUP", "2026-11-04", "LLM_ANALYSIS")).rejects.toThrow(
     "快照详情",
   );
+});
+
+it("空列表响应不能冒充查询成功，实际空记录仍可展示", async () => {
+  vi.mocked(apiGet).mockResolvedValue({ status: "ok", data: null });
+  await expect(fetchCheckpointsList()).rejects.toThrow("响应为空");
+  vi.mocked(apiGet).mockResolvedValue({ status: "ok", data: { items: [], total: 0 } });
+  await expect(fetchCheckpointsList()).resolves.toEqual({ items: [], total: 0 });
 });

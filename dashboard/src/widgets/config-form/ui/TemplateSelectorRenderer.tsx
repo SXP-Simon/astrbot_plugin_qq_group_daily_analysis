@@ -1,66 +1,29 @@
-import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
-import React, { useEffect, useMemo, useState } from "react";
-import { Select, Button, Modal, Card, Row, Col, Tag, Typography, Image, Alert } from "antd";
+import { LoadingState } from "../../../shared/ui/loading-state";
+import { useEffect, useMemo, useState } from "react";
 import {
-  EyeOutlined,
-  AppstoreOutlined,
-  CheckCircleOutlined,
-  PictureOutlined,
-  DownloadOutlined,
-  DeleteOutlined,
-  BulbOutlined,
-} from "@ant-design/icons";
-import { useTheme } from "../../../shared/lib/useTheme";
+  IconCheck,
+  IconDownload,
+  IconEye,
+  IconLayoutGrid,
+  IconPhoto,
+  IconTrash,
+} from "@tabler/icons-react";
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
 import {
   KNOWN_TEMPLATES,
   supportsTemplate,
   templateCapabilities,
   type TemplateRequirements,
-  getTemplateCdnUrl,
 } from "../../../entities/report/model/templates";
-import { fetchTemplatePreview } from "../../../entities/report/api/reportApi";
+import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
+import { useTemplatePreview } from "../../../entities/report/model/useTemplatePreview";
 import { TemplateInstallModal } from "../../../features/install-template/ui/TemplateInstallModal";
 import { TemplateUninstallModal } from "../../../features/install-template/ui/TemplateUninstallModal";
-
-import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
-
-const GALLERY_FALLBACK =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='180' viewBox='0 0 200 180'><rect width='200' height='180' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='12'>预览图</text></svg>";
-
-/** 自定义模板的预览图：按需从后端取模板目录内 preview.jpg 等；
- *  visible/onVisibleChange 可选：传入时预览弹层为受控模式（供"预览当前效果"按钮联动），
- *  不传时保持点击图片内部预览（画廊场景） */
-const CustomPreviewImage: React.FC<{
-  templateName: string;
-  height?: number;
-  visible?: boolean;
-  onVisibleChange?: (visible: boolean) => void;
-}> = ({ templateName, height = 180, visible, onVisibleChange }) => {
-  const [src, setSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setSrc(null);
-    fetchTemplatePreview(templateName).then((url) => {
-      if (!cancelled && url) setSrc(url);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [templateName]);
-
-  return (
-    <Image
-      src={src || GALLERY_FALLBACK}
-      alt={templateName}
-      style={{ width: "100%", height, objectFit: "cover", objectPosition: "top" }}
-      fallback={GALLERY_FALLBACK}
-      preview={{ src: src || undefined, visible, onVisibleChange }}
-    />
-  );
-};
-
-const { Text, Paragraph } = Typography;
+import { Alert } from "../../../shared/ui/alert";
+import { Button } from "../../../shared/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog";
+import { ImagePreview } from "../../../shared/ui/image-preview";
+import { SearchSelect } from "../../../shared/ui/search-select";
 
 interface TemplateSelectorRendererProps {
   cdnBaseUrl?: string | null;
@@ -68,351 +31,290 @@ interface TemplateSelectorRendererProps {
   requirements?: TemplateRequirements;
   options?: unknown[];
   defaultValue?: unknown;
-  onChange: (val: string) => void;
+  onChange: (value: string) => void;
 }
 
-export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> = ({
+/** 缩略图的加载与地址来自实体模型，点击入口同时支持键盘。 */
+function TemplateThumbnail({
+  id,
+  name,
+  custom,
+  cdnBaseUrl,
+  compact,
+  onPreview,
+}: {
+  id: string;
+  name: string;
+  custom: boolean;
+  cdnBaseUrl: string | null;
+  compact?: boolean;
+  onPreview: () => void;
+}) {
+  const preview = useTemplatePreview(id, custom, cdnBaseUrl);
+  const [failed, setFailed] = useState<string | null>(null);
+  return (
+    <button
+      type="button"
+      aria-label={`预览 ${name}`}
+      onClick={onPreview}
+      className={`${compact ? "h-28 w-20 shrink-0" : "h-48 w-full"} relative flex cursor-zoom-in items-center justify-center overflow-hidden rounded-xl border border-solid border-border bg-muted/40 p-0 text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring`}
+    >
+      {preview.src && failed !== preview.src ? (
+        <img
+          src={preview.src}
+          alt={name}
+          loading="lazy"
+          className="h-full w-full object-cover object-top"
+          onError={() => setFailed(preview.src)}
+        />
+      ) : (
+        <span className="flex flex-col items-center gap-2 p-2 text-xs">
+          <IconPhoto aria-hidden="true" />
+          <span>{preview.loading ? "读取预览…" : "暂无预览图"}</span>
+        </span>
+      )}
+      <span className="absolute bottom-0 right-0 flex items-center gap-1 rounded-tl-lg bg-card/95 px-2 py-1 text-xs text-foreground">
+        <IconEye size={14} aria-hidden="true" />
+        预览
+      </span>
+    </button>
+  );
+}
+
+export function TemplateSelectorRenderer({
   cdnBaseUrl = DEFAULT_TEMPLATE_CDN_BASE_URL,
   value,
-  options: _options,
   requirements,
   defaultValue,
   onChange,
-}) => {
-  const { isDark } = useTheme();
+}: TemplateSelectorRendererProps) {
   const [galleryOpen, setGalleryOpen] = useState(false);
-  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [installOpen, setInstallOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
-  const {
-    templates: remoteTemplates,
-    loading,
-    ready,
-    error,
-    refresh: refreshRemoteTemplates,
-  } = useReportTemplates();
-
+  const { templates: remoteTemplates, loading, ready, error, refresh } = useReportTemplates();
   const currentTemplate =
     typeof value === "string" && value
       ? value
       : typeof defaultValue === "string" && defaultValue
         ? defaultValue
         : "HatsuneMiku";
-
-  // 模板切换/卸载回退后重置预览弹层状态，避免预览残留叠加（如与画廊弹窗同开）
   useEffect(() => {
-    setPreviewVisible(false);
+    setPreviewId(null);
   }, [currentTemplate]);
-
-  const availableTemplates = useMemo(
-    () => remoteTemplates.filter((item) => supportsTemplate(item, requirements)),
-    [remoteTemplates, requirements],
-  );
-  const templateOptions = useMemo(
-    () =>
-      availableTemplates.map((item) => ({
-        label: `${item.display_name || item.label || item.id} [${templateCapabilities(item).join(" / ")}]`,
-        value: item.id,
-      })),
-    [availableTemplates],
-  );
   const galleryItems = useMemo(
     () =>
-      availableTemplates.map((remote) => {
-        const known = KNOWN_TEMPLATES.find((item) => item.key === remote.id);
-        return {
-          key: remote.id,
-          isCustom: Boolean(remote.is_custom),
-          name: remote.display_name || known?.name || remote.id,
-          desc: remote.desc || known?.desc || "",
-          tag: remote.tag || known?.tag || "",
-          tagColor: remote.tag_color || known?.tagColor || "default",
-          capabilities: templateCapabilities(remote),
-        };
-      }),
-    [availableTemplates],
+      remoteTemplates
+        .filter((item) => supportsTemplate(item, requirements))
+        .map((item) => {
+          const known = KNOWN_TEMPLATES.find((entry) => entry.key === item.id);
+          return {
+            key: item.id,
+            custom: Boolean(item.is_custom),
+            name: item.display_name || known?.name || item.label || item.id,
+            description: item.desc || known?.desc || "",
+            tag: item.tag || known?.tag || "",
+            capabilities: templateCapabilities(item),
+          };
+        }),
+    [remoteTemplates, requirements],
   );
-  const currentSupported = availableTemplates.some((item) => item.id === currentTemplate);
-
-  // 当前选中模板的展示信息：与画廊/下拉同源的元信息合并（API 优先、KNOWN 兜底）
-  const currentMeta = galleryItems.find((g) => g.key === currentTemplate) || {
-    key: currentTemplate,
-    isCustom: false,
-    name: currentTemplate,
-    desc: "自定义或外部模板",
-    tag: "模板",
-    tagColor: "blue",
-    capabilities: [],
-  };
-
-  const currentCdnUrl = getTemplateCdnUrl(currentTemplate, cdnBaseUrl);
+  const current = galleryItems.find((item) => item.key === currentTemplate);
+  const previewIndex = galleryItems.findIndex((item) => item.key === previewId);
+  const previewItem = galleryItems[previewIndex];
+  useEffect(() => {
+    if (previewId && !galleryItems.some((item) => item.key === previewId)) setPreviewId(null);
+  }, [galleryItems, previewId]);
+  const preview = useTemplatePreview(
+    previewItem?.key ?? "",
+    previewItem?.custom ?? false,
+    cdnBaseUrl,
+    Boolean(previewItem),
+  );
+  const previewDialog = previewItem ? (
+    <ImagePreview
+      key={previewItem.key}
+      src={preview.src}
+      loading={preview.loading}
+      error={preview.error}
+      title={`模板预览 · ${previewItem.name}`}
+      position={`${previewIndex + 1} / ${galleryItems.length}`}
+      onPrevious={
+        galleryOpen && previewIndex > 0
+          ? () => setPreviewId(galleryItems[previewIndex - 1].key)
+          : undefined
+      }
+      onNext={
+        galleryOpen && previewIndex + 1 < galleryItems.length
+          ? () => setPreviewId(galleryItems[previewIndex + 1].key)
+          : undefined
+      }
+      onClose={() => setPreviewId(null)}
+    />
+  ) : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
+    <div className="grid min-w-0 gap-3">
       {error && (
-        <Alert
-          type="error"
-          showIcon
-          message={error}
-          action={<Button onClick={() => void refreshRemoteTemplates()}>重试</Button>}
-        />
+        <Alert variant="destructive">
+          {error}
+          <Button size="sm" variant="outline" className="ml-2" onClick={() => void refresh()}>
+            重试
+          </Button>
+        </Alert>
+      )}
+      {loading && (
+        <LoadingState className="m-0 text-sm text-muted-foreground">正在读取模板列表…</LoadingState>
       )}
       {ready && !remoteTemplates.length && (
-        <Text type="secondary">暂无可用模板，请安装模板或刷新列表。</Text>
+        <p className="m-0 text-sm text-muted-foreground">暂无可用模板，请安装模板或刷新列表。</p>
       )}
-      {ready && !currentSupported && (
-        <Text type="warning">
+      {ready && !current && (
+        <Alert variant="warning">
           当前主题不支持所选渲染引擎或输出格式，请选择兼容主题。切换不会自动覆盖你的配置。
-        </Text>
+        </Alert>
       )}
       {cdnBaseUrl === null && (
-        <Text type="danger">CDN 地址没填对，请先到「图片渲染策略」改一下，再来看模板预览。</Text>
+        <Alert variant="destructive">
+          CDN 地址没填对，请先到「图片渲染策略」改一下，再来看模板预览。
+        </Alert>
       )}
-      {/* 顶部下拉选择与快捷按钮 */}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <Select
-          loading={loading}
-          disabled={!ready}
-          value={currentTemplate}
-          onChange={(v) => onChange(v)}
-          style={{ minWidth: 200, flex: 1 }}
-          options={templateOptions}
-          optionFilterProp="label"
-          showSearch
-        />
-        <Button
-          icon={<EyeOutlined />}
-          disabled={!currentSupported}
-          onClick={() => setPreviewVisible(true)}
-        >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="min-w-0 basis-60 grow">
+          <SearchSelect
+            label="报告模板"
+            value={currentTemplate}
+            disabled={!ready}
+            virtual
+            options={galleryItems.map((item) => ({
+              value: item.key,
+              label: `${item.name} [${item.capabilities.join(" / ")}]`,
+            }))}
+            onChange={onChange}
+          />
+        </div>
+        <Button variant="outline" disabled={!current} onClick={() => setPreviewId(currentTemplate)}>
+          <IconEye aria-hidden="true" />
           预览当前效果
         </Button>
-        <Button
-          type="primary"
-          ghost
-          icon={<AppstoreOutlined />}
-          onClick={() => setGalleryOpen(true)}
-        >
+        <Button variant="outline" onClick={() => setGalleryOpen(true)}>
+          <IconLayoutGrid aria-hidden="true" />
           浏览全部模板画廊
         </Button>
-        <Button icon={<DownloadOutlined />} onClick={() => setInstallOpen(true)}>
+        <Button variant="outline" onClick={() => setInstallOpen(true)}>
+          <IconDownload aria-hidden="true" />
           安装模板
         </Button>
-        <Button icon={<DeleteOutlined />} onClick={() => setUninstallOpen(true)}>
+        <Button variant="outline" onClick={() => setUninstallOpen(true)}>
+          <IconTrash aria-hidden="true" />
           卸载模板
         </Button>
       </div>
+      {current && (
+        <div className="flex items-center gap-4 rounded-xl bg-muted/40 p-3">
+          <TemplateThumbnail
+            id={current.key}
+            name={current.name}
+            custom={current.custom}
+            cdnBaseUrl={cdnBaseUrl}
+            compact
+            onPreview={() => setPreviewId(current.key)}
+          />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{current.name}</span>
+              {current.tag && (
+                <span className="rounded-md bg-secondary px-2 py-1 text-xs text-secondary-foreground">
+                  {current.tag}
+                </span>
+              )}
+            </div>
+            <p className="mb-0 mt-2 text-sm leading-relaxed text-muted-foreground">
+              {current.description}
+            </p>
+          </div>
+        </div>
+      )}
       <TemplateInstallModal
         open={installOpen}
         onClose={() => setInstallOpen(false)}
-        onInstalled={() => void refreshRemoteTemplates()}
+        onInstalled={() => void refresh()}
       />
       <TemplateUninstallModal
         open={uninstallOpen}
         onClose={() => setUninstallOpen(false)}
         onUninstalled={(name) => {
-          void refreshRemoteTemplates();
-          // 若卸载的正是当前选中模板，回退到内置默认，避免表单值指向已删除模板
-          if (currentTemplate === name) {
-            onChange("HatsuneMiku");
-          }
+          void refresh();
+          if (currentTemplate === name) onChange("HatsuneMiku");
         }}
       />
-
-      {/* 选定模板的实时缩略图与简介卡片 */}
-      {currentSupported && (
-        <div
-          style={{
-            display: "flex",
-            gap: 14,
-            padding: "10px 14px",
-            borderRadius: 6,
-            background: isDark ? "rgba(255, 255, 255, 0.03)" : "#f8fafc",
-            border: `1px solid ${isDark ? "#303030" : "#e2e8f0"}`,
-            alignItems: "center",
-          }}
-        >
-          <div
-            style={{
-              width: 72,
-              height: 96,
-              borderRadius: 4,
-              overflow: "hidden",
-              border: `1px solid ${isDark ? "#434343" : "#d9d9d9"}`,
-              flexShrink: 0,
-              cursor: "pointer",
-              background: isDark ? "#000" : "#fff",
-              position: "relative",
-            }}
-            onClick={() => setPreviewVisible(true)}
-          >
-            {currentMeta.isCustom ? (
-              <CustomPreviewImage
-                templateName={currentTemplate}
-                height={96}
-                visible={previewVisible}
-                onVisibleChange={setPreviewVisible}
-              />
-            ) : (
-              <Image
-                src={currentCdnUrl || GALLERY_FALLBACK}
-                alt={currentTemplate}
-                width={72}
-                height={96}
-                style={{ objectFit: "cover" }}
-                preview={{
-                  visible: previewVisible,
-                  onVisibleChange: setPreviewVisible,
-                  src: currentCdnUrl,
-                }}
-                fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='96' viewBox='0 0 72 96'><rect width='72' height='96' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='10'>预览图</text></svg>"
-              />
-            )}
-          </div>
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <Text strong style={{ fontSize: 13 }}>
-                {currentMeta.name}
-              </Text>
-              <Tag color={currentMeta.tagColor} style={{ fontSize: 11 }}>
-                {currentMeta.tag}
-              </Tag>
-            </div>
-            <Paragraph type="secondary" style={{ margin: 0, fontSize: 12, lineHeight: "1.4" }}>
-              {currentMeta.desc}
-            </Paragraph>
-            <Text type="secondary" style={{ fontSize: 11, display: "block", marginTop: 4 }}>
-              <BulbOutlined style={{ marginRight: 4, color: "#faad14" }} />
-              点击缩略图可全屏缩放预览完整长图，或点击上方「浏览全部模板画廊」进行对比选型。
-            </Text>
-          </div>
-        </div>
-      )}
-
-      {/* 全部模板画廊弹窗 */}
-      <Modal
-        title={
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <PictureOutlined style={{ color: "#1677ff" }} />
-            <span>报告模板视觉样式画廊</span>
-          </div>
-        }
+      <Dialog
         open={galleryOpen}
-        onCancel={() => setGalleryOpen(false)}
-        footer={null}
-        width={960}
-        styles={{ body: { maxHeight: "75vh", overflowY: "auto", padding: "16px 8px" } }}
+        onOpenChange={(open) => {
+          if (!previewItem) setGalleryOpen(open);
+        }}
       >
-        <Image.PreviewGroup>
-          <Row gutter={[16, 16]}>
-            {galleryItems.map((tmpl) => {
-              const isSelected = tmpl.key === currentTemplate;
-              const isCustom = tmpl.isCustom;
-
-              return (
-                <Col xs={24} sm={12} md={8} key={tmpl.key}>
-                  <Card
-                    hoverable
-                    size="small"
-                    style={{
-                      borderColor: isSelected ? "#1677ff" : undefined,
-                      borderWidth: isSelected ? 2 : 1,
-                      background: isDark ? "#141414" : "#ffffff",
-                    }}
-                    styles={{
-                      body: { padding: 12 },
-                      cover: {
-                        height: 180,
-                        overflow: "hidden",
-                        background: isDark ? "#000" : "#f5f5f5",
-                        position: "relative",
-                      },
-                    }}
-                    cover={
-                      isCustom ? (
-                        <CustomPreviewImage templateName={tmpl.key} />
-                      ) : (
-                        <Image
-                          src={getTemplateCdnUrl(tmpl.key, cdnBaseUrl) || GALLERY_FALLBACK}
-                          alt={tmpl.name}
-                          style={{
-                            width: "100%",
-                            height: 180,
-                            objectFit: "cover",
-                            objectPosition: "top",
-                          }}
-                          fallback={GALLERY_FALLBACK}
-                        />
-                      )
-                    }
-                  >
-                    <div style={{ marginBottom: 6 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                      >
-                        <Text strong style={{ fontSize: 13 }}>
-                          {tmpl.name}
-                          {isCustom && (
-                            <Tag
-                              color="blue"
-                              style={{ fontSize: 10, marginLeft: 6, padding: "0 4px" }}
-                            >
-                              自定义
-                            </Tag>
-                          )}
-                        </Text>
-                        <Tag color={tmpl.tagColor} style={{ fontSize: 10, padding: "0 4px" }}>
-                          {tmpl.tag}
-                        </Tag>
-                      </div>
-                      <Text
-                        type="secondary"
-                        style={{ fontSize: 11, display: "block", marginTop: 4, minHeight: 32 }}
-                      >
-                        <span>
-                          {tmpl.capabilities.map((capability) => (
-                            <Tag key={capability}>{capability}</Tag>
-                          ))}
-                        </span>
-                        {tmpl.desc}
-                      </Text>
-                    </div>
-
-                    <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
-                      {isSelected ? (
-                        <Button
-                          size="small"
-                          type="dashed"
-                          icon={<CheckCircleOutlined style={{ color: "#52c41a" }} />}
-                          disabled
-                        >
-                          当前使用中
-                        </Button>
-                      ) : (
-                        <Button
-                          size="small"
-                          type="primary"
-                          onClick={() => {
-                            onChange(tmpl.key);
-                            setGalleryOpen(false);
-                          }}
-                        >
-                          应用此模板
-                        </Button>
-                      )}
-                    </div>
-                  </Card>
-                </Col>
-              );
-            })}
-          </Row>
-        </Image.PreviewGroup>
-      </Modal>
+        <DialogContent className="max-w-5xl" aria-describedby={undefined}>
+          <DialogTitle>报告模板视觉样式画廊</DialogTitle>
+          {!galleryItems.length && (
+            <p className="text-sm text-muted-foreground">没有符合当前渲染方式的模板。</p>
+          )}
+          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {galleryItems.map((item) => (
+              <article
+                key={item.key}
+                aria-label={item.name}
+                className={`flex min-w-0 flex-col gap-3 rounded-xl border border-solid p-3 ${item.key === currentTemplate ? "border-primary bg-primary/10" : "border-border bg-muted/20"}`}
+              >
+                <TemplateThumbnail
+                  id={item.key}
+                  name={item.name}
+                  custom={item.custom}
+                  cdnBaseUrl={cdnBaseUrl}
+                  onPreview={() => setPreviewId(item.key)}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="m-0 break-words text-base font-medium">{item.name}</h3>
+                  {item.custom && (
+                    <span className="rounded-md bg-secondary-soft px-2 py-1 text-xs text-secondary-ink">
+                      自定义
+                    </span>
+                  )}
+                </div>
+                {!!item.capabilities.length && (
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {item.capabilities.join(" · ")}
+                  </p>
+                )}
+                {item.tag && <span className="text-xs text-muted-foreground">{item.tag}</span>}
+                <p className="m-0 grow text-sm leading-relaxed text-muted-foreground">
+                  {item.description}
+                </p>
+                <Button
+                  className="self-end"
+                  variant={item.key === currentTemplate ? "secondary" : "default"}
+                  disabled={item.key === currentTemplate}
+                  onClick={() => {
+                    onChange(item.key);
+                    setGalleryOpen(false);
+                  }}
+                >
+                  {item.key === currentTemplate ? (
+                    <>
+                      <IconCheck aria-hidden="true" />
+                      当前使用中
+                    </>
+                  ) : (
+                    "应用此模板"
+                  )}
+                </Button>
+              </article>
+            ))}
+          </div>
+          {galleryOpen && previewDialog}
+        </DialogContent>
+      </Dialog>
+      {!galleryOpen && previewDialog}
     </div>
   );
-};
+}

@@ -6,6 +6,7 @@ WebUI 链路观测与指标路由 (Trace & Metrics Routes)
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from typing import TYPE_CHECKING, TypedDict
 
@@ -99,6 +100,27 @@ class TraceRoutes:
             end_time_raw = (request.query.get("end_time") or "").strip()
             sort_by = (request.query.get("sort_by") or "").strip() or "started_at"
             sort_order = (request.query.get("sort_order") or "").strip() or "desc"
+            before_raw = request.query.get("before_time")
+            before_id = (request.query.get("before_id") or "").strip() or None
+            before_time = None
+            if before_raw is not None or before_id is not None:
+                try:
+                    before_time = float(before_raw) if before_raw is not None else None
+                except (ValueError, TypeError):
+                    return error_response("分页游标格式不正确", status_code=400)
+                if (
+                    before_time is None
+                    or not math.isfinite(before_time)
+                    or not before_id
+                    or sort_by != "started_at"
+                    or sort_order != "desc"
+                    or offset != 0
+                ):
+                    return error_response(
+                        "分页游标仅支持时间倒序，不能同时指定偏移", status_code=400
+                    )
+            limit = max(1, min(200, limit))
+            offset = max(0, offset)
 
             start_time = None
             if start_time_raw:
@@ -129,7 +151,7 @@ class TraceRoutes:
 
             items, total = await asyncio.to_thread(
                 self.trace_store.list_traces,
-                limit=query_dto.get("limit", 20),
+                limit=limit + 1,
                 offset=query_dto.get("offset", 0),
                 group_id=query_dto.get("group_id"),
                 status=query_dto.get("status"),
@@ -139,13 +161,59 @@ class TraceRoutes:
                 end_time=query_dto.get("end_time"),
                 sort_by=query_dto.get("sort_by", "started_at"),
                 sort_order=query_dto.get("sort_order", "desc"),
+                before_time=before_time,
+                before_id=before_id,
+                platform=request.query.get("platform"),
             )
             return json_response(
-                {"status": "ok", "data": {"items": items, "total": total}}
+                {
+                    "status": "ok",
+                    "data": {
+                        "items": items[:limit],
+                        "total": total,
+                        "has_more": len(items) > limit,
+                    },
+                }
             )
         except Exception as e:
             logger.error(f"查询 Trace 列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
+
+    async def api_acknowledge_trace(self, trace_id: str) -> WebApiResponse:
+        """保存任务提醒的人工知晓状态。
+
+        Args:
+            trace_id: 需要标记或恢复提醒的任务编号。
+
+        Returns:
+            知晓时间回执；输入无效、记录不存在或任务未结束时返回相应错误。
+        """
+        try:
+            body = await request.json()
+        except Exception:
+            return error_response("请求内容不是有效的 JSON。", status_code=400)
+        if not is_string_mapping(body):
+            return error_response("请明确指定是否已知晓。", status_code=400)
+        acknowledged = body.get("acknowledged")
+        if not isinstance(acknowledged, bool):
+            return error_response("请明确指定是否已知晓。", status_code=400)
+        try:
+            stamp = await asyncio.to_thread(
+                self.trace_store.set_trace_acknowledgement, trace_id, acknowledged
+            )
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {"trace_id": trace_id, "acknowledged_at": stamp},
+                }
+            )
+        except KeyError:
+            return error_response("找不到这条分析记录，可能已经清理。", status_code=404)
+        except ValueError as exc:
+            return error_response(str(exc), status_code=409)
+        except Exception as exc:
+            logger.error(f"保存任务知晓标记失败: {exc}", exc_info=True)
+            return error_response("知晓状态未能保存，请稍后重试。", status_code=500)
 
     async def api_get_distinct_groups(self) -> WebApiResponse:
         """获取所有有历史分析记录的群组列表（用于下拉快速筛选）"""

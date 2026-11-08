@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -74,7 +74,7 @@ class TypstReportData(TypedDict):
     review: TypstReview | None
     tokens: list[int]
     decorations: list[str]
-    miku_allseto: NotRequired[bool]
+    miku_title_font: NotRequired[Literal["Miku AllSeto Title", "cjkFonts"] | None]
 
 
 @dataclass(frozen=True, slots=True)

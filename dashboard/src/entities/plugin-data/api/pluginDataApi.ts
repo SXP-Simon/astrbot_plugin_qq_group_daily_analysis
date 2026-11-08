@@ -5,6 +5,7 @@ import { configBackupListSchema, configBackupDetailSchema } from "../model/confi
 import {
   PluginDataOverview,
   IncrementalBatchesResponse,
+  IncrementalGroupDirectory,
   IncrementalBatchItem,
   CheckpointsListResponse,
   CheckpointDetail,
@@ -69,18 +70,34 @@ export async function clearConfigBackups(): Promise<number> {
 
 // ---------------- 增量批次与游标管理 API ----------------
 
-export async function fetchIncrementalGroups(): Promise<string[]> {
-  const res = await apiGet<{ groups: string[] }>("data/incremental/groups");
-  const data = extractData<{ groups: string[] }>(res);
-  return data?.groups ?? [];
+export async function fetchIncrementalGroupDirectory(): Promise<IncrementalGroupDirectory> {
+  const res = await apiGet<unknown>("data/incremental/groups");
+  return z
+    .object({
+      groups: z.array(z.string()),
+      group_details: z.array(
+        z.object({
+          group_id: z.string(),
+          platform_id: z.string(),
+          group_name: z.string(),
+        }),
+      ),
+    })
+    .parse(extractData<unknown>(res));
 }
 
 export async function fetchIncrementalBatches(
   groupId: string,
+  page = 1,
+  pageSize = 20,
+  platformId = "",
 ): Promise<IncrementalBatchesResponse | null> {
   if (!groupId) return null;
   const res = await apiGet<IncrementalBatchesResponse>("data/incremental/batches", {
     group_id: groupId,
+    platform_id: platformId,
+    page,
+    page_size: pageSize,
   });
   return extractData<IncrementalBatchesResponse>(res);
 }
@@ -88,18 +105,25 @@ export async function fetchIncrementalBatches(
 export async function fetchIncrementalBatchDetail(
   groupId: string,
   batchId: string,
+  platformId = "",
 ): Promise<IncrementalBatchItem | null> {
   if (!groupId || !batchId) return null;
   const res = await apiGet<IncrementalBatchItem>("data/incremental/batch/detail", {
     group_id: groupId,
+    platform_id: platformId,
     batch_id: batchId,
   });
   return extractData<IncrementalBatchItem>(res);
 }
 
-export async function deleteIncrementalBatch(groupId: string, batchId: string): Promise<boolean> {
+export async function deleteIncrementalBatch(
+  groupId: string,
+  batchId: string,
+  platformId = "",
+): Promise<boolean> {
   const res = await apiPost<{ deleted: boolean }>("data/incremental/batch", {
     group_id: groupId,
+    platform_id: platformId,
     batch_id: batchId,
   });
   return extractData<{ deleted: boolean }>(res)?.deleted ?? false;
@@ -107,10 +131,11 @@ export async function deleteIncrementalBatch(groupId: string, batchId: string): 
 
 export async function resetIncrementalGroup(
   groupId: string,
+  platformId = "",
 ): Promise<{ deleted_batches: number; message: string }> {
   const res = await apiPost<{ deleted_batches: number; message: string }>(
     "data/incremental/reset",
-    { group_id: groupId },
+    { group_id: groupId, platform_id: platformId },
   );
   return (
     extractData<{ deleted_batches: number; message: string }>(res) ?? {
@@ -122,16 +147,23 @@ export async function resetIncrementalGroup(
 
 // ---------------- 阶段产物 Checkpoint 管理 API ----------------
 
-export async function fetchCheckpointGroups(): Promise<string[]> {
-  const res = await apiGet<{ groups: string[] }>("data/checkpoints/groups");
-  const data = extractData<{ groups: string[] }>(res);
-  return data?.groups ?? [];
+export async function fetchCheckpointGroups() {
+  const res = await apiGet<unknown>("data/checkpoints/groups");
+  const data = z
+    .object({
+      sessions: z.array(
+        z.object({ group_id: z.string(), group_name: z.string(), platform: z.string() }),
+      ),
+    })
+    .parse(extractData<unknown>(res));
+  return data.sessions;
 }
 
 export async function fetchCheckpointsList(params?: {
   limit?: number;
   offset?: number;
   group_id?: string;
+  platform?: string;
   date_str?: string;
   stage_name?: string;
   trace_id?: string;
@@ -140,7 +172,8 @@ export async function fetchCheckpointsList(params?: {
     ...(params ?? {}),
   });
   const data = extractData<CheckpointsListResponse>(res);
-  return data ?? { items: [], total: 0 };
+  if (!data) throw new Error("快照列表响应为空，请刷新重试。");
+  return data;
 }
 
 export async function fetchCheckpointDetail(
@@ -163,7 +196,7 @@ export async function fetchCheckpointDetail(
   const detail = data && "detail" in data ? data.detail : data;
   const parsed = z
     .object({ group_id: z.string(), date_str: z.string(), stage_name: z.string() })
-    .passthrough()
+    .loose()
     .safeParse(detail);
   if (!parsed.success) throw new Error("快照详情格式异常，请刷新后重试。");
   return parsed.data;

@@ -196,6 +196,7 @@ RECORD_SCHEMAS: dict[str, object] = {
                 "kind",
                 "key",
                 "group_id",
+                "platform_id",
                 "batch_id",
                 "date_str",
                 "stage_name",

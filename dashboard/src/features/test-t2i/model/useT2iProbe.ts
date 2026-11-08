@@ -6,6 +6,7 @@ import type { GroupItem } from "../../../entities/group/model/types";
 
 export function useT2iProbe(input: T2iProbeInput) {
   const sequence = useRef(0);
+  const pending = useRef(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<T2iProbe | null>(null);
   const [error, setError] = useState("");
@@ -37,6 +38,7 @@ export function useT2iProbe(input: T2iProbeInput) {
 
   useEffect(() => {
     sequence.current += 1;
+    pending.current = false;
     setLoading(false);
     setResult(null);
     setError("");
@@ -55,7 +57,8 @@ export function useT2iProbe(input: T2iProbeInput) {
   ]);
 
   const run = async () => {
-    if (loading) return;
+    if (pending.current) return;
+    pending.current = true;
     const requestId = ++sequence.current;
     setLoading(true);
     setResult(null);
@@ -75,7 +78,10 @@ export function useT2iProbe(input: T2iProbeInput) {
       if (sequence.current === requestId)
         setError(err instanceof Error ? err.message : "测试没能完成，请稍后再试。");
     } finally {
-      if (sequence.current === requestId) setLoading(false);
+      if (sequence.current === requestId) {
+        pending.current = false;
+        setLoading(false);
+      }
     }
   };
 

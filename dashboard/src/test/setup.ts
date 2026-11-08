@@ -39,7 +39,7 @@ Object.defineProperty(globalThis, "localStorage", {
   writable: true,
 });
 
-// 为 JSDOM 环境补齐 Ant Design 所需的 window.matchMedia 桩方法
+// 为 JSDOM 补齐主题、响应式布局与减少动态效果使用的 matchMedia
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: (query: string) => ({

@@ -1,0 +1,35 @@
+{
+  "group_id": "telegram:-100001",
+  "batch_id": "serialized-demo",
+  "timestamp": 1794000000,
+  "messages_count": 10,
+  "characters_count": 90,
+  "hourly_msg_counts": {},
+  "hourly_char_counts": {},
+  "user_stats": {},
+  "emoji_stats": {},
+  "topics": [
+    {
+      "topic": "周末出游",
+      "contributors": ["小林"],
+      "detail": "[alice] 分享了徒步路线",
+      "contributor_ids": ["alice"]
+    }
+  ],
+  "golden_quotes": [
+    {
+      "content": "出门才知道天气真好",
+      "sender": "小林",
+      "reason": "说出了出游的轻松心情",
+      "user_id": "alice"
+    }
+  ],
+  "token_usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  },
+  "chat_quality_review": null,
+  "last_message_timestamp": 0,
+  "participant_ids": []
+}

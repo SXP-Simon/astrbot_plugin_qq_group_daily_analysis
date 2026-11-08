@@ -1,13 +1,13 @@
-import { useState } from "react";
-import { message } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   triggerNewTask,
   fetchConnectedPlatforms,
-  ConnectedPlatform,
+  type ConnectedPlatform,
 } from "../../../entities/task/api/taskApi";
-import { fetchProviderList, LLMProviderItem } from "../../../entities/trace/api/traceApi";
+import { fetchProviderList, type LLMProviderItem } from "../../../entities/trace/api/traceApi";
 import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
-import { GroupItem } from "../../../entities/group/model/types";
+import type { GroupItem } from "../../../entities/group/model/types";
 
 export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void) {
   const [open, setOpen] = useState(false);
@@ -18,9 +18,13 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
   const [templateName, setTemplateName] = useState("auto");
   const [submitting, setSubmitting] = useState(false);
   const [connectedPlatforms, setConnectedPlatforms] = useState<ConnectedPlatform[]>([]);
-  const [loadingPlatforms, setLoadingPlatforms] = useState(false);
   const [providers, setProviders] = useState<LLMProviderItem[]>([]);
-  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [optionsError, setOptionsError] = useState("");
+  const [optionsVersion, setOptionsVersion] = useState(0);
+  const pending = useRef(false);
+  const mounted = useRef(false);
+  const inferred = useRef({ name: "", platform: "" });
   const {
     templates,
     loading: loadingTemplates,
@@ -29,113 +33,143 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
     refresh: refreshTemplates,
   } = useReportTemplates("configured", open);
 
-  const loadOptions = async () => {
-    try {
-      setLoadingPlatforms(true);
-      setLoadingProviders(true);
-      const [platList, provList] = await Promise.allSettled([
-        fetchConnectedPlatforms(),
-        fetchProviderList(),
-      ]);
-      if (platList.status === "fulfilled") setConnectedPlatforms(platList.value);
-      if (provList.status === "fulfilled") setProviders(provList.value);
-    } catch {
-      // Ignore background failure, fallback options will be displayed
-    } finally {
-      setLoadingPlatforms(false);
-      setLoadingProviders(false);
-    }
-  };
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setLoadingOptions(true);
+    setOptionsError("");
+    void Promise.allSettled([fetchConnectedPlatforms(), fetchProviderList()]).then(
+      ([platforms, models]) => {
+        if (!active) return;
+        setConnectedPlatforms(platforms.status === "fulfilled" ? platforms.value : []);
+        setProviders(models.status === "fulfilled" ? models.value : []);
+        const failures = [
+          platforms.status === "rejected" ? "平台" : "",
+          models.status === "rejected" ? "模型" : "",
+        ].filter(Boolean);
+        setOptionsError(
+          failures.length ? `${failures.join("和")}列表未能读取，可重试加载或使用默认选择。` : "",
+        );
+        setLoadingOptions(false);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [open, optionsVersion]);
 
   const handleOpen = () => {
+    if (pending.current) return;
     setGroupId("");
     setGroupName("");
     setPlatform("auto");
     setProviderId("auto");
     setTemplateName("auto");
+    inferred.current = { name: "", platform: "" };
     setOpen(true);
-    loadOptions();
   };
-
-  const handleClose = () => {
-    setOpen(false);
-  };
-
-  const handleGroupIdChange = (val: string) => {
-    setGroupId(val);
-    const matched = groups.find((g) => g.group_id === val.trim());
-    if (matched) {
-      if (matched.group_name && !groupName) {
-        setGroupName(matched.group_name);
-      }
-      if (matched.platform && platform === "auto") {
-        setPlatform(matched.platform);
-      }
+  const handleGroupIdChange = (value: string) => {
+    setGroupId(value);
+    const inferPlatform = platform === "auto" || platform === inferred.current.platform;
+    const platformType = connectedPlatforms.find((item) => item.id === platform)?.type ?? platform;
+    const matches = groups.filter(
+      (group) =>
+        group.group_id === value.trim() &&
+        (inferPlatform || group.platform === platform || group.platform === platformType),
+    );
+    // 不同平台可能存在相同群号；只有唯一匹配时才补全名称或平台。
+    const match = matches.length === 1 ? matches[0] : undefined;
+    if (!groupName || groupName === inferred.current.name) {
+      const name = match?.group_name ?? "";
+      setGroupName(name);
+      inferred.current.name = name;
+    }
+    if (inferPlatform) {
+      const instances = connectedPlatforms.filter(
+        (item) => item.id === match?.platform || item.type === match?.platform,
+      );
+      const next =
+        instances.length === 1
+          ? instances[0].id
+          : connectedPlatforms.length === 0
+            ? match?.platform || "auto"
+            : "auto";
+      setPlatform(next);
+      inferred.current.platform = next;
     }
   };
-
   const handleSubmit = async () => {
-    const trimmedId = groupId.trim();
-    if (!trimmedId) {
-      message.warning("请输入目标群号");
-      return;
-    }
-
-    if (
-      templateName !== "auto" &&
-      (!ready || !templates.some((item) => item.id === templateName))
-    ) {
-      message.warning(templatesError || "请选择当前支持的模板");
-      return;
-    }
+    if (pending.current || !open) return;
+    const id = groupId.trim();
+    if (!id) throw new Error("请输入群聊或会话标识。");
+    if (templateName !== "auto" && (!ready || !templates.some((item) => item.id === templateName)))
+      throw new Error(templatesError || "所选模板当前不可用，请重新选择。");
+    pending.current = true;
     setSubmitting(true);
     try {
-      const res = await triggerNewTask(
-        trimmedId,
+      const response = await triggerNewTask(
+        id,
         groupName.trim(),
         platform,
-        providerId !== "auto" ? providerId : undefined,
-        templateName !== "auto" ? templateName : undefined,
+        providerId === "auto" ? undefined : providerId,
+        templateName === "auto" ? undefined : templateName,
       );
-      if (res.status === "ok") {
-        const traceInfo = res.trace_id ? ` (任务编号: ${res.trace_id})` : "";
-        message.success(`分析任务已提交到执行队列${traceInfo}`);
-        setOpen(false);
-        if (onSuccess) onSuccess();
-      } else {
-        message.error(`触发失败: ${res.message || "未知错误"}`);
+      if (response.status !== "ok")
+        throw new Error(response.message || "未能发起分析，请稍后重试。");
+      if (!mounted.current) return;
+      setOpen(false);
+      toast.success("分析任务已提交", {
+        description: response.trace_id ? `任务编号：${response.trace_id}` : undefined,
+      });
+      try {
+        onSuccess?.();
+      } catch {
+        toast.warning("任务已提交，列表未能更新。请手动刷新查看。");
       }
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e);
-      message.error(`请求异常: ${errMsg}`);
     } finally {
-      setSubmitting(false);
+      pending.current = false;
+      if (mounted.current) setSubmitting(false);
     }
   };
-
   return {
     open,
     groupId,
     setGroupId: handleGroupIdChange,
     groupName,
-    setGroupName,
+    setGroupName: (value: string) => {
+      inferred.current.name = "";
+      setGroupName(value);
+    },
     platform,
-    setPlatform,
+    setPlatform: (value: string) => {
+      inferred.current.platform = "";
+      setPlatform(value);
+    },
     providerId,
     setProviderId,
     templateName,
     setTemplateName,
     submitting,
     connectedPlatforms,
-    loadingPlatforms,
+    loadingPlatforms: open && loadingOptions,
     providers,
-    loadingProviders,
+    loadingProviders: open && loadingOptions,
+    optionsError,
+    refreshOptions: () => setOptionsVersion((version) => version + 1),
     templates,
     loadingTemplates,
     templatesError,
     refreshTemplates,
     handleOpen,
-    handleClose,
+    handleClose: () => {
+      if (!pending.current) setOpen(false);
+    },
     handleSubmit,
   };
 }

@@ -301,9 +301,15 @@ class TypstReportRenderer:
                 shutil.copytree(template.parent, job, dirs_exist_ok=True)
                 (job / CUSTOM_TEMPLATE_MARKER).touch()
             if builtin and theme == "HatsuneMiku":
-                data["miku_allseto"] = (
-                    self.data_dir / "typst/fonts/cjkFonts_allseto_v1.11.ttf"
-                ).is_file()
+                # 新子集优先；已有完整版继续可用，不主动删除用户字体。
+                fonts = self.data_dir / "typst/fonts"
+                data["miku_title_font"] = (
+                    "Miku AllSeto Title"
+                    if (fonts / "cjkFonts-AllSeto-Title-v1.11.ttf").is_file()
+                    else "cjkFonts"
+                    if (fonts / "cjkFonts_allseto_v1.11.ttf").is_file()
+                    else None
+                )
             shutil.copyfile(template, job / "main.typ")
             (job / "data.json").write_text(
                 json.dumps(data, ensure_ascii=False), encoding="utf-8"
@@ -327,17 +333,17 @@ class TypstReportRenderer:
                 and theme == "HatsuneMiku"
                 and data["language"] in ("zh-Hans", "zh-Hant")
             ):
-                available = data.get("miku_allseto", False)
+                title_font = data.get("miku_title_font")
                 if span:
                     span["payload"]["title_font"] = (
-                        "cjkFonts"
-                        if available
+                        title_font
+                        if title_font
                         else "Noto Sans TC"
                         if data["font_language"] == "zh-Hant"
                         else "Noto Sans SC"
                     )
-                if not available:
-                    warning = "全瀨體尚未下载，中文标题暂用 Noto；可在 WebUI 补齐 Miku 模板字体"
+                if not title_font:
+                    warning = "初音标题字体尚未下载，中文标题暂用 Noto；可在 WebUI 补齐 Miku 模板字体"
                     if span:
                         previous = span["payload"].get("warning")
                         span["payload"]["warning"] = (

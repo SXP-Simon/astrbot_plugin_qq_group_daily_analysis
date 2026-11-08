@@ -145,11 +145,11 @@ export const mockTraces: TraceRecord[] = [
               model: "deepseek-chat",
               tokens: 2220,
               system_prompt:
-                "你是一个专业的群聊总结助手。请分析以下群聊记录，提取出最核心的 3-5 个讨论话题，并生成简明扼要的摘要与讨论热度评分。",
+                "你是一个专业的群聊总结助手。请分析以下群聊记录，提取出最核心的 3-5 个讨论话题，并生成简明扼要的摘要与参与者。",
               prompt:
                 "【群聊消息记录】\n[08:24] 张三: 大家今天看了最新的 LLM 评估基准测试吗？\n[08:26] 李四: 看到了，DeepSeek V3 的代码生成表现非常亮眼。\n[08:30] 王五: 没错，本地跑量化版本体验也很流畅...\n[11:15] 赵六: 关于 React 19 的服务端组件，大家在生产环境试过了吗？",
               completion:
-                '{\n  "topics": [\n    {\n      "title": "DeepSeek V3 评估基准热议",\n      "summary": "群友热烈探讨了最新开源大模型的代码与推理能力，并分享了本地量化部署经验。",\n      "heat_score": 95\n    },\n    {\n      "title": "前端工程化与全栈架构演进",\n      "summary": "讨论了 React 19 新特性对复杂工作流的重构提升。",\n      "heat_score": 82\n    }\n  ]\n}',
+                '{\n  "topics": [\n    {\n      "topic": "DeepSeek V3 评估基准热议",\n      "detail": "群友热烈探讨了最新开源大模型的代码与推理能力，并分享了本地量化部署经验。",\n      "contributors": ["示例参与者"], "contributor_ids": ["demo-user"]\n    },\n    {\n      "topic": "前端工程化与全栈架构演进",\n      "detail": "讨论了 React 19 新特性对复杂工作流的重构提升。",\n      "contributors": ["示例参与者"], "contributor_ids": ["demo-user"]\n    }\n  ]\n}',
             },
             user_titles: {
               provider_id: "deepseek-chat",
@@ -302,9 +302,9 @@ export const mockTraces: TraceRecord[] = [
       total_tokens: 4820,
       estimated_cost: 0.0096,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 1800, completion_tokens: 420, total_tokens: 2220 },
-        quality_analyzer: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 },
-        quote_analyzer: { prompt_tokens: 820, completion_tokens: 280, total_tokens: 1100 },
+        topics: { prompt_tokens: 1800, completion_tokens: 420, total_tokens: 2220 },
+        chat_quality: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 },
+        golden_quotes: { prompt_tokens: 820, completion_tokens: 280, total_tokens: 1100 },
       },
     },
     performance_metrics: {
@@ -427,10 +427,10 @@ export const mockTraces: TraceRecord[] = [
       total_tokens: 98500,
       estimated_cost: 0.2955,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 35000, completion_tokens: 8200, total_tokens: 43200 },
-        quality_analyzer: { prompt_tokens: 22000, completion_tokens: 5800, total_tokens: 27800 },
-        comic_prompt_engine: { prompt_tokens: 12500, completion_tokens: 3800, total_tokens: 16300 },
-        quote_analyzer: { prompt_tokens: 9000, completion_tokens: 2200, total_tokens: 11200 },
+        topics: { prompt_tokens: 35000, completion_tokens: 8200, total_tokens: 43200 },
+        chat_quality: { prompt_tokens: 22000, completion_tokens: 5800, total_tokens: 27800 },
+        comic_storyboard: { prompt_tokens: 12500, completion_tokens: 3800, total_tokens: 16300 },
+        golden_quotes: { prompt_tokens: 9000, completion_tokens: 2200, total_tokens: 11200 },
       },
     },
     performance_metrics: {
@@ -593,7 +593,7 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
       total_tokens: 1200,
       estimated_cost: 0.0024,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 1200, completion_tokens: 0, total_tokens: 1200 },
+        topics: { prompt_tokens: 1200, completion_tokens: 0, total_tokens: 1200 },
       },
     },
     performance_metrics: {
@@ -689,8 +689,8 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
       total_tokens: 5600,
       estimated_cost: 0.0112,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 2800, completion_tokens: 800, total_tokens: 3600 },
-        quote_analyzer: { prompt_tokens: 1400, completion_tokens: 600, total_tokens: 2000 },
+        topics: { prompt_tokens: 2800, completion_tokens: 800, total_tokens: 3600 },
+        golden_quotes: { prompt_tokens: 1400, completion_tokens: 600, total_tokens: 2000 },
       },
     },
     performance_metrics: {
@@ -792,7 +792,7 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
               prompt:
                 "【Discord Chat History Extract】\nPixelDev: Unity 6 tilemap shader performance tricks\nSpriteMaster: Aseprite new animation layer blend mode...",
               completion:
-                '{\n  "topics": [\n    {\n      "title": "Unity 6 Tilemap 渲染管线优化",\n      "summary": "探讨了2D像素游戏的批处理渲染与自定义 Shader 性能调优方案。",\n      "heat_score": 90\n    },\n    {\n      "title": "Aseprite 像素分层动画技巧",\n      "summary": "交流了多图层调色板索引与像素光影表现手法。",\n      "heat_score": 86\n    }\n  ]\n}',
+                '{\n  "topics": [\n    {\n      "topic": "Unity 6 Tilemap 渲染管线优化",\n      "detail": "探讨了2D像素游戏的批处理渲染与自定义 Shader 性能调优方案。",\n      "contributors": ["示例参与者"], "contributor_ids": ["demo-user"]\n    },\n    {\n      "topic": "Aseprite 像素分层动画技巧",\n      "detail": "交流了多图层调色板索引与像素光影表现手法。",\n      "contributors": ["示例参与者"], "contributor_ids": ["demo-user"]\n    }\n  ]\n}',
             },
             user_titles: {
               provider_id: "claude-3-5-sonnet",
@@ -837,7 +837,7 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
       total_tokens: 6200,
       estimated_cost: 0.0155,
       per_analyzer: {
-        topic_analyzer: { prompt_tokens: 4900, completion_tokens: 1300, total_tokens: 6200 },
+        topics: { prompt_tokens: 4900, completion_tokens: 1300, total_tokens: 6200 },
       },
     },
     performance_metrics: {
@@ -985,3 +985,14 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
     },
   },
 ];
+
+mockTraces.push({
+  trace_id: "trace-platform-same-group-example",
+  group_id: "123456789",
+  group_name: "摄影交流示例群",
+  platform: "telegram",
+  trigger_type: "manual",
+  status: "succeeded",
+  started_at: (Date.now() - 86400000) / 1000,
+  duration_ms: 2100,
+});

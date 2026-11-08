@@ -191,6 +191,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/data/incremental/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按页读取群聊增量批次 */
+        get: operations["getIncrementalBatchPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config": {
         parameters: {
             query?: never;
@@ -413,6 +430,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/data/incremental/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按平台区分的增量群聊目录 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 群聊目录 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            status?: string;
+                            data?: components["schemas"]["IncrementalGroupDirectory"];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/data/checkpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询有效阶段快照 */
+        get: {
+            parameters: {
+                query?: {
+                    group_id?: string;
+                    platform?: string;
+                    date_str?: string;
+                    stage_name?: string;
+                    trace_id?: string;
+                    limit?: number;
+                    offset?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 查询结果 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            status?: string;
+                            data?: components["schemas"]["CheckpointsListResponse"];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/data/checkpoints/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 有效阶段快照的群聊身份 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 查询结果 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            status?: string;
+                            data?: {
+                                groups: string[];
+                                sessions: components["schemas"]["GroupItem"][];
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/traces": {
         parameters: {
             query?: never;
@@ -424,6 +569,23 @@ export interface paths {
         get: operations["listTraces"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/traces/{trace_id}/acknowledgement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 保存或撤销任务提醒的知晓状态 */
+        post: operations["acknowledgeTrace"];
         delete?: never;
         options?: never;
         head?: never;
@@ -702,6 +864,7 @@ export interface components {
             kind: string;
             key?: string;
             group_id?: string;
+            platform_id?: string;
             batch_id?: string;
             date_str?: string;
             stage_name?: string;
@@ -885,6 +1048,7 @@ export interface components {
             error_stage?: string | null;
             error_message?: string | null;
             stack_trace?: string | null;
+            acknowledged_at?: number | null;
             extra?: {
                 [key: string]: unknown;
             };
@@ -994,6 +1158,7 @@ export interface components {
             trace_id?: string | null;
             stage?: string | null;
             location?: string | null;
+            function_name?: string | null;
         };
         AvailableTag: {
             key: string;
@@ -1032,15 +1197,20 @@ export interface components {
             reports: components["schemas"]["SectionStats"];
             temp_files: components["schemas"]["SectionStats"];
         };
+        IncrementalGroupDirectoryItem: {
+            group_id: string;
+            platform_id: string;
+            group_name: string;
+        };
+        IncrementalGroupDirectory: {
+            groups: string[];
+            group_details: components["schemas"]["IncrementalGroupDirectoryItem"][];
+        };
         IncrementalBatchTopic: {
-            title?: string;
-            summary?: string;
-            description?: string;
-            heat_score?: number;
-            category?: string;
-            keywords?: string[];
-        } & {
-            [key: string]: unknown;
+            topic?: string;
+            detail?: string;
+            contributors?: string[];
+            contributor_ids?: string[];
         };
         ChatQualityDimension: {
             name?: string;
@@ -1056,12 +1226,9 @@ export interface components {
         };
         IncrementalBatchGoldenQuote: {
             content?: string;
-            text?: string;
-            sender_nickname?: string;
-            sender_name?: string;
-            author?: string;
-        } & {
-            [key: string]: unknown;
+            sender?: string;
+            reason?: string;
+            user_id?: string;
         };
         IncrementalBatchItem: {
             group_id: string;
@@ -1070,7 +1237,7 @@ export interface components {
             created_at_iso?: string;
             messages_count: number;
             characters_count: number;
-            topics_count: number;
+            topics_count?: number;
             topics?: components["schemas"]["IncrementalBatchTopic"][];
             golden_quotes_count?: number;
             golden_quotes?: components["schemas"]["IncrementalBatchGoldenQuote"][];
@@ -1093,19 +1260,26 @@ export interface components {
             [key: string]: unknown;
         };
         IncrementalCursorInfo: {
+            timestamp?: number | null;
             group_id: string;
             last_analyzed_timestamp: number;
-            last_message_timestamp: number;
+            last_message_timestamp: number | null;
             tracked_message_ids_count: number;
         };
         IncrementalBatchesResponse: {
+            total: number;
+            page: number;
+            page_size: number;
             group_id: string;
+            platform_id?: string;
             cursor: components["schemas"]["IncrementalCursorInfo"];
             batches: components["schemas"]["IncrementalBatchItem"][];
         };
         CheckpointItem: {
             checkpoint_id?: string;
             group_id: string;
+            group_name?: string;
+            platform?: string;
             date_str: string;
             stage_name: string;
             trace_id?: string;
@@ -1725,6 +1899,49 @@ export interface operations {
             };
         };
     };
+    getIncrementalBatchPage: {
+        parameters: {
+            query: {
+                platform_id?: string;
+                group_id: string;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 分页总数与页码来自同一次索引读取 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: components["schemas"]["IncrementalBatchesResponse"];
+                    };
+                };
+            };
+            /** @description 缺少群号或分页参数格式错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 批次读取失败或索引对应内容已变化 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getPluginConfig: {
         parameters: {
             query?: never;
@@ -2260,11 +2477,20 @@ export interface operations {
     listTraces: {
         parameters: {
             query?: {
+                /** @description 按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台 */
+                platform?: string;
                 group_id?: string;
                 status?: string;
                 trigger_type?: string;
                 limit?: number;
                 offset?: number;
+                search?: string;
+                start_time?: number;
+                end_time?: number;
+                sort_by?: string;
+                sort_order?: string;
+                before_time?: number;
+                before_id?: string;
             };
             header?: never;
             path?: never;
@@ -2283,9 +2509,72 @@ export interface operations {
                         data?: {
                             items: components["schemas"]["TraceRecord"][];
                             total: number;
+                            has_more?: boolean;
                         };
                     };
                 };
+            };
+        };
+    };
+    acknowledgeTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    acknowledged: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description 知晓状态已保存 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status?: string;
+                        data?: {
+                            trace_id: string;
+                            acknowledged_at: number | null;
+                        };
+                    };
+                };
+            };
+            /** @description 请求格式无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 任务不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 任务尚未结束 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 保存失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2414,10 +2703,15 @@ export interface operations {
     getReportHistory: {
         parameters: {
             query?: {
+                /** @description 按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台 */
+                platform?: string;
                 limit?: number;
                 offset?: number;
                 group_id?: string;
                 search?: string;
+                start_time?: number;
+                end_time?: number;
+                sort_order?: string;
             };
             header?: never;
             path?: never;

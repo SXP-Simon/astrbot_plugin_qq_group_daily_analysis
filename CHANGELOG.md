@@ -2,11 +2,144 @@
 
 ## 未发布
 
-* QQ 官方机器人支持查询群名称，新分析记录不再只能显示 OpenID。查询失败时保留上次成功获取的群名或原标识，不影响分析和发送，无需新增配置。
-* 修复 Telegram、Satori 和 QQ 官方消息中已采集的回复关系在分析时丢失的问题。
-* 修复 Discord 消息中的 @ 用户信息在生成总结前丢失的问题，并将自定义表情和贴纸计入表情数量统计。
-* 修复活动图表中的表情分布遗漏，与报告总数、用户统计采用一致的计算方式。
-* 断点续跑继续保留已保存的 @ 提及和回复关系，兼容旧任务数据，无需修改配置。
+### 控制台焕新
+
+* 重新设计总览、分析记录、统计、报告、日志、配置和数据页面，以及相关弹窗。保留原有功能，统一浅色、深色与窄屏体验；切换页面保留筛选、编辑内容和滚动位置。
+* 默认配色对齐 AstrBot；宿主支持传递自定义配色时，按钮、选中项和图表会随之更新，旧版宿主使用插件默认配色。警告和错误仍分别使用黄色、红色，避免与普通选中状态混淆。
+* 总览先展示分析统计和趋势，下方集中查看并行任务与近期异常。“需要关注”中的记录可标记为“已知晓”，换设备也会保留，并可撤销。
+
+### 界面预览
+
+部分截图使用示例数据，点击图片可查看原图。
+
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>总览</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview-20261108-b3eb04579d.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview-20261108-b3eb04579d.png" alt="总览" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>配置与校验</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/config-20261108-3d36f42581.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/config-20261108-3d36f42581.png" alt="配置与校验" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>分析记录</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/traces-20261108-de3b7d2ba0.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/traces-20261108-de3b7d2ba0.png" alt="分析记录" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告与重绘</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/reports-20261108-29096c774f.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/reports-20261108-29096c774f.png" alt="报告与重绘" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>统计与消耗</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/statistics-20261108-1ab5371b6c.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/statistics-20261108-1ab5371b6c.jpg" alt="统计与消耗" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>日志</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/logs-20261108-8ce3608813.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/logs-20261108-8ce3608813.png" alt="日志" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>任务阶段与渲染回退</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/task-diagnosis-20261108-c6b0ca7c4a.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/task-diagnosis-20261108-c6b0ca7c4a.jpg" alt="任务阶段与渲染回退" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>继续分析</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume-20261108-ee6a4545b4.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume-20261108-ee6a4545b4.jpg" alt="继续分析" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>数据与阶段快照</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/data-checkpoints-20261108-299de32635.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/data-checkpoints-20261108-299de32635.png" alt="数据与阶段快照" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>Typst 字体管理</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png" alt="Typst 字体管理" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告模板画廊</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/template-gallery-20261108-9440eea52d.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/template-gallery-20261108-9440eea52d.png" alt="报告模板画廊" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告文件管理</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/report-file-management-20261108-14aca297cb.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/report-file-management-20261108-14aca297cb.png" alt="报告文件管理" width="100%"></a>
+    </td>
+  </tr>
+</table>
+
+### 任务详情与排障
+
+* 任务详情日志与日志页使用相同的等级配色，警告和错误更容易辨认。Ctrl+A / Command+A 只全选日志，复制使用 Ctrl+C / Command+C 或“复制日志”；修复受限环境复制后弹窗跳回顶部的问题。
+
+* 阶段树与所选阶段的详情并排展示，优先展开正在执行或异常的步骤，保留重试及失败后的恢复过程。顶层耗时占比按任务计算，子阶段按父阶段计算；并行和父子阶段不再重复累加，缺失记录显示“未记录”。
+* 可按模块查看提示词、重试和校正记录，以及模型调用、T2I 各轮渲染、截图超时、请求等待上限、字体素材、Typst 子阶段和内存记录。日志、原始数据与报告文件可从详情直接打开。
+* 日志采用紧凑排版，保留错误堆栈，并显示文件名、行号和函数名。功能分类使用中文，补齐 T2I、Typst、字体素材、任务、增量分析和平台等分类，便于筛选和关联任务。
+* 快速切换或关闭详情时，旧请求不再覆盖当前内容；运行任务和实时日志不会被较旧的查询结果重新显示。离开日志页后暂停订阅，返回后恢复原筛选。
+
+### 多机器人接入与增量分析
+
+* 同一个 AstrBot 接入多个机器人时，即使加入同号群，也会按机器人实例分别保存增量批次、分析进度和历史结果。同一会话的同类重复任务仍会拦截，不同实例不再仅因群号相同而互相误拦；全局大模型并发上限继续有效。
+* 命令、工具调用、定时任务和 WebUI 使用一致的实例身份。存在多个同类接入、仅凭平台名称无法确定目标时，会提示选择具体实例，不再随意选中其中一个；报告查询也按对应实例查找结果。
+* 删除、编辑或重置增量数据时，与对应会话的分析任务互斥，避免重置后又被运行中的任务写回。取消排队任务不会误释放其他任务占用的并发名额。
+* 增量进度读取失败或损坏时，停止本次分析并提示错误，避免把存储故障当成首次分析而重新消耗 Token；正常首次分析不受影响。
+* 增量批次支持分页和跨页选择，详情按实际数据展示话题、摘要、参与者、金句作者及聊天质量；修复话题名称和摘要字段不匹配的问题，去掉没有真实数据来源的热度数值。
+
+### 历史报告与继续分析
+
+* 预览超过 30 秒会提示仍在等待结果，并继续等待文件，不再因插件自身的等待上限提前报错。关闭或切换预览后，迟到结果不会覆盖当前内容；实际读取失败仍可重试。已有的服务器文件位置可在加载期间查看和复制，无需等待图片完成。
+
+* 每次分析独立保存历史结果和报告文件，同一分钟生成多份报告、不同实例分析同号群时不再相互覆盖。
+* 重绘和“继续分析”优先读取原任务保存的产物，不再因群号相同借用其他任务或实例的数据。指定任务的快照缺失时，不再自动退回归属不明的旧快照；删除快照也只处理指定任务。
+* 修复同时点击“继续分析”可能重复受理，以及任务刚受理就取消时留下运行中记录的问题。取消仍针对具体任务，不会取消另一个实例的同号群任务。
+* 报告、任务产物和文件管理的图片预览统一支持拖动、滚轮缩放、双指缩放、旋转和原尺寸查看；长图按宽度展开，方便阅读正文。保留原图、HTML 下载与换模板重绘。操作失败会保留选择和具体原因；生成成功但列表刷新失败时分别提示。
+* 减少预览时的重复传输，未变化的文件可复用浏览器缓存，文件替换后重新读取；读取超时可直接重试。HTML 等待外链素材时增加提示，已有内容仍可阅读。
+
+### 查询、统计与数据管理
+
+* 分析记录、统计、报告和阶段快照可按平台筛选，群聊选项显示群名和群号，区分不同接入的同号群。无法确认平台的旧记录仍可查看，并标为未记录平台。
+* 报告日期筛选和时间排序作用于全部历史，不再只处理当前页；已确认删除的报告文件不再占用总数。分析记录及快照的总数与列表使用同一次读取结果，相同排序值有固定顺序。
+* 浏览历史时，新任务完成只提示有更新，不再强制跳页。统计页可继续加载更早记录，选中的任务离开当前范围时会明确提示；缺失用量不补零，模块合计与任务总量不一致时会提示核对。
+* 数据管理保留各分区原有的搜索、分页、跨页选择及确认删除，删除后自动回到有效页码。修复管理窗口加载时闪出空列表、参考素材长路径被挤成竖排，以及切换记录后混入旧内容的问题。
+
+### 配置、模板与字体
+
+* 配置分组会显示“已修改 N 项”，改动字段用淡主题色和文字标记，改回原值或保存成功后清除；方案列表内部的优先级、格式等字段也可区分是否修改，错误提示仍保留红色。
+* 配置有未保存的修改时，切换到其他页面会持续显示黄色提醒，可一键返回配置，草稿仍会保留；保存成功后提醒消失。独立打开控制台时，刷新或关闭页面会请求浏览器确认，是否弹出由浏览器决定；AstrBot 宿主内不强行拦截切页。
+* 保存配置时会检查字段类型、预设选项、嵌套方案和数值范围，例如并发数不能为零、透明度须在 0–1 之间，破损的人格映射 JSON 不能保存。页面会定位错误；后端同样拦截格式错误的数据，保留当前配置和未保存的编辑。自定义地址及扩展字段仍可保留，格式检查不代替服务连通性测试。
+* 配置按分组浏览和搜索，渲染方案等列表可添加、调整和测试。模型和人格从 AstrBot 已配置的候选中搜索选择，支持清空和使用默认配置，避免手填 ID 出错；CDN 等自定义地址仍可填写。输入框的中文占位提示使用页面字体。保存失败保留草稿，保存期间的新编辑不会丢失；重新读取前确认未保存内容，上传结果不会错填到另一个条目。
+* 字体、模板素材和自定义模板继续支持下载、上传、替换及管理。下载进度、失败原因和取消状态更清楚，安装或删除失败可保留输入重试；配置备份可按版本和时间查看，逐层展开原始内容。
+* 初音 Typst 报告的固定中文标题改用约 14 KB 的字体子集，替代约 30 MiB 的完整字库，字形不变。可在“数据 → 存储空间概览 → Typst 字体”补齐；已有完整版仍可使用，HTML / T2I 使用的 WOFF2 不受影响。
+* 控制台使用本地霞鹜文楷字体，不依赖外部字体服务；这与报告所用的字体分开管理。
+
+### 升级后需要知道
+
+* 常用入口简化了名称，功能仍在原来的页面：
+
+  | 原入口 | 新入口 |
+  | --- | --- |
+  | 运行总览 | 总览 |
+  | 统计与消耗 | 统计 |
+  | 历史报告 | 报告 |
+  | 运行日志 | 日志 |
+  | 配置中心 | 配置 |
+  | 数据管理 | 数据 |
+  | 幂等续跑 | 继续分析 |
+
+* 升级前按群号保存的增量数据会接续到一个机器人实例，并保留原始备份，不会复制给所有同号群。缺少平台信息或完整快照的旧任务，可能无法直接继续分析，需要选择具体会话重新发起。
+* 若只想让某一个接入分析某个群，请在启用名单中填写完整 UMO；仅填写群号仍沿用原有匹配规则。不同实例不会共享大模型分析结果，避免重复消耗需通过启用范围和并发配置控制。
+
+---
+
+<details>
+<summary>📋 点击查看历史更新日志</summary>
 
 ## [v5.9.4] - Typst 本地报告、字体与素材管理、分析任务恢复改进
 
@@ -78,11 +211,6 @@
 * 修复 Base64 图片被当作文件路径保存、出现「文件名过长」而无法留存历史报告的问题。
 * 修复重绘没有生成有效报告却返回成功、恢复时误用其他任务快照，以及历史报告扫描与索引查询筛选不一致等情况。
 * 改善持久化操作对异步分析的阻塞，补齐任务取消后的清理，并修正 Token 汇总及统计时间范围边界。
-
----
-
-<details>
-<summary>📋 点击查看历史更新日志</summary>
 
 ## [v5.9.3] - 修复容器内 T2I 地址校验，渲染方案可单独测试
 

@@ -1,131 +1,218 @@
-import { useEffect, useRef, useState } from "react";
-import { message } from "antd";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { subscribeSSE } from "../../../shared/api/bridge";
 import { fetchPluginLogs, clearPluginLogs as apiClearLogs } from "../../../entities/log/api/logApi";
-import { AvailableTag, PluginLogItem } from "../../../entities/log/model/types";
+import {
+  logEntrySchema,
+  type AvailableTag,
+  type PluginLogItem,
+} from "../../../entities/log/model/types";
+import { copyToClipboard } from "../../../shared/lib/clipboard";
 
-export function useLogsViewModel() {
+export function useLogsViewModel(active = true) {
   const [logs, setLogs] = useState<PluginLogItem[]>([]);
   const [total, setTotal] = useState(0);
   const [availableTags, setAvailableTags] = useState<AvailableTag[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // 筛选条件
+  const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [clearing, setClearing] = useState(false);
   const [search, setSearch] = useState("");
-  const [level, setLevel] = useState<string | undefined>(undefined);
-  const [tag, setTag] = useState<string | undefined>(undefined);
-  const [traceId, setTraceId] = useState<string | undefined>(undefined);
+  const [level, setLevel] = useState<string>();
+  const [tag, setTag] = useState<string>();
+  const [traceId, setTraceId] = useState<string>();
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const requestSequence = useRef(0);
+  const pending = useRef<number | null>(null);
+  const clearingRef = useRef(false);
+  const activeRef = useRef(active);
+  const autoRef = useRef(autoRefresh);
+  const mounted = useRef(true);
+  const knownIds = useRef(new Set<string>());
+  const streamed = useRef(new Map<string, PluginLogItem>());
+  activeRef.current = active;
+  autoRef.current = autoRefresh;
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    const requests = requestSequence;
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      ++requests.current;
+    };
+  }, []);
 
-  const loadLogs = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const res = await fetchPluginLogs({
-        limit: 200,
-        search: search.trim() || undefined,
-        level: level || undefined,
-        tag: tag || undefined,
-        trace_id: traceId || undefined,
-      });
-      setLogs(res.items || []);
-      setTotal(res.total || 0);
-      if (res.available_tags && res.available_tags.length > 0) {
+  const loadLogs = useCallback(
+    async (silent = false) => {
+      if (
+        !activeRef.current ||
+        clearingRef.current ||
+        (silent && (!autoRef.current || pending.current !== null))
+      )
+        return;
+      const request = ++requestSequence.current;
+      pending.current = request;
+      streamed.current.clear();
+      setLoading(!silent);
+      setError("");
+      try {
+        const res = await fetchPluginLogs({
+          limit: 200,
+          search: search.trim() || undefined,
+          level,
+          tag,
+          trace_id: traceId,
+        });
+        if (!mounted.current || !activeRef.current || request !== requestSequence.current) return;
+        // 请求期间到达的实时日志不能被稍旧的查询快照覆盖。
+        const ids = new Set(res.items.map((item) => item.id));
+        const additions = [...streamed.current.values()].filter((item) => !ids.has(item.id));
+        const items = [...additions, ...res.items]
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 300);
+        knownIds.current = new Set(items.map((item) => item.id));
+        setLogs(items);
+        setTotal(res.total + additions.length);
         setAvailableTags(res.available_tags);
+      } catch (reason) {
+        if (mounted.current && activeRef.current && request === requestSequence.current)
+          setError(
+            reason instanceof Error ? "日志加载失败：" + reason.message : "日志加载失败，请重试。",
+          );
+      } finally {
+        if (pending.current === request) pending.current = null;
+        if (mounted.current && request === requestSequence.current) setLoading(false);
       }
-    } catch {
-      // 忽略加载异常
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  };
+    },
+    [search, level, tag, traceId],
+  );
 
-  const handleClearLogs = async () => {
-    try {
-      await apiClearLogs();
-      setLogs([]);
-      setTotal(0);
-      message.success("日志缓冲已清空");
-    } catch {
-      message.error("清空日志失败");
-    }
-  };
-
-  // 初始与条件变化加载
   useEffect(() => {
-    loadLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, level, tag, traceId]);
+    const requests = requestSequence;
+    if (active) void loadLogs();
+    else setLoading(false);
+    return () => {
+      ++requests.current;
+      pending.current = null;
+    };
+  }, [active, loadLogs]);
 
-  // SSE 实时推流：收到后端 log_entry 毫秒级直接上屏
   useEffect(() => {
+    if (!active || !autoRefresh) return;
+    let listening = true;
     const unsubscribe = subscribeSSE({
-      onMessage: (eventPayload: unknown) => {
-        if (!autoRefresh) return;
+      onMessage: (event: unknown) => {
         if (
-          eventPayload &&
-          typeof eventPayload === "object" &&
-          "event" in eventPayload &&
-          (eventPayload as { event: string }).event === "log_entry"
-        ) {
-          const entry = (eventPayload as unknown as { data?: PluginLogItem })?.data;
-          if (entry && entry.id) {
-            // 实时检查是否匹配当前筛选条件
-            if (level && entry.level !== level) return;
-            if (tag && entry.tag.toLowerCase() !== tag.toLowerCase()) return;
-            if (traceId && entry.trace_id !== traceId) return;
-            if (
-              search.trim() &&
-              !entry.message.toLowerCase().includes(search.trim().toLowerCase()) &&
-              !(entry.trace_id || "").toLowerCase().includes(search.trim().toLowerCase()) &&
-              !entry.logger_name.toLowerCase().includes(search.trim().toLowerCase()) &&
-              !(entry.location || "").toLowerCase().includes(search.trim().toLowerCase())
-            ) {
-              return;
-            }
-
-            setLogs((prev) => {
-              // 防重
-              if (prev.some((item) => item.id === entry.id)) return prev;
-              return [entry, ...prev.slice(0, 300)];
-            });
-            setTotal((t) => t + 1);
-          }
+          !listening ||
+          clearingRef.current ||
+          !event ||
+          typeof event !== "object" ||
+          !("event" in event) ||
+          event.event !== "log_entry" ||
+          !("data" in event)
+        )
+          return;
+        const parsed = logEntrySchema.safeParse(event.data);
+        if (!parsed.success) return;
+        const entry = parsed.data;
+        if (
+          (level && entry.level !== level) ||
+          (tag && entry.tag.toLowerCase() !== tag.toLowerCase()) ||
+          (traceId && entry.trace_id !== traceId)
+        )
+          return;
+        const keyword = search.trim().toLowerCase();
+        if (
+          keyword &&
+          ![
+            entry.message,
+            entry.trace_id,
+            entry.logger_name,
+            entry.location,
+            entry.function_name,
+          ].some((value) => value?.toLowerCase().includes(keyword))
+        )
+          return;
+        if (pending.current !== null) {
+          streamed.current.set(entry.id, entry);
+          if (streamed.current.size > 300)
+            streamed.current.delete(streamed.current.keys().next().value!);
         }
+        if (knownIds.current.has(entry.id)) return;
+        knownIds.current.add(entry.id);
+        if (knownIds.current.size > 600)
+          knownIds.current = new Set([...knownIds.current].slice(-300));
+        setLogs((previous) =>
+          [entry, ...previous].sort((a, b) => b.timestamp - a.timestamp).slice(0, 300),
+        );
+        setTotal((count) => count + 1);
       },
     });
-
     return () => {
-      if (unsubscribe) unsubscribe();
+      listening = false;
+      unsubscribe?.();
     };
-  }, [autoRefresh, level, tag, traceId, search]);
+  }, [active, autoRefresh, level, tag, traceId, search]);
 
-  // 兜底轮询 (每 5 秒同步一次全量指标与未连接状态)
   useEffect(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    if (autoRefresh) {
-      pollRef.current = setInterval(() => {
-        loadLogs(true);
-      }, 5000);
-    }
+    if (!active || !autoRefresh) return;
+    const requests = requestSequence;
+    const timer = setInterval(() => void loadLogs(true), 5000);
     return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      clearInterval(timer);
+      ++requests.current;
+      pending.current = null;
+      setLoading(false);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh, search, level, tag, traceId]);
+  }, [active, autoRefresh, loadLogs]);
+
+  const clearLogs = async () => {
+    if (clearingRef.current) return false;
+    clearingRef.current = true;
+    ++requestSequence.current;
+    pending.current = null;
+    setLoading(false);
+    setClearing(true);
+    setError("");
+    setFeedback("");
+    try {
+      await apiClearLogs();
+      if (!mounted.current) return false;
+      knownIds.current.clear();
+      streamed.current.clear();
+      setLogs([]);
+      setTotal(0);
+      setFeedback("日志缓冲已清空");
+      return true;
+    } catch (reason) {
+      if (mounted.current)
+        setError(
+          reason instanceof Error ? "清空日志失败：" + reason.message : "清空日志失败，请重试。",
+        );
+      return false;
+    } finally {
+      clearingRef.current = false;
+      if (mounted.current) setClearing(false);
+    }
+  };
+
+  const copyLogs = async () => {
+    if (!logs.length) {
+      setFeedback("暂无可复制的日志");
+      return;
+    }
+    const ok = await copyToClipboard(logs.map((item) => item.raw).join("\n"));
+    if (mounted.current)
+      setFeedback(ok ? "已复制 " + logs.length + " 条日志" : "复制失败，请手动选中文本后复制。");
+  };
 
   return {
     logs,
     total,
     availableTags,
     loading,
+    error,
+    feedback,
+    clearing,
     search,
     setSearch,
     level,
@@ -136,7 +223,8 @@ export function useLogsViewModel() {
     setTraceId,
     autoRefresh,
     setAutoRefresh,
-    clearLogs: handleClearLogs,
-    refresh: (silent = false) => loadLogs(silent),
+    clearLogs,
+    copyLogs,
+    refresh: loadLogs,
   };
 }

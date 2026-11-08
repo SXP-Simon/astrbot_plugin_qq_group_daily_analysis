@@ -195,6 +195,7 @@ async def test_report_entry_points_forward_bound_renderer(entry, monkeypatch, tm
     adapter.get_platform_name.return_value = "qq_official"
     adapter.send_text_report = AsyncMock(return_value=True)
     manager = MagicMock()
+    manager.resolve_platform_id.side_effect = lambda value: value
     manager.get_adapter.return_value = adapter
 
     if entry in ("manual", "manual_summary"):

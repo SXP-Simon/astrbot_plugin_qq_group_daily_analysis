@@ -1,6 +1,5 @@
-import React from "react";
 import { resolveSpanOutcome } from "../model/spanOutcome";
-import { useTheme } from "../../../shared/lib/useTheme";
+import { getRenderAttemptDiagnostic } from "../model/renderAttempts";
 
 interface SpanAlertsProps {
   stageName: string;
@@ -8,117 +7,76 @@ interface SpanAlertsProps {
   payload?: Record<string, unknown>;
 }
 
-export const SpanAlerts: React.FC<SpanAlertsProps> = ({ stageName, status, payload }) => {
-  const { isDark } = useTheme();
-
+export function SpanAlerts({ stageName, status, payload }: SpanAlertsProps) {
   const outcome = resolveSpanOutcome(status, payload);
-  const isFailed = outcome === "failed";
-
+  const messages: { label: string; value: unknown; danger?: boolean; warning?: boolean }[] = [];
+  const renderDiagnostic = getRenderAttemptDiagnostic(payload);
+  if (renderDiagnostic)
+    messages.push({
+      label: renderDiagnostic.label,
+      value: `此前失败原因：${renderDiagnostic.reason}`,
+      warning: true,
+    });
+  if (outcome === "cancelled") messages.push({ label: "已停止", value: "该阶段已停止。" });
+  if (payload?.failure_reason)
+    messages.push({ label: "原始失败原因", value: payload.failure_reason });
+  if (payload?.mode === "basic" && payload.reason)
+    messages.push({ label: "恢复原因", value: payload.reason });
+  if (outcome === "failed")
+    messages.push({
+      label: "阶段执行异常",
+      value: payload?.error || "该阶段执行失败，未记录具体原因。",
+      danger: true,
+    });
+  if (outcome !== "failed" && payload?.warning)
+    messages.push({ label: "阶段警告", value: payload.warning, warning: true });
+  if (Array.isArray(payload?.subtask_errors)) {
+    for (const error of payload.subtask_errors) {
+      if (error != null && error !== "") messages.push({ label: "子任务异常", value: error });
+    }
+  }
+  if (
+    stageName.toUpperCase() === "LLM_ANALYSIS" &&
+    ["success", "warning", "skipped"].includes(outcome)
+  ) {
+    const features = payload?.enabled_features;
+    const flags = new Map<string, unknown>(
+      Object.entries(
+        features && typeof features === "object" && !Array.isArray(features) ? features : {},
+      ),
+    );
+    const knownFlags = ["topics", "user_titles", "golden_quotes", "chat_quality"].map((key) =>
+      flags.get(key),
+    );
+    if (knownFlags.every((flag) => flag === false)) {
+      messages.push({ label: "未启用分析模块", value: "话题、群友画像、金句和质量锐评均未开启。" });
+    } else if (
+      knownFlags.some((flag) => flag === true) &&
+      payload?.topics_count === 0 &&
+      payload.user_titles_count === 0 &&
+      payload.golden_quotes_count === 0 &&
+      payload.chat_quality_review === false
+    ) {
+      messages.push({
+        label: "未记录分析结果",
+        value: "本阶段记录的话题、画像、金句和质量锐评均为空，可展开提示词与模型返回查看。",
+      });
+    }
+  }
+  if (!messages.length) return null;
   return (
-    <>
-      {outcome === "cancelled" && (
-        <div style={{ color: isDark ? "#8b949e" : "#64748b", marginBottom: 8 }}>
-          该阶段已取消，后续步骤已停止。
-        </div>
-      )}
-      {typeof payload?.failure_reason === "string" && (
-        <div style={{ marginBottom: 8, overflowWrap: "anywhere" }}>
-          原始失败原因：{payload.failure_reason}
-        </div>
-      )}
-      {payload?.mode === "basic" && typeof payload.reason === "string" && (
-        <div style={{ marginBottom: 8, overflowWrap: "anywhere" }}>恢复原因：{payload.reason}</div>
-      )}
-      {/* 异常提示 */}
-      {isFailed && (
+    <div className="mb-4 space-y-3 text-sm" aria-label="阶段提示">
+      {messages.map(({ label, value, danger, warning }, index) => (
         <div
-          style={{
-            padding: "6px 10px",
-            background: isDark ? "rgba(220, 38, 38, 0.1)" : "#fef2f2",
-            borderLeft: "3px solid #ef4444",
-            borderRadius: "0 4px 4px 0",
-            color: isDark ? "#fca5a5" : "#b91c1c",
-            fontSize: 11,
-            marginBottom: 8,
-            lineHeight: 1.5,
-          }}
+          key={index}
+          className={`border-0 border-l-2 border-solid px-3 py-2 ${danger ? "border-destructive bg-destructive/10 text-destructive" : warning ? "border-warning bg-warning/10 text-warning" : "border-border text-foreground"}`}
         >
-          <span style={{ fontWeight: 600, marginRight: 6 }}>阶段执行异常：</span>
-          <span className="font-mono">{String(payload?.error || "该流程执行异常中断")}</span>
+          <p className="m-0 font-medium">{label}</p>
+          <p className="mb-0 mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+            {typeof value === "string" ? value : JSON.stringify(value)}
+          </p>
         </div>
-      )}
-
-      {/* 警告/降级提示 */}
-      {!isFailed && Boolean(payload?.warning) && (
-        <div
-          style={{
-            padding: "6px 10px",
-            background: isDark ? "rgba(217, 119, 6, 0.1)" : "#fffbeb",
-            borderLeft: "3px solid #f59e0b",
-            borderRadius: "0 4px 4px 0",
-            color: isDark ? "#fbbf24" : "#92400e",
-            fontSize: 11,
-            marginBottom: 8,
-            lineHeight: 1.5,
-          }}
-        >
-          <span style={{ fontWeight: 600, marginRight: 6 }}>阶段警告：</span>
-          <span className="font-mono">{String(payload?.warning)}</span>
-        </div>
-      )}
-
-      {/* 子任务错误提示 */}
-      {Array.isArray(payload?.subtask_errors) && payload.subtask_errors.length > 0 && (
-        <div
-          style={{
-            padding: "6px 10px",
-            background: isDark ? "rgba(217, 119, 6, 0.1)" : "#fffbeb",
-            borderLeft: "3px solid #f59e0b",
-            borderRadius: "0 4px 4px 0",
-            color: isDark ? "#fbbf24" : "#92400e",
-            fontSize: 11,
-            marginBottom: 8,
-            lineHeight: 1.5,
-          }}
-        >
-          <div style={{ fontWeight: 600, marginBottom: 2 }}>部分子任务调用异常：</div>
-          {payload.subtask_errors.map((err: string, i: number) => (
-            <div key={i} className="font-mono" style={{ fontSize: 10, marginTop: 1 }}>
-              • {err}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* LLM 分析未产出提示 */}
-      {stageName === "LLM_ANALYSIS" &&
-        payload?.topics_count === 0 &&
-        (!payload?.prompt_tokens || payload?.prompt_tokens === 0) &&
-        (!Array.isArray(payload?.subtask_errors) || payload?.subtask_errors.length === 0) && (
-          <div
-            style={{
-              padding: "6px 10px",
-              background: isDark ? "rgba(217, 119, 6, 0.1)" : "#fffbeb",
-              borderLeft: "3px solid #f59e0b",
-              borderRadius: "0 4px 4px 0",
-              color: isDark ? "#fbbf24" : "#92400e",
-              fontSize: 11,
-              marginBottom: 8,
-              lineHeight: 1.5,
-            }}
-          >
-            <span style={{ fontWeight: 600, marginRight: 6 }}>
-              {payload?.enabled_features && Object.values(payload.enabled_features).every((v) => !v)
-                ? "提示："
-                : "警告："}
-            </span>
-            <span>
-              {payload?.enabled_features && Object.values(payload.enabled_features).every((v) => !v)
-                ? "配置项中话题、群友画像、金句和质量锐评均未开启。"
-                : "模型未消耗 Token 或未能解析出任何话题/画像/金句，请检查大模型 Provider 连接与配置。"}
-            </span>
-          </div>
-        )}
-    </>
+      ))}
+    </div>
   );
-};
+}

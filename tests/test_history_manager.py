@@ -76,3 +76,31 @@ async def test_history_snapshot_records_source_trace(history, analysis, monkeypa
         assert await manager.save_analysis("123", analysis, "2026-10-29", "12:00")
     restored = await manager.get_analysis("123", "2026-10-29")
     assert restored["trace_id"] == "saved-report-source"
+
+
+@pytest.mark.asyncio
+async def test_session_history_preserves_same_minute_tasks_and_exact_lookup(history, analysis, monkeypatch):
+    from src.shared.trace_context import TraceContext
+
+    monkeypatch.setattr("src.shared.trace_context._global_trace_store", None)
+    manager, records = history
+    for platform, trace_id, count in [("first", "a1", 10), ("second", "b1", 20), ("first", "a2", 30)]:
+        analysis["statistics"].message_count = count
+        with TraceContext(trace_id=trace_id, platform=platform, group_id="123"):
+            assert await manager.save_analysis("123", analysis, "2026-10-29", "12:00", platform_id=platform)
+    versions = [value for value in records.values() if isinstance(value, dict)]
+    assert len(versions) == 3
+    assert (await manager.get_analysis("123", "2026-10-29", platform_id="first"))["statistics"]["message_count"] == 30
+    assert (await manager.get_analysis("123", "2026-10-29", platform_id="second"))["statistics"]["message_count"] == 20
+    assert (await manager.get_analysis("123", "2026-10-29", platform_id="first", trace_id="a1"))["statistics"]["message_count"] == 10
+    assert await manager.get_analysis("123", "2026-10-29", platform_id="second", trace_id="a1") is None
+    assert await manager.get_analysis("other", "2026-10-29", platform_id="first", trace_id="a1") is None
+    assert await manager.get_analysis("123", "2026-10-29", platform_id="first", trace_id="missing") is None
+
+
+@pytest.mark.asyncio
+async def test_session_history_never_adopts_unknown_legacy_owner(history):
+    manager, records = history
+    records["analysis_123_2026-10-29"] = {"statistics": {}, "trace_id": "old"}
+    assert await manager.get_analysis("123", "2026-10-29", platform_id="first") is None
+    assert records["analysis_123_2026-10-29"]["trace_id"] == "old"

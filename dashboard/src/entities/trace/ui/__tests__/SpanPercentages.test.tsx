@@ -4,6 +4,121 @@ import { SpanTimeline } from "../SpanTimeline";
 import type { TraceSpan } from "../../model/types";
 import { buildSpanTree } from "../../model/spanTree";
 
+it("实际记录为零的阶段与未记录耗时区分", () => {
+  render(
+    <SpanTimeline
+      spans={[
+        {
+          span_id: "zero",
+          trace_id: "zero",
+          stage_name: "FETCH_MESSAGES",
+          status: "success",
+          started_at: 1,
+          duration_ms: 0,
+          payload: {},
+        },
+      ]}
+      totalDurationMs={10}
+      taskStatus="succeeded"
+    />,
+  );
+  expect(screen.getByText("完成 (0ms)")).toBeVisible();
+  expect(screen.getByText("占总耗时 0%")).toBeVisible();
+});
+
+it("结束后缺失耗时不显示为零，未知父耗时不能作为占比分母", () => {
+  const spans: TraceSpan[] = [
+    {
+      span_id: "parent",
+      trace_id: "unknown",
+      stage_name: "RENDER_REPORT",
+      status: "success",
+      started_at: 1,
+      duration_ms: null,
+      payload: {},
+    },
+    {
+      span_id: "child",
+      trace_id: "unknown",
+      stage_name: "TYPST_COMPILE",
+      status: "success",
+      started_at: 1,
+      duration_ms: 10,
+      payload: { parent_span_id: "parent" },
+    },
+  ];
+  render(<SpanTimeline spans={spans} taskStatus="succeeded" />);
+  fireEvent.click(screen.getByText("报告长图渲染与生成"));
+  expect(screen.getByText("完成 (耗时未记录)")).toBeVisible();
+  expect(screen.queryByText(/占父阶段/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/占总耗时/)).not.toBeInTheDocument();
+});
+
+it("缺少当前阶段记录时只提示等待，不伪造阶段和开始时间", () => {
+  render(<SpanTimeline spans={[]} currentStage="RENDER_REPORT" taskStatus="running" />);
+  expect(screen.getByText(/尚未收到该阶段的详细记录/)).toBeVisible();
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+});
+
+it("默认展开异常子阶段的祖先，切换任务不保留旧选择", () => {
+  const parent: TraceSpan = {
+    span_id: "parent",
+    trace_id: "failure",
+    stage_name: "RENDER_REPORT",
+    status: "failed",
+    started_at: 1,
+    duration_ms: 100,
+    payload: {},
+  };
+  const child: TraceSpan = {
+    span_id: "child",
+    trace_id: "failure",
+    stage_name: "TYPST_COMPILE",
+    status: "failed",
+    started_at: 1,
+    duration_ms: 100,
+    payload: { parent_span_id: "parent", error: "示例编译错误" },
+  };
+  const view = render(<SpanTimeline spans={[parent, child]} taskStatus="failed" />);
+  expect(screen.getByRole("button", { name: /Typst 主题编译/ })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  expect(screen.getByText("示例编译错误")).toBeVisible();
+  view.rerender(
+    <SpanTimeline
+      spans={[{ ...parent, trace_id: "next", status: "skipped" }]}
+      taskStatus="skipped"
+    />,
+  );
+  expect(screen.queryByText("示例编译错误")).not.toBeInTheDocument();
+  expect(screen.getByText("已跳过 (100ms)")).toBeVisible();
+});
+
+it("无法识别的状态不当作成功，运行中耗时不冒充百分之百进度", () => {
+  const span: TraceSpan = {
+    span_id: "unknown",
+    trace_id: "unknown",
+    stage_name: "LLM_ANALYSIS",
+    status: "unrecognized",
+    started_at: 1,
+    duration_ms: null,
+    payload: {},
+  };
+  const view = render(<SpanTimeline spans={[span]} taskStatus="failed" />);
+  expect(screen.getByText("状态未记录 (耗时未记录)")).toBeVisible();
+  view.rerender(
+    <SpanTimeline
+      spans={[{ ...span, status: "running", started_at: Date.now() / 1000 - 2 }]}
+      taskStatus="running"
+    />,
+  );
+  expect(screen.getByText(/执行中 \(已运行/)).toBeVisible();
+  expect(screen.queryByText(/100%/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+});
+
 it("父阶段占任务总耗时，子阶段相对父阶段计算，短步骤不再抬高到2%", () => {
   const spans: TraceSpan[] = [
     {

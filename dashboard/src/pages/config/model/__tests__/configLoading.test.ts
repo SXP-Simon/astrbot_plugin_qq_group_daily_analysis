@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { message } from "antd";
+import { toast } from "sonner";
 import { fetchPluginConfig, savePluginConfig } from "../../../../entities/config/api/configApi";
 import {
   pluginConfigResponseSchema,
@@ -8,6 +8,7 @@ import {
 } from "../../../../entities/config/model/configContract";
 import { useConfigViewModel } from "../useConfigViewModel";
 import schema from "../../../../../../_conf_schema.json";
+import type { PluginSchema } from "../../../../entities/config/model/types";
 
 vi.mock("../../../../entities/config/api/configApi", () => ({
   fetchPluginConfig: vi.fn(),
@@ -15,15 +16,47 @@ vi.mock("../../../../entities/config/api/configApi", () => ({
   fetchAvailableProviders: vi.fn().mockResolvedValue([]),
   fetchAvailablePersonas: vi.fn().mockResolvedValue([]),
 }));
-vi.mock("antd", () => ({ message: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
 
 beforeEach(() => vi.clearAllMocks());
+
+it.each([
+  { group: "performance", field: "max_concurrent_llm", invalid: 0, valid: 2 },
+  {
+    group: "daily_comic",
+    field: "drawing_provider_overrides",
+    invalid: [{ __template_key: "openai", priority: 0.5 }],
+    valid: [{ __template_key: "openai", priority: 1 }],
+  },
+])(
+  "$group.$field 校验失败不发送保存请求，修正后可保存",
+  async ({ group, field, invalid, valid }) => {
+    vi.mocked(fetchPluginConfig).mockResolvedValue({
+      config: { [group]: { [field]: invalid } },
+      schema: schema as PluginSchema,
+    });
+    vi.mocked(savePluginConfig).mockResolvedValue({ success: true });
+    const { result } = renderHook(() => useConfigViewModel());
+    await waitFor(() => expect(result.current.configLoaded).toBe(true));
+    await act(async () => {
+      await result.current.handleSave();
+    });
+    expect(savePluginConfig).not.toHaveBeenCalled();
+    expect(result.current.errors[group][field]).toBeTruthy();
+    expect(result.current.activeCategory).toBe(group);
+    act(() => result.current.handleFieldChange(group, field, valid));
+    await act(async () => {
+      await result.current.handleSave();
+    });
+    expect(savePluginConfig).toHaveBeenCalledOnce();
+  },
+);
 
 it("加载失败要提示且禁止保存空配置", async () => {
   vi.mocked(fetchPluginConfig).mockRejectedValue(new Error("配置响应结构无效"));
   const { result } = renderHook(() => useConfigViewModel());
   await waitFor(() => expect(result.current.loading).toBe(false));
-  expect(message.error).toHaveBeenCalledWith("配置响应结构无效");
+  expect(toast.error).toHaveBeenCalledWith("配置响应结构无效");
   await act(async () => {
     await result.current.handleSave();
   });
@@ -50,10 +83,12 @@ it.each(["wrong", 123, null])(
     await waitFor(() => expect(result.current.configLoaded).toBe(true));
     expect(result.current.templateCdnBaseUrl).toBeNull();
     expect(result.current.errors.t2i_rendering.t2i_rendering_strategies).toBeTruthy();
+    act(() => result.current.setSearchQuery("隐藏错误字段"));
     await act(async () => {
       await result.current.handleSave();
     });
     expect(savePluginConfig).not.toHaveBeenCalled();
+    expect(result.current.searchQuery).toBe("");
     act(() =>
       result.current.handleFieldChange("t2i_rendering", "t2i_rendering_strategies", [
         { cdn_base_url: " https://example.com/ " },
@@ -109,7 +144,7 @@ it.each([true, false])(
       success ? initial : [],
     );
     expect(result.current.isDirty).toBe(!success);
-    expect(message.success).toHaveBeenCalledTimes(success ? 1 : 0);
+    expect(toast.success).toHaveBeenCalledTimes(success ? 1 : 0);
   },
 );
 
@@ -141,7 +176,7 @@ it("保存成功后使用新版本，发生冲突时保留用户草稿", async (
   expect(savePluginConfig).toHaveBeenLastCalledWith({ basic: { max_topics: 7 } }, nextRevision);
   expect(result.current.formData.basic.max_topics).toBe(7);
   expect(result.current.isDirty).toBe(true);
-  expect(message.error).toHaveBeenLastCalledWith("配置已被其他页面修改，请重新读取后再保存。");
+  expect(toast.error).toHaveBeenLastCalledWith("配置已被其他页面修改，请重新读取后再保存。");
 });
 
 it.each([true, false])("保存排序成功状态 %s：更新展示或保留失败草稿", async (success) => {

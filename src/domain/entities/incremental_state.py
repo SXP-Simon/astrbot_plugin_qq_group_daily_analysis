@@ -53,6 +53,17 @@ class IncrementalBatchPayload(TypedDict, total=False):
     participant_ids: list[str]
 
 
+@dataclass(frozen=True)
+class IncrementalBatchPage:
+    """同一次批次索引读取得到的分页概览。"""
+
+    items: list[IncrementalBatchPayload]
+    total: int
+    page: int
+    page_size: int
+    last_message_timestamp: int | None
+
+
 @dataclass
 class IncrementalBatch:
     """

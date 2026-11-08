@@ -1,7 +1,13 @@
-import React from "react";
-import { Tag, Progress, Space, Tooltip, theme } from "antd";
-import { SyncOutlined, WarningOutlined, DownOutlined, RightOutlined } from "@ant-design/icons";
+import {
+  IconAlertCircle,
+  IconAlertTriangle,
+  IconChevronDown,
+  IconChevronRight,
+  IconLoader2,
+} from "@tabler/icons-react";
 import { resolveSpanOutcome } from "../model/spanOutcome";
+import { getRenderAttemptDiagnostic } from "../model/renderAttempts";
+import { getSpanTiming, getDurationRatio } from "../model/spanTiming";
 import { getStageSlaThreshold } from "../model/sla";
 import { formatDuration, formatStageName } from "../../../shared/lib/formatters";
 
@@ -9,151 +15,126 @@ interface SpanHeaderProps {
   stageName: string;
   durationMs?: number | null;
   startedAt: number;
-  totalDurationMs: number;
+  totalDurationMs?: number | null;
   status: string;
+  taskStatus?: string;
   isExpanded: boolean;
+  isSelected?: boolean;
   onToggleExpand: () => void;
   payload?: Record<string, unknown>;
   parentStageName?: string;
   hasChildren?: boolean;
+  now?: number;
 }
 
-export const SpanHeader: React.FC<SpanHeaderProps> = ({
+export function SpanHeader({
   stageName,
   durationMs,
   startedAt,
   totalDurationMs,
   status,
+  taskStatus,
   isExpanded,
+  isSelected,
   onToggleExpand,
   payload,
   parentStageName,
   hasChildren = false,
-}) => {
-  const { token } = theme.useToken();
-
+  now,
+}: SpanHeaderProps) {
   const outcome = resolveSpanOutcome(status, payload);
-  const isRunning = outcome === "running";
-  const isCancelled = outcome === "cancelled";
+  const renderDiagnostic = getRenderAttemptDiagnostic(payload);
+  const timing = getSpanTiming(
+    { duration_ms: durationMs, started_at: startedAt, status },
+    taskStatus,
+    now,
+  );
+  const ratio = getDurationRatio(timing.durationMs, totalDurationMs);
+  const ratioLabel =
+    ratio !== null && ratio > 0 && ratio < 0.1 ? "<0.1" : ratio?.toFixed(1).replace(/\.0$/, "");
   const duration =
-    durationMs !== null && durationMs !== undefined
-      ? durationMs
-      : Math.max(0, Math.round((Date.now() / 1000 - (startedAt || Date.now() / 1000)) * 1000));
-
-  const durationPct = isRunning
-    ? 100
-    : Math.min(100, Math.max(0, (duration / Math.max(1, totalDurationMs)) * 100));
-  const durationPercentLabel =
-    durationPct > 0 && durationPct < 0.1 ? "<0.1" : durationPct.toFixed(1).replace(/\.0$/, "");
-
-  const { thresholdMs, description: slaDesc } = getStageSlaThreshold(stageName);
-  const isSlaExceeded = !isRunning && !isCancelled && duration > thresholdMs;
-  const isFailed = outcome === "failed";
-  const isWarning = outcome === "warning";
-
-  let color = "#52c41a";
-  let tagColor = "success";
-
-  if (isCancelled) {
-    color = token.colorTextDisabled;
-    tagColor = "default";
-  } else if (isFailed) {
-    color = "#ff4d4f";
-    tagColor = "error";
-  } else if (isRunning) {
-    color = "#1677ff";
-    tagColor = "processing";
-  } else if (isWarning) {
-    color = "#fa8c16";
-    tagColor = "warning";
-  } else if (isSlaExceeded) {
-    color = "#fa8c16";
-    tagColor = "warning";
-  }
+    timing.durationMs === null
+      ? "耗时未记录"
+      : timing.durationMs === 0
+        ? "0ms"
+        : formatDuration(timing.durationMs);
+  const labels = {
+    cancelled: "已取消",
+    failed: "失败",
+    warning: "警告",
+    success: "完成",
+    skipped: "已跳过",
+    unknown: "状态未记录",
+    running: taskStatus === "running" ? "执行中" : "状态未更新",
+  };
+  const { thresholdMs, description } = getStageSlaThreshold(stageName);
+  const slow =
+    !timing.live &&
+    timing.durationMs !== null &&
+    timing.durationMs > thresholdMs &&
+    outcome !== "cancelled";
 
   return (
-    <>
-      <div
-        onClick={onToggleExpand}
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          cursor: "pointer",
-          userSelect: "none",
-        }}
-      >
-        <Space size={6}>
-          {isExpanded ? (
-            <DownOutlined style={{ fontSize: 10, color: token.colorTextTertiary }} />
+    <button
+      type="button"
+      className="stage-row"
+      data-selected={isSelected || undefined}
+      data-outcome={outcome}
+      aria-current={isSelected ? "true" : undefined}
+      aria-expanded={hasChildren ? isExpanded : undefined}
+      onClick={onToggleExpand}
+    >
+      <span className="stage-row-heading">
+        {hasChildren ? (
+          isExpanded ? (
+            <IconChevronDown size={16} aria-hidden="true" />
           ) : (
-            <RightOutlined style={{ fontSize: 10, color: token.colorTextTertiary }} />
-          )}
-          <span style={{ fontWeight: 600, fontSize: 13, color: token.colorText }}>
-            {formatStageName(stageName)}
-            {stageName === "IMAGE_RENDER_ATTEMPT" && typeof payload?.strategy_name === "string" && (
-              <span style={{ fontWeight: 400 }}> · {payload.strategy_name}</span>
-            )}
-          </span>
-          {hasChildren && <Tag style={{ margin: 0, fontSize: 10 }}>含子阶段</Tag>}
-          {isSlaExceeded && (
-            <Tooltip title={`该阶段耗时已超出预期的健康基线 (${slaDesc})`}>
-              <Tag
-                color="warning"
-                icon={<WarningOutlined />}
-                style={{ margin: 0, fontSize: 10, padding: "0 4px", lineHeight: "18px" }}
-              >
-                耗时超出健康基线
-              </Tag>
-            </Tooltip>
-          )}
-        </Space>
-
-        <Space size={6}>
-          {!isRunning && (
-            <Tooltip
-              title={
-                parentStageName
-                  ? `相对于「${formatStageName(parentStageName)}」的耗时，父子阶段不能重复累加`
-                  : "相对于本次任务的总耗时"
-              }
-            >
-              <span style={{ fontSize: 11, color: token.colorTextSecondary, whiteSpace: "nowrap" }}>
-                {parentStageName ? "占父阶段" : "占总耗时"} {durationPercentLabel}%
-              </span>
-            </Tooltip>
-          )}
-          <Tag
-            color={tagColor}
-            icon={isRunning ? <SyncOutlined spin /> : undefined}
-            style={{
-              fontSize: 11,
-              borderRadius: 4,
-              margin: 0,
-              fontWeight: 600,
-            }}
+            <IconChevronRight size={16} aria-hidden="true" />
+          )
+        ) : (
+          <IconChevronRight size={16} aria-hidden="true" />
+        )}
+        <span className="stage-name">
+          {formatStageName(stageName)}
+          {stageName === "IMAGE_RENDER_ATTEMPT" &&
+            typeof payload?.strategy_name === "string" &&
+            ` · ${payload.strategy_name}`}
+        </span>
+        {hasChildren && <small>含子阶段</small>}
+      </span>
+      <span className="stage-row-meta">
+        {outcome === "running" && taskStatus === "running" && (
+          <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
+        )}
+        <span className="stage-status">
+          {outcome === "warning" && <IconAlertTriangle size={14} aria-hidden="true" />}
+          {outcome === "failed" && <IconAlertCircle size={14} aria-hidden="true" />}
+          {labels[outcome]} ({timing.live ? "已运行 " : ""}
+          {duration})
+        </span>
+        {ratio !== null && (
+          <span
+            title={
+              parentStageName
+                ? `相对于「${formatStageName(parentStageName)}」耗时；父子不能重复累加，并行阶段不累计为任务耗时。`
+                : "相对于本次任务总耗时，不表示完成进度。"
+            }
           >
-            {isCancelled
-              ? `已取消 (${formatDuration(durationMs ?? 0)})`
-              : isRunning
-                ? `执行中 (${formatDuration(duration)})`
-                : isWarning
-                  ? `警告 (${formatDuration(durationMs ?? 0)})`
-                  : isFailed
-                    ? `失败 (${formatDuration(durationMs ?? 0)})`
-                    : formatDuration(durationMs ?? 0)}
-          </Tag>
-        </Space>
-      </div>
-
-      <Progress
-        percent={isRunning ? 100 : durationPct}
-        status={isRunning ? "active" : "normal"}
-        size="small"
-        showInfo={false}
-        strokeColor={color}
-        style={{ margin: "4px 0 2px 0" }}
-      />
-    </>
+            {parentStageName ? "占父阶段" : "占总耗时"} {ratioLabel}%
+          </span>
+        )}
+      </span>
+      {ratio !== null && (
+        <span className="stage-duration-track" aria-hidden="true">
+          <span style={{ width: `${Math.min(100, ratio)}%` }} />
+        </span>
+      )}
+      {slow && (
+        <small className="stage-slow" title={description}>
+          耗时超出参考值
+        </small>
+      )}
+      {renderDiagnostic && <small className="stage-slow">{renderDiagnostic.label}</small>}
+    </button>
   );
-};
+}

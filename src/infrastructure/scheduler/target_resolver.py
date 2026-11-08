@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...domain.value_objects.group_session import GroupSession
 from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from ..platform.factory import PlatformAdapterFactory
@@ -29,7 +30,7 @@ class ScheduledTargetResolver:
         """
         self.config_manager = config_manager
         self.bot_manager = bot_manager
-        self._group_name_cache: dict[tuple[str, str], str] = {}
+        self._group_name_cache: dict[GroupSession, str] = {}
 
     async def get_platform_id_for_group(self, group_id: str | int) -> str | None:
         """根据群ID获取对应的平台ID（精准验证）。
@@ -53,6 +54,7 @@ class ScheduledTargetResolver:
             logger.info(
                 f"正在验证群 {group_id} 属于哪个平台 (已注册适配器: {list(adapters.keys())})..."
             )
+            matches: set[str] = set()
             for platform_id, adapter in adapters.items():
                 try:
                     if not self.bot_manager.is_plugin_enabled(
@@ -68,13 +70,21 @@ class ScheduledTargetResolver:
                             actual_pid = self.bot_manager.get_adapter_platform_id(
                                 adapter
                             ) or str(platform_id)
-                            logger.info(f"✅ 群 {group_id} 属于平台 {actual_pid}")
-                            return actual_pid
+                            matches.add(actual_pid)
                         logger.debug(f"平台 {platform_id} 无法获取群 {group_id} 信息")
                 except Exception as e:
                     logger.debug(f"平台 {platform_id} 验证群 {group_id} 失败: {e}")
                     continue
 
+            if len(matches) == 1:
+                return next(iter(matches))
+            if len(matches) > 1:
+                logger.warning(
+                    "群 %s 同时存在于多个平台实例，请明确指定接入：%s",
+                    group_id,
+                    sorted(matches),
+                )
+                return None
             logger.error(
                 f"❌ 无法确定群 {group_id} 属于哪个平台 (已尝试适配器: {list(adapters.keys())})"
             )
@@ -100,15 +110,18 @@ class ScheduledTargetResolver:
             if pid:
                 adapter = self.bot_manager.get_adapter(pid)
                 if adapter:
-                    key = (pid, group_id)
+                    session = GroupSession(
+                        self.bot_manager.get_adapter_platform_id(adapter) or pid,
+                        group_id,
+                    )
                     # QQ 官方适配器自带成功/失败过期缓存，不能在这里永久固定旧名。
                     cache_locally = adapter.get_platform_name() != "qq_official"
-                    if cache_locally and key in self._group_name_cache:
-                        return self._group_name_cache[key]
+                    if cache_locally and session in self._group_name_cache:
+                        return self._group_name_cache[session]
                     info = await adapter.get_group_info(group_id)
                     if info and info.group_name:
                         if cache_locally and info.group_name != group_id:
-                            self._group_name_cache[key] = info.group_name
+                            self._group_name_cache[session] = info.group_name
                         return info.group_name
         except Exception:
             pass
@@ -273,4 +286,4 @@ class ScheduledTargetResolver:
             except Exception as e:
                 logger.error(f"平台 {platform_id} 获取群列表异常: {e}")
 
-        return list(all_groups)
+        return sorted(all_groups)

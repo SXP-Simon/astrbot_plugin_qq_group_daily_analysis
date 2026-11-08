@@ -16,7 +16,7 @@ async def test_failed_batch_does_not_save_checkpoint_or_advance_cursor():
     service.incremental_store = Mock(save_batch=AsyncMock(return_value=False), update_last_analyzed_cursor=AsyncMock())
     service.checkpoint_store = Mock()
     pipeline = PipelineContext(None, service.checkpoint_store, "123", "2026-10-01")
-    assert await service._persist_incremental_batch(pipeline, IncrementalBatch(group_id="123"), [], 0, set()) is None
+    assert await service._persist_incremental_batch(pipeline, IncrementalBatch(group_id="123"), [], 0, set(), service.incremental_store) is None
     service.checkpoint_store.save_checkpoint.assert_not_called()
     service.incremental_store.update_last_analyzed_cursor.assert_not_awaited()
 
@@ -44,7 +44,7 @@ async def test_cursor_advances_after_batch_and_checkpoint_attempt(checkpoint_fai
     pipeline = PipelineContext(None, service.checkpoint_store, "123", "2026-10-01")
     batch = IncrementalBatch(group_id="123", batch_id="batch", last_message_timestamp=100)
     message = UnifiedMessage(message_id="new", sender_id="u", sender_name="成员", group_id="123", text_content="消息", timestamp=100)
-    assert await service._persist_incremental_batch(pipeline, batch, [message], 100, {"old"}) == 100
+    assert await service._persist_incremental_batch(pipeline, batch, [message], 100, {"old"}, service.incremental_store) == 100
     assert order == ["batch", "checkpoint", "cursor"]
     assert service.checkpoint_store.save_checkpoint.call_args.kwargs["date_str"] == "2026-10-01"
     service.incremental_store.update_last_analyzed_cursor.assert_awaited_once_with("123", 100, {"old", "new"})

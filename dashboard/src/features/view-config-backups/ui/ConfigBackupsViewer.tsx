@@ -1,6 +1,8 @@
-import { Alert, Button, Card, Empty, Modal, Space, Spin, Table, Typography } from "antd";
-import { HistoryOutlined, ReloadOutlined } from "@ant-design/icons";
-import type { ConfigBackupInfo } from "../../../entities/plugin-data/model/configBackup";
+import { LoadingState } from "../../../shared/ui/loading-state";
+import { IconHistory, IconRefresh } from "@tabler/icons-react";
+import { Button } from "../../../shared/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import { Pagination } from "../../../shared/ui/pagination";
 import { formatBytes } from "../../../shared/lib/formatters";
 import { useConfigBackups } from "../model/useConfigBackups";
 import { JsonBackupTree } from "./JsonBackupTree";
@@ -15,112 +17,142 @@ export function ConfigBackupsViewer() {
   const vm = useConfigBackups();
   return (
     <>
-      <Button size="small" type="link" icon={<HistoryOutlined />} onClick={vm.load}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-secondary-ink hover:bg-secondary-soft"
+        onClick={vm.load}
+      >
+        <IconHistory aria-hidden="true" />
         查看备份
       </Button>
-      <Modal
-        title="配置自动备份"
+      <Dialog
         open={vm.open}
-        onCancel={vm.close}
-        width={1080}
-        footer={<Button onClick={vm.close}>关闭</Button>}
-        destroyOnHidden
+        onOpenChange={(open) => {
+          if (!open) vm.close();
+        }}
       >
-        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-          <Space wrap>
-            <Typography.Text type="secondary">
-              选择一份备份，展开查看当时保存的原始键值。没有记录的版本和时间会标为“未记录”。
-            </Typography.Text>
-            <Button size="small" icon={<ReloadOutlined />} onClick={vm.load} loading={vm.loading}>
+        <DialogContent className="max-w-5xl">
+          <DialogTitle>配置自动备份</DialogTitle>
+          <DialogDescription>只读查看保存时的原始配置，不会覆盖当前配置。</DialogDescription>
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={vm.load} disabled={vm.loading}>
+              <IconRefresh aria-hidden="true" className={vm.loading ? "animate-spin" : undefined} />
               刷新列表
             </Button>
-          </Space>
-          {vm.error && <Alert type="error" showIcon message={vm.error} />}
-          <Table<ConfigBackupInfo>
-            size="small"
-            rowKey="filename"
-            loading={vm.loading}
-            dataSource={vm.items}
-            pagination={{ pageSize: 5, showSizeChanger: false }}
-            scroll={{ x: 800 }}
-            locale={{ emptyText: "暂无配置备份" }}
-            columns={[
-              {
-                title: "文件名",
-                dataIndex: "filename",
-                render: (value: string) => (
-                  <Typography.Text style={{ overflowWrap: "anywhere" }}>{value}</Typography.Text>
-                ),
-              },
-              {
-                title: "类型",
-                dataIndex: "kind",
-                width: 138,
-                render: (kind: ConfigBackupInfo["kind"]) => kindLabels[kind],
-              },
-              {
-                title: "插件版本",
-                dataIndex: "plugin_version",
-                width: 100,
-                render: (value: string | null) => value || "未记录",
-              },
-              {
-                title: "备份时间",
-                dataIndex: "saved_at",
-                width: 170,
-                render: (value: string | null) => (value ? value.replace("T", " ") : "未记录"),
-              },
-              {
-                title: "大小",
-                dataIndex: "size_bytes",
-                width: 85,
-                render: formatBytes,
-              },
-              {
-                title: "操作",
-                width: 90,
-                render: (_: unknown, item) =>
-                  item.error ? (
-                    <Typography.Text type="danger" title={item.error}>
-                      无法读取
-                    </Typography.Text>
-                  ) : (
-                    <Button size="small" type="link" onClick={() => vm.select(item.filename)}>
+          </div>
+          {vm.error && (
+            <p role="alert" className="m-0 text-sm text-destructive">
+              {vm.error}
+            </p>
+          )}
+          {vm.loading ? (
+            <LoadingState className="py-6 text-center text-muted-foreground">
+              正在读取备份列表…
+            </LoadingState>
+          ) : vm.items.length > 0 ? (
+            <>
+              <ul aria-label="配置备份" className="m-0 list-none divide-y divide-border p-0">
+                {vm.visibleItems.map((item) => (
+                  <li
+                    key={item.filename}
+                    className="flex flex-wrap items-start justify-between gap-3 py-3"
+                  >
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <p className="m-0 break-all font-mono text-sm">{item.filename}</p>
+                      <dl className="m-0 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                        <div>
+                          <dt className="text-muted-foreground">类型</dt>
+                          <dd className="m-0">{kindLabels[item.kind]}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">插件版本</dt>
+                          <dd className="m-0">{item.plugin_version || "未记录"}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">保存时间</dt>
+                          <dd className="m-0">
+                            {item.saved_at ? item.saved_at.replace("T", " ") : "未记录"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">大小</dt>
+                          <dd className="m-0">{formatBytes(item.size_bytes)}</dd>
+                        </div>
+                      </dl>
+                      {item.error && (
+                        <p className="m-0 break-words text-sm text-destructive">
+                          无法读取：{item.error}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant={vm.selectedFilename === item.filename ? "default" : "tonal"}
+                      size="sm"
+                      disabled={Boolean(item.error)}
+                      aria-pressed={vm.selectedFilename === item.filename}
+                      onClick={() => vm.select(item.filename)}
+                    >
                       查看
                     </Button>
-                  ),
-              },
-            ]}
-          />
+                  </li>
+                ))}
+              </ul>
+              {vm.items.length > 5 && (
+                <Pagination
+                  page={vm.page}
+                  pageSize={5}
+                  pageSizes={[5]}
+                  total={vm.items.length}
+                  onChange={vm.setPage}
+                />
+              )}
+            </>
+          ) : !vm.error ? (
+            <p role="status" className="py-6 text-center text-muted-foreground">
+              暂无配置备份
+            </p>
+          ) : null}
           {vm.detailLoading && (
-            <Spin tip="正在读取备份">
-              <div style={{ height: 80 }} />
-            </Spin>
+            <LoadingState className="text-sm text-muted-foreground">正在读取备份…</LoadingState>
           )}
-          {vm.detailError && <Alert type="error" showIcon message={vm.detailError} />}
+          {vm.detailError && (
+            <p role="alert" className="m-0 text-sm text-destructive">
+              {vm.detailError}
+            </p>
+          )}
           {vm.detail && (
-            <Card
-              size="small"
-              title={
-                <Typography.Text style={{ overflowWrap: "anywhere" }}>
-                  {vm.detail.backup.filename}
-                </Typography.Text>
-              }
+            <section
+              aria-label="备份内容"
+              className="min-w-0 space-y-3 border-t border-border pt-4"
             >
-              <div style={{ maxHeight: "50vh", overflow: "auto" }}>
+              <h3 className="m-0 break-all font-mono text-sm font-medium">
+                {vm.detail.backup.filename}
+              </h3>
+              <div
+                className="max-h-[50dvh] overflow-auto rounded-lg border border-border p-3"
+                tabIndex={0}
+                role="region"
+                aria-label="原始配置键值"
+              >
                 <JsonBackupTree
                   key={vm.detail.backup.filename}
                   label="原始 JSON"
                   value={vm.detail.content}
                 />
               </div>
-            </Card>
+            </section>
           )}
           {!vm.detail && !vm.detailLoading && !vm.detailError && vm.items.length > 0 && (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="点击“查看”展开一份备份" />
+            <p className="m-0 text-sm text-muted-foreground">选择一份备份查看内容。</p>
           )}
-        </Space>
-      </Modal>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={vm.close}>
+              关闭备份
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

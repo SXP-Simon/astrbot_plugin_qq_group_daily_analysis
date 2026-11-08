@@ -161,6 +161,7 @@ def plugin(mock_context, default_config, tmp_path: Path):
         p.plugin_id = "astrbot_plugin_qq_group_daily_analysis"
         p.get_kv_data = AsyncMock(return_value={})
         p.put_kv_data = AsyncMock()
+        p.bot_manager.resolve_platform_id = Mock(side_effect=lambda value: value)
         p._initialized = True
         return p
 
@@ -723,12 +724,14 @@ async def test_incremental_status_disabled(plugin):
 @pytest.mark.asyncio
 async def test_incremental_status_no_batches(plugin):
     event = MockEvent(group_id="123456")
+    plugin.incremental_store.for_session = AsyncMock(return_value=plugin.incremental_store)
     plugin.incremental_store.query_batches = AsyncMock(return_value=[])
 
     results = []
     async for res in plugin.incremental_status(event):
         results.append(res)
 
+    plugin.incremental_store.for_session.assert_awaited_once_with("123456", event.get_platform_id())
     assert any("尚无增量分析数据" in r.get("text", "") for r in results)
 
 
@@ -743,6 +746,7 @@ async def test_incremental_status_with_batches(plugin):
             end_time=time.time(),
         )
     ]
+    plugin.incremental_store.for_session = AsyncMock(return_value=plugin.incremental_store)
     plugin.incremental_store.query_batches = AsyncMock(return_value=fake_batches)
 
     mock_state = MagicMock()
@@ -761,6 +765,7 @@ async def test_incremental_status_with_batches(plugin):
     async for res in plugin.incremental_status(event):
         results.append(res)
 
+    plugin.incremental_store.for_session.assert_awaited_once_with("123456", event.get_platform_id())
     assert any("增量分析状态" in r.get("text", "") for r in results)
     assert any("累计消息: 100" in r.get("text", "") for r in results)
     assert any("话题数: 3" in r.get("text", "") for r in results)

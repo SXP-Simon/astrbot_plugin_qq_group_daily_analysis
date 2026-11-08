@@ -13,64 +13,116 @@ export const mockPluginDataOverview: PluginDataOverview = {
   temp_files: { count: 8, size_bytes: 2400000 },
 };
 
+const incrementalNow = Math.floor(Date.now() / 1000);
+
 export const mockIncrementalBatches: IncrementalBatchesResponse = {
+  total: 27,
+  page: 1,
+  page_size: 20,
   group_id: "123456789",
   cursor: {
+    timestamp: incrementalNow - 86400,
     group_id: "123456789",
-    last_analyzed_timestamp: Date.now() - 86400000,
-    last_message_timestamp: Date.now(),
+    last_analyzed_timestamp: incrementalNow - 86400,
+    last_message_timestamp: incrementalNow,
     tracked_message_ids_count: 2450,
   },
   batches: [
     {
       group_id: "123456789",
       batch_id: "batch-20260926-01",
-      timestamp: Date.now() - 43200000,
-      created_at_iso: "2026-09-26T12:00:05Z",
+      timestamp: incrementalNow - 43200,
+      created_at_iso: new Date((incrementalNow - 43200) * 1000).toISOString(),
       messages_count: 420,
       characters_count: 6850,
-      topics_count: 3,
+      topics_count: 2,
+      last_message_timestamp: incrementalNow - 43260,
+      token_usage: { total_tokens: 3600, prompt_tokens: 2800, completion_tokens: 800 },
+      chat_quality_review: {
+        title: "示例：技术交流与轻松闲聊",
+        subtitle: "讨论集中，气氛友好",
+        summary: "大家围绕实际开发问题分享经验，偶尔穿插日常话题。",
+        dimensions: [{ name: "信息交流", percentage: 75, comment: "问题和解答都有具体背景。" }],
+      },
+      golden_quotes_count: 1,
+      golden_quotes: [
+        {
+          content: "先把问题复现出来，修复就有了方向。",
+          sender: "示例小林",
+          reason: "用简单的话说明排查方法",
+          user_id: "demo-lin",
+        },
+      ],
       topics: [
         {
-          title: "React 19 特性讨论",
-          summary: "探讨了 Action 与 Server Component 在企业级开发中的应用",
-          heat_score: 88,
+          topic: "React 19 特性讨论",
+          detail: "探讨了 Action 与 Server Component 在企业级开发中的应用",
+          contributors: ["示例小林", "示例小夏"],
+          contributor_ids: ["demo-lin", "demo-xia"],
         },
         {
-          title: "LLM Agent 状态机架构",
-          summary: "探讨了断点续跑与快照恢复的设计模式",
-          heat_score: 92,
+          topic: "LLM Agent 状态机架构",
+          detail: "探讨了断点续跑与快照恢复的设计模式",
+          contributors: ["示例小林", "示例小夏"],
+          contributor_ids: ["demo-lin", "demo-xia"],
         },
       ],
     },
     {
       group_id: "123456789",
       batch_id: "batch-20260926-02",
-      timestamp: Date.now() - 21600000,
-      created_at_iso: "2026-09-26T18:00:04Z",
+      timestamp: incrementalNow - 21600,
+      created_at_iso: new Date((incrementalNow - 21600) * 1000).toISOString(),
       messages_count: 650,
       characters_count: 11200,
-      topics_count: 4,
+      topics_count: 2,
       topics: [
         {
-          title: "TypeScript 5.8 新类型语法",
-          summary: "深入分析了严格空安全与内联优化",
-          heat_score: 80,
+          topic: "TypeScript 5.8 新类型语法",
+          detail: "深入分析了严格空安全与内联优化",
+          contributors: ["示例小林", "示例小夏"],
+          contributor_ids: ["demo-lin", "demo-xia"],
         },
-        { title: "群友摸鱼技术交流", summary: "分享了开源键盘与显示器选购心得", heat_score: 75 },
+        {
+          topic: "群友摸鱼技术交流",
+          detail: "分享了开源键盘与显示器选购心得",
+          contributors: ["示例小林", "示例小夏"],
+          contributor_ids: ["demo-lin", "demo-xia"],
+        },
       ],
     },
     {
       group_id: "123456789",
       batch_id: "batch-20260926-03",
-      timestamp: Date.now() - 3600000,
-      created_at_iso: "2026-09-26T23:00:00Z",
+      timestamp: incrementalNow - 3600,
+      created_at_iso: new Date((incrementalNow - 3600) * 1000).toISOString(),
       messages_count: 470,
       characters_count: 8900,
-      topics_count: 2,
+      topics_count: 0,
     },
   ],
 };
+
+// 多页示例使用真实话题字段；明确标注示例参与者。
+for (let index = 0; index < 24; index += 1) {
+  const timestamp = incrementalNow - 45000 - index * 600;
+  mockIncrementalBatches.batches.push({
+    group_id: "123456789",
+    batch_id: `demo-batch-${String(index + 1).padStart(2, "0")}`,
+    timestamp,
+    created_at_iso: new Date(timestamp * 1000).toISOString(),
+    messages_count: 30 + index,
+    characters_count: 300 + index * 10,
+    topics: [
+      {
+        topic: `示例：周末交流 ${index + 1}`,
+        detail: "分享出游安排与做饭心得。",
+        contributors: ["示例小林"],
+        contributor_ids: ["demo-lin"],
+      },
+    ],
+  });
+}
 
 export const mockCheckpoints: CheckpointsListResponse = {
   total: 4,
@@ -79,45 +131,109 @@ export const mockCheckpoints: CheckpointsListResponse = {
       checkpoint_id: "chk-20260926-001",
       group_id: "123456789",
       date_str: "2026-09-26",
-      stage_name: "llm_analysis",
+      stage_name: "LLM_ANALYSIS",
       trace_id: "trace-20260926-001",
       data_size_bytes: 5230,
-      created_at: Date.now() - 3600000,
-      created_at_formatted: "2026-09-26 00:00:14",
+      created_at: Math.floor((Date.now() - 3600000) / 1000),
       has_data: true,
     },
     {
       checkpoint_id: "chk-20260926-002-dense",
       group_id: "8899001122",
       date_str: "2026-09-26",
-      stage_name: "comic_generation",
+      stage_name: "COMIC_DRAWING",
       trace_id: "trace-20260926-002-dense",
       data_size_bytes: 84000,
-      created_at: Date.now() - 7167500,
-      created_at_formatted: "2026-09-26 23:02:10",
+      created_at: Math.floor((Date.now() - 7167500) / 1000),
       has_data: true,
     },
     {
       checkpoint_id: "chk-20260926-004-timeout",
       group_id: "987654321",
       date_str: "2026-09-26",
-      stage_name: "llm_analysis",
+      stage_name: "LLM_ANALYSIS",
       trace_id: "trace-20260926-004-timeout",
       data_size_bytes: 3820,
-      created_at: Date.now() - 1798800,
-      created_at_formatted: "2026-09-26 00:30:02",
+      created_at: Math.floor((Date.now() - 1798800) / 1000),
       has_data: true,
     },
     {
       checkpoint_id: "chk-20260924-008",
       group_id: "123456789",
       date_str: "2026-09-24",
-      stage_name: "report_rendering",
+      stage_name: "RENDER_REPORT",
       trace_id: "trace-20260924-008-resumed",
       data_size_bytes: 4100,
-      created_at: Date.now() - 259200000,
-      created_at_formatted: "2026-09-24 00:00:10",
+      created_at: Math.floor((Date.now() - 259200000) / 1000),
       has_data: true,
     },
   ],
 };
+
+for (const item of [...mockCheckpoints.items]) {
+  for (const stage of [
+    "FETCH_MESSAGES",
+    "CLEAN_MESSAGES",
+    "STATS_ANALYSIS",
+    "LLM_ANALYSIS",
+    "RENDER_REPORT",
+    "COMIC_DRAWING",
+  ]) {
+    if (stage === item.stage_name) continue;
+    if (item.trace_id?.includes("timeout") && ["RENDER_REPORT", "COMIC_DRAWING"].includes(stage))
+      continue;
+    mockCheckpoints.items.push({
+      ...item,
+      checkpoint_id: `${item.checkpoint_id}-${stage}`,
+      stage_name: stage,
+    });
+  }
+}
+mockCheckpoints.items.push({
+  checkpoint_id: "demo-daily-checkpoint",
+  group_id: "123456789",
+  date_str: "2026-09-23",
+  stage_name: "LLM_ANALYSIS",
+  trace_id: "",
+  data_size_bytes: 0,
+  created_at: Math.floor(Date.now() / 1000) - 86400,
+});
+mockCheckpoints.items.push({
+  checkpoint_id: "demo-platform-same-group-checkpoint",
+  group_id: "123456789",
+  date_str: "2026-11-06",
+  stage_name: "LLM_ANALYSIS",
+  trace_id: "trace-platform-same-group-example",
+  data_size_bytes: 128,
+  created_at: Math.floor(Date.now() / 1000) - 86400,
+  has_data: true,
+});
+mockCheckpoints.total = mockCheckpoints.items.length;
+
+// 与正式仓储一致，批次和游标按平台实例、群号分别保存。
+export const mockIncrementalSessions = new Map<string, IncrementalBatchesResponse>([
+  [JSON.stringify(["aiocqhttp", mockIncrementalBatches.group_id]), mockIncrementalBatches],
+]);
+export function incrementalMockSession(groupId: string, platformId: string) {
+  const key = JSON.stringify([platformId, groupId]);
+  let session = mockIncrementalSessions.get(key);
+  if (!session) {
+    session = {
+      group_id: groupId,
+      platform_id: platformId,
+      total: 0,
+      page: 1,
+      page_size: 20,
+      batches: [],
+      cursor: {
+        group_id: groupId,
+        timestamp: 0,
+        last_analyzed_timestamp: 0,
+        last_message_timestamp: 0,
+        tracked_message_ids_count: 0,
+      },
+    };
+    mockIncrementalSessions.set(key, session);
+  }
+  return session;
+}

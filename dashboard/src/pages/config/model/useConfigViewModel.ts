@@ -1,7 +1,7 @@
 import { renderingRuntimeSchema } from "../../../entities/config/model/renderingConfig";
 import { pluginConfigSaveSchema } from "../../../entities/config/model/configContract";
-import { useState, useEffect, useMemo } from "react";
-import { message } from "antd";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { toast } from "sonner";
 import {
   fetchPluginConfig,
   fetchAvailableProviders,
@@ -19,7 +19,7 @@ import {
 import { isFieldVisible } from "../../../entities/config/model/visibility";
 export { isFieldVisible, resolveDependencyValue } from "../../../entities/config/model/visibility";
 
-export function useConfigViewModel(onConfigSaved?: () => void) {
+export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
   const [loading, setLoading] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [revision, setRevision] = useState<string>();
@@ -31,20 +31,41 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
   const [personas, setPersonas] = useState<AvailablePersona[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>("basic");
   const [searchQuery, setSearchQuery] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [optionsError, setOptionsError] = useState("");
+  const loadRequest = useRef(0);
+  const lifecycle = useRef(0);
+  const loadingRef = useRef(false);
+  const savingRef = useRef(false);
+  const focusTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // 校验错误状态：按 分组Key -> 字段Key -> 错误信息 存储
   const [errors, setErrors] = useState<Record<string, Record<string, string>>>({});
-  const [groupErrorCounts, setGroupErrorCounts] = useState<Record<string, number>>({});
+  const groupErrorCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(errors).map(([group, fields]) => [group, Object.keys(fields).length]),
+      ),
+    [errors],
+  );
 
-  const loadConfig = async (isManual = false) => {
+  const loadConfig = useCallback(async (isManual = false) => {
+    if (savingRef.current) return false;
+    const request = ++loadRequest.current;
+    loadingRef.current = true;
     setLoading(true);
     setConfigLoaded(false);
+    setLoadError("");
+    setSaveError("");
+    if (focusTimer.current) clearTimeout(focusTimer.current);
     try {
       const [configData, providerList, personaList] = await Promise.allSettled([
         fetchPluginConfig(),
         fetchAvailableProviders(),
         fetchAvailablePersonas(),
       ]);
+      if (request !== loadRequest.current) return false;
 
       if (providerList.status === "fulfilled") {
         setProviders(providerList.value || []);
@@ -53,6 +74,15 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
       if (personaList.status === "fulfilled") {
         setPersonas(personaList.value || []);
       }
+      const missing = [
+        providerList.status === "rejected" ? "模型" : "",
+        personaList.status === "rejected" ? "人格" : "",
+      ].filter(Boolean);
+      setOptionsError(
+        missing.length
+          ? `${missing.join("和")}选项暂时无法读取，已有填写值会保留，可重新读取后再选择。`
+          : "",
+      );
 
       if (configData.status === "rejected") throw configData.reason;
       if (configData.status === "fulfilled") {
@@ -62,34 +92,46 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
         setSchema(data.schema || {});
         setOriginalConfig(data.config || {});
         // 深拷贝一份 formData
-        setFormData(JSON.parse(JSON.stringify(data.config || {})));
+        setFormData(structuredClone(data.config));
 
         const validation = validateConfigWithZod(data.config, data.schema);
         setErrors(validation.errorMap);
-        setGroupErrorCounts(validation.groupErrorCounts);
         const keys = Object.keys(data.schema);
-        if (keys.length > 0 && (!activeCategory || !keys.includes(activeCategory))) {
-          setActiveCategory(keys[0]);
-        }
+        setActiveCategory((current) => (keys.includes(current) ? current : (keys[0] ?? "basic")));
         if (isManual) {
-          message.success("已重新读取最新配置");
+          toast.success("已重新读取最新配置");
         }
+        return true;
       }
     } catch (error: unknown) {
-      message.error(
-        error instanceof Error ? error.message : "读取配置信息失败，请检查网络或后端状态",
-      );
+      if (request !== loadRequest.current) return false;
+      const reason =
+        error instanceof Error ? error.message : "读取配置信息失败，请检查网络或后端状态";
+      setLoadError(reason);
+      toast.error(reason);
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
-  };
-
-  useEffect(() => {
-    loadConfig();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return false;
   }, []);
 
+  useEffect(() => {
+    void loadConfig();
+    const request = loadRequest;
+    const epoch = lifecycle;
+    const timer = focusTimer;
+    return () => {
+      request.current++;
+      epoch.current++;
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [loadConfig]);
+
   const handleFieldChange = (groupKey: string, fieldKey: string, value: unknown) => {
+    if (loadingRef.current || !configLoaded) return;
     setFormData((prev) => {
       const next = { ...prev };
       if (!next[groupKey]) {
@@ -133,18 +175,6 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
             delete nextErrors[groupKey];
           }
 
-          // 同步更新各分组错误计数
-          setGroupErrorCounts((prevCounts) => {
-            const nextCounts = { ...prevCounts };
-            const count = Object.keys(groupErrors).length;
-            if (count > 0) {
-              nextCounts[groupKey] = count;
-            } else {
-              delete nextCounts[groupKey];
-            }
-            return nextCounts;
-          });
-
           return nextErrors;
         });
       }
@@ -155,42 +185,66 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
     return JSON.stringify(formData) !== JSON.stringify(originalConfig);
   }, [formData, originalConfig]);
 
+  // 沿用侧栏一级配置项的计数口径，列表内部多处修改只计为一个配置项。
+  const modifiedFields = useMemo(() => {
+    const result: Record<string, ReadonlySet<string>> = {};
+    for (const group of new Set([...Object.keys(originalConfig), ...Object.keys(formData)])) {
+      const original = originalConfig[group] ?? {};
+      const current = formData[group] ?? {};
+      result[group] = new Set(
+        [...new Set([...Object.keys(original), ...Object.keys(current)])].filter(
+          (field) => JSON.stringify(original[field]) !== JSON.stringify(current[field]),
+        ),
+      );
+    }
+    return result;
+  }, [formData, originalConfig]);
+
   const handleSave = async () => {
-    if (!configLoaded || loading || saving) {
-      message.error("请等待配置成功加载后再保存");
+    if (savingRef.current) return;
+    if (!configLoaded || loadingRef.current) {
+      setSaveError("请等待配置成功加载后再保存");
+      toast.error("请等待配置成功加载后再保存");
       return;
     }
+    setSaveError("");
+    if (focusTimer.current) clearTimeout(focusTimer.current);
     // 1. 保存前使用 Zod 执行严格校验
     const validationResult = validateConfigWithZod(formData, schema);
 
     if (!validationResult.isValid) {
       setErrors(validationResult.errorMap);
-      setGroupErrorCounts(validationResult.groupErrorCounts);
 
       const firstError = validationResult.errors[0];
       if (firstError) {
         // 自动切换到存在错误的分组 Tab
         setActiveCategory(firstError.groupKey);
+        setSearchQuery("");
 
         // 提示人类可读的友好中文错误
-        message.error(
-          `【${firstError.groupLabel}】中的「${firstError.fieldLabel}」${firstError.message}，请检查该部分。`,
-        );
+        const reason = `【${firstError.groupLabel}】中的「${firstError.fieldLabel}」${firstError.message}，请检查该部分。`;
+        setSaveError(reason);
+        toast.error(reason);
 
         // 平滑滚动定位并自动高亮聚焦到错误字段
-        setTimeout(() => {
+        focusTimer.current = setTimeout(() => {
           const targetDom =
             document.getElementById(firstError.domId) ||
             document.getElementById(`cfg-field-${firstError.groupKey}-${firstError.fieldKey}`) ||
             document.getElementById(`cfg-field-${firstError.fieldKey}`);
 
-          if (targetDom) {
-            targetDom.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (targetDom && targetDom.getClientRects().length > 0) {
+            targetDom.scrollIntoView({
+              behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                ? "auto"
+                : "smooth",
+              block: "center",
+            });
             const focusable = targetDom.querySelector<HTMLElement>(
               "input, select, textarea, button",
             );
             if (focusable) {
-              focusable.focus();
+              focusable.focus({ preventScroll: true });
             }
           }
         }, 120);
@@ -200,33 +254,48 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
 
     // 校验通过，清理错误状态
     setErrors({});
-    setGroupErrorCounts({});
 
     // 2. 提交保存
     setSaving(true);
+    savingRef.current = true;
+    const epoch = lifecycle.current;
     try {
       const parsed = pluginConfigSaveSchema.safeParse(formData);
       if (!parsed.success) {
-        message.error(parsed.error.issues[0].message);
+        setSaveError(parsed.error.issues[0].message);
+        toast.error(parsed.error.issues[0].message);
         return;
       }
       const normalized = parsed.data;
       const res = revision
         ? await savePluginConfig(normalized, revision)
         : await savePluginConfig(normalized);
+      if (epoch !== lifecycle.current) return;
       if (res.success) {
         setRevision(res.revision ?? revision);
-        message.success(res.message || "配置已成功保存并生效");
+        toast.success(res.message || "配置已成功保存并生效");
         setOriginalConfig(normalized);
         setFormData((current) => (current === formData ? normalized : current));
-        if (onConfigSaved) onConfigSaved();
+        try {
+          await onConfigSaved?.();
+        } catch {
+          if (epoch === lifecycle.current)
+            toast.warning("配置已保存，但相关页面未能刷新，请手动刷新查看。");
+        }
       } else {
-        message.error(res.message || "保存配置失败");
+        setSaveError(res.message || "保存配置失败");
+        toast.error(res.message || "保存配置失败");
       }
     } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : "保存配置请求发生异常");
+      if (epoch !== lifecycle.current) return;
+      const reason = error instanceof Error ? error.message : "保存配置请求发生异常";
+      setSaveError(reason);
+      toast.error(reason);
     } finally {
-      setSaving(false);
+      if (epoch === lifecycle.current) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   };
 
@@ -244,15 +313,16 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
       let matchCount = 0;
       if (q) {
         if (
+          key.toLowerCase().includes(q) ||
           groupDesc.toLowerCase().includes(q) ||
           (group.hint && group.hint.toLowerCase().includes(q))
         ) {
           matchCount += visibleItems.length;
         } else {
-          for (const [, item] of visibleItems) {
+          for (const [fieldKey, item] of visibleItems) {
             const desc = (item.description || "").toLowerCase();
             const hint = (item.hint || "").toLowerCase();
-            if (desc.includes(q) || hint.includes(q)) {
+            if (fieldKey.toLowerCase().includes(q) || desc.includes(q) || hint.includes(q)) {
               matchCount++;
             }
           }
@@ -269,17 +339,29 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
     });
   }, [schema, searchQuery, formData]);
 
+  const matchingCategories = categories.filter(
+    (category) => category.matchCount === undefined || category.matchCount > 0,
+  );
+  const displayedCategory = matchingCategories.some((category) => category.key === activeCategory)
+    ? activeCategory
+    : (matchingCategories[0]?.key ?? activeCategory);
+
   // 当前激活分组的字段列表（应用搜索过滤，并过滤 invisible 与 condition 条件隐藏项）
   const currentGroupFields = useMemo(() => {
-    if (!schema[activeCategory]) return [];
+    if (!schema[displayedCategory]) return [];
     const q = searchQuery.trim().toLowerCase();
-    const groupItems = schema[activeCategory].items || {};
+    const group = schema[displayedCategory];
+    const groupItems = group.items || {};
+    const groupMatches =
+      displayedCategory.toLowerCase().includes(q) ||
+      group.description.toLowerCase().includes(q) ||
+      (group.hint ?? "").toLowerCase().includes(q);
 
     return Object.entries(groupItems)
       .filter(([fieldKey, item]) => {
         // 过滤 schema 中声明为不可见或当前不满足 condition 的字段
         if (!isFieldVisible(item, formData)) return false;
-        if (!q) return true;
+        if (!q || groupMatches) return true;
         const desc = (item.description || "").toLowerCase();
         const hint = (item.hint || "").toLowerCase();
         const key = fieldKey.toLowerCase();
@@ -289,11 +371,11 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
         key: fieldKey,
         schema: item,
         value:
-          formData[activeCategory]?.[fieldKey] !== undefined
-            ? formData[activeCategory][fieldKey]
+          formData[displayedCategory]?.[fieldKey] !== undefined
+            ? formData[displayedCategory][fieldKey]
             : item.default,
       }));
-  }, [schema, activeCategory, formData, searchQuery]);
+  }, [schema, displayedCategory, formData, searchQuery]);
 
   const renderingConfig = renderingRuntimeSchema.safeParse(formData.t2i_rendering ?? {});
 
@@ -308,17 +390,22 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
     templateRequirements,
     templateCdnBaseUrl: renderingConfig.success ? renderingConfig.data.t2i_cdn_base_url : null,
     loading,
+    loadError,
+    saveError,
+    optionsError,
     configLoaded,
     saving,
     isDirty,
+    modifiedFields,
+    originalConfig,
     schema,
     formData,
     providers,
     personas,
     categories,
-    activeCategory,
+    activeCategory: displayedCategory,
     currentGroupFields,
-    activeGroupMeta: schema[activeCategory],
+    activeGroupMeta: schema[displayedCategory],
     searchQuery,
     errors,
     groupErrorCounts,

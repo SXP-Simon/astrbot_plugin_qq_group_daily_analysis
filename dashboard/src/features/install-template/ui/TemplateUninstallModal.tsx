@@ -1,165 +1,128 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
+import { IconRefresh, IconTrash } from "@tabler/icons-react";
 import { templateCapabilities } from "../../../entities/report/model/templates";
-import React, { useEffect, useState } from "react";
-import {
-  Modal,
-  List,
-  Button,
-  Alert,
-  Empty,
-  Spin,
-  Popconfirm,
-  Tag,
-  Typography,
-  message,
-  Space,
-} from "antd";
-import { DeleteOutlined, SafetyOutlined, ReloadOutlined } from "@ant-design/icons";
-import { fetchReportTemplates, uninstallTemplate } from "../../../entities/report/api/reportApi";
-import { ReportTemplateItem } from "../../../entities/report/model/templates";
-
-const { Text } = Typography;
+import { useTemplateRemoval } from "../model/useTemplateRemoval";
+import { Button } from "../../../shared/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
 
 interface TemplateUninstallModalProps {
   open: boolean;
   onClose: () => void;
   onUninstalled?: (name: string) => void;
 }
-
-export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
+export function TemplateUninstallModal({
   open,
   onClose,
   onUninstalled,
-}) => {
-  const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [uninstalling, setUninstalling] = useState<string | null>(null);
-
-  const loadTemplates = async () => {
-    setLoading(true);
-    try {
-      const list = await fetchReportTemplates();
-      // 移除能力由后端确认，手动放置的自定义模板也可管理。
-      setTemplates(list.filter((t) => t.can_uninstall === true));
-    } catch {
-      message.warning("模板列表获取失败，请检查插件运行状态");
-      setTemplates([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (open) {
-      loadTemplates();
-    }
-  }, [open]);
-
-  const handleUninstall = async (name: string) => {
-    setUninstalling(name);
-    try {
-      const result = await uninstallTemplate(name);
-      if (result) {
-        message.success(`模板已卸载：${name}`);
-        onUninstalled?.(name);
-        await loadTemplates();
-      } else {
-        message.error("卸载失败，请查看服务器日志。");
-      }
-    } catch (e) {
-      const err = e as { message?: string };
-      message.error(err?.message || "卸载失败，请查看服务器日志。");
-    } finally {
-      setUninstalling(null);
-    }
-  };
-
+}: TemplateUninstallModalProps) {
+  const vm = useTemplateRemoval(open, onClose, onUninstalled);
   return (
-    <Modal
-      title={
-        <Space>
-          <DeleteOutlined style={{ color: "#ff4d4f" }} />
-          <span>卸载自定义模板</span>
-        </Space>
-      }
+    <Dialog
       open={open}
-      onCancel={onClose}
-      footer={null}
-      width={560}
+      onOpenChange={(next) => {
+        if (!next) vm.close();
+      }}
     >
-      <Alert
-        type="info"
-        showIcon
-        icon={<SafetyOutlined />}
-        message="可移除插件数据目录内的自定义模板"
-        description="手动模板也可移除，内置模板保留。将删除选定模板的整个目录及素材；使用它的配置需重新选择，已生成报告不受影响。"
-        style={{ marginBottom: 12 }}
-      />
-      <Spin spinning={loading}>
-        <div
-          style={{
-            maxHeight: 360,
-            overflowY: "auto",
-            border: "1px solid rgba(128,128,128,0.2)",
-            borderRadius: 6,
-          }}
-        >
-          {templates.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="暂无可移除的自定义模板"
-              style={{ padding: "24px 0" }}
-            />
-          ) : (
-            <List
-              size="small"
-              dataSource={templates}
-              renderItem={(item) => (
-                <List.Item
-                  actions={[
-                    <Popconfirm
-                      key="uninstall"
-                      title={`确定卸载模板「${item.label || item.id}」？`}
-                      description="将删除数据目录中的整个模板文件夹，操作不可恢复。"
-                      okText="卸载"
-                      cancelText="取消"
-                      okButtonProps={{ danger: true, loading: uninstalling === item.id }}
-                      onConfirm={() => handleUninstall(item.id)}
-                    >
-                      <Button size="small" danger type="text" icon={<DeleteOutlined />}>
-                        卸载
-                      </Button>
-                    </Popconfirm>,
-                  ]}
-                >
-                  <List.Item.Meta
-                    title={
-                      <Space size={6}>
-                        <Text style={{ fontSize: 13 }}>{item.label || item.id}</Text>
-                        <Tag color="blue" style={{ fontSize: 11 }}>
-                          {item.id}
-                        </Tag>
-                      </Space>
-                    }
-                    description={
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {item.desc || templateCapabilities(item).join(" / ")}
-                        <span>
-                          {templateCapabilities(item).map((capability) => (
-                            <Tag key={capability}>{capability}</Tag>
-                          ))}
-                        </span>
-                      </Text>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
-          )}
-        </div>
-      </Spin>
-      <Button icon={<ReloadOutlined />} onClick={loadTemplates} style={{ marginTop: 12 }} block>
-        刷新列表
-      </Button>
-    </Modal>
+      <DialogContent
+        className="max-w-2xl"
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (vm.target) vm.select(null);
+          else vm.close();
+        }}
+        onPointerDownOutside={(event) => {
+          if (vm.busy) event.preventDefault();
+        }}
+      >
+        <DialogTitle>卸载自定义模板</DialogTitle>
+        <DialogDescription>
+          手动放置的自定义模板也可移除。将删除整个模板目录及素材，已生成的报告不受影响；使用它的配置需重新选择。内置模板保留。
+        </DialogDescription>
+        {vm.target ? (
+          <div className="grid gap-4 rounded-xl bg-destructive/5 p-4">
+            <h3 className="m-0 break-words text-base font-medium">
+              确定卸载模板「{vm.target.label || vm.target.id}」？
+            </h3>
+            <code className="break-all text-sm">{vm.target.id}/</code>
+            <p className="m-0 text-sm text-muted-foreground">
+              此操作不可恢复。需要保留的源码和素材请先下载。
+            </p>
+            {vm.actionError && (
+              <p role="alert" className="m-0 text-sm text-destructive">
+                {vm.actionError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={vm.busy} onClick={() => vm.select(null)}>
+                返回列表
+              </Button>
+              <Button variant="destructive" disabled={vm.busy} onClick={() => void vm.remove()}>
+                <IconTrash aria-hidden="true" />
+                {vm.busy ? "正在卸载…" : "卸载整个模板"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {vm.error && (
+              <p role="alert" className="m-0 rounded-xl bg-warning/10 p-3 text-sm text-warning">
+                {vm.error}
+              </p>
+            )}
+            {vm.loading && (
+              <LoadingState className="m-0 text-sm text-muted-foreground">
+                正在读取自定义模板…
+              </LoadingState>
+            )}
+            <ul
+              className="m-0 max-h-96 list-none divide-y divide-border overflow-auto p-0"
+              aria-label="可卸载模板"
+            >
+              {vm.templates.map((item) => (
+                <li key={item.id} className="flex items-start justify-between gap-3 py-3">
+                  <div className="grid min-w-0 gap-1">
+                    <span className="break-words font-medium">{item.label || item.id}</span>
+                    <code className="break-all text-xs text-muted-foreground">{item.id}</code>
+                    {item.desc && <p className="m-0 text-sm text-muted-foreground">{item.desc}</p>}
+                    <span className="text-xs text-secondary-ink">
+                      {templateCapabilities(item).join(" / ")}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                    disabled={vm.busy || vm.loading}
+                    onClick={() => vm.select(item)}
+                  >
+                    <IconTrash aria-hidden="true" />
+                    卸载
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            {!vm.loading && !vm.error && !vm.templates.length && (
+              <p className="m-0 py-6 text-center text-sm text-muted-foreground">
+                暂无可移除的自定义模板
+              </p>
+            )}
+            <div className="flex justify-between gap-2">
+              <Button
+                variant="outline"
+                disabled={vm.loading || vm.busy}
+                onClick={() => void vm.refresh()}
+              >
+                <IconRefresh aria-hidden="true" />
+                刷新列表
+              </Button>
+              <Button variant="outline" onClick={vm.close}>
+                关闭窗口
+              </Button>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
-};
+}

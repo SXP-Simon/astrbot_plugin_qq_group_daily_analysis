@@ -39,12 +39,13 @@ export const mockFontPresets: TypstFontPreset[] = [
     cdn_path: "gh/googlefonts/noto-emoji@main/2D/fonts/Noto-COLRv1.ttf",
   },
   {
-    name: "cjkFonts_allseto_v1.11.ttf",
+    name: "cjkFonts-AllSeto-Title-v1.11.ttf",
     download_url:
-      "https://raw.githubusercontent.com/moeru-ai/airi/1eb62e912fe7936387804aa920ff98c9f1137d80/packages/font-cjkfonts-allseto/src/files/cjkFonts_allseto_v1.11.ttf",
+      "https://raw.githubusercontent.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/main/assets/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.ttf",
     upstream_url:
-      "https://github.com/moeru-ai/airi/blob/1eb62e912fe7936387804aa920ff98c9f1137d80/packages/font-cjkfonts-allseto/src/files/cjkFonts_allseto_v1.11.ttf",
-    cdn_path: null,
+      "https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/blob/main/assets/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.ttf",
+    cdn_path:
+      "gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.ttf",
   },
   {
     name: "Outfit.ttf",

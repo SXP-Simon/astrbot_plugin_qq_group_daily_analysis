@@ -18,6 +18,7 @@ from ....application.services.task_guard import DuplicateGroupTaskError
 from ....domain.entities.incremental_state import IncrementalBatch
 from ....shared.constants import PLUGIN_NAME
 from ....shared.type_guards import is_object_list, is_string_mapping
+from ...persistence.history_manager import HistoryManager
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
@@ -31,7 +32,9 @@ if TYPE_CHECKING:
     )
     from ..active_task_manager import ActiveTaskManager
 
-HISTORY_KEY = re.compile(r"analysis_(.+)_(\d{4}-\d{2}-\d{2})(?:_(\d{2}-\d{2}))?$")
+HISTORY_KEY = re.compile(
+    r"analysis_(.+)_(\d{4}-\d{2}-\d{2})(?:_(\d{2}-\d{2})(?:_([a-f0-9]{32}))?)?$"
+)
 
 
 class RecordLocator(TypedDict):
@@ -40,6 +43,7 @@ class RecordLocator(TypedDict):
     kind: str
     key: str
     group_id: str
+    platform_id: str
     batch_id: str
     date_str: str
     stage_name: str
@@ -62,6 +66,7 @@ def parse_locator(raw: dict[str, object]) -> RecordLocator:
         "kind": "",
         "key": "",
         "group_id": "",
+        "platform_id": "",
         "batch_id": "",
         "date_str": "",
         "stage_name": "",
@@ -210,16 +215,30 @@ class ManagedRecordRoutes:
         service = self.service
         if not service:
             raise ValueError("分析服务尚未初始化")
+        if locator["platform_id"]:
+            locator["platform_id"] = service.bot_manager.resolve_platform_id(
+                locator["platform_id"]
+            )
         if kind == "history":
             value = cast(
                 "object",
                 await service.history_manager.plugin.get_kv_data(locator["key"], None),
             )
-            return value if is_string_mapping(value) else None
+            if is_string_mapping(value):
+                if (
+                    locator["platform_id"]
+                    and value.get("platform_id") != locator["platform_id"]
+                ):
+                    raise ValueError("历史记录与所选平台不一致，请刷新后重试")
+                return value
+            return None
         if kind == "batch":
             if not service.incremental_store:
                 raise ValueError("增量存储尚未初始化")
-            batch = await service.incremental_store.get_batch_detail(
+            store = await service.incremental_store.for_session(
+                locator["group_id"], locator["platform_id"]
+            )
+            batch = await store.get_batch_detail(
                 locator["group_id"], locator["batch_id"]
             )
             return batch.to_dict() if batch else None
@@ -263,6 +282,9 @@ class ManagedRecordRoutes:
                     if search not in key.casefold():
                         continue
                     locator = parse_locator({"kind": kind, "key": key})
+                    platform = value.get("platform_id")
+                    if isinstance(platform, str):
+                        locator["platform_id"] = platform
                     items.append(
                         {
                             "locator": locator,
@@ -345,15 +367,41 @@ class ManagedRecordRoutes:
             data = body.get("data")
             record_revision(data)
             async with self._lock, AsyncExitStack() as stack:
+                current = await self._read(locator)
+                if locator["kind"] == "history":
+                    identity = current if current is not None else data
+                    owner = (
+                        identity.get("platform_id")
+                        if is_string_mapping(identity)
+                        else ""
+                    )
+                    if isinstance(owner, str):
+                        locator["platform_id"] = owner
+                if locator["platform_id"] and self.service:
+                    locator["platform_id"] = (
+                        self.service.bot_manager.resolve_platform_id(
+                            locator["platform_id"]
+                        )
+                    )
+                scope = locator["platform_id"] or None
+                if locator["kind"] == "checkpoint":
+                    scope = None
                 if locator["group_id"] and self.service:
                     if any(
                         task.get("group_id") == locator["group_id"]
+                        and (
+                            not scope
+                            or not task.get("platform")
+                            or task.get("platform") == scope
+                        )
                         for task in self.active_tasks.get_active_tasks()
                     ):
                         raise FileExistsError("此群有任务正在执行，请结束后再修改记录")
                     for task_type in ("daily", "incremental", "final"):
                         await stack.enter_async_context(
-                            self.service.group_lock(locator["group_id"], task_type)
+                            self.service.group_lock(
+                                locator["group_id"], task_type, scope
+                            )
                         )
                 current = await self._read(locator)
                 if operation == "create":
@@ -418,6 +466,7 @@ class ManagedRecordRoutes:
             store = service.incremental_store
             if not store:
                 raise ValueError("增量存储尚未初始化")
+            store = await store.for_session(locator["group_id"], locator["platform_id"])
             if operation == "delete":
                 if not await store.delete_batch(
                     locator["group_id"], locator["batch_id"]
@@ -487,23 +536,69 @@ class ManagedRecordRoutes:
         if not self.service:
             raise ValueError("分析服务尚未初始化")
         plugin = self.service.history_manager.plugin
+        current = await self._read(locator)
+        platform_id = (
+            str(current.get("platform_id", ""))
+            if is_string_mapping(current)
+            else locator["platform_id"]
+        )
+        match = HISTORY_KEY.fullmatch(locator["key"])
+        minute = match[3] if match else None
+        daily_key = HistoryManager.latest_key(
+            locator["group_id"], locator["date_str"], platform_id
+        )
+        pointers = [daily_key]
+        if platform_id and minute:
+            pointers.append(
+                HistoryManager.latest_key(
+                    locator["group_id"], locator["date_str"], platform_id, minute
+                )
+            )
         if operation == "delete":
             await plugin.delete_kv_data(locator["key"])
-            daily_key = f"analysis_{locator['group_id']}_{locator['date_str']}"
-            pointer = cast("object", await plugin.get_kv_data(daily_key, None))
-            if pointer == locator["key"]:
-                candidates = sorted(
-                    key
-                    for key in await self._history()
-                    if key.startswith(daily_key + "_")
-                )
+            records = await self._history()
+            for pointer_key in pointers:
+                pointer = cast("object", await plugin.get_kv_data(pointer_key, None))
+                if pointer != locator["key"]:
+                    continue
+                candidates = [
+                    (key, value)
+                    for key, value in records.items()
+                    if key.startswith(
+                        f"analysis_{locator['group_id']}_{locator['date_str']}_"
+                    )
+                    and str(value.get("platform_id", "")) == platform_id
+                    and (pointer_key == daily_key or (minute and f"_{minute}_" in key))
+                ]
                 if candidates:
+                    candidates.sort(
+                        key=lambda item: (
+                            str(item[1].get("created_at", item[0])),
+                            item[0],
+                        )
+                    )
                     await cast("KeyValueWriter", plugin).put_kv_data(
-                        daily_key, candidates[-1]
+                        pointer_key, candidates[-1][0]
                     )
                 else:
-                    await plugin.delete_kv_data(daily_key)
+                    await plugin.delete_kv_data(pointer_key)
+            if is_string_mapping(current):
+                analysis = current.get("analysis")
+                trace_id = (
+                    analysis.get("trace_id") if is_string_mapping(analysis) else None
+                )
+                if isinstance(trace_id, str) and trace_id:
+                    task_key = f"analysis_task_{trace_id.encode().hex()}"
+                    if (
+                        cast("object", await plugin.get_kv_data(task_key, None))
+                        == locator["key"]
+                    ):
+                        await plugin.delete_kv_data(task_key)
         elif is_string_mapping(data):
+            if is_string_mapping(current) and str(data.get("platform_id", "")) != str(
+                current.get("platform_id", "")
+            ):
+                raise ValueError("不能修改历史记录的平台归属")
             if "analysis" in data and (
                 not isinstance(data["analysis"], dict)
                 or not isinstance(data.get("summary"), dict)
@@ -511,17 +606,46 @@ class ManagedRecordRoutes:
                 raise ValueError("历史记录需要完整的 summary 与 analysis 对象")
             if not data:
                 raise ValueError("不能保存空的历史记录")
-            await cast("KeyValueWriter", plugin).put_kv_data(locator["key"], data)
-            daily_key = f"analysis_{locator['group_id']}_{locator['date_str']}"
-            pointer = cast("object", await plugin.get_kv_data(daily_key, None))
-            if locator["key"] != daily_key and (
-                pointer is None
-                or (
-                    isinstance(pointer, str)
-                    and pointer.startswith(daily_key + "_")
-                    and locator["key"] > pointer
-                )
+            if platform_id and (
+                data.get("platform_id") != platform_id
+                or data.get("group_id") != locator["group_id"]
+                or data.get("date_str") != locator["date_str"]
             ):
+                raise ValueError("不能修改历史记录的会话或日期身份")
+            if platform_id and is_string_mapping(current):
+                old_analysis = current.get("analysis")
+                new_analysis = data.get("analysis")
+                if is_string_mapping(old_analysis) and (
+                    not is_string_mapping(new_analysis)
+                    or new_analysis.get("trace_id") != old_analysis.get("trace_id")
+                ):
+                    raise ValueError("不能修改历史记录的任务身份")
+            analysis = data.get("analysis")
+            trace_id = analysis.get("trace_id") if is_string_mapping(analysis) else None
+            task_key = (
+                f"analysis_task_{trace_id.encode().hex()}"
+                if platform_id and isinstance(trace_id, str) and trace_id
+                else None
+            )
+            if task_key:
+                owner = await plugin.get_kv_data(task_key, None)
+                if owner is not None and owner != locator["key"]:
+                    raise ValueError("此任务已有历史版本，不能绑定到另一条记录")
+            await cast("KeyValueWriter", plugin).put_kv_data(locator["key"], data)
+            if task_key:
                 await cast("KeyValueWriter", plugin).put_kv_data(
-                    daily_key, locator["key"]
+                    task_key, locator["key"]
                 )
+            for pointer_key in pointers:
+                pointer = cast("object", await plugin.get_kv_data(pointer_key, None))
+                if locator["key"] != pointer_key and (
+                    pointer is None
+                    or (
+                        not platform_id
+                        and isinstance(pointer, str)
+                        and locator["key"] > pointer
+                    )
+                ):
+                    await cast("KeyValueWriter", plugin).put_kv_data(
+                        pointer_key, locator["key"]
+                    )

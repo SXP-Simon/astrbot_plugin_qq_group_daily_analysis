@@ -747,8 +747,18 @@ class GroupDailyAnalysis(Star):
                 )
             return f"未能定位到群聊 '{group}'。建议直接提供纯数字群号重新查询。"
 
+        try:
+            platform_id = self.bot_manager.resolve_platform_id(
+                group.rsplit(":GroupMessage:", 1)[0]
+                if ":GroupMessage:" in group
+                else str(event.get_platform_id() or "")
+            )
+        except ValueError as error:
+            return str(error)
+        target_umo = f"{platform_id}:GroupMessage:{target_group_id}"
+
         # 2. 群权限白名单校验
-        if not self.config_manager.is_group_allowed(target_group_id):
+        if not self.config_manager.is_group_allowed(target_umo):
             return f"群聊 {matched_name or target_group_id} 未在群分析启用名单中，暂无分析数据。"
 
         # 3. 日期范围解析
@@ -764,6 +774,7 @@ class GroupDailyAnalysis(Star):
             start_date=start_date,
             end_date=end_date,
             report_section=report_section,
+            platform_id=platform_id,
         )
 
     @filter.llm_tool("group_daily_analysis_trigger")

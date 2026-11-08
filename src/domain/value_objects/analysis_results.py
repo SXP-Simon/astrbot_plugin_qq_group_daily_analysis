@@ -911,11 +911,21 @@ class AnalysisExportPayload(TypedDict, total=False):
     date_str: str
 
 
+class CheckpointGroupPayload(TypedDict):
+    """阶段快照关联任务中的会话身份。"""
+
+    group_id: str
+    group_name: str
+    platform: str
+
+
 class CheckpointSummaryPayload(TypedDict, total=False):
     """阶段 Checkpoint 摘要元数据契约"""
 
     checkpoint_id: str
     group_id: str
+    group_name: str
+    platform: str
     date_str: str
     stage_name: str
     trace_id: str

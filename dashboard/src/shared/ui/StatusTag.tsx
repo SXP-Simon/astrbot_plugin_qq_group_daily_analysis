@@ -1,63 +1,47 @@
-import React from "react";
-import { Tag } from "antd";
+import {
+  IconAlertCircle,
+  IconCheck,
+  IconClock,
+  IconLoader2,
+  IconPlayerStop,
+  IconPlayerSkipForward,
+  IconX,
+} from "@tabler/icons-react";
 
-interface StatusTagProps {
-  status: "succeeded" | "failed" | "running" | "aborted" | string;
+export function StatusTag({ status }: { status: string }) {
+  const states = new Map([
+    ["pending", { label: "待处理", icon: IconClock }],
+    ["succeeded", { label: "成功", icon: IconCheck }],
+    ["completed", { label: "成功", icon: IconCheck }],
+    ["warning", { label: "警告", icon: IconAlertCircle }],
+    ["partial_success", { label: "部分成功", icon: IconAlertCircle }],
+    ["failed", { label: "失败", icon: IconX }],
+    ["running", { label: "运行中", icon: IconLoader2 }],
+    ["aborted", { label: "已中止", icon: IconPlayerStop }],
+    ["cancelled", { label: "已中止", icon: IconPlayerStop }],
+    ["skipped", { label: "已跳过", icon: IconPlayerSkipForward }],
+  ]);
+  const item = states.get(status);
+  const Icon = item?.icon ?? IconAlertCircle;
+  const tone =
+    status === "failed"
+      ? "bg-destructive/10 text-destructive"
+      : status === "running"
+        ? "bg-primary-soft text-primary-ink"
+        : ["succeeded", "completed"].includes(status)
+          ? "bg-success/10 text-success"
+          : ["warning", "partial_success"].includes(status)
+            ? "bg-warning/10 text-warning"
+            : "bg-muted text-muted-foreground";
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-medium ${tone}`}
+    >
+      <Icon
+        className={`size-3.5 ${status === "running" ? "animate-spin" : ""}`}
+        aria-hidden="true"
+      />
+      {item?.label ?? (status || "状态未记录")}
+    </span>
+  );
 }
-
-export const StatusTag: React.FC<StatusTagProps> = ({ status }) => {
-  switch (status) {
-    case "pending":
-      return (
-        <Tag color="default" className="text-xs font-semibold">
-          待处理
-        </Tag>
-      );
-    case "succeeded":
-    case "completed":
-      return (
-        <Tag color="success" className="text-xs font-semibold">
-          成功
-        </Tag>
-      );
-    case "warning":
-      return (
-        <Tag color="warning" className="text-xs font-semibold">
-          警告
-        </Tag>
-      );
-    case "partial_success":
-      return (
-        <Tag color="warning" className="text-xs font-semibold">
-          部分成功
-        </Tag>
-      );
-    case "failed":
-      return (
-        <Tag color="error" className="text-xs font-semibold">
-          失败
-        </Tag>
-      );
-    case "running":
-      return (
-        <Tag color="processing" className="text-xs font-semibold">
-          运行中
-        </Tag>
-      );
-    case "aborted":
-    case "cancelled":
-      return (
-        <Tag color="default" className="text-xs font-semibold">
-          已中止
-        </Tag>
-      );
-    case "skipped":
-      return (
-        <Tag color="cyan" className="text-xs font-semibold">
-          已跳过
-        </Tag>
-      );
-    default:
-      return <Tag className="text-xs">{String(status)}</Tag>;
-  }
-};

@@ -1,5 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ConfigProvider } from "antd";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import {
   fetchConfigBackup,
@@ -29,11 +28,7 @@ async function expand(label: string) {
 }
 
 it("列出旧版本和缺失元数据，按原始结构展开对象、数组和长文本", async () => {
-  render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
-      <ConfigBackupsViewer />
-    </ConfigProvider>,
-  );
+  render(<ConfigBackupsViewer />);
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: /查看备份/ }));
   });
@@ -57,14 +52,33 @@ it("列出旧版本和缺失元数据，按原始结构展开对象、数组和�
   expect(screen.queryByRole("button", { name: /恢复|应用|保存配置/ })).not.toBeInTheDocument();
 }, 15000);
 
-// 真实弹窗和表格涉及多次重渲染，与上面的交互用例使用相同时限。
+it("分页保留每份备份元数据，损坏项无法打开，关闭后返回入口焦点", async () => {
+  const items = Array.from({ length: 6 }, (_, index) => ({
+    ...mockConfigBackups[0].backup,
+    filename: `backup-${index}.json`,
+    error: index === 5 ? "JSON 已损坏" : null,
+  }));
+  vi.mocked(fetchConfigBackups).mockResolvedValue(items);
+  render(<ConfigBackupsViewer />);
+  const opener = screen.getByRole("button", { name: /查看备份/ });
+  opener.focus();
+  fireEvent.click(opener);
+  const list = await screen.findByRole("list", { name: "配置备份" });
+  expect(within(list).getAllByRole("listitem")).toHaveLength(5);
+  fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+  expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+  expect(within(list).getByText("backup-5.json")).toBeVisible();
+  expect(within(list).getByText("无法读取：JSON 已损坏")).toBeVisible();
+  expect(within(list).getByRole("button", { name: "查看" })).toBeDisabled();
+  expect(fetchConfigBackup).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "关闭备份" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(opener).toHaveFocus();
+});
+
 it("列表失败可以刷新，备份被删除时给出读取失败说明", async () => {
   vi.mocked(fetchConfigBackups).mockRejectedValueOnce(new Error("offline"));
-  render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
-      <ConfigBackupsViewer />
-    </ConfigProvider>,
-  );
+  render(<ConfigBackupsViewer />);
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: /查看备份/ }));
   });

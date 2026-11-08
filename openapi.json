@@ -749,6 +749,78 @@
         }
       }
     },
+    "/data/incremental/batches": {
+      "get": {
+        "summary": "按页读取群聊增量批次",
+        "operationId": "getIncrementalBatchPage",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分页总数与页码来自同一次索引读取",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/IncrementalBatchesResponse"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "缺少群号或分页参数格式错误"
+          },
+          "500": {
+            "description": "批次读取失败或索引对应内容已变化"
+          }
+        }
+      }
+    },
     "/config": {
       "get": {
         "summary": "读取插件配置、表单定义和内容版本",
@@ -1491,11 +1563,174 @@
         }
       }
     },
+    "/data/incremental/groups": {
+      "get": {
+        "tags": [
+          "Data"
+        ],
+        "summary": "按平台区分的增量群聊目录",
+        "responses": {
+          "200": {
+            "description": "群聊目录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/IncrementalGroupDirectory"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/data/checkpoints": {
+      "get": {
+        "tags": [
+          "Data"
+        ],
+        "summary": "分页查询有效阶段快照",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date_str",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage_name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trace_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查询结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CheckpointsListResponse"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/data/checkpoints/groups": {
+      "get": {
+        "tags": [
+          "Data"
+        ],
+        "summary": "有效阶段快照的群聊身份",
+        "responses": {
+          "200": {
+            "description": "查询结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "groups": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "sessions": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/GroupItem"
+                          }
+                        }
+                      },
+                      "required": [
+                        "groups",
+                        "sessions"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/traces": {
       "get": {
         "summary": "List execution traces with filters",
         "operationId": "listTraces",
         "parameters": [
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台"
+          },
           {
             "name": "group_id",
             "in": "query",
@@ -1532,6 +1767,55 @@
               "type": "integer",
               "default": 0
             }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort_order",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before_time",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1556,6 +1840,9 @@
                         },
                         "total": {
                           "type": "integer"
+                        },
+                        "has_more": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -1567,6 +1854,85 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/traces/{trace_id}/acknowledgement": {
+      "post": {
+        "summary": "保存或撤销任务提醒的知晓状态",
+        "operationId": "acknowledgeTrace",
+        "parameters": [
+          {
+            "name": "trace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "acknowledged"
+                ],
+                "properties": {
+                  "acknowledged": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "知晓状态已保存",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "trace_id",
+                        "acknowledged_at"
+                      ],
+                      "properties": {
+                        "trace_id": {
+                          "type": "string"
+                        },
+                        "acknowledged_at": {
+                          "type": "number",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式无效"
+          },
+          "404": {
+            "description": "任务不存在"
+          },
+          "409": {
+            "description": "任务尚未结束"
+          },
+          "500": {
+            "description": "保存失败"
           }
         }
       }
@@ -1754,6 +2120,14 @@
         "operationId": "getReportHistory",
         "parameters": [
           {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台"
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
@@ -1778,6 +2152,27 @@
           },
           {
             "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "sort_order",
             "in": "query",
             "schema": {
               "type": "string"
@@ -2304,6 +2699,9 @@
             "type": "string"
           },
           "group_id": {
+            "type": "string"
+          },
+          "platform_id": {
             "type": "string"
           },
           "batch_id": {
@@ -2994,6 +3392,10 @@
             "type": "string",
             "nullable": true
           },
+          "acknowledged_at": {
+            "type": "number",
+            "nullable": true
+          },
           "extra": {
             "type": "object",
             "additionalProperties": true
@@ -3420,6 +3822,10 @@
           "location": {
             "type": "string",
             "nullable": true
+          },
+          "function_name": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -3601,32 +4007,68 @@
           "temp_files"
         ]
       },
+      "IncrementalGroupDirectoryItem": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string"
+          },
+          "platform_id": {
+            "type": "string"
+          },
+          "group_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "platform_id",
+          "group_name"
+        ]
+      },
+      "IncrementalGroupDirectory": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "group_details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncrementalGroupDirectoryItem"
+            }
+          }
+        },
+        "required": [
+          "groups",
+          "group_details"
+        ]
+      },
       "IncrementalBatchTopic": {
         "type": "object",
         "properties": {
-          "title": {
+          "topic": {
             "type": "string"
           },
-          "summary": {
+          "detail": {
             "type": "string"
           },
-          "description": {
-            "type": "string"
+          "contributors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
-          "heat_score": {
-            "type": "number"
-          },
-          "category": {
-            "type": "string"
-          },
-          "keywords": {
+          "contributor_ids": {
             "type": "array",
             "items": {
               "type": "string"
             }
           }
-        },
-        "additionalProperties": true
+        }
       },
       "ChatQualityDimension": {
         "type": "object",
@@ -3671,20 +4113,16 @@
           "content": {
             "type": "string"
           },
-          "text": {
+          "sender": {
             "type": "string"
           },
-          "sender_nickname": {
+          "reason": {
             "type": "string"
           },
-          "sender_name": {
-            "type": "string"
-          },
-          "author": {
+          "user_id": {
             "type": "string"
           }
-        },
-        "additionalProperties": true
+        }
       },
       "IncrementalBatchItem": {
         "type": "object",
@@ -3767,14 +4205,17 @@
           "batch_id",
           "timestamp",
           "messages_count",
-          "characters_count",
-          "topics_count"
+          "characters_count"
         ],
         "additionalProperties": true
       },
       "IncrementalCursorInfo": {
         "type": "object",
         "properties": {
+          "timestamp": {
+            "type": "number",
+            "nullable": true
+          },
           "group_id": {
             "type": "string"
           },
@@ -3782,7 +4223,8 @@
             "type": "number"
           },
           "last_message_timestamp": {
-            "type": "number"
+            "type": "number",
+            "nullable": true
           },
           "tracked_message_ids_count": {
             "type": "number"
@@ -3798,7 +4240,19 @@
       "IncrementalBatchesResponse": {
         "type": "object",
         "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          },
           "group_id": {
+            "type": "string"
+          },
+          "platform_id": {
             "type": "string"
           },
           "cursor": {
@@ -3814,7 +4268,10 @@
         "required": [
           "group_id",
           "cursor",
-          "batches"
+          "batches",
+          "total",
+          "page",
+          "page_size"
         ]
       },
       "CheckpointItem": {
@@ -3824,6 +4281,12 @@
             "type": "string"
           },
           "group_id": {
+            "type": "string"
+          },
+          "group_name": {
+            "type": "string"
+          },
+          "platform": {
             "type": "string"
           },
           "date_str": {

@@ -1,0 +1,20 @@
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { HtmlPreview } from "../html-preview";
+afterEach(() => vi.useRealTimers());
+it("HTML 加载时正文仍可展示，外链超时给出提示，完成后移除提示且保留沙盒", () => {
+  vi.useFakeTimers();
+  const view = render(<HtmlPreview title="报告" html="<h1>示例</h1>" sandbox="" />);
+  const frame = screen.getByTitle("报告");
+  expect(frame).toHaveAttribute("srcdoc", "<h1>示例</h1>");
+  expect(frame).toHaveAttribute("sandbox", "");
+  expect(screen.getByRole("status")).toHaveTextContent("正在打开 HTML");
+  act(() => vi.advanceTimersByTime(20000));
+  expect(screen.getByRole("status")).toHaveTextContent("外链素材可能较慢或不可达");
+  fireEvent.load(frame);
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  view.rerender(<HtmlPreview title="报告" html="<h1>新的报告</h1>" sandbox="" />);
+  expect(screen.getByRole("status")).toHaveTextContent("正在打开 HTML");
+  view.unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});

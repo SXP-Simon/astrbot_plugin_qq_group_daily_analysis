@@ -198,12 +198,13 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
             )
 
     class FakeHistoryManager:
-        async def save_analysis(self, group_id, analysis_result, date_str=None):
+        async def save_analysis(self, group_id, analysis_result, date_str=None, *, platform_id=""):
             return None
 
     service = AnalysisApplicationService(
         config_manager=FakeConfig(),
         bot_manager=SimpleNamespace(
+            resolve_platform_id=lambda value: value or "onebot",
             get_adapter=lambda platform_id: FakeAdapter(),
             get_adapter_platform_id=lambda adapter: adapter.platform_id,
         ),
@@ -446,12 +447,13 @@ def test_daily_analysis_aborts_when_all_enabled_llm_tasks_fail():
             return [], [], [], TokenUsage(), None
 
     class FakeHistoryManager:
-        async def save_analysis(self, group_id, analysis_result, date_str=None):
+        async def save_analysis(self, group_id, analysis_result, date_str=None, *, platform_id=""):
             return None
 
     service = AnalysisApplicationService(
         config_manager=FakeConfig(),
         bot_manager=SimpleNamespace(
+            resolve_platform_id=lambda value: value or "onebot",
             get_adapter=lambda platform_id: FakeAdapter(),
             get_adapter_platform_id=lambda adapter: adapter.platform_id,
         ),
@@ -578,12 +580,13 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
             )
 
     class FakeHistoryManager:
-        async def save_analysis(self, group_id, analysis_result, date_str=None):
+        async def save_analysis(self, group_id, analysis_result, date_str=None, *, platform_id=""):
             return None
 
     service = AnalysisApplicationService(
         config_manager=FakeConfig(),
         bot_manager=SimpleNamespace(
+            resolve_platform_id=lambda value: value or "onebot",
             get_adapter=lambda platform_id: FakeAdapter(),
             get_adapter_platform_id=lambda adapter: adapter.platform_id,
         ),
@@ -700,12 +703,13 @@ def test_daily_analysis_succeeds_when_all_llm_disabled():
             return [], [], [], TokenUsage(), None
 
     class FakeHistoryManager:
-        async def save_analysis(self, group_id, analysis_result, date_str=None):
+        async def save_analysis(self, group_id, analysis_result, date_str=None, *, platform_id=""):
             return None
 
     service = AnalysisApplicationService(
         config_manager=FakeConfig(),
         bot_manager=SimpleNamespace(
+            resolve_platform_id=lambda value: value or "onebot",
             get_adapter=lambda platform_id: FakeAdapter(),
             get_adapter_platform_id=lambda adapter: adapter.platform_id,
         ),

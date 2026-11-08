@@ -1,0 +1,230 @@
+import { useState } from "react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { TraceRecord } from "../../../entities/trace/model/types";
+import { AnalysisTimelinePicker } from "../AnalysisTimelinePicker";
+
+const traces: TraceRecord[] = ["a", "b", "c"].map((id, index) => ({
+  trace_id: `example-${id}`,
+  group_name: `示例 ${id}`,
+  group_id: "123",
+  platform: index === 0 ? "telegram" : "discord",
+  trigger_type: "manual",
+  status: index === 0 ? "cancelled" : "succeeded",
+  started_at: 300 - index * 100,
+  ...(index === 0 ? { total_tokens: 0, duration_ms: 0, compression_ratio: 0 } : {}),
+}));
+const onView = vi.fn();
+function Picker() {
+  const [selected, select] = useState(traces[0]);
+  return (
+    <AnalysisTimelinePicker
+      traces={traces}
+      selectedTrace={selected}
+      onSelectTrace={select}
+      onViewTraceDetail={onView}
+    />
+  );
+}
+const frames = new Map<number, FrameRequestCallback>();
+let sequence = 0;
+beforeEach(() => {
+  frames.clear();
+  sequence = 0;
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    frames.set(++sequence, callback);
+    return sequence;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+    frames.delete(id);
+  });
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
+
+it("键盘方向键与首尾键切换任务并保持焦点，前后按钮和详情对应当前选择", () => {
+  render(<Picker />);
+  const first = screen.getByRole("button", { name: /选择任务 示例 a/ });
+  const second = screen.getByRole("button", { name: /选择任务 示例 b/ });
+  const last = screen.getByRole("button", { name: /选择任务 示例 c/ });
+  expect(screen.getByRole("button", { name: "上一条" })).toBeDisabled();
+  first.focus();
+  fireEvent.keyDown(first, { key: "ArrowRight" });
+  expect(second).toHaveFocus();
+  expect(second).toHaveAttribute("aria-pressed", "true");
+  expect(first).toHaveAttribute("tabindex", "-1");
+  fireEvent.keyDown(second, { key: "End" });
+  expect(last).toHaveFocus();
+  expect(screen.getByRole("button", { name: "下一条" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "查看所选任务" }));
+  expect(onView).toHaveBeenCalledWith("example-c");
+  fireEvent.keyDown(last, { key: "Home" });
+  expect(first).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: "下一条" }));
+  expect(second).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "上一条" }));
+  expect(first).toHaveAttribute("aria-pressed", "true");
+});
+
+it("状态、平台、用量、耗时与留存无需悬停，取消不冒充运行，零与缺失分开", () => {
+  const view = render(<Picker />);
+  const first = screen.getByRole("button", { name: /选择任务 示例 a/ });
+  expect(within(first).getByText("已中止")).toBeVisible();
+  expect(within(first).getByText("telegram · 123")).toBeVisible();
+  expect(first).toHaveTextContent("Tokens 0 · 耗时 0ms");
+  expect(first).toHaveTextContent("消息留存 0%");
+  const second = screen.getByRole("button", { name: /选择任务 示例 b/ });
+  expect(second).toHaveTextContent("Tokens 未记录 · 耗时 未记录");
+  expect(second).toHaveTextContent("消息留存 未记录");
+  view.rerender(
+    <AnalysisTimelinePicker traces={traces} selectedTrace={null} onSelectTrace={vi.fn()} loading />,
+  );
+  expect(screen.getByRole("button", { name: /选择任务 示例 a/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "下一条" })).toBeDisabled();
+});
+
+it("长群名收起显示时仍能识别完整任务，状态、平台和选择行为不丢失", () => {
+  const longName = "深度学习与自然语言处理前沿学术讨论暨核心内测技术交流特大群（第 3 分群）";
+  const longTrace = { ...traces[1], group_name: longName, group_id: "108273918237493821" };
+  const onSelect = vi.fn();
+  render(
+    <AnalysisTimelinePicker
+      traces={[traces[0], longTrace]}
+      selectedTrace={traces[0]}
+      onSelectTrace={onSelect}
+    />,
+  );
+  const card = screen.getByRole("button", { name: (name) => name.includes(longName) });
+  expect(card).toHaveAccessibleName(expect.stringContaining(longTrace.trace_id));
+  expect(within(card).getByTitle(longName)).toHaveTextContent(longName);
+  expect(within(card).getByText("成功")).toBeVisible();
+  expect(within(card).getByText(`discord · ${longTrace.group_id}`)).toBeVisible();
+  fireEvent.click(card);
+  expect(onSelect).toHaveBeenCalledWith(longTrace);
+});
+
+it("快速切换取消旧帧，减少动态效果时直接定位，卸载取消待执行滚动", () => {
+  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+  const view = render(<Picker />);
+  const first = screen.getByRole("button", { name: /选择任务 示例 a/ });
+  const last = screen.getByRole("button", { name: /选择任务 示例 c/ });
+  const container = first.closest("ol")!.parentElement!;
+  const scrollTo = vi.fn();
+  Object.defineProperties(container, {
+    scrollTo: { value: scrollTo },
+    scrollWidth: { value: 900 },
+    clientWidth: { value: 300 },
+  });
+  Object.defineProperties(last, { offsetLeft: { value: 500 }, offsetWidth: { value: 240 } });
+  fireEvent.keyDown(first, { key: "ArrowRight" });
+  fireEvent.keyDown(screen.getByRole("button", { name: /选择任务 示例 b/ }), { key: "End" });
+  expect(frames.size).toBe(1);
+  act(() => {
+    for (const callback of frames.values()) callback(0);
+    frames.clear();
+  });
+  expect(scrollTo).toHaveBeenCalledTimes(1);
+  expect(scrollTo).toHaveBeenCalledWith({ left: 470, behavior: "auto" });
+  fireEvent.keyDown(last, { key: "Home" });
+  expect(frames.size).toBe(1);
+  view.unmount();
+  expect(frames.size).toBe(0);
+});
+
+it("鼠标拖动只平移不误选，键盘激活仍可选择；触屏保留原生滑动", () => {
+  vi.stubGlobal("PointerEvent", MouseEvent);
+  render(<Picker />);
+  const first = screen.getByRole("button", { name: /选择任务 示例 a/ });
+  const last = screen.getByRole("button", { name: /选择任务 示例 c/ });
+  const container = first.closest("ol")!.parentElement!;
+  const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 100, button: 0 });
+  Object.defineProperty(down, "pointerType", { value: "mouse" });
+  fireEvent(container, down);
+  fireEvent.pointerMove(container, { clientX: 30 });
+  fireEvent.pointerUp(container);
+  expect(container.scrollLeft).toBe(70);
+  fireEvent.click(last, { detail: 1 });
+  expect(first).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(last, { detail: 0 });
+  expect(last).toHaveAttribute("aria-pressed", "true");
+  const touch = new MouseEvent("pointerdown", { bubbles: true, clientX: 100 });
+  Object.defineProperty(touch, "pointerType", { value: "touch" });
+  fireEvent(container, touch);
+  fireEvent.pointerMove(container, { clientX: 10 });
+  expect(container.scrollLeft).toBe(70);
+});
+
+it("纵向滚轮横移记录，首尾和无溢出时放行页面滚动，不改变所选任务", () => {
+  render(<Picker />);
+  const first = screen.getByRole("button", { name: /选择任务 示例 a/ });
+  const container = first.closest("ol")!.parentElement!;
+  Object.defineProperties(container, {
+    scrollWidth: { configurable: true, value: 900 },
+    clientWidth: { value: 300 },
+  });
+  expect(fireEvent.wheel(container, { deltaY: -80 })).toBe(true);
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(false);
+  expect(container.scrollLeft).toBe(80);
+  expect(fireEvent.wheel(container, { deltaY: 1000 })).toBe(false);
+  expect(container.scrollLeft).toBe(600);
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(true);
+  expect(fireEvent.wheel(container, { deltaY: -80 })).toBe(false);
+  expect(container.scrollLeft).toBe(520);
+  expect(first).toHaveAttribute("aria-pressed", "true");
+  Object.defineProperty(container, "scrollWidth", { value: 300 });
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(true);
+});
+
+it("按行或整页的滚轮换算距离，触控板横滑、缩放和组合键保留原生行为", () => {
+  render(<Picker />);
+  const container = screen.getByRole("list").parentElement!;
+  container.style.lineHeight = "20px";
+  Object.defineProperties(container, {
+    scrollWidth: { value: 1800 },
+    clientWidth: { value: 300 },
+  });
+  fireEvent.wheel(container, { deltaY: 3, deltaMode: WheelEvent.DOM_DELTA_LINE });
+  expect(container.scrollLeft).toBe(60);
+  fireEvent.wheel(container, { deltaY: 1, deltaMode: WheelEvent.DOM_DELTA_PAGE });
+  expect(container.scrollLeft).toBe(360);
+  for (const properties of [
+    { deltaX: 50 },
+    { deltaX: 2, deltaY: 80 },
+    { deltaY: 80, ctrlKey: true },
+    { deltaY: 80, metaKey: true },
+    { deltaY: 80, shiftKey: true },
+    { deltaY: 80, cancelable: false },
+    { deltaY: 0 },
+  ]) {
+    expect(fireEvent.wheel(container, properties)).toBe(true);
+    expect(container.scrollLeft).toBe(360);
+  }
+});
+
+it("数据载入后注册滚轮事件，列表移除或卸载时清理监听", () => {
+  const onSelect = vi.fn();
+  const view = render(
+    <AnalysisTimelinePicker traces={[]} selectedTrace={null} onSelectTrace={onSelect} />,
+  );
+  view.rerender(
+    <AnalysisTimelinePicker traces={traces} selectedTrace={traces[0]} onSelectTrace={onSelect} />,
+  );
+  const container = screen.getByRole("list").parentElement!;
+  Object.defineProperties(container, { scrollWidth: { value: 900 }, clientWidth: { value: 300 } });
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(false);
+  view.rerender(
+    <AnalysisTimelinePicker traces={[]} selectedTrace={null} onSelectTrace={onSelect} />,
+  );
+  expect(fireEvent.wheel(container, { deltaY: 80 })).toBe(true);
+  expect(container.scrollLeft).toBe(80);
+  view.rerender(
+    <AnalysisTimelinePicker traces={traces} selectedTrace={traces[0]} onSelectTrace={onSelect} />,
+  );
+  const replacement = screen.getByRole("list").parentElement!;
+  const remove = vi.spyOn(replacement, "removeEventListener");
+  view.unmount();
+  expect(remove).toHaveBeenCalledWith("wheel", expect.any(Function));
+});

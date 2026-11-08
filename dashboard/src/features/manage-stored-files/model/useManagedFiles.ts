@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { message } from "antd";
+import { toast } from "sonner";
 import { readUploadFile } from "../../../shared/lib/fileUpload";
 import type { FileDraft } from "./fileDraft";
 import {
@@ -38,23 +38,46 @@ export function useManagedFiles() {
   const [content, setContent] = useState<ManagedFileContent | null>(null);
   const listSequence = useRef(0);
   const detailSequence = useRef(0);
+  const overviewSequence = useRef(0);
+  const operation = useRef<number | null>(null);
+  const uploadSequence = useRef(0);
+  const activeUpload = useRef<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [overviewLoading, setOverviewLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    const request = ++overviewSequence.current;
+    setOverviewLoading(true);
     try {
-      setPartitions(await fetchManagedPartitions());
+      const result = await fetchManagedPartitions();
+      if (request !== overviewSequence.current) return;
+      setPartitions(result);
       setError("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "存储概览读取失败");
+      if (request === overviewSequence.current)
+        setError(cause instanceof Error ? cause.message : "存储概览读取失败");
+    } finally {
+      if (request === overviewSequence.current) setOverviewLoading(false);
     }
   }, []);
 
+  const listQueryKey = JSON.stringify([partition?.key, search, page, extensions, directory]);
+  const currentListQuery = useRef(listQueryKey);
+  currentListQuery.current = listQueryKey;
   const load = useCallback(async () => {
+    if (listQueryKey !== currentListQuery.current) return;
     const sequence = ++listSequence.current;
     if (!partition || ["typst_fonts", "avatar_storage"].includes(partition.key)) return;
     setLoading(true);
     try {
       const result = await fetchManagedFiles(partition.key, search, page, extensions, directory);
-      if (sequence === listSequence.current) {
+      if (sequence === listSequence.current && listQueryKey === currentListQuery.current) {
+        const lastPage = Math.max(1, Math.ceil(result.total / 20));
+        if (page > lastPage) {
+          setPage(lastPage);
+          return;
+        }
         setFiles(result.items);
         setGroups(result.groups || []);
         setTotal(result.total);
@@ -66,7 +89,7 @@ export function useManagedFiles() {
     } finally {
       if (sequence === listSequence.current) setLoading(false);
     }
-  }, [partition, search, page, extensions, directory]);
+  }, [partition, search, page, extensions, directory, listQueryKey]);
 
   useEffect(() => {
     void refresh();
@@ -81,12 +104,21 @@ export function useManagedFiles() {
   useEffect(
     () => () => {
       detailSequence.current++;
+      overviewSequence.current++;
+      uploadSequence.current++;
     },
     [],
   );
 
   const select = (value: ManagedPartition | null) => {
     detailSequence.current++;
+    listSequence.current++;
+    uploadSequence.current++;
+    activeUpload.current = null;
+    operation.current = null;
+    setBusy(false);
+    setUploading(false);
+    setActionError("");
     setEditor(null);
     setPartition(value);
     setDirectory("");
@@ -96,51 +128,71 @@ export function useManagedFiles() {
     setPage(1);
     setFiles([]);
     setTotal(0);
-    setLoading(false);
+    setLoading(value !== null && !["typst_fonts", "avatar_storage"].includes(value.key));
     setContent(null);
     setSelected([]);
     setDeleteResult(null);
     setListError("");
   };
   const inspect = async (name: string) => {
-    if (!partition || busy) return;
+    if (!partition || operation.current !== null) return;
     const sequence = ++detailSequence.current;
+    operation.current = sequence;
+    setActionError("");
     setBusy(true);
     try {
       const result = await fetchManagedContent(partition.key, name);
-      if (sequence === detailSequence.current) setContent(result);
+      if (sequence === detailSequence.current) {
+        if (result.name !== name) throw new Error("文件读取结果不匹配，请刷新后重试");
+        setContent(result);
+      }
     } catch (cause) {
-      void message.error(cause instanceof Error ? cause.message : "文件读取失败");
+      if (sequence === detailSequence.current)
+        toast.error(cause instanceof Error ? cause.message : "文件读取失败");
     } finally {
-      setBusy(false);
+      if (sequence === detailSequence.current) {
+        operation.current = null;
+        setBusy(false);
+      }
     }
   };
   const mutate = async (input: Omit<ManagedFileMutation, "partition">) => {
-    if (!partition || busy) return false;
+    if (!partition || operation.current !== null || activeUpload.current !== null) return false;
     const sequence = detailSequence.current;
+    operation.current = sequence;
+    setActionError("");
     setBusy(true);
     try {
       await mutateManagedFile({ ...input, partition: partition.key });
-      if (sequence !== detailSequence.current) {
-        await refresh();
-        return false;
-      }
+      if (sequence !== detailSequence.current) return false;
       setContent(null);
       await Promise.all([load(), refresh()]);
-      void message.success("文件操作完成");
+      if (sequence !== detailSequence.current) return false;
+      toast.success("文件操作完成");
       return true;
     } catch (cause) {
-      void message.error(cause instanceof Error ? cause.message : "文件操作失败");
+      if (sequence === detailSequence.current) {
+        const detail = cause instanceof Error ? cause.message : "文件操作失败";
+        setActionError(detail);
+        toast.error(detail);
+      }
       return false;
     } finally {
-      setBusy(false);
+      if (sequence === detailSequence.current) {
+        operation.current = null;
+        setBusy(false);
+      }
     }
   };
   const download = async (name: string) => {
-    if (!partition || busy) return;
+    if (!partition || operation.current !== null) return;
+    const sequence = detailSequence.current;
+    operation.current = sequence;
     setBusy(true);
     try {
       const result = await fetchManagedContent(partition.key, name);
+      if (sequence !== detailSequence.current) return;
+      if (result.name !== name) throw new Error("文件读取结果不匹配，请刷新后重试");
       const bytes = Uint8Array.from(atob(result.content_base64), (char) => char.charCodeAt(0));
       const url = URL.createObjectURL(new Blob([bytes], { type: result.media_type }));
       const link = document.createElement("a");
@@ -149,31 +201,49 @@ export function useManagedFiles() {
       link.click();
       URL.revokeObjectURL(url);
     } catch (cause) {
-      void message.error(cause instanceof Error ? cause.message : "文件下载失败");
+      if (sequence === detailSequence.current)
+        toast.error(cause instanceof Error ? cause.message : "文件下载失败");
     } finally {
-      setBusy(false);
+      if (sequence === detailSequence.current) {
+        operation.current = null;
+        setBusy(false);
+      }
     }
   };
-  const deleteSelected = async () => {
-    if (!partition || !selected.length || busy) return;
+  const deleteSelected = async (targets = selected, expectedPartition = partition?.key) => {
+    if (
+      !partition ||
+      partition.key !== expectedPartition ||
+      !targets.length ||
+      operation.current !== null
+    )
+      return false;
     const sequence = detailSequence.current;
+    operation.current = sequence;
     setBusy(true);
+    setActionError("");
     try {
       const result = await deleteManagedFiles(
         partition.key,
-        selected.map((file) => ({ name: file.name, revision: file.revision })),
+        targets.map((file) => ({ name: file.name, revision: file.revision })),
       );
-      if (sequence !== detailSequence.current) {
-        await refresh();
-        return;
-      }
+      if (sequence !== detailSequence.current) return false;
       setDeleteResult(result);
       setSelected((current) => current.filter((file) => !result.deleted.includes(file.name)));
       await Promise.all([load(), refresh()]);
+      return sequence === detailSequence.current;
     } catch (cause) {
-      void message.error(cause instanceof Error ? cause.message : "多选删除失败");
+      if (sequence === detailSequence.current) {
+        const message = cause instanceof Error ? cause.message : "多选删除失败";
+        setActionError(message);
+        toast.error(message);
+      }
+      return false;
     } finally {
-      setBusy(false);
+      if (sequence === detailSequence.current) {
+        operation.current = null;
+        setBusy(false);
+      }
     }
   };
   const selectFiles = (keys: React.Key[]) => {
@@ -185,15 +255,22 @@ export function useManagedFiles() {
     );
   };
   const prepareUpload = async (file: File, replacement = false, targetName?: string) => {
+    if (operation.current !== null) return;
     const sequence = detailSequence.current;
+    const request = ++uploadSequence.current;
+    activeUpload.current = request;
+    const draft = editor;
+    setUploading(true);
+    setActionError("");
     try {
       const encoded = await readUploadFile(file);
-      if (sequence !== detailSequence.current) return;
-      if (replacement) setEditor((current) => current && { ...current, encoded });
+      if (sequence !== detailSequence.current || request !== uploadSequence.current) return;
+      if (replacement)
+        setEditor((current) => (current && current === draft ? { ...current, encoded } : current));
       else {
         if (targetName && partition?.key === "template_resources") {
           const result = await fetchManagedFiles(partition.key, targetName, 1);
-          if (sequence !== detailSequence.current) return;
+          if (sequence !== detailSequence.current || request !== uploadSequence.current) return;
           const existing = result.items.find((item) => item.name === targetName);
           setEditor({ name: targetName, text: "", encoded, revision: existing?.revision });
           return;
@@ -205,12 +282,20 @@ export function useManagedFiles() {
         setEditor({ name: prefix + file.name, text: "", encoded });
       }
     } catch (cause) {
-      if (sequence === detailSequence.current)
-        void message.error(cause instanceof Error ? cause.message : "无法读取上传文件");
+      if (sequence === detailSequence.current && request === uploadSequence.current) {
+        const detail = cause instanceof Error ? cause.message : "无法读取上传文件";
+        setActionError(detail);
+        toast.error(detail);
+      }
+    } finally {
+      if (sequence === detailSequence.current && request === uploadSequence.current) {
+        activeUpload.current = null;
+        setUploading(false);
+      }
     }
   };
   const saveEditor = async () => {
-    if (!editor) return;
+    if (!editor || activeUpload.current !== null) return;
     const encoded =
       editor.encoded ??
       btoa(
@@ -226,7 +311,7 @@ export function useManagedFiles() {
         content_base64: encoded,
       })
     )
-      setEditor(null);
+      setEditor((current) => (current === editor ? null : current));
   };
   const totals = partitions.reduce(
     (value, item) => ({
@@ -240,6 +325,7 @@ export function useManagedFiles() {
   );
   return {
     partitions,
+    overviewLoading,
     partition,
     files,
     groups,
@@ -253,11 +339,21 @@ export function useManagedFiles() {
     busy,
     error,
     listError,
+    actionError,
+    uploading,
+    clearActionError: () => setActionError(""),
     content,
     selected,
     deleteResult,
     editor,
     setEditor,
+    cancelEditor: () => {
+      uploadSequence.current++;
+      activeUpload.current = null;
+      setUploading(false);
+      setActionError("");
+      setEditor(null);
+    },
     prepareUpload,
     saveEditor,
     refresh,
@@ -270,6 +366,13 @@ export function useManagedFiles() {
     setPage,
     selectDirectory: (value: string) => {
       detailSequence.current++;
+      listSequence.current++;
+      uploadSequence.current++;
+      activeUpload.current = null;
+      operation.current = null;
+      setBusy(false);
+      setUploading(false);
+      setActionError("");
       setEditor(null);
       setDirectory(value);
       setSearch("");

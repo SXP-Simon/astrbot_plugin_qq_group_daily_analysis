@@ -1,125 +1,264 @@
-import React from "react";
-import { Card, Empty } from "antd";
+import { LoadingState } from "../../shared/ui/loading-state";
+import { resolveChartColor } from "../../shared/lib/chartColors";
 import ReactECharts from "echarts-for-react";
-import { PieChartOutlined } from "@ant-design/icons";
-import { TokenUsage } from "../../entities/trace/model/types";
-import { formatTokens } from "../../shared/lib/formatters";
+import type { EChartsOption } from "echarts";
+import type { TokenUsage } from "../../entities/trace/model/types";
 import { useTheme } from "../../shared/lib/useTheme";
 
 interface TokenChartWidgetProps {
-  tokenUsage: TokenUsage;
+  loading?: boolean;
+  tokenUsage?: TokenUsage | null;
+  totalTokens?: number | null;
 }
 
-export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }) => {
-  const { isDark } = useTheme();
-  const perAnalyzer = tokenUsage.per_analyzer || {};
+const analyzerLabels: Record<string, string> = {
+  topics: "话题分析",
+  user_titles: "群友画像",
+  golden_quotes: "群聊金句",
+  chat_quality: "群聊质量",
+  comic_storyboard: "漫画分镜",
+};
+const recordedCount = (value: number | null | undefined) =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 
-  const analyzerLabels: Record<string, string> = {
-    topics: "话题分析",
-    user_titles: "群友画像",
-    golden_quotes: "精彩金句",
-    chat_quality: "群聊质量",
-    comic_storyboard: "趣味漫画",
-  };
-
-  const pieData = Object.entries(perAnalyzer)
-    .filter(([, v]) => (v.total_tokens || 0) > 0)
-    .map(([k, v]) => ({
-      name: analyzerLabels[k] || k,
-      value: v.total_tokens || 0,
-      promptTokens: v.prompt_tokens || 0,
-      completionTokens: v.completion_tokens || 0,
-    }));
-
-  const hasTokens = (tokenUsage.total_tokens || 0) > 0 || pieData.length > 0;
-
-  const pieOption = {
+export function TokenChartWidget({
+  tokenUsage,
+  totalTokens,
+  loading = false,
+}: TokenChartWidgetProps) {
+  useTheme();
+  if (loading)
+    return (
+      <section aria-label="模型消耗" aria-busy="true" className="min-w-0 space-y-4">
+        <h2 className="m-0 text-lg font-medium">模型消耗</h2>
+        <LoadingState skeleton>正在读取模型用量…</LoadingState>
+      </section>
+    );
+  const style = getComputedStyle(document.documentElement);
+  const color = (name: string) => resolveChartColor(style.getPropertyValue(name), style.color);
+  const total = recordedCount(tokenUsage?.total_tokens ?? totalTokens);
+  const rows = Object.entries(tokenUsage?.per_analyzer ?? {})
+    .map(([id, usage]) => ({
+      id,
+      name: analyzerLabels[id] || id,
+      input: recordedCount(usage.prompt_tokens),
+      output: recordedCount(usage.completion_tokens),
+      total: recordedCount(usage.total_tokens),
+    }))
+    .sort((a, b) => (b.total ?? -1) - (a.total ?? -1));
+  const plotted = rows.filter((row) => row.total !== null && row.total > 0);
+  const canStack = plotted.every(
+    (row) => row.input !== null && row.output !== null && row.input + row.output === row.total,
+  );
+  const moduleTotal = rows.reduce((sum, row) => sum + (row.total ?? 0), 0);
+  const mismatched =
+    rows.length > 0 &&
+    rows.every((row) => row.total !== null) &&
+    total !== null &&
+    moduleTotal !== total;
+  const option: EChartsOption = {
+    animation: false,
+    backgroundColor: "transparent",
+    textStyle: { fontFamily: '"LXGW WenKai Screen", sans-serif', color: color("--foreground") },
     tooltip: {
-      trigger: "item",
-      backgroundColor: isDark ? "rgba(24, 24, 28, 0.96)" : "rgba(255, 255, 255, 0.96)",
-      borderColor: isDark ? "#383838" : "#f0f0f0",
-      borderWidth: 1,
-      padding: [8, 12],
-      textStyle: { color: isDark ? "#e6edf3" : "#262626", fontSize: 12 },
-      formatter: (params: {
-        name: string;
-        value: number;
-        percent: number;
-        color: string;
-        data: { promptTokens?: number; completionTokens?: number };
-      }) => {
-        const { name, value, percent, data, color } = params;
-        const prompt = data?.promptTokens !== undefined ? formatTokens(data.promptTokens) : "-";
-        const completion =
-          data?.completionTokens !== undefined ? formatTokens(data.completionTokens) : "-";
-        const total = formatTokens(value);
-        return `
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${color};"></span>
-            <span style="font-weight: 600; font-size: 13px; color: ${isDark ? "#ffffff" : "#262626"};">${name}</span>
-          </div>
-          <div style="color: ${isDark ? "#bfbfbf" : "#595959"}; font-size: 12px; margin-bottom: 4px;">
-            总消耗: <span style="font-weight: 600; color: #9254de;">${total}</span> (${percent}%)
-          </div>
-          <div style="color: ${isDark ? "#8c8c8c" : "#8c8c8c"}; font-size: 11px; padding-top: 4px; border-top: 1px dashed ${isDark ? "#383838" : "#f0f0f0"};">
-            输入: <span style="color: ${isDark ? "#d9d9d9" : "#595959"};">${prompt}</span> / 输出: <span style="color: ${isDark ? "#d9d9d9" : "#595959"};">${completion}</span>
-          </div>
-        `;
+      trigger: "axis",
+      renderMode: "html",
+      enterable: false,
+      transitionDuration: 0,
+      extraCssText: "pointer-events: none; white-space: pre-wrap;",
+      formatter: (params: unknown) => {
+        const first: unknown = Array.isArray(params) ? params[0] : params;
+        if (
+          !first ||
+          typeof first !== "object" ||
+          !("dataIndex" in first) ||
+          typeof first.dataIndex !== "number"
+        )
+          return "";
+        const row = plotted[first.dataIndex];
+        if (!row) return "";
+        const element = document.createElement("div");
+        element.textContent = canStack
+          ? `${row.name}\n输入 Tokens：${row.input?.toLocaleString() ?? "未记录"}\n输出 Tokens：${row.output?.toLocaleString() ?? "未记录"}`
+          : `${row.name}\n总 Tokens：${row.total?.toLocaleString() ?? "未记录"}`;
+        return element;
       },
+      confine: true,
+      backgroundColor: color("--card"),
+      borderColor: color("--border"),
+      textStyle: { color: color("--foreground") },
     },
-    legend: {
-      bottom: "0%",
-      left: "center",
-      textStyle: { fontSize: 11, color: isDark ? "#e6edf3" : "#595959" },
+    grid: { top: 4, bottom: 4, left: 0, right: 64, containLabel: true },
+    xAxis: {
+      type: "value",
+      show: false,
+      max: "dataMax",
+      minInterval: 1,
+    },
+    yAxis: {
+      type: "category",
+      inverse: true,
+      data: plotted.map((row) => row.name),
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: {
+        color: color("--foreground"),
+        fontSize: 12,
+        width: 96,
+        overflow: "truncate",
+        margin: 12,
+      },
     },
     series: [
       {
-        name: "模型消耗",
-        type: "pie",
-        radius: ["40%", "70%"],
-        avoidLabelOverlap: false,
-        itemStyle: {
-          borderRadius: 4,
-          borderColor: isDark ? "#141414" : "#fff",
-          borderWidth: 2,
+        type: "bar",
+        name: canStack ? "输入 Tokens" : "总 Tokens",
+        stack: "usage",
+        barWidth: 10,
+        showBackground: true,
+        backgroundStyle: { color: color("--muted"), borderRadius: 5 },
+        data: plotted.map((row) => (canStack ? row.input : row.total)),
+        itemStyle: { color: color("--chart-input"), borderRadius: canStack ? [5, 0, 0, 5] : 5 },
+        label: {
+          show: !canStack,
+          position: "right",
+          distance: 10,
+          color: color("--foreground"),
+          formatter: (params) => plotted[params.dataIndex].total!.toLocaleString(),
         },
-        label: { show: false },
-        data:
-          pieData.length > 0
-            ? pieData
-            : [
-                {
-                  name: "全流程分析",
-                  value: tokenUsage.total_tokens,
-                  promptTokens: tokenUsage.prompt_tokens,
-                  completionTokens: tokenUsage.completion_tokens,
-                },
-              ],
       },
+      ...(canStack
+        ? [
+            {
+              type: "bar" as const,
+              name: "输出 Tokens",
+              stack: "usage",
+              barWidth: 10,
+              data: plotted.map((row) => row.output),
+              itemStyle: { color: color("--chart-output"), borderRadius: [0, 5, 5, 0] },
+              label: {
+                show: true,
+                position: "right" as const,
+                distance: 10,
+                color: color("--foreground"),
+                formatter: (params: { dataIndex: number }) =>
+                  plotted[params.dataIndex].total!.toLocaleString(),
+              },
+            },
+          ]
+        : []),
     ],
   };
-
   return (
-    <Card
-      size="small"
-      title={
-        <span style={{ fontSize: 13 }}>
-          <PieChartOutlined style={{ color: "#722ed1", marginRight: 6 }} />
-          各模块模型消耗分布
-        </span>
-      }
-    >
-      <div style={{ height: 230, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {hasTokens ? (
-          <ReactECharts option={pieOption} style={{ height: "100%", width: "100%" }} />
-        ) : (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="本次分析未产生模型消耗（纯统计模式或未启用大模型）"
-            style={{ margin: 0 }}
+    <section aria-label="模型消耗" className="min-w-0 space-y-4">
+      <h2 className="m-0 text-lg font-medium">模型消耗</h2>
+      <dl className="m-0 grid grid-cols-3 gap-2">
+        {[
+          { label: "总 Tokens", value: total, tone: "bg-card" },
+          {
+            label: "输入 Tokens",
+            value: recordedCount(tokenUsage?.prompt_tokens),
+            tone: "bg-primary-soft",
+          },
+          {
+            label: "输出 Tokens",
+            value: recordedCount(tokenUsage?.completion_tokens),
+            tone: "bg-secondary-soft",
+          },
+        ].map(({ label, value, tone }) => (
+          <div key={label} className={`min-w-0 rounded-xl p-3 ${tone}`}>
+            <dt className="text-sm text-muted-foreground">{label}</dt>
+            <dd className="m-0 mt-1 break-words text-lg tabular-nums">
+              {typeof value === "number" ? value.toLocaleString() : "未记录"}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {plotted.length > 0 && (
+        <div className="min-w-0 overflow-hidden">
+          <div
+            aria-label="图例"
+            className="mb-1 flex justify-end gap-4 text-xs text-muted-foreground"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="size-2 rounded-sm"
+                style={{ background: color("--chart-input") }}
+              />
+              {canStack ? "输入" : "模块总量"}
+            </span>
+            {canStack && (
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-sm"
+                  style={{ background: color("--chart-output") }}
+                />
+                输出
+              </span>
+            )}
+          </div>
+          <ReactECharts
+            option={option}
+            notMerge
+            style={{ height: Math.min(480, Math.max(94, plotted.length * 42 + 8)), width: "100%" }}
           />
-        )}
-      </div>
-    </Card>
+        </div>
+      )}
+      {rows.length ? (
+        <>
+          {mismatched && (
+            <p role="status" className="m-0 text-sm text-muted-foreground">
+              模块记录合计 {moduleTotal.toLocaleString()} Tokens，与任务总数不同，以下保留原始记录。
+            </p>
+          )}
+          <div
+            role="region"
+            aria-label="模块消耗明细"
+            tabIndex={0}
+            className="max-h-80 overflow-auto rounded-xl border border-solid border-border focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <table className="w-full border-collapse text-sm">
+              <caption className="sr-only">各模块模型消耗，单位 Tokens</caption>
+              <thead className="sticky top-0 bg-secondary">
+                <tr>
+                  {["分析模块", "输入", "输出", "合计"].map((label) => (
+                    <th key={label} scope="col" className="px-3 py-2 text-left font-medium">
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-0 border-t border-solid border-border">
+                    <th
+                      scope="row"
+                      className="max-w-64 break-words px-3 py-2 text-left font-normal"
+                    >
+                      {row.name}
+                    </th>
+                    {[row.input, row.output, row.total].map((value, index) => (
+                      <td key={index} className="px-3 py-2 tabular-nums">
+                        {value === null ? "未记录" : value.toLocaleString()}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <p role="status" className="m-0 py-6 text-sm text-muted-foreground">
+          {total === null
+            ? "未记录模型用量。"
+            : total === 0
+              ? "已记录总消耗为 0 Tokens，未保存模块明细。"
+              : "仅记录了任务总用量，未保存模块明细。"}
+        </p>
+      )}
+    </section>
   );
-};
+}

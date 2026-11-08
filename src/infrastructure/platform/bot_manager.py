@@ -349,6 +349,9 @@ class BotManager:
         3. 标准协议类型名称匹配（如传入 'aiocqhttp'、'telegram' 时匹配对应协议适配器实例）
 
         若未指定 platform_id 或未精准匹配到任何有效适配器，返回 None。
+
+        Raises:
+            ValueError: 非精确标识匹配多个实例，无法唯一定位目标。
         """
         # 如果没有任何适配器，尝试全局刷新一次
         if not self._adapters:
@@ -374,9 +377,17 @@ class BotManager:
 
         # 2. 大小写与空格不敏感匹配
         clean_id_lower = clean_id.lower()
-        for k, adp in self._adapters.items():
-            if k.strip().lower() == clean_id_lower:
-                return adp
+        candidates = [
+            adp
+            for k, adp in self._adapters.items()
+            if k.strip().lower() == clean_id_lower
+        ]
+        if len(candidates) == 1:
+            return candidates[0]
+        if len(candidates) > 1:
+            raise ValueError(
+                f"平台标识 {platform_id} 对应多个实例，请选择准确的实例 ID"
+            )
 
         # 3. 通过 PlatformAdapterFactory 注册类型匹配（当调用方传入标准协议名如 aiocqhttp/telegram 时）
         if PlatformAdapterFactory.is_supported(clean_id_lower):
@@ -384,12 +395,17 @@ class BotManager:
                 clean_id_lower
             )
             if expected_adapter_cls:
-                for k, adp in self._adapters.items():
-                    if isinstance(adp, expected_adapter_cls):
-                        logger.info(
-                            f"[BotManager] 平台类型 '{platform_id}' 精准匹配到已注册适配器 '{k}'"
-                        )
-                        return adp
+                candidates = [
+                    adp
+                    for adp in self._adapters.values()
+                    if isinstance(adp, expected_adapter_cls)
+                ]
+                if len(candidates) == 1:
+                    return candidates[0]
+                if len(candidates) > 1:
+                    raise ValueError(
+                        f"存在多个 {platform_id} 接入，请选择准确的实例 ID"
+                    )
 
         logger.warning(
             f"[BotManager] 未找到匹配平台 '{platform_id}' 的适配器。当前已有适配器列表: {list(self._adapters.keys())}"
@@ -412,6 +428,26 @@ class BotManager:
             return str(p_id)
         # 3. 兜底读取 platform_name
         return str(getattr(adapter, "platform_name", "") or "")
+
+    def resolve_platform_id(self, platform_id: str | None) -> str:
+        """将入口别名解析成唯一真实实例，供锁、配置与持久化共同使用。
+
+        Args:
+            platform_id: 实例 ID 或仅在单实例时有效的协议别名。
+
+        Returns:
+            已注册适配器的真实实例 ID。
+
+        Raises:
+            ValueError: 接入不存在、身份不完整或别名存在歧义。
+        """
+        adapter = self.get_adapter(platform_id)
+        if adapter is None:
+            raise ValueError(f"未找到平台 {platform_id} 的适配器，请选择有效的平台实例")
+        actual_id = self.get_adapter_platform_id(adapter)
+        if not actual_id:
+            raise ValueError("无法确定平台实例身份，请检查接入配置")
+        return actual_id
 
     def get_all_adapters(self) -> dict[str, PlatformAdapter[object]]:
         """获取所有 PlatformAdapter 实例 {platform_id: adapter}"""

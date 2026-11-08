@@ -1,33 +1,16 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Drawer,
-  Tag,
-  Alert,
-  Typography,
-  Spin,
-  Collapse,
-  Space,
-  Button,
-  message,
-  theme,
-} from "antd";
-import { ReloadOutlined, SyncOutlined } from "@ant-design/icons";
-import { fetchTraceDetail, resumeTraceTask } from "../../entities/trace/api/traceApi";
-import { fetchTraceLogs } from "../../entities/log/api/logApi";
-import { fetchReportContent } from "../../entities/report/api/reportApi";
-import { ReportItem } from "../../entities/report/model/types";
-import { ReportPreviewModal } from "../report-preview-modal/ReportPreviewModal";
-import { TraceRecord } from "../../entities/trace/model/types";
-import { PluginLogItem } from "../../entities/log/model/types";
+import { LoadingState } from "../../shared/ui/loading-state";
+import { IconRefresh, IconPlayerPlay } from "@tabler/icons-react";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../shared/ui/dialog";
+import { Button } from "../../shared/ui/button";
 import { StatusTag } from "../../shared/ui/StatusTag";
 import { SpanTimeline } from "../../entities/trace/ui/SpanTimeline";
+import { TraceMetricsChart } from "../../entities/trace/ui/TraceMetricsChart";
 import { formatStageName } from "../../shared/lib/formatters";
 import { ResumeTaskModal } from "../../features/resume-task/ui/ResumeTaskModal";
-import { TraceMetricsChart } from "../../entities/trace/ui/TraceMetricsChart";
+import { ReportPreviewModal } from "../report-preview-modal/ReportPreviewModal";
 import { TraceLogViewer } from "./ui/TraceLogViewer";
 import { TraceSummaryCard } from "./ui/TraceSummaryCard";
-
-const { Text, Paragraph } = Typography;
+import { useTraceDrawerViewModel } from "./model/useTraceDrawerViewModel";
 
 interface TraceDrawerProps {
   traceId: string | null;
@@ -35,375 +18,173 @@ interface TraceDrawerProps {
   onClose: () => void;
 }
 
-export const TraceDrawer: React.FC<TraceDrawerProps> = ({ traceId, open, onClose }) => {
-  const { token } = theme.useToken();
-  const [storedTrace, setTrace] = useState<TraceRecord | null>(null);
-  const trace =
-    storedTrace?.status === "running" && storedTrace.duration_ms == null
-      ? { ...storedTrace, duration_ms: Math.max(0, Date.now() - storedTrace.started_at * 1000) }
-      : storedTrace;
-  const [logs, setLogs] = useState<PluginLogItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [resuming, setResuming] = useState(false);
-  const [resumeModalOpen, setResumeModalOpen] = useState(false);
-  const [previewReport, setPreviewReport] = useState<ReportItem | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const handleConfirmResume = async (selectedProvider?: string, selectedTemplate?: string) => {
-    if (!traceId) return;
-    setResuming(true);
-    try {
-      await resumeTraceTask(traceId, selectedProvider, selectedTemplate);
-      message.success("已成功触发断点续跑任务，正在恢复分析...");
-      setResumeModalOpen(false);
-      loadDetail(true);
-    } catch (e) {
-      message.error(`触发续跑失败: ${e}`);
-    } finally {
-      setResuming(false);
-    }
-  };
-
-  const handlePreviewFile = async (filename: string, isHtml: boolean) => {
-    const baseItem: ReportItem = {
-      filename,
-      size_bytes: 0,
-      modified_at: Date.now() / 1000,
-      is_html: isHtml,
-      group_id: trace?.group_id,
-      group_name: trace?.group_name,
-      platform: trace?.platform,
-      trace_id: trace?.trace_id,
-    };
-    setPreviewReport(baseItem);
-    setPreviewOpen(true);
-    setPreviewLoading(true);
-    try {
-      const data = await fetchReportContent(filename);
-      if (data) {
-        setPreviewReport((prev) => ({
-          ...(prev || baseItem),
-          ...data,
-        }));
-      }
-    } catch {
-      message.error("加载产物报告文件失败");
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const handleDownloadFile = async (filename: string, isHtml: boolean) => {
-    try {
-      const data = await fetchReportContent(filename);
-      if (!data) {
-        message.error("获取下载文件失败");
-        return;
-      }
-      let href = data.data_url;
-      let cleanupBlobUrl: string | null = null;
-      if (isHtml && data.html_content) {
-        const blob = new Blob([data.html_content], { type: "text/html;charset=utf-8" });
-        href = URL.createObjectURL(blob);
-        cleanupBlobUrl = href;
-      }
-      if (!href) {
-        message.error("未获取到下载链接");
-        return;
-      }
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      if (cleanupBlobUrl) {
-        URL.revokeObjectURL(cleanupBlobUrl);
-      }
-    } catch {
-      message.error("下载文件失败");
-    }
-  };
-
-  const loadDetail = useCallback(
-    async (isManual = false) => {
-      if (!traceId) return;
-      if (!isManual) setLoading(true);
-      try {
-        const [detailData, logsData] = await Promise.allSettled([
-          fetchTraceDetail(traceId),
-          fetchTraceLogs(traceId),
-        ]);
-        if (detailData.status === "fulfilled") setTrace(detailData.value);
-        if (logsData.status === "fulfilled") setLogs(logsData.value);
-      } finally {
-        if (!isManual) setLoading(false);
-      }
-    },
-    [traceId],
-  );
-
-  useEffect(() => {
-    if (open && traceId) {
-      loadDetail();
-    } else {
-      setTrace(null);
-      setLogs([]);
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    }
-  }, [open, traceId, loadDetail]);
-
-  // 运行中高频静默轮询（同时实时刷新 Spans 状态与执行日志流）
-  useEffect(() => {
-    if (open && trace?.status === "running" && traceId) {
-      if (!pollRef.current) {
-        pollRef.current = setInterval(async () => {
-          try {
-            const [detailData, logsData] = await Promise.allSettled([
-              fetchTraceDetail(traceId, true),
-              fetchTraceLogs(traceId),
-            ]);
-            if (detailData.status === "fulfilled" && detailData.value) {
-              setTrace(detailData.value);
-              if (detailData.value.status !== "running" && pollRef.current) {
-                clearInterval(pollRef.current);
-                pollRef.current = null;
-              }
-            }
-            if (logsData.status === "fulfilled" && logsData.value) {
-              setLogs(logsData.value);
-            }
-          } catch {
-            // 忽略轮询异常
-          }
-        }, 1500);
-      }
-    }
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [open, trace?.status, traceId]);
-
-  const hasWarningSpan = trace?.spans?.some(
-    (s) =>
-      s.status === "warning" ||
-      s.payload?.success === false ||
-      Boolean(s.payload?.warning) ||
-      (Array.isArray(s.payload?.subtask_errors) && s.payload.subtask_errors.length > 0),
-  );
-  const effectiveStatus =
-    trace?.status === "warning" ||
-    Boolean(trace?.extra?.has_warnings) ||
-    (trace?.status === "succeeded" && hasWarningSpan)
-      ? "warning"
-      : trace?.status || "unknown";
-
+export function TraceDrawer({ traceId, open, onClose }: TraceDrawerProps) {
+  const vm = useTraceDrawerViewModel(traceId, open);
+  const trace = vm.trace;
   return (
-    <Drawer
-      title={
-        <Space size="middle">
-          <span style={{ fontSize: 16, fontWeight: 600 }}>任务执行详情</span>
-          {trace && <StatusTag status={effectiveStatus} />}
-        </Space>
-      }
-      extra={
-        <Space size="small">
-          {trace && trace.status !== "running" && (
-            <Button
-              size="small"
-              type="primary"
-              ghost
-              icon={<SyncOutlined spin={resuming} />}
-              loading={resuming}
-              onClick={() => setResumeModalOpen(true)}
-            >
-              幂等续跑
-            </Button>
-          )}
-          <Button
-            size="small"
-            type="text"
-            icon={<ReloadOutlined spin={loading} />}
-            onClick={() => loadDetail(true)}
-          >
-            刷新
-          </Button>
-        </Space>
-      }
-      placement="right"
-      width={600}
-      onClose={onClose}
+    <Dialog
       open={open}
-      destroyOnHidden
+      onOpenChange={(next) => {
+        if (!next && !vm.resuming) onClose();
+      }}
     >
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "60px 0" }}>
-          <Spin tip="正在加载任务详情..." />
-        </div>
-      ) : trace ? (
-        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-          {/* 运行中状态提示 */}
-          {trace.status === "running" && (
-            <Alert
-              type="info"
-              showIcon
-              icon={<SyncOutlined spin />}
-              message="任务正在执行中"
-              description={
-                <span>
-                  当前阶段：
-                  <Tag color="processing" style={{ margin: "0 4px" }}>
-                    {trace.current_stage ? formatStageName(trace.current_stage) : "准备中"}
-                  </Tag>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    （已自动每 3 秒刷新，任务结束后将显示完整数据）
-                  </Text>
-                </span>
-              }
-            />
-          )}
-
-          {/* 跳过提示 */}
-          {trace.status === "skipped" && (
-            <Alert
-              type="info"
-              showIcon
-              message="定时/增量分析已安全跳过"
-              description={
-                <Paragraph
-                  ellipsis={{ rows: 2, expandable: true, symbol: "展开详情" }}
-                  style={{ marginBottom: 0, fontSize: 13 }}
-                >
-                  {trace.error_message ||
-                    "未达到分析触发阈值或未满足执行条件，本次调度已安全跳过，未消耗任何 Token。"}
-                </Paragraph>
-              }
-            />
-          )}
-
-          {/* 错误警告与快速重试 */}
-          {trace.status === "failed" && (
-            <Alert
-              type="error"
-              showIcon
-              message={
-                trace.error_stage
-                  ? `在【${formatStageName(trace.error_stage)}】阶段发生异常`
-                  : "分析过程发生异常"
-              }
-              description={
-                <div>
-                  <Paragraph
-                    ellipsis={{ rows: 2, expandable: true, symbol: "展开详情" }}
-                    style={{ marginBottom: 4 }}
-                  >
-                    {trace.error_message || "未知错误"}
-                  </Paragraph>
-                  <div style={{ marginTop: 8, marginBottom: 8 }}>
-                    <Button
-                      type="primary"
-                      size="small"
-                      danger
-                      ghost
-                      icon={<SyncOutlined spin={resuming} />}
-                      loading={resuming}
-                      onClick={() => setResumeModalOpen(true)}
-                    >
-                      从 Checkpoint 幂等续跑此任务
-                    </Button>
-                  </div>
-                  {trace.stack_trace && (
-                    <Collapse
-                      size="small"
-                      ghost
-                      items={[
-                        {
-                          key: "stack_trace",
-                          label: <span style={{ fontSize: 11 }}>查看异常堆栈 (Stack Trace)</span>,
-                          children: (
-                            <pre
-                              style={{
-                                fontSize: 11,
-                                fontFamily:
-                                  "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
-                                background: token.colorFillAlter,
-                                color: token.colorText,
-                                border: `1px solid ${token.colorBorderSecondary}`,
-                                padding: 8,
-                                borderRadius: 4,
-                                maxHeight: 200,
-                                overflow: "auto",
-                                whiteSpace: "pre-wrap",
-                                wordBreak: "break-all",
-                              }}
-                            >
-                              {trace.stack_trace}
-                            </pre>
-                          ),
-                        },
-                      ]}
-                    />
-                  )}
-                </div>
-              }
-            />
-          )}
-
-          {/* 基本信息与消耗概览 */}
-          <TraceSummaryCard
-            trace={trace}
-            onPreviewFile={handlePreviewFile}
-            onDownloadFile={handleDownloadFile}
-          />
-
-          {/* 全链路性能指标与运行期资源观测图表 */}
-          <TraceMetricsChart trace={trace} />
-
-          {/* 执行阶段时间线 */}
-          <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-              执行生命周期阶段 (Spans)
-            </div>
-            <SpanTimeline
-              spans={trace.spans || []}
-              totalDurationMs={trace.duration_ms ?? undefined}
-              currentStage={trace.current_stage ?? undefined}
-              taskStatus={trace.status}
-            />
+      <DialogContent className="max-w-6xl gap-5 sm:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-3 pr-6">
+          <div className="grid gap-1">
+            <DialogTitle>{trace?.group_name || "任务详情"}</DialogTitle>
+            <DialogDescription className="flex flex-wrap items-center gap-2">
+              {trace && (
+                <>
+                  <StatusTag status={vm.effectiveStatus} />
+                  <span className="font-mono text-xs">
+                    {trace.platform} · {trace.group_id}
+                  </span>
+                </>
+              )}
+              {!trace && "查看阶段记录、日志与报告"}
+            </DialogDescription>
           </div>
-
-          {/* 专属执行日志流 */}
-          <TraceLogViewer logs={logs} />
-        </Space>
-      ) : (
-        <Text type="secondary">未能获取到任务详情</Text>
-      )}
-
-      <ReportPreviewModal
-        open={previewOpen}
-        loading={previewLoading}
-        report={previewReport}
-        onClose={() => {
-          setPreviewOpen(false);
-          setPreviewReport(null);
-        }}
-        onDownload={(r) => handleDownloadFile(r.filename, Boolean(r.is_html))}
-      />
-
-      <ResumeTaskModal
-        open={resumeModalOpen}
-        loading={resuming}
-        onCancel={() => setResumeModalOpen(false)}
-        onConfirm={handleConfirmResume}
-      />
-    </Drawer>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={vm.refresh}
+              disabled={vm.loading || vm.refreshing}
+            >
+              <IconRefresh
+                aria-hidden="true"
+                className={vm.loading || vm.refreshing ? "animate-spin" : undefined}
+              />
+              刷新
+            </Button>
+            {trace && trace.status !== "running" && (
+              <Button size="sm" onClick={() => vm.setResumeModalOpen(true)} disabled={vm.resuming}>
+                <IconPlayerPlay aria-hidden="true" />
+                继续分析
+              </Button>
+            )}
+          </div>
+        </div>
+        {vm.error && (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {vm.error}
+          </p>
+        )}
+        {vm.actionError && !vm.resumeModalOpen && (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {vm.actionError}
+          </p>
+        )}
+        {vm.notice && (
+          <p role="status" className="m-0 text-sm text-muted-foreground">
+            {vm.notice}
+          </p>
+        )}
+        {vm.loading ? (
+          <LoadingState skeleton className="py-12 text-center text-muted-foreground">
+            正在加载任务详情…
+          </LoadingState>
+        ) : (
+          trace && (
+            <>
+              {trace.status === "running" && (
+                <p role="status" className="m-0 rounded-xl bg-accent px-4 py-3 text-sm">
+                  正在{trace.current_stage ? formatStageName(trace.current_stage) : "准备分析"}
+                  ，详情自动更新。
+                </p>
+              )}
+              {trace.status === "skipped" && (
+                <p className="m-0 rounded-xl bg-muted px-4 py-3 text-sm">
+                  {trace.error_message || "本次任务已跳过，具体原因未记录。"}
+                </p>
+              )}
+              {trace.status === "failed" && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-solid border-destructive/35 bg-destructive/5 px-4 py-3"
+                >
+                  <p className="m-0 font-medium text-destructive">
+                    {trace.error_stage ? `${formatStageName(trace.error_stage)}失败` : "分析未完成"}
+                  </p>
+                  <p className="mb-0 mt-1 whitespace-pre-wrap break-words text-sm">
+                    {trace.error_message || "未记录具体原因，请查看阶段记录和日志。"}
+                  </p>
+                </div>
+              )}
+              <TraceSummaryCard
+                trace={trace}
+                downloading={vm.downloading}
+                onPreviewFile={vm.previewFile}
+                onDownloadFile={vm.downloadFile}
+              />
+              <section
+                aria-label="执行过程"
+                className="border-0 border-t border-solid border-border pt-4"
+              >
+                <h2 className="mb-3 mt-0 text-lg font-medium">执行过程</h2>
+                <SpanTimeline
+                  spans={trace.spans || []}
+                  totalDurationMs={trace.duration_ms ?? undefined}
+                  currentStage={trace.current_stage ?? undefined}
+                  taskStatus={trace.status}
+                />
+              </section>
+              <details className="border-0 border-t border-solid border-border pt-4">
+                <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-ring">
+                  耗时、内存与传输
+                </summary>
+                <div className="mt-3">
+                  <TraceMetricsChart trace={trace} />
+                </div>
+              </details>
+              {vm.logsError && (
+                <p role="alert" className="m-0 text-sm text-destructive">
+                  {vm.logsError}
+                </p>
+              )}
+              <TraceLogViewer key={trace.trace_id} logs={vm.logs} />
+              {trace.stack_trace && (
+                <details>
+                  <summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-ring">
+                    异常堆栈
+                  </summary>
+                  <pre className="max-h-80 overflow-auto rounded-xl bg-muted p-3 text-xs whitespace-pre-wrap break-words">
+                    {trace.stack_trace}
+                  </pre>
+                </details>
+              )}
+              <details>
+                <summary className="cursor-pointer text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                  完整任务记录
+                </summary>
+                <pre className="max-h-96 overflow-auto rounded-xl bg-muted p-3 text-xs whitespace-pre-wrap break-words">
+                  {JSON.stringify(trace, null, 2)}
+                </pre>
+              </details>
+            </>
+          )
+        )}
+        <ReportPreviewModal
+          open={vm.previewOpen}
+          loading={vm.previewLoading}
+          report={vm.previewReport}
+          error={vm.previewError || vm.actionError}
+          downloading={vm.downloading}
+          onClose={vm.closePreview}
+          onRetry={() => {
+            if (vm.previewReport)
+              void vm.previewFile(vm.previewReport.filename, Boolean(vm.previewReport.is_html));
+          }}
+          onDownload={(report) => void vm.downloadFile(report.filename, Boolean(report.is_html))}
+        />
+        <ResumeTaskModal
+          open={vm.resumeModalOpen}
+          loading={vm.resuming}
+          error={vm.actionError}
+          onCancel={() => vm.setResumeModalOpen(false)}
+          onConfirm={vm.confirmResume}
+        />
+      </DialogContent>
+    </Dialog>
   );
-};
+}

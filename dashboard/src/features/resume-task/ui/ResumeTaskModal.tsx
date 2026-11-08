@@ -1,141 +1,125 @@
-import React, { useEffect, useState } from "react";
-import { Modal, Alert, Form, Select, Space } from "antd";
-import { SyncOutlined, ApiOutlined, SkinOutlined } from "@ant-design/icons";
-import { fetchProviderList, LLMProviderItem } from "../../../entities/trace/api/traceApi";
-import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
-import { formatTemplateOptions } from "../../../entities/report/model/templates";
+import { LoadingState } from "../../../shared/ui/loading-state";
+import { useId } from "react";
+import { IconRefresh } from "@tabler/icons-react";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import { Button } from "../../../shared/ui/button";
+import { NativeSelect } from "../../../shared/ui/native-select";
+import { useResumeOptions } from "../model/useResumeOptions";
 
 interface ResumeTaskModalProps {
   open: boolean;
   loading: boolean;
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (selectedProvider?: string, selectedTemplate?: string) => void;
 }
 
-export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
+export function ResumeTaskModal({
   open,
   loading,
+  error,
   onCancel,
   onConfirm,
-}) => {
-  const [providers, setProviders] = useState<LLMProviderItem[]>([]);
-  const [loadingProviders, setLoadingProviders] = useState(false);
-  const {
-    templates,
-    loading: loadingTemplates,
-    ready,
-    error,
-    refresh,
-  } = useReportTemplates("configured", open);
-  const [selectedProvider, setSelectedProvider] = useState("auto");
-  const [selectedTemplate, setSelectedTemplate] = useState("auto");
-
-  useEffect(() => {
-    if (open) {
-      setSelectedProvider("auto");
-      setSelectedTemplate("auto");
-      setLoadingProviders(true);
-      fetchProviderList()
-        .then((list) => setProviders(list))
-        .catch(() => {})
-        .finally(() => setLoadingProviders(false));
-    }
-  }, [open]);
-
-  const handleOk = () => {
-    if (
-      selectedTemplate !== "auto" &&
-      (!ready || !templates.some((item) => item.id === selectedTemplate))
-    )
-      return;
-    onConfirm(
-      selectedProvider !== "auto" ? selectedProvider : undefined,
-      selectedTemplate !== "auto" ? selectedTemplate : undefined,
-    );
-  };
-
-  const templateOptions = formatTemplateOptions(templates, true);
-
+}: ResumeTaskModalProps) {
+  const vm = useResumeOptions(open);
+  const id = useId();
   return (
-    <Modal
-      title={
-        <Space>
-          <SyncOutlined />
-          <span>幂等断点续跑 / 重试分析</span>
-        </Space>
-      }
+    <Dialog
       open={open}
-      onCancel={onCancel}
-      onOk={handleOk}
-      confirmLoading={loading}
-      okButtonProps={{
-        disabled:
-          selectedTemplate !== "auto" &&
-          (!ready || !templates.some((item) => item.id === selectedTemplate)),
+      onOpenChange={(next) => {
+        if (!next && !loading) onCancel();
       }}
-      okText="立即续跑"
-      cancelText="取消"
-      destroyOnClose
-      width={460}
     >
-      <div style={{ marginTop: 12 }}>
-        <Alert
-          type="info"
-          showIcon
-          message="零浪费 Token 细粒度产物复用"
-          description="系统已自动跳过消息拉取与清洗，并直接复用本次任务中已有非空产物的子分析（如已生成的话题/画像），仅对失败或未完成的子任务向大模型发起补充请求。"
-          style={{ marginBottom: 16 }}
-        />
-
+      <DialogContent>
+        <DialogTitle>继续分析</DialogTitle>
+        <DialogDescription>
+          优先复用已保存的结果，补齐未完成的分析。快照缺失时会重新拉取消息，可能产生新的模型消耗。
+        </DialogDescription>
         {error && (
-          <Alert
-            type="warning"
-            message={error}
-            action={<a onClick={() => void refresh()}>重试</a>}
-          />
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {error}
+          </p>
         )}
-        <Form layout="vertical">
-          <Form.Item
-            label={
-              <Space>
-                <ApiOutlined />
-                <span>指定大模型 Provider (选填)</span>
-              </Space>
-            }
-            extra="若上次分析因大模型崩溃、限流或 Provider 故障中断，可在此临时指定其他备用模型完成续跑"
-          >
-            <Select
-              value={selectedProvider}
-              onChange={setSelectedProvider}
-              loading={loadingProviders}
-              options={[
-                { label: "跟随系统默认配置 (推荐)", value: "auto" },
-                ...providers.map((p) => ({
-                  label: p.label || `${p.name} (${p.id})`,
-                  value: p.id,
-                })),
-              ]}
-            />
-          </Form.Item>
-
-          <Form.Item
-            label={
-              <Space>
-                <SkinOutlined style={{ color: "#722ed1" }} />
-                <span>视觉主题模板 (选填)</span>
-              </Space>
-            }
-            extra="续跑生成报告时可切换报告排版视觉模板"
-          >
-            <Select
-              value={selectedTemplate}
-              onChange={setSelectedTemplate}
-              loading={loadingTemplates}
-              options={templateOptions}
-            />
-          </Form.Item>
-        </Form>
-      </div>
-    </Modal>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!loading && vm.canConfirm)
+              onConfirm(
+                vm.selectedProvider === "auto" ? undefined : vm.selectedProvider,
+                vm.selectedTemplate === "auto" ? undefined : vm.selectedTemplate,
+              );
+          }}
+          className="grid gap-5"
+        >
+          <div className="grid gap-2">
+            <label htmlFor={`${id}-provider`}>模型</label>
+            <NativeSelect
+              id={`${id}-provider`}
+              value={vm.selectedProvider}
+              disabled={loading || vm.loadingProviders}
+              onChange={(event) => vm.setSelectedProvider(event.target.value)}
+            >
+              <option value="auto">使用原配置</option>
+              {vm.providers.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.label || `${provider.name} (${provider.id})`}
+                </option>
+              ))}
+            </NativeSelect>
+            {vm.loadingProviders && (
+              <LoadingState className="text-sm text-muted-foreground">正在加载模型…</LoadingState>
+            )}
+            {vm.providerError && (
+              <div role="alert" className="text-sm text-destructive">
+                {vm.providerError}
+                <Button variant="link" size="sm" onClick={vm.retryProviders} disabled={loading}>
+                  重试模型列表
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="grid gap-2">
+            <label htmlFor={`${id}-template`}>报告模板</label>
+            <NativeSelect
+              id={`${id}-template`}
+              value={vm.selectedTemplate}
+              disabled={loading || vm.loadingTemplates}
+              onChange={(event) => vm.setSelectedTemplate(event.target.value)}
+            >
+              {vm.templateOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </NativeSelect>
+            {vm.loadingTemplates && (
+              <LoadingState className="text-sm text-muted-foreground">正在加载模板…</LoadingState>
+            )}
+            {vm.templateError && (
+              <div role="alert" className="text-sm text-destructive">
+                {vm.templateError}
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => void vm.retryTemplates()}
+                  disabled={loading}
+                >
+                  重试模板列表
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onCancel} disabled={loading}>
+              取消
+            </Button>
+            <Button type="submit" disabled={loading || !vm.canConfirm}>
+              <IconRefresh aria-hidden="true" className={loading ? "animate-spin" : undefined} />
+              {loading ? "正在提交…" : "开始续跑"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
-};
+}

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ConfigProvider } from "antd";
 import { FontManager } from "../../../../../features/manage-typst-fonts/ui/FontManager";
 import { downloadTypstFonts, fetchTypstFonts } from "../../../../../entities/config/api/configApi";
 import {
@@ -93,16 +92,16 @@ it("字体管理展示缺失和共享依赖，不提供无意义的二进制查�
 
 it("移除共享字体会确认影响，使用列表版本并刷新为缺失状态", async () => {
   render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
+    <>
       <FontManager onChanged={vi.fn()} />
-    </ConfigProvider>,
+    </>,
   );
   await screen.findByText("已安装 1 / 2 个字体，缺少 1 个");
   const row = screen.getByText("NotoSansSC.ttf").closest("tr")!;
   fireEvent.click(within(row).getByText("移除"));
   expect(await screen.findByText(/将影响 2 个模板/)).toBeInTheDocument();
-  const confirm = document.querySelector<HTMLElement>(".ant-popconfirm-buttons")!;
-  fireEvent.click(within(confirm).getByText(/移.?除/));
+  const confirm = screen.getByRole("dialog", { name: "移除 NotoSansSC.ttf？" });
+  fireEvent.click(within(confirm).getByRole("button", { name: "移除字体" }));
   await waitFor(() =>
     expect(deleteManagedFiles).toHaveBeenCalledWith("typst_fonts", [
       { name: "NotoSansSC.ttf", revision: "stat:NotoSansSC.ttf" },
@@ -135,7 +134,7 @@ it("按方案选定模板并给出同版来源，上传上游原文件时自动�
   });
   const onChanged = vi.fn();
   render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
+    <>
       <FontManager
         onChanged={onChanged}
         initialSelection={{
@@ -144,13 +143,20 @@ it("按方案选定模板并给出同版来源，上传上游原文件时自动�
           source: "github",
         }}
       />
-    </ConfigProvider>,
+    </>,
   );
   await screen.findByText("已安装 0 / 1 个字体，缺少 1 个");
   const row = screen.getByText(name).closest("tr")!;
-  expect(screen.queryByText(preset.upstream_url)).not.toBeInTheDocument();
-  fireEvent.click(within(row).getByRole("button", { name: "查看上游" }));
-  expect(await screen.findByText(preset.upstream_url)).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "外部地址" })).not.toBeInTheDocument();
+  const upstream = within(row).getByRole("button", { name: "查看上游" });
+  upstream.focus();
+  fireEvent.click(upstream);
+  const address = await screen.findByRole("dialog", { name: "查看上游" });
+  expect(within(address).getByRole("textbox", { name: "外部地址" })).toHaveValue(
+    preset.upstream_url,
+  );
+  fireEvent.click(within(address).getByRole("button", { name: "关闭" }));
+  await waitFor(() => expect(upstream).toHaveFocus());
   expect(within(row).getByRole("button", { name: "直接下载" })).toBeVisible();
   expect(within(row).queryByRole("link")).not.toBeInTheDocument();
   fireEvent.change(row.querySelector<HTMLInputElement>("input[type=file]")!, {
@@ -179,3 +185,48 @@ it("按方案选定模板并给出同版来源，上传上游原文件时自动�
   expect(onChanged).toHaveBeenCalled();
   expect(screen.getByRole("combobox", { name: "字体下载 CDN" })).toBeDisabled();
 }, 15000);
+
+it("多页字体保留选择，移除失败保留确认目标与错误并支持重试", async () => {
+  files = Array.from({ length: 22 }, (_, index) => metadata(`Custom-${index}.ttf`));
+  render(<FontManager onChanged={vi.fn()} />);
+  await screen.findByText("已安装 0 / 2 个字体，缺少 2 个");
+  fireEvent.change(screen.getByRole("combobox", { name: "管理字体的模板" }), {
+    target: { value: "__all__" },
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: "选择字体 Custom-0.ttf" }));
+  fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+  expect(screen.queryByText("Custom-0.ttf")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("checkbox", { name: "选择字体 Custom-20.ttf" }));
+  const trigger = screen.getByRole("button", { name: "移除所选（2）" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = screen.getByRole("dialog", { name: "移除所选的 2 个字体？" });
+  expect(within(dialog).getByText("Custom-0.ttf")).toBeVisible();
+  expect(within(dialog).getByText("Custom-20.ttf")).toBeVisible();
+  vi.mocked(deleteManagedFiles).mockRejectedValueOnce(new Error("字体正在使用，请稍后重试"));
+  fireEvent.click(within(dialog).getByRole("button", { name: "移除字体" }));
+  expect(await within(dialog).findByText("字体正在使用，请稍后重试")).toBeVisible();
+  await waitFor(() =>
+    expect(within(dialog).getByRole("button", { name: "移除字体" })).toBeEnabled(),
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "移除字体" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(deleteManagedFiles).toHaveBeenLastCalledWith("typst_fonts", [
+    { name: "Custom-0.ttf", revision: "stat:Custom-0.ttf" },
+    { name: "Custom-20.ttf", revision: "stat:Custom-20.ttf" },
+  ]);
+});
+
+it("移除确认可以用 Escape 取消并返回原按钮，不发删除请求", async () => {
+  render(<FontManager onChanged={vi.fn()} />);
+  await screen.findByText("已安装 1 / 2 个字体，缺少 1 个");
+  const row = screen.getByText("NotoSansSC.ttf").closest("tr")!;
+  const trigger = within(row).getByRole("button", { name: "移除" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  expect(screen.getByRole("button", { name: "取消" })).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(trigger).toHaveFocus();
+  expect(deleteManagedFiles).not.toHaveBeenCalled();
+});

@@ -408,7 +408,7 @@ class ExplodingStubbornService:
         self.task: asyncio.Task[object] | None = None
         self.release = False
 
-    def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
+    def is_group_running(self, group_id: str, task_type: str = "daily", platform_id: str | None = None) -> bool:
         return False
 
     async def execute_daily_analysis(self, **kwargs: object) -> dict[str, object]:
@@ -474,7 +474,7 @@ class GatedService:
         self.gate = asyncio.Event()
         self.started = asyncio.Event()
 
-    def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
+    def is_group_running(self, group_id: str, task_type: str = "daily", platform_id: str | None = None) -> bool:
         return False
 
     async def execute_daily_analysis(self, **kwargs: object) -> dict[str, object]:

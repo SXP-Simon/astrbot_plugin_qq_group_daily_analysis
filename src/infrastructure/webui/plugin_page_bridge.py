@@ -177,6 +177,12 @@ class PluginPageWebUIBridge:
             ),
             # 2. 链路追溯与指标
             (
+                f"/{PLUGIN_NAME}/traces/<trace_id>/acknowledgement",
+                self.trace_routes.api_acknowledge_trace,
+                ["POST"],
+                "保存或撤销任务提醒的知晓状态",
+            ),
+            (
                 f"/{PLUGIN_NAME}/traces",
                 self.trace_routes.api_list_traces,
                 ["GET"],

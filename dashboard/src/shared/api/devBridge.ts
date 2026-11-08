@@ -1,6 +1,8 @@
 import { ApiResponse, AstrBotContext, SSEEventWrapper } from "./bridge";
 import { mockHandlers, mockSSEService } from "../../mocks";
 import { mockFontDownloads } from "../../mocks/data/fontDownloads";
+import { getDevThemeContext } from "./devThemeContext";
+export { devSubscribeContext } from "./devThemeContext";
 
 const PLUGIN_BASE_PATH = "/api/plugins/astrbot_plugin_qq_group_daily_analysis";
 
@@ -14,7 +16,8 @@ export function getDevBridgeMode(): DevBridgeMode {
       return urlParam;
     }
     if (window.localStorage && typeof window.localStorage.getItem === "function") {
-      return (window.localStorage.getItem("astrbot_dev_bridge_mode") as DevBridgeMode) || "mock";
+      const saved = window.localStorage.getItem("astrbot_dev_bridge_mode");
+      if (saved === "mock" || saved === "proxy") return saved;
     }
   } catch {
     // ignore
@@ -31,6 +34,10 @@ export function setDevBridgeMode(mode: DevBridgeMode) {
     } catch {
       // ignore
     }
+    // 显式 URL 参数优先于缓存；只更新缓存再刷新会一直停在旧模式。
+    const url = new URL(window.location.href);
+    url.searchParams.set("devMode", mode);
+    window.history.replaceState(null, "", url);
     window.location.reload();
   }
 }
@@ -86,9 +93,10 @@ function matchMockHandler(
 
 export async function devFetchContext(): Promise<AstrBotContext> {
   return {
-    isDark: false,
+    // 独立页面沿用 URL 或缓存主题，不模拟一条强制亮色的宿主通知。
     pluginName: "astrbot_plugin_qq_group_daily_analysis",
     version: "v5.6.4",
+    ...getDevThemeContext(),
   };
 }
 
@@ -110,8 +118,13 @@ export async function devApiGet<T = unknown>(
     }
   }
 
-  // 模拟异步网络延迟 (30ms ~ 100ms)
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // 开发时通过 mockDelay 检查慢加载，默认 50ms，限制在 0–5000ms；Proxy 不受影响。
+  const rawDelay = new URLSearchParams(window.location.search).get("mockDelay");
+  const delay =
+    rawDelay !== null && Number.isFinite(Number(rawDelay))
+      ? Math.min(5000, Math.max(0, Number(rawDelay)))
+      : 50;
+  await new Promise((resolve) => setTimeout(resolve, delay));
   const res = matchMockHandler("GET", path, params);
   return res as ApiResponse<T>;
 }

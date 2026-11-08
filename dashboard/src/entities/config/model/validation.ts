@@ -1,6 +1,7 @@
 import { cdnBaseUrlSchema, fontBaseUrlSchema, renderingStrategySchema } from "./renderingConfig";
 import { z } from "zod";
 import { PluginSchema, SchemaFieldItem } from "./types";
+import { isFieldVisible } from "./visibility";
 
 export interface ConfigValidationError {
   groupKey: string;
@@ -21,202 +22,159 @@ export interface ConfigValidationResult {
 
 const TIME_REGEX = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
-/**
- * 为单个 Schema 字段构建对应的 Zod 校验器
- */
+/** 校验声明字段，递归检查对象与方案，保留未声明的扩展值。 */
 export function buildFieldZodSchema(fieldKey: string, field: SchemaFieldItem): z.ZodType {
-  if (fieldKey === "cdn_base_url") {
-    return cdnBaseUrlSchema.optional();
-  }
+  if (fieldKey === "cdn_base_url") return cdnBaseUrlSchema.optional();
   if (["google_fonts", "gstatic"].includes(fieldKey)) return fontBaseUrlSchema.optional();
   if (fieldKey === "t2i_rendering_strategies") return z.array(renderingStrategySchema).optional();
 
-  // 1. 单选下拉选项校验（排除 list 多选类型以及可自定义的 report_template）
-  if (
-    field.type !== "list" &&
-    Array.isArray(field.options) &&
-    field.options.length > 0 &&
-    fieldKey !== "report_template" &&
-    !fieldKey.includes("report_template")
-  ) {
-    return z.any().superRefine((val, ctx) => {
-      if (val === undefined || val === null || val === "") return;
-      if (!field.options!.includes(val as string | number)) {
-        ctx.addIssue({
-          code: "custom",
-          message: `选项无效，请从预设选项中选择（可选: ${field.options!.slice(0, 4).join(", ")}${
-            field.options!.length > 4 ? " 等" : ""
-          }）`,
-        });
+  return z.unknown().superRefine((value, ctx) => {
+    if (value === undefined || value === null) return;
+    switch (field.type) {
+      case "int":
+      case "float": {
+        if (
+          typeof value !== "number" ||
+          !Number.isFinite(value) ||
+          (field.type === "int" && !Number.isInteger(value))
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            message: field.type === "int" ? "必须填写有效的整数" : "必须填写有效的数字",
+          });
+          return;
+        }
+        if (typeof field.min === "number" && value < field.min)
+          ctx.addIssue({ code: "custom", message: `数值不能小于 ${field.min}` });
+        if (typeof field.max === "number" && value > field.max)
+          ctx.addIssue({ code: "custom", message: `数值不能大于 ${field.max}` });
+        break;
       }
-    });
-  }
-
-  // 2. 按数据类型分支校验
-  switch (field.type) {
-    case "int":
-      return z.any().superRefine((val, ctx) => {
-        if (val === undefined || val === null || val === "") return;
-        const num = typeof val === "number" ? val : Number(val);
-        if (isNaN(num) || !Number.isInteger(num)) {
-          ctx.addIssue({
-            code: "custom",
-            message: "必须填写有效的整数",
-          });
+      case "bool":
+        if (typeof value !== "boolean")
+          ctx.addIssue({ code: "custom", message: "必须为布尔值（开关状态）" });
+        break;
+      case "object": {
+        if (typeof value !== "object" || Array.isArray(value)) {
+          ctx.addIssue({ code: "custom", message: "请填写有效的 JSON 对象，修正后再保存。" });
           return;
         }
-        if (typeof field.min === "number" && num < field.min) {
-          ctx.addIssue({
-            code: "custom",
-            message: `数值不能小于 ${field.min}`,
-          });
-        }
-        if (typeof field.max === "number" && num > field.max) {
-          ctx.addIssue({
-            code: "custom",
-            message: `数值不能大于 ${field.max}`,
-          });
-        }
-      });
-
-    case "float":
-      return z.any().superRefine((val, ctx) => {
-        if (val === undefined || val === null || val === "") return;
-        const num = typeof val === "number" ? val : Number(val);
-        if (isNaN(num)) {
-          ctx.addIssue({
-            code: "custom",
-            message: "必须填写有效的数字",
-          });
-          return;
-        }
-        if (typeof field.min === "number" && num < field.min) {
-          ctx.addIssue({
-            code: "custom",
-            message: `数值不能小于 ${field.min}`,
-          });
-        }
-        if (typeof field.max === "number" && num > field.max) {
-          ctx.addIssue({
-            code: "custom",
-            message: `数值不能大于 ${field.max}`,
-          });
-        }
-      });
-
-    case "bool":
-      return z.any().superRefine((val, ctx) => {
-        if (
-          typeof val !== "boolean" &&
-          val !== "true" &&
-          val !== "false" &&
-          val !== undefined &&
-          val !== null
-        ) {
-          ctx.addIssue({
-            code: "custom",
-            message: "必须为布尔值（开关状态）",
-          });
-        }
-      });
-
-    case "list":
-      return z.any().superRefine((val, ctx) => {
-        if (val === undefined || val === null) return;
-        if (!Array.isArray(val)) {
-          ctx.addIssue({
-            code: "custom",
-            message: "列表数据格式不合法，必须为数组",
-          });
-          return;
-        }
-
-        // 如果是多选枚举列表 (如 output_format)
-        if (Array.isArray(field.options) && field.options.length > 0) {
-          for (const item of val) {
-            if (!field.options.includes(item as string | number)) {
-              ctx.addIssue({
-                code: "custom",
-                message: `包含无效的选项「${item}」`,
-              });
-            }
+        const data = value as Record<string, unknown>;
+        const items = field.items;
+        if (items && typeof items.type !== "string") {
+          for (const [key, child] of Object.entries(items as Record<string, SchemaFieldItem>)) {
+            if (child.hidden || !isFieldVisible(child, { current: data })) continue;
+            const result = buildFieldZodSchema(key, child).safeParse(data[key] ?? child.default);
+            if (!result.success)
+              for (const issue of result.error.issues)
+                ctx.addIssue({
+                  code: "custom",
+                  path: [key, ...issue.path],
+                  message: `${child.description || key}：${issue.message}`,
+                });
           }
         }
-      });
-
-    case "template_list":
-      return z.any().superRefine((val, ctx) => {
-        if (val === undefined || val === null) return;
-        if (!Array.isArray(val)) {
-          ctx.addIssue({
-            code: "custom",
-            message: "方案列表格式不正确",
-          });
+        break;
+      }
+      case "list":
+      case "template_list": {
+        if (!Array.isArray(value)) {
+          ctx.addIssue({ code: "custom", message: "列表数据格式不合法，必须为数组" });
           return;
         }
-        val.forEach((item, idx) => {
-          if (!item || typeof item !== "object") {
-            ctx.addIssue({
-              code: "custom",
-              message: `第 ${idx + 1} 个方案配置数据不合法`,
-            });
+        const values: unknown[] = value;
+        values.forEach((item, index) => {
+          if (field.type === "template_list") {
+            if (!item || typeof item !== "object" || Array.isArray(item)) {
+              ctx.addIssue({
+                code: "custom",
+                path: [index],
+                message: `第 ${index + 1} 个方案必须是配置对象`,
+              });
+              return;
+            }
+            const data = item as Record<string, unknown>;
+            const templates = field.templates;
+            if (templates && Object.keys(templates).length) {
+              const key =
+                data.__template_key ??
+                (Object.keys(templates).length === 1 ? Object.keys(templates)[0] : undefined);
+              const template = typeof key === "string" ? templates[key] : undefined;
+              if (!template) {
+                ctx.addIssue({
+                  code: "custom",
+                  path: [index],
+                  message: `第 ${index + 1} 个方案请选择有效的类型`,
+                });
+                return;
+              }
+              const result = buildFieldZodSchema(fieldKey, {
+                type: "object",
+                items: template.items,
+              }).safeParse(data);
+              if (!result.success)
+                for (const issue of result.error.issues)
+                  ctx.addIssue({
+                    code: "custom",
+                    path: [index, ...issue.path],
+                    message: `第 ${index + 1} 个方案：${issue.message}`,
+                  });
+            }
+          } else if (fieldKey === "auto_analysis_time") {
+            const time = typeof item === "string" ? item.trim().replace(/：/g, ":") : "";
+            const parts = /^(\d{1,2}):(\d{1,2})$/.exec(time);
+            if (!parts || Number(parts[1]) > 23 || Number(parts[2]) > 59)
+              ctx.addIssue({
+                code: "custom",
+                path: [index],
+                message: "自动分析时间请使用 00:00–23:59 范围内的 HH:MM 格式",
+              });
           }
         });
-      });
-
-    case "file":
-      return z.any().superRefine((val, ctx) => {
-        if (val === undefined || val === null || val === "") return;
-        if (typeof val !== "string" && !Array.isArray(val)) {
+        break;
+      }
+      case "file":
+        if (
+          typeof value !== "string" &&
+          !(Array.isArray(value) && value.every((item: unknown) => typeof item === "string"))
+        )
+          ctx.addIssue({ code: "custom", message: "文件路径必须是文字或路径列表" });
+        break;
+      case "string":
+      case "text":
+        if (typeof value !== "string") {
+          ctx.addIssue({ code: "custom", message: "必须填写文字" });
+          return;
+        }
+        if (
+          fieldKey === "daily_schedule_time" &&
+          value &&
+          !TIME_REGEX.test(value.trim().replace(/：/g, ":"))
+        )
           ctx.addIssue({
             code: "custom",
-            message: "文件路径格式不正确",
+            message: "时间格式不正确，请输入 24 小时制 HH:MM 格式（如 23:30）",
           });
-        }
-      });
-
-    case "string":
-    case "text":
-    default:
-      return z.any().superRefine((val, ctx) => {
-        if (val === undefined || val === null || val === "") return;
-
-        // 1. 定时时间格式检测 (如 daily_schedule_time: "23:00")
-        if (
-          fieldKey === "daily_schedule_time" ||
-          (fieldKey.includes("time") && typeof val === "string" && val.includes(":"))
-        ) {
-          if (typeof val === "string" && !TIME_REGEX.test(val.trim())) {
+        if (value.trim() && fieldKey === "profile_mapping_config") {
+          try {
+            const mapping: unknown = JSON.parse(value);
+            if (!mapping || typeof mapping !== "object" || Array.isArray(mapping))
+              ctx.addIssue({ code: "custom", message: "请填写有效的 JSON 对象" });
+          } catch {
             ctx.addIssue({
               code: "custom",
-              message: "时间格式不正确，请输入 24 小时制 HH:MM 格式（如 23:30）",
+              message: "请填写有效的 JSON 对象，检查括号、引号和逗号",
             });
-            return;
           }
         }
-
-        // 2. JSON 字符串格式检测
-        if (
-          typeof val === "string" &&
-          val.trim() &&
-          (fieldKey.includes("json") ||
-            fieldKey.includes("mapping") ||
-            fieldKey.includes("overrides"))
-        ) {
-          const trimmed = val.trim();
-          if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-            try {
-              JSON.parse(trimmed);
-            } catch (err) {
-              ctx.addIssue({
-                code: "custom",
-                message: `JSON 语法解析失败: ${(err as Error).message}`,
-              });
-            }
-          }
-        }
-      });
-  }
+        break;
+    }
+    if (field.options?.length && !fieldKey.includes("report_template")) {
+      const choices: unknown[] = field.type === "list" && Array.isArray(value) ? value : [value];
+      if (choices.some((item) => item !== "" && !field.options!.some((option) => option === item)))
+        ctx.addIssue({ code: "custom", message: "选项无效，请从预设选项中选择" });
+    }
+  });
 }
 
 /**
@@ -252,52 +210,11 @@ export function validateConfigWithZod(
     const groupItems = group.items || {};
 
     Object.entries(groupItems).forEach(([fieldKey, field]) => {
-      if (field.invisible || field.hidden) return;
+      if (field.hidden || !isFieldVisible(field, formData)) return;
 
       const fieldLabel = field.description || fieldKey;
       const value = groupData[fieldKey] !== undefined ? groupData[fieldKey] : field.default;
       const domId = `cfg-field-${groupKey}-${fieldKey}`;
-
-      // 递归处理嵌套 object 字段
-      if (
-        field.type === "object" &&
-        field.items &&
-        typeof field.items === "object" &&
-        !Array.isArray(field.items)
-      ) {
-        const subItems = field.items as Record<string, SchemaFieldItem>;
-        const objVal = (typeof value === "object" && value !== null ? value : {}) as Record<
-          string,
-          unknown
-        >;
-
-        Object.entries(subItems).forEach(([subKey, subField]) => {
-          if (subField.invisible || subField.hidden) return;
-          const subLabel = `${fieldLabel} - ${subField.description || subKey}`;
-          const subValue = objVal[subKey] !== undefined ? objVal[subKey] : subField.default;
-          const subDomId = `cfg-field-${groupKey}-${fieldKey}-${subKey}`;
-          const subError = validateSingleFieldWithZod(subKey, subField, subValue);
-
-          if (subError) {
-            errors.push({
-              groupKey,
-              groupLabel,
-              fieldKey: `${fieldKey}.${subKey}`,
-              fieldLabel: subLabel,
-              message: subError,
-              path: `${groupKey}.${fieldKey}.${subKey}`,
-              domId: subDomId,
-            });
-
-            if (!errorMap[groupKey]) {
-              errorMap[groupKey] = {};
-            }
-            errorMap[groupKey][`${fieldKey}.${subKey}`] = subError;
-            groupErrorCounts[groupKey] = (groupErrorCounts[groupKey] || 0) + 1;
-          }
-        });
-        return;
-      }
 
       const errorMsg = validateSingleFieldWithZod(fieldKey, field, value);
       if (errorMsg) {

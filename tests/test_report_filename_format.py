@@ -79,6 +79,29 @@ def test_filename_format_applies_when_trace_context_active(tmp_path):
     assert "report_344184506_" not in Path(html_path).name
 
 
+def test_parallel_report_paths_are_unique_before_either_file_is_written(tmp_path):
+    from src.infrastructure.reporting.render_diagnostics import build_safe_report_path
+    first = build_safe_report_path(tmp_path, "${group_id}/${date}.html", "123", "2026-11-07", "first")
+    second = build_safe_report_path(tmp_path, "${group_id}/${date}.html", "123", "2026-11-07", "second")
+    assert first != second
+    assert first.parent == second.parent == tmp_path / "123"
+    assert not first.exists() and not second.exists()
+
+
+def test_forwarded_report_temp_paths_do_not_collide_for_same_group():
+    from src.infrastructure.reporting.dispatcher import ReportDispatcher
+    dispatcher = object.__new__(ReportDispatcher)
+    first = dispatcher._save_image_to_temp("base64://aW1hZ2U=", "123")
+    second = dispatcher._save_image_to_temp("base64://aW1hZ2U=", "123")
+    try:
+        assert first and second and first != second
+        assert Path(first).read_bytes() == Path(second).read_bytes() == b"image"
+    finally:
+        for name in (first, second):
+            if name:
+                Path(name).unlink(missing_ok=True)
+
+
 def test_trace_id_variable_renders_bound_trace(tmp_path):
     """${trace_id} 变量在格式中可用，取当前 TraceContext 的追踪号。"""
     generator = build_generator(tmp_path, "报告_${group_id}_${trace_id}.html")

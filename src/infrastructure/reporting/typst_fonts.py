@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import shutil
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypedDict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
 import aiohttp
+
+MIKU_TITLE_FONT = "cjkFonts-AllSeto-Title-v1.11.ttf"
+REPOSITORY_TITLE_FONT = (
+    Path(__file__).resolve().parents[3] / "assets/HatsuneMiku" / MIKU_TITLE_FONT
+)
 
 # 字体始终写入插件 data 目录；来源是固定上游，不接受任意下载 URL 或目标路径。
 FONT_SOURCES = {
@@ -18,8 +24,8 @@ FONT_SOURCES = {
     "NotoSansJP.ttf": "gh/google/fonts@main/ofl/notosansjp/NotoSansJP[wght].ttf",
     "NotoSansSymbols2.ttf": "gh/google/fonts@main/ofl/notosanssymbols2/NotoSansSymbols2-Regular.ttf",
     "NotoColorEmoji.ttf": "gh/googlefonts/noto-emoji@main/2D/fonts/Noto-COLRv1.ttf",
-    # 与 cjkFonts 官方 1.11 包逐字节一致；完整 TTF 约 30 MiB，超过常见 CDN 文件上限。
-    "cjkFonts_allseto_v1.11.ttf": "https://raw.githubusercontent.com/moeru-ai/airi/1eb62e912fe7936387804aa920ff98c9f1137d80/packages/font-cjkfonts-allseto/src/files/cjkFonts_allseto_v1.11.ttf",
+    # 与 HTML 共用八字标题子集，保留字形与许可；Typst 使用未压缩的 TTF。
+    MIKU_TITLE_FONT: "gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/cjkFonts-AllSeto-Title-v1.11.ttf",
     "Outfit.ttf": "gh/google/fonts@main/ofl/outfit/Outfit[wght].ttf",
     "ShareTechMono.ttf": "gh/google/fonts@main/ofl/sharetechmono/ShareTechMono-Regular.ttf",
     "Inter.ttf": "gh/google/fonts@main/ofl/inter/Inter[opsz,wght].ttf",
@@ -56,7 +62,7 @@ THEME_FONTS = {
             "Outfit.ttf",
             "ShareTechMono.ttf",
             "Inter.ttf",
-            "cjkFonts_allseto_v1.11.ttf",
+            MIKU_TITLE_FONT,
         ),
         "simple": (),
         # JetBrains Mono 的中文等宽回退需要保留，避免按需安装后改变字形。
@@ -239,6 +245,27 @@ async def download_typst_fonts(
         trust_env=True,
     ) as session:
         for name in missing:
+            # 源码检出含标题资源，供本地与 CI 离线补齐；release 不含 assets，走下方下载。
+            if name == MIKU_TITLE_FONT and REPOSITORY_TITLE_FONT.is_file():
+                target = directory / name
+                temporary = target.with_name(f".{name}.{uuid.uuid4().hex}.part")
+                try:
+                    shutil.copyfile(REPOSITORY_TITLE_FONT, temporary)
+                    temporary.replace(target)
+                finally:
+                    temporary.unlink(missing_ok=True)
+                if on_progress:
+                    size = target.stat().st_size
+                    on_progress(
+                        {
+                            "name": name,
+                            "url": REPOSITORY_TITLE_FONT.as_uri(),
+                            "received": size,
+                            "total": size,
+                            "phase": "validating",
+                        }
+                    )
+                continue
             location = FONT_SOURCES[name]
             if source == "github" and location.startswith("gh/"):
                 repository, path = location[3:].split("@", 1)

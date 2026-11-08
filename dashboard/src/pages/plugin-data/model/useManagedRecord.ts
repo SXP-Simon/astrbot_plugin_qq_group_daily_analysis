@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { message } from "antd";
+import { toast } from "sonner";
 import { z } from "zod";
 import {
   fetchManagedRecord,
   mutateManagedRecord,
   recordLocatorSchema,
+  recordKey,
   type ManagedRecord,
   type RecordLocator,
 } from "../../../entities/plugin-data/api/managedRecordsApi";
@@ -21,6 +22,8 @@ export function useManagedRecord(
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const sequence = useRef(0);
+  const mutation = useRef<number | null>(null);
+  const [reload, setReload] = useState(0);
   const locatorKey = JSON.stringify(locator);
   useEffect(() => {
     const ref = sequence;
@@ -30,6 +33,7 @@ export function useManagedRecord(
     setError("");
     setText("");
     setBusy(false);
+    mutation.current = null;
     if (importKind) {
       setText(
         JSON.stringify(
@@ -37,7 +41,7 @@ export function useManagedRecord(
             locator: {
               kind: importKind,
               ...(importKind === "batch"
-                ? { group_id: "", batch_id: "" }
+                ? { platform_id: "", group_id: "", batch_id: "" }
                 : { key: "analysis_群号_2026-11-03_12-00" }),
             },
             data: {},
@@ -47,13 +51,23 @@ export function useManagedRecord(
           2,
         ),
       );
-      return;
+      return () => {
+        ref.current++;
+      };
     }
-    if (!locatorKey || locatorKey === "null") return;
+    if (!locatorKey || locatorKey === "null")
+      return () => {
+        ref.current++;
+      };
     setBusy(true);
-    void fetchManagedRecord(JSON.parse(locatorKey) as RecordLocator)
+    void fetchManagedRecord(recordLocatorSchema.parse(JSON.parse(locatorKey)))
       .then((value) => {
         if (sequence.current === request) {
+          if (
+            recordKey(value.locator) !==
+            recordKey(recordLocatorSchema.parse(JSON.parse(locatorKey)))
+          )
+            throw new Error("返回的记录与所选条目不一致，请重新读取");
           setRecord(value);
           setText(JSON.stringify(value.data, null, 2));
         }
@@ -68,9 +82,12 @@ export function useManagedRecord(
     return () => {
       ref.current++;
     };
-  }, [locatorKey, importKind]);
+  }, [locatorKey, importKind, reload]);
 
   const save = async (operation: "create" | "replace" | "delete") => {
+    if (busy || mutation.current !== null) return false;
+    const request = sequence.current;
+    mutation.current = request;
     setBusy(true);
     setError("");
     try {
@@ -82,15 +99,40 @@ export function useManagedRecord(
       const target = imported?.locator || record?.locator;
       if (!target) throw new Error("请先读取记录");
       const data =
-        operation === "delete" ? undefined : (imported?.data ?? z.json().parse(JSON.parse(text)));
+        operation === "delete"
+          ? undefined
+          : imported
+            ? imported.data
+            : z.json().parse(JSON.parse(text));
       await mutateManagedRecord({ locator: target, data, operation, revision: record?.revision });
-      void message.success("记录操作完成");
+      if (sequence.current !== request) return false;
+      toast.success(
+        operation === "delete"
+          ? "记录已删除"
+          : operation === "create"
+            ? "记录已导入"
+            : "修订已保存",
+      );
       onChanged();
       onClose();
+      return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "记录操作失败");
+      if (sequence.current === request)
+        setError(
+          cause instanceof SyntaxError
+            ? "JSON 格式不正确，请检查后再保存。"
+            : cause instanceof z.ZodError
+              ? "记录格式不正确，请确认导入内容包含有效的 locator 和 data。"
+              : cause instanceof Error
+                ? cause.message
+                : "记录操作失败",
+        );
+      return false;
     } finally {
-      setBusy(false);
+      if (sequence.current === request) {
+        mutation.current = null;
+        setBusy(false);
+      }
     }
   };
   const download = () => {
@@ -106,7 +148,7 @@ export function useManagedRecord(
           ? /^data:image\/(png|jpe?g|webp|gif|svg\+xml|bmp|x-icon);base64,/.exec(uri)?.[1]
           : null;
       if (!format || typeof uri !== "string") {
-        void message.error("头像图片暂不可下载，请刷新后重试");
+        toast.error("头像图片暂不可下载，请刷新后重试");
         return;
       }
       const link = document.createElement("a");
@@ -132,5 +174,16 @@ export function useManagedRecord(
     link.click();
     URL.revokeObjectURL(url);
   };
-  return { record, text, setText, editing, setEditing, busy, error, save, download };
+  return {
+    record,
+    text,
+    setText,
+    editing,
+    setEditing,
+    busy,
+    error,
+    save,
+    download,
+    retry: () => setReload((value) => value + 1),
+  };
 }

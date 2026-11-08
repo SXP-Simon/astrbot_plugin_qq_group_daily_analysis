@@ -102,56 +102,78 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 ### 🎛️ WebUI 控制台
 
-- **内嵌管理面板**: 原生集成在 AstrBot 插件管理页面，无需额外部署，集中提供运行总览、分析记录、统计与消耗、历史报告、运行日志、配置中心与数据管理七大板块
+- **内嵌管理面板**: 原生集成在 AstrBot 插件管理页面，无需额外部署，集中提供总览、分析记录、统计、报告、日志、配置与数据七个页面
 - **插件配置中心**: 内置专属可视化配置界面，提供 12 个功能分组导航与即时搜索；支持已有人格与大模型服务商下拉点选、漫画参考图本地上传与灯箱预览，修改保存即时生效
 - **趋势分析与消耗看板**: 支持近48小时、近7天、近14天、近30天等不同时间跨度切换，直观呈现 API 请求走势、大模型 Tokens 消耗堆叠图与服务商消耗占比环形饼图
-- **报告浏览与主题重绘**: 历史报告支持长图与 HTML 在线预览及一键下载；支持切换视觉主题（手账、亚托莉、蔚蓝档案、初音未来、黑客赛博、复古像素、极简等）重新生成报告，直接复用已有数据，0 Token 成本
-- **时序事件时间线**: 在统计与消耗页面提供连续水平时间轴，支持鼠标拖拽平移与快速回溯历史样本，直观查看各群聊的消息清洗留存与模块消耗
+- **报告浏览与主题重绘**: 历史报告支持长图与 HTML 在线预览及一键下载。图片可拖动查看，使用滚轮或双指缩放，也可选择原始尺寸；支持切换视觉主题（手账、亚托莉、蔚蓝档案、初音未来、黑客赛博、复古像素、极简等）重新生成报告，直接复用已有数据，0 Token 成本
+- **时序事件时间线**: 在「统计」页面提供连续水平时间轴，支持鼠标拖拽平移与快速回溯历史样本，直观查看各群聊的消息清洗留存与模块消耗
 - **全流程可观测性与实时监控**: 运行中任务状态与步骤实时同步感知；任务详情按父子阶段展示分析、素材准备、排队、编译和发送过程，保留重试与恢复原因；Typst 可分别查看编译子进程内存、CPU 耗时与宿主内存净变化
-- **任务停止与断点续跑**: 群内手动分析沿用 AstrBot 内置 `stop`，WebUI 任务可在运行总览中止；续跑有有效快照的任务时复用已有分析，重复续跑也继承原任务数据与分析日期
+- **任务停止与断点续跑**: 群内手动分析沿用 AstrBot 内置 `stop`，WebUI 任务可在「总览」中止；续跑有有效快照的任务时复用已有分析，重复续跑也继承原任务数据与分析日期
 - **字体、素材与存储管理**: 可从 Typst 方案直达字体或素材管理，按主题补齐、上传及替换；报告文件支持搜索、类型筛选与多选删除，自定义模板按实际目录选择管理，详见[数据与资源管理](#数据与资源管理)
 - **任务与报告双向关联**: 在任务详情中可直接查看对应产生的所有报告文件；从历史报告中点击任务编号，可快速跳转到该次任务的执行明细与日志
 - **异常任务自动清理**: AstrBot 重启时自动标记并清理未正常结束的中断任务，不留烂尾
 
+部分截图使用示例数据。
+
 <table align="center" width="100%">
   <tr>
     <td align="center" width="50%" valign="top">
-      <p><b>运行总览</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png" alt="运行总览" width="100%"></a>
+      <p><b>总览</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview-20261108-b3eb04579d.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview-20261108-b3eb04579d.png" alt="总览" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
-      <p><b>配置中心</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png" alt="配置中心" width="100%"></a>
+      <p><b>配置与校验</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/config-20261108-3d36f42581.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/config-20261108-3d36f42581.png" alt="配置与校验" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>分析记录</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png" alt="分析记录" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/traces-20261108-de3b7d2ba0.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/traces-20261108-de3b7d2ba0.png" alt="分析记录" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
-      <p><b>历史报告列表</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png" alt="历史报告列表" width="100%"></a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%" valign="top">
-      <p><b>任务执行详情与断点续跑</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png" alt="任务执行详情与断点续跑" width="100%"></a>
-    </td>
-    <td align="center" width="50%" valign="top">
-      <p><b>任务执行详情（子模块状态与异常诊断）</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png" alt="子模块状态与异常诊断" width="100%"></a>
+      <p><b>报告与重绘</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/reports-20261108-29096c774f.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/reports-20261108-29096c774f.png" alt="报告与重绘" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>统计与消耗</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png" alt="统计与消耗" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/statistics-20261108-1ab5371b6c.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/statistics-20261108-1ab5371b6c.jpg" alt="统计与消耗" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
-      <p><b>运行日志</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png" alt="运行日志" width="100%"></a>
+      <p><b>日志</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/logs-20261108-8ce3608813.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/logs-20261108-8ce3608813.png" alt="日志" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>任务阶段与渲染回退</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/task-diagnosis-20261108-c6b0ca7c4a.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/task-diagnosis-20261108-c6b0ca7c4a.jpg" alt="任务阶段与渲染回退" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>继续分析</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume-20261108-ee6a4545b4.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume-20261108-ee6a4545b4.jpg" alt="继续分析" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>数据与阶段快照</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/data-checkpoints-20261108-299de32635.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/data-checkpoints-20261108-299de32635.png" alt="数据与阶段快照" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>Typst 字体管理</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png" alt="Typst 字体管理" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告模板画廊</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/template-gallery-20261108-9440eea52d.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/template-gallery-20261108-9440eea52d.png" alt="报告模板画廊" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告文件管理</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/report-file-management-20261108-14aca297cb.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/report-file-management-20261108-14aca297cb.png" alt="报告文件管理" width="100%"></a>
     </td>
   </tr>
 </table>
@@ -222,6 +244,8 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 分析结果完成后，自动联动漫画会立即在后台运行，报告渲染与发送不会等待出图完成。反过来，报告发送失败也不会取消已经开始的漫画任务。自动联动只复用报告中的有效话题总结，因此需要开启话题分析；话题功能关闭、话题 LLM 无结果或标题为空时会跳过本次自动漫画。手动 `/群漫画` 则会独立提取话题，不依赖报告功能开关。
 
 ### 分析黑白名单配置说明（小白能懂）
+
+同一个 AstrBot 接入多个机器人时，名单只填群号会匹配这些机器人下的同号群。只想让其中一个机器人分析，请在对应群聊中通过 AstrBot 的 `/sid` 获取完整 UMO（命令前缀跟随宿主配置），将它填入名单，例如 `bot_a:GroupMessage:123456`。两个接入都启用时，会分别分析并消耗 Token；插件不会跨接入合并它们的分析数据。
 
 下面只讲“在面板里怎么点”。
 
@@ -544,6 +568,10 @@ PNG 无损，调节「JPEG 质量」不会改变 PNG 清晰度。超长报告会
 
 ## 数据与资源管理
 
+新版 WebUI 简化了顶部入口名称，功能仍在原位置：「运行总览」改为「总览」，「统计与消耗」改为「统计」，「历史报告」改为「报告」，「配置中心」改为「配置」，「数据管理」改为「数据」，「运行日志」改为「日志」；「分析记录」名称不变。下文沿用旧名称的操作路径也对应这些入口。
+
+在「分析记录」点击「详情」查看阶段树，选择阶段后可阅读对应的调用、渲染或错误记录；「耗时、内存与传输」保留图表，「完整任务记录」可查看全部字段。原「幂等续跑」按钮改为「继续分析」，仍可临时选择模型和报告模板；系统优先复用已有快照，快照缺失时可能重新分析并产生模型消耗。
+
 打开插件 WebUI「**数据管理 → 存储空间概览 → 存储分区明细与管理**」，可查看各类数据占用，并进入对应管理页：
 
 | 分区 | 可以做什么 |
@@ -660,7 +688,7 @@ AstrBot 更新插件时会先删除旧插件目录，再解压或移动新目录
 
 > [!IMPORTANT]
 > **排查手段 1：外链大字体包/图片 CDN 下载阻塞（国内服务器高发）**
-> - **每轮单独配置资源**：在插件 WebUI 的「图片渲染方案」点击「添加渲染方案」（AstrBot 配置页为「添加条目」），选择海外、内地或自定义 T2I 方案，再修改这一轮的模板 CDN、Google Fonts 和 Gstatic 地址。AstrBot 配置页使用下拉预设和“自定义地址”入口，保存后会显示并保留实际地址；插件 WebUI 可直接在选框中输入。两端共用配置，已打开的页面需重新打开后查看另一端的修改。CDN 需支持 `/gh/` 和 `/npm/`。使用前请测试T2I服务所在网络的速度和可达性；「检测可用性」检查的是机器人服务器，远程 T2I 仍需实际生成报告确认。
+> - **每轮单独配置资源**：在插件 WebUI 的「图片渲染方案」点击「添加渲染方案」（AstrBot 配置页为「添加条目」），选择海外、内地或自定义 T2I 方案，再修改这一轮的模板 CDN、Google Fonts 和 Gstatic 地址。AstrBot 配置页使用下拉预设和“自定义地址”入口，保存后会显示并保留实际地址；插件 WebUI 可直接填写地址，也可通过“选择预设”填入。两端共用配置，已打开的页面需重新打开后查看另一端的修改。CDN 需支持 `/gh/` 和 `/npm/`。使用前请测试T2I服务所在网络的速度和可达性；「检测可用性」检查的是机器人服务器，远程 T2I 仍需实际生成报告确认。
 > - **自定义服务的字体加载方式**：通常保持「在线字体」。已在T2I服务安装字体，或字体下载经常超时且愿意接受备用字体时，可选择「使用已安装字体」；只影响本轮图片报告，素材图片仍需 CDN。安装位置、完整字体清单及适用情况见[字体安装指南](https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/docs/T2I_FONTS.md)。
 > - **配置多轮回退**：可为不同轮次填写不同 CDN，也可以只更换字体地址。优先级越小越先执行，同优先级按列表顺序执行；资源地址变化时重新准备 HTML，成功后停止。所有轮次共用 5 分钟总等待上限。独立 HTML 报告和模板预览采用第一优先级方案的资源地址。
 > - **先单独测试渲染服务**：海外、内地、自定义 T2I 与 Typst 方案均有「测试渲染」按钮，不用先保存，也不消耗大模型 Token 或向群里发消息。海外／内地方案可测试 AstrBot 默认配置，或已有群聊绑定的配置；自定义方案测试当前填写的地址和 Token；Typst 验证本地编译器。测试小图不能代替完整报告的字体和素材检查。容器名称支持下划线，但两个容器需要网络互通；配置示例见[渲染方案与容器网络说明](docs/REPORT_TEMPLATE_GUIDE.md#52-模板内部引用的图片重要渲染链路约束)。

@@ -193,6 +193,7 @@ class ReportQueryService:
         start_date: str,
         end_date: str,
         report_section: str = "全部",
+        platform_id: str | None = None,
     ) -> str:
         """执行群分析报告综合检索与文本组装。
 
@@ -205,7 +206,7 @@ class ReportQueryService:
         Returns:
             str: 格式化的 Markdown 结果文本。
         """
-        group_name = self._get_cached_group_name(group_id)
+        group_name = self._get_cached_group_name(group_id, platform_id)
         sections = self._parse_sections(report_section)
 
         # 1. 查询热轨：CheckpointStore (优先常规分析 LLM_ANALYSIS，若无则尝试按需分析 ON_DEMAND_ANALYSIS)
@@ -213,7 +214,31 @@ class ReportQueryService:
         is_latest_query = not bool(start_date and end_date)
 
         if self.checkpoint_store:
-            if is_latest_query:
+            if platform_id:
+                dates: list[str | None] = [None]
+                if not is_latest_query:
+                    start = dt.date.fromisoformat(start_date)
+                    end = dt.date.fromisoformat(end_date)
+                    dates = [
+                        (start + dt.timedelta(days=i)).isoformat()
+                        for i in range((end - start).days + 1)
+                    ]
+                for selected_date in dates:
+                    for stage in (
+                        AnalysisStage.LLM_ANALYSIS.value,
+                        AnalysisStage.ON_DEMAND_ANALYSIS.value,
+                    ):
+                        scoped = await asyncio.to_thread(
+                            self._get_latest_checkpoint,
+                            group_id,
+                            stage,
+                            platform_id=platform_id,
+                            date_str=selected_date,
+                        )
+                        if scoped:
+                            reports_data.append(scoped)
+                            break
+            elif is_latest_query:
                 # 获取最新一份 Checkpoint (LLM_ANALYSIS 优先，兜底 ON_DEMAND_ANALYSIS)
                 latest_cp = (
                     await asyncio.to_thread(
@@ -251,7 +276,10 @@ class ReportQueryService:
         probe_notice = ""
         if not reports_data and start_date and start_date == end_date:
             nearby_cp = await asyncio.to_thread(
-                self._probe_nearby_checkpoint, group_id, start_date
+                self._probe_nearby_checkpoint,
+                group_id,
+                start_date,
+                platform_id=platform_id,
             )
             if nearby_cp:
                 reports_data.append(nearby_cp)
@@ -263,7 +291,11 @@ class ReportQueryService:
         # 3. 若热轨仍为空，尝试冷轨降级：HistoryManager (KV)
         if not reports_data and self.history_manager:
             kv_reports = await self._query_history_kv(
-                group_id, start_date, end_date, is_latest_query
+                group_id,
+                start_date,
+                end_date,
+                is_latest_query,
+                platform_id=platform_id or "",
             )
             if kv_reports:
                 reports_data.extend(kv_reports)
@@ -314,6 +346,9 @@ class ReportQueryService:
         self,
         group_id: str,
         stage_name: str = "LLM_ANALYSIS",
+        *,
+        platform_id: str | None = None,
+        date_str: str | None = None,
     ) -> dict[str, object] | None:
         if not self.checkpoint_store:
             return None
@@ -322,6 +357,8 @@ class ReportQueryService:
             offset=0,
             group_id=group_id,
             stage_name=stage_name,
+            platform=platform_id,
+            date_str=date_str,
         )
         if not items:
             return None
@@ -346,7 +383,7 @@ class ReportQueryService:
         return None
 
     def _probe_nearby_checkpoint(
-        self, group_id: str, target_date_str: str
+        self, group_id: str, target_date_str: str, *, platform_id: str | None = None
     ) -> dict[str, object] | None:
         if not self.checkpoint_store:
             return None
@@ -364,6 +401,13 @@ class ReportQueryService:
             AnalysisStage.ON_DEMAND_ANALYSIS.value,
         ):
             for d_str in (prev_date, next_date):
+                if platform_id:
+                    scoped = self._get_latest_checkpoint(
+                        group_id, stage, platform_id=platform_id, date_str=d_str
+                    )
+                    if scoped:
+                        return scoped
+                    continue
                 detail = self.checkpoint_store.get_checkpoint_detail(
                     group_id=group_id,
                     date_str=d_str,
@@ -390,6 +434,7 @@ class ReportQueryService:
         start_date: str,
         end_date: str,
         is_latest_query: bool,
+        platform_id: str = "",
     ) -> list[dict[str, object]]:
         if not self.history_manager:
             return []
@@ -401,7 +446,9 @@ class ReportQueryService:
             today = dt.date.today()
             for offset in range(7):
                 cur_date = (today - dt.timedelta(days=offset)).strftime("%Y-%m-%d")
-                data = await self.history_manager.get_analysis(group_id, cur_date)
+                data = await self.history_manager.get_analysis(
+                    group_id, cur_date, platform_id=platform_id
+                )
                 if data:
                     results.append(
                         {
@@ -427,7 +474,9 @@ class ReportQueryService:
 
         while cur <= end:
             d_str = cur.strftime("%Y-%m-%d")
-            data = await self.history_manager.get_analysis(group_id, d_str)
+            data = await self.history_manager.get_analysis(
+                group_id, d_str, platform_id=platform_id
+            )
             if data:
                 results.append(
                     {
@@ -620,13 +669,21 @@ class ReportQueryService:
 
         return full_content
 
-    def _get_cached_group_name(self, group_id: str) -> str:
+    def _get_cached_group_name(
+        self, group_id: str, platform_id: str | None = None
+    ) -> str:
         if not self.trace_store:
             return ""
         try:
-            groups = self.trace_store.get_distinct_groups()
+            groups = (
+                self.trace_store.get_distinct_groups(by_session=True)
+                if platform_id
+                else self.trace_store.get_distinct_groups()
+            )
             for g in groups:
-                if str(g.get("group_id", "")) == str(group_id):
+                if str(g.get("group_id", "")) == str(group_id) and (
+                    not platform_id or g.get("platform") == platform_id
+                ):
                     return str(g.get("group_name", ""))
         except Exception:
             pass

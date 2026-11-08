@@ -4,79 +4,31 @@ import {
   ReportTemplateItem,
 } from "../../entities/report/model/templates";
 
-/**
- * 历史产物报告 Mock 数据矩阵
- * 包含：日报长图 (PNG)、四格/六格群漫画 (Comic PNG)、可交互式 HTML 报告等多格式与多平台案例
- */
+import { mockTraces } from "./traces";
+
+/** 图片与网页报告沿用任务实际声明的文件名和归属，不再维护另一份错位清单。 */
 export const mockReportHistory: ReportItem[] = [
-  // 1. 标准日报长图
-  {
-    filename: "daily_analysis_123456789_2026-09-26.png",
-    size_bytes: 482910,
-    modified_at: (Date.now() - 3600000) / 1000,
-    group_id: "123456789",
-    group_name: "技术交流与闲聊吹水群",
-    platform: "aiocqhttp",
-    report_type: "image",
-    trace_id: "trace-20260926-001",
-  },
-  // 2. 稠密高负载群长图
-  {
-    filename: "daily_analysis_8899001122_2026-09-26.png",
-    size_bytes: 1420500,
-    modified_at: (Date.now() - 7200000) / 1000,
-    group_id: "8899001122",
-    group_name: "🌸 2026 深度学习与自然语言处理前沿学术讨论暨核心内测技术交流特大群 (第 3 分群) 🚀",
-    platform: "aiocqhttp",
-    report_type: "image",
-    trace_id: "trace-20260926-002-dense",
-  },
-  // 3. 多模态群漫画
-  {
-    filename: "comic_8899001122_2026-09-26.png",
-    size_bytes: 2840000,
-    modified_at: (Date.now() - 7167500) / 1000,
-    group_id: "8899001122",
-    group_name: "🌸 2026 深度学习与自然语言处理前沿学术讨论暨核心内测技术交流特大群 (第 3 分群) 🚀",
-    platform: "aiocqhttp",
-    report_type: "comic",
-    trace_id: "trace-20260926-002-dense",
-  },
-  // 4. 独立可交互 HTML 报告
-  {
-    filename: "interactive_report_8899001122_2026-09-26.html",
-    size_bytes: 385000,
-    modified_at: (Date.now() - 7166000) / 1000,
-    group_id: "8899001122",
-    group_name: "🌸 2026 深度学习与自然语言处理前沿学术讨论暨核心内测技术交流特大群 (第 3 分群) 🚀",
-    platform: "aiocqhttp",
-    report_type: "html",
-    is_html: true,
-    trace_id: "trace-20260926-002-dense",
-  },
-  // 5. Telegram 渠道告警日报
-  {
-    filename: "daily_analysis_telegram_1001987654321.png",
-    size_bytes: 420000,
-    modified_at: (Date.now() - 900000) / 1000,
-    group_id: "-1001987654321",
-    group_name: "DevOps & SRE Infra Alert Channel [PROD]",
-    platform: "telegram",
-    report_type: "image",
-    trace_id: "trace-20260926-005-tg-warning",
-  },
-  // 6. Discord 社区复古像素日报
-  {
-    filename: "daily_analysis_discord_1082739182374.png",
-    size_bytes: 610000,
-    modified_at: (Date.now() - 86400000) / 1000,
-    group_id: "1082739182374",
-    group_name: "🎮 Indie Game Dev & Pixel Art Guild",
-    platform: "discord",
-    report_type: "image",
-    trace_id: "trace-20260925-006-discord",
-  },
-  // 7. 昨日历史日报
+  ...mockTraces.flatMap((trace) =>
+    (trace.report_files ?? []).flatMap((file): ReportItem[] => {
+      if (!file.filename || !/\.(png|jpe?g|webp|html?)$/i.test(file.filename)) return [];
+      const isHtml = /\.html?$/i.test(file.filename);
+      const isComic = file.report_type === "comic";
+      return [
+        {
+          filename: file.filename,
+          size_bytes: file.size_bytes ?? 0,
+          modified_at: file.created_at ?? trace.completed_at ?? trace.started_at,
+          group_id: trace.group_id,
+          group_name: trace.group_name,
+          platform: trace.platform,
+          report_type: isHtml ? "html" : isComic ? "comic" : "image",
+          is_html: isHtml,
+          is_comic: isComic,
+          trace_id: trace.trace_id,
+        },
+      ];
+    }),
+  ),
   {
     filename: "report_123456789_2026-09-25.png",
     size_bytes: 624500,
@@ -86,7 +38,6 @@ export const mockReportHistory: ReportItem[] = [
     platform: "aiocqhttp",
     report_type: "image",
   },
-  // 8. 核心测试群历史日报
   {
     filename: "report_987654321_2026-09-25.png",
     size_bytes: 489200,

@@ -92,6 +92,7 @@ async def test_resume_json_messages_and_preserves_archive_date(tmp_path):
                 }
             ],
         },
+        trace_id="resume-json",
     )
     config = MagicMock()
     config.get_topic_analysis_enabled.return_value = True
@@ -180,3 +181,31 @@ async def test_resume_rejects_another_task_daily_history(monkeypatch):
         )
     assert result["success"] is False
     assert result["reason"] == "checkpoint_missing"
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("partial", [False, True])
+async def test_rejected_resume_does_not_write_new_task_checkpoints(tmp_path, partial):
+    """完整和部分续跑都必须先取得会话锁，再为新任务写入快照。"""
+    from src.application.services.task_guard import DuplicateGroupTaskError
+
+    store = CheckpointStore(tmp_path / "rejected-resume.db")
+    store.save_checkpoint("g1", "2026-11-07", "LLM_ANALYSIS", {
+        "statistics": {"message_count": 3},
+        "topics": [{"topic": "已完成话题", "contributors": [], "detail": "保留"}],
+    }, trace_id="original")
+    store.save_checkpoint("g1", "2026-11-07", "CLEAN_MESSAGES", {"statistics": {"message_count": 3}}, trace_id="original")
+    config = MagicMock()
+    config.get_topic_analysis_enabled.return_value = True
+    config.get_user_title_analysis_enabled.return_value = partial
+    config.get_golden_quote_analysis_enabled.return_value = False
+    config.get_chat_quality_analysis_enabled.return_value = False
+    bot_manager = MagicMock()
+    bot_manager.resolve_platform_id.return_value = "first"
+    guard = TaskGuard()
+    service = AnalysisRecoveryService(config, bot_manager, MagicMock(), MagicMock(), MagicMock(), guard, store)
+    async with guard.group_lock("g1", "daily", "first"):
+        async with TraceContext(trace_id="rejected"):
+            with pytest.raises(DuplicateGroupTaskError):
+                await service.resume_analysis("rejected", "g1", "first", date_str="2026-11-07", checkpoint_trace_id="original")
+    assert store.get_checkpoint("g1", "2026-11-07", "LLM_ANALYSIS", trace_id="rejected") is None
+    assert store.get_checkpoint("g1", "2026-11-07", "LLM_ANALYSIS", trace_id="original")

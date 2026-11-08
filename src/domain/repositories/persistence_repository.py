@@ -9,15 +9,25 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..entities.incremental_state import IncrementalBatch
+    from ..entities.incremental_state import IncrementalBatch, IncrementalBatchPage
     from ..value_objects.analysis_results import (
         CheckpointDetailPayload,
+        CheckpointGroupPayload,
         CheckpointSummaryPayload,
     )
+    from ..value_objects.group_session import GroupSession
 
 
 class IIncrementalStore(ABC):
     """增量批次持久化仓储接口"""
+
+    @abstractmethod
+    async def for_session(self, group_id: str, platform_id: str) -> IIncrementalStore:
+        """获取会话隔离的仓储；首次访问时接管尚未归属的旧数据。"""
+
+    @abstractmethod
+    async def get_tracked_sessions(self) -> list[GroupSession]:
+        """列出会话身份，尚未归属的旧数据以空平台保留。"""
 
     @abstractmethod
     async def save_batch(self, batch: IncrementalBatch) -> bool:
@@ -62,10 +72,19 @@ class IIncrementalStore(ABC):
         """获取所有已记录增量批次的群组列表"""
 
     @abstractmethod
-    async def get_all_batches_with_details(
-        self, group_id: str
-    ) -> list[dict[str, object]]:
-        """获取指定群组的所有增量批次详情列表"""
+    async def list_batch_page(
+        self, group_id: str, page: int = 1, page_size: int = 20
+    ) -> IncrementalBatchPage:
+        """读取一页批次；分页总数与排序使用同一份索引。
+
+        Args:
+            group_id: 群组 ID。
+            page: 从 1 开始的页码。
+            page_size: 每页数量。
+
+        Returns:
+            分页概览及全部索引可确认的最新消息时间。
+        """
 
     @abstractmethod
     async def get_batch_detail(
@@ -160,12 +179,17 @@ class ICheckpointStore(ABC):
         date_str: str | None = None,
         stage_name: str | None = None,
         trace_id: str | None = None,
+        platform: str | None = None,
     ) -> tuple[list[CheckpointSummaryPayload], int]:
         """分页获取所有 Checkpoint 快照元数据列表"""
 
     @abstractmethod
     def get_distinct_checkpoint_groups(self) -> list[str]:
         """获取所有存在 Checkpoint 快照的唯一群号列表"""
+
+    @abstractmethod
+    def get_checkpoint_group_sessions(self) -> list[CheckpointGroupPayload]:
+        """获取有效快照关联的群聊身份，未关联任务的记录保留空平台。"""
 
     @abstractmethod
     def get_checkpoint_detail(

@@ -1146,6 +1146,9 @@ class AutoScheduler:
                 before_ts = time_mod.time() - (analysis_days * 2 * 24 * 3600)
                 incremental_store = self.analysis_service.incremental_store
                 if incremental_store:
+                    incremental_store = await incremental_store.for_session(
+                        group_id, dispatch_platform_id or ""
+                    )
                     cleaned = await incremental_store.cleanup_old_batches(
                         group_id, before_ts
                     )

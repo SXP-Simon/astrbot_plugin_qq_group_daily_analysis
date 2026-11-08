@@ -1,4 +1,11 @@
-import { devApiGet, devApiPost, devApiUpload, devFetchContext, devSubscribeSSE } from "./devBridge";
+import {
+  devApiGet,
+  devApiPost,
+  devApiUpload,
+  devFetchContext,
+  devSubscribeSSE,
+  devSubscribeContext,
+} from "./devBridge";
 
 /**
  * AstrBot 插件 Page Bridge 通信底层 (Shared API Bridge)
@@ -7,6 +14,7 @@ import { devApiGet, devApiPost, devApiUpload, devFetchContext, devSubscribeSSE }
 
 export interface AstrBotContext {
   isDark?: boolean;
+  themeColors?: { primary?: string; secondary?: string };
   pluginName?: string;
   [key: string]: unknown;
 }
@@ -101,20 +109,50 @@ export async function fetchContext(): Promise<AstrBotContext> {
   return { isDark: false, pluginName: "astrbot_plugin_qq_group_daily_analysis" };
 }
 
+export function subscribeContext(callback: (context: AstrBotContext) => void): () => void {
+  const bridge = getBridge();
+  if (typeof bridge?.onContext === "function") return bridge.onContext(callback);
+  if (import.meta.env.DEV && !bridge) return devSubscribeContext(callback);
+  return () => {};
+}
+
 export async function apiGet<T = unknown>(
   path: string,
   params?: Record<string, unknown>,
+  timeoutMs?: number,
 ): Promise<ApiResponse<T> | null> {
   const bridge = getBridge();
-  let response: ApiResponse<T> | null = null;
-  if (bridge && typeof bridge.apiGet === "function") {
-    response = await bridge.apiGet<T>(path, params);
-  } else if (import.meta.env.DEV) {
-    response = await devApiGet<T>(path, params);
+  const pending =
+    bridge && typeof bridge.apiGet === "function"
+      ? bridge.apiGet<T>(path, params)
+      : import.meta.env.DEV
+        ? devApiGet<T>(path, params)
+        : Promise.resolve(null);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const response =
+      timeoutMs === undefined
+        ? await pending
+        : await Promise.race([
+            pending,
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `读取超过 ${timeoutMs / 1000} 秒，请检查到 AstrBot 的网络连接后重试。`,
+                    ),
+                  ),
+                timeoutMs,
+              );
+            }),
+          ]);
+    if (!response) throw new Error("未收到接口响应，请检查连接后重试。");
+    extractData(response);
+    return response;
+  } finally {
+    clearTimeout(timer);
   }
-  if (!response) throw new Error("未收到接口响应，请检查连接后重试。");
-  extractData(response);
-  return response;
 }
 
 export async function apiPost<T = unknown>(
@@ -140,19 +178,30 @@ export function subscribeSSE(handlers: {
   const bridge = getBridge();
   if (bridge && typeof bridge.subscribeSSE === "function") {
     let subId: string | number | null = null;
+    let disposed = false;
     bridge
       .subscribeSSE("events/stream", {
         onMessage: (evt: SSEEventWrapper) => {
+          if (disposed) return;
           const payload = evt.parsed !== undefined ? evt.parsed : evt.raw;
           handlers.onMessage(payload);
         },
-        onError: handlers.onError,
+        onError: () => {
+          if (!disposed) handlers.onError?.();
+        },
       })
       .then((id) => {
-        subId = id;
+        // 宿主异步返回订阅编号时，页面可能已经离开，仍需撤销这次订阅。
+        if (disposed) bridge.unsubscribeSSE(id);
+        else subId = id;
+      })
+      .catch(() => {
+        if (!disposed) handlers.onError?.();
       });
 
     return () => {
+      if (disposed) return;
+      disposed = true;
       if (subId !== null && typeof bridge.unsubscribeSSE === "function") {
         bridge.unsubscribeSSE(subId);
       }

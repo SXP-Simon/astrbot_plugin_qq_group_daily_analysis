@@ -8,12 +8,7 @@
     "browser": true,
     "es2020": true
   },
-  "ignorePatterns": [
-    "dist/**",
-    "node_modules/**",
-    "src/shared/api/generated/**",
-    "design-preview/**"
-  ],
+  "ignorePatterns": ["dist/**", "node_modules/**", "src/shared/api/generated/**"],
   "rules": {
     "for-direction": "error",
     "no-async-promise-executor": "error",
@@ -89,6 +84,10 @@
     ],
     "no-array-constructor": "error",
     "no-var": "error",
-    "prefer-const": "error"
+    "prefer-const": "error",
+    "typescript/no-deprecated": "error"
+  },
+  "options": {
+    "typeAware": true
   }
 }

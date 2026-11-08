@@ -12,6 +12,41 @@ import { mockCheckpoints } from "../data/pluginData";
 import { extractData } from "../../shared/api/bridge";
 import { mockActiveTasks } from "../data/tasks";
 
+it("同号群按实例分别触发，重复请求拒绝，续跑沿用原会话", () => {
+  const group = "mock-session-isolation",
+    ids: string[] = [];
+  try {
+    const first = mockHandlers["POST tasks/trigger"]({ group_id: group, platform: "aiocqhttp" });
+    const second = mockHandlers["POST tasks/trigger"]({ group_id: group, platform: "telegram" });
+    expect(first.status).toBe("ok");
+    expect(second.status).toBe("ok");
+    ids.push(first.data!.trace_id, second.data!.trace_id);
+    expect(
+      mockHandlers["POST tasks/trigger"]({ group_id: group, platform: "telegram" }).status,
+    ).toBe("error");
+    expect(mockHandlers["POST tasks/:traceId/resume"]({}, { traceId: ids[1] }).status).toBe(
+      "error",
+    );
+    mockHandlers["POST tasks/cancel"]({ task_id: ids[1] });
+    const resumed = mockHandlers["POST tasks/:traceId/resume"](
+      { platform: "aiocqhttp" },
+      { traceId: ids[1] },
+    );
+    expect(resumed.status).toBe("ok");
+    ids.push(resumed.data!.trace_id);
+    expect(mockActiveTasks.find((task) => task.task_id === resumed.data!.trace_id)?.platform).toBe(
+      "telegram",
+    );
+    expect(mockTraces.find((trace) => trace.trace_id === ids[1])?.status).toBe("aborted");
+  } finally {
+    for (const id of ids) {
+      mockHandlers["POST tasks/cancel"]({ task_id: id });
+      const index = mockTraces.findIndex((trace) => trace.trace_id === id);
+      if (index >= 0) mockTraces.splice(index, 1);
+    }
+  }
+});
+
 it("字体上传 Mock 只有末块才发布文件，取消后拒绝迟到分块", () => {
   const name = "mock-chunk-font.ttf",
     download_id = "chunk-upload-test";
@@ -78,7 +113,7 @@ it("快照 Mock 按请求身份读取真实 data 结构，并拒绝缺失或不�
   expect(extractData(mockHandlers["GET data/checkpoint/detail"](params))).toMatchObject({
     ...params,
     checkpoint_id: item.checkpoint_id,
-    data: { group_id: item.group_id, stage_name: item.stage_name },
+    data: { output_format: "png", template: "HatsuneMiku" },
   });
   expect(
     mockHandlers["GET data/checkpoint/detail"]({ ...params, trace_id: "missing" }).status,
@@ -140,6 +175,25 @@ describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => 
     const filtered = mockHandlers["GET logs"]({ tag: "LLM" });
     expect(filtered.data.items.length).toBeGreaterThan(0);
     expect(filtered.data.items.every((item) => item.tag === "LLM")).toBe(true);
+    for (const key of [
+      "Typst",
+      "T2I",
+      "Resources",
+      "Config",
+      "Storage",
+      "Messages",
+      "Incremental",
+      "Tasks",
+      "Dispatch",
+      "Satori",
+      "Platform",
+      "General",
+    ]) {
+      expect(logs.data.available_tags.some((tag) => tag.key === key)).toBe(true);
+      const result = mockHandlers["GET logs"]({ tag: key });
+      expect(result.data.items.length).toBeGreaterThan(0);
+      expect(result.data.items.every((item) => item.tag === key)).toBe(true);
+    }
   });
 
   it("平台数据和真实接口一致，包含平台实例和显示名称", () => {
@@ -298,7 +352,7 @@ it("Typst演示覆盖本地缓存、下载、超时、恢复、失败和取消�
     titleFallback?.spans?.find((span) => span.stage_name === "TYPST_RESOURCES")?.payload,
   ).toMatchObject({
     title_font: "Noto Sans SC",
-    warning: expect.stringContaining("全瀨體尚未下载"),
+    warning: expect.stringContaining("初音标题字体尚未下载"),
   });
   for (const trace of native) {
     for (const span of trace.spans || []) {

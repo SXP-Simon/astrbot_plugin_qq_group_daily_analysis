@@ -209,9 +209,11 @@ class IncrementalBatchesQueryDTO(TypedDict):
 
     Attributes:
         group_id: 目标群号。
+        platform_id: 平台实例标识，空值仅用于尚未归属的旧数据。
     """
 
     group_id: str
+    platform_id: NotRequired[str]
 
 
 class IncrementalBatchDetailQueryDTO(TypedDict):
@@ -219,10 +221,12 @@ class IncrementalBatchDetailQueryDTO(TypedDict):
 
     Attributes:
         group_id: 目标群号。
+        platform_id: 平台实例标识，空值仅用于尚未归属的旧数据。
         batch_id: 增量批次唯一标识符。
     """
 
     group_id: str
+    platform_id: NotRequired[str]
     batch_id: str
 
 
@@ -231,10 +235,12 @@ class IncrementalBatchDeleteDTO(TypedDict):
 
     Attributes:
         group_id: 目标群号。
+        platform_id: 平台实例标识，空值仅用于尚未归属的旧数据。
         batch_id: 增量批次唯一标识符。
     """
 
     group_id: str
+    platform_id: NotRequired[str]
     batch_id: str
 
 
@@ -243,9 +249,11 @@ class IncrementalResetDTO(TypedDict):
 
     Attributes:
         group_id: 目标群号。
+        platform_id: 平台实例标识，空值仅用于尚未归属的旧数据。
     """
 
     group_id: str
+    platform_id: NotRequired[str]
 
 
 # ============================================================================

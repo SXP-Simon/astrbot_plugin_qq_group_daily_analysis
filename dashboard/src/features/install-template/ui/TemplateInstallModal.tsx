@@ -1,21 +1,12 @@
-import React, { useState } from "react";
-import { Modal, Tabs, Form, Input, Button, Alert, Upload, Typography, message, Space } from "antd";
-import {
-  GithubOutlined,
-  InboxOutlined,
-  DownloadOutlined,
-  InfoCircleOutlined,
-  BookOutlined,
-  BulbOutlined,
-} from "@ant-design/icons";
-import {
-  installTemplateFromUrl,
-  installTemplateFromFile,
-  TemplateInstallResult,
-} from "../../../entities/report/api/reportApi";
-
-const { Dragger } = Upload;
-const { Text, Paragraph } = Typography;
+import { useRef } from "react";
+import { IconBrandGithub, IconFileZip, IconDownload, IconX } from "@tabler/icons-react";
+import type { TemplateInstallResult } from "../../../entities/report/api/reportApi";
+import { useTemplateInstall } from "../model/useTemplateInstall";
+import { Button } from "../../../shared/ui/button";
+import { Input } from "../../../shared/ui/input";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../shared/ui/tabs";
+import { formatBytes } from "../../../shared/lib/formatters";
 
 interface TemplateInstallModalProps {
   open: boolean;
@@ -23,243 +14,172 @@ interface TemplateInstallModalProps {
   onInstalled?: (result: TemplateInstallResult) => void;
 }
 
-const NAMING_GUIDE = (
-  <Space direction="vertical" size={2} style={{ width: "100%" }}>
-    <Text strong>
-      <BookOutlined style={{ marginRight: 6, color: "#1677ff" }} />
-      命名与参考规范
-    </Text>
-    <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.6 }}>
-      模板名建议使用小写英文蛇形并带命名空间前缀（如{" "}
-      <Text code style={{ fontSize: 12 }}>
-        gda_miku_dream
-      </Text>
-      ）：建议只用小写字母、数字、下划线，长度不超过 50。避免空格与特殊字符，
-      以免报告文件名、预览图与 CDN 链接出错，并与内置模板（scrapbook 等）区分。 不填写时将从压缩包 /
-      仓库名自动推断（GitHub 归档的 -main 后缀会被自动去除）。 中文显示名可在模板根目录下放置可选的{" "}
-      <Text code style={{ fontSize: 12 }}>
-        template.json
-      </Text>{" "}
-      （如 {'{"name": "初音梦境"}'}），作为下拉框中的展示名称。可参考标准示例仓库{" "}
-      <Typography.Link
-        href="https://github.com/lingyun14beta/daily-analysis-report-theme"
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ fontSize: 12 }}
-      >
-        lingyun14beta/daily-analysis-report-theme
-      </Typography.Link>
-      。
-    </Text>
-  </Space>
-);
-
-export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
-  open,
-  onClose,
-  onInstalled,
-}) => {
-  const [activeTab, setActiveTab] = useState("url");
-  const [urlForm] = Form.useForm();
-  const [fileForm] = Form.useForm();
-  const [pickedFile, setPickedFile] = useState<File | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const resetState = () => {
-    setPickedFile(null);
-    urlForm.resetFields();
-    fileForm.resetFields();
-  };
-
-  const handleClose = () => {
-    resetState();
-    onClose();
-  };
-
-  const handleInstallUrl = async () => {
-    try {
-      const values = await urlForm.validateFields();
-      setSubmitting(true);
-      const result = await installTemplateFromUrl({
-        repo_url: values.repo_url,
-        name: values.name || undefined,
-      });
-      if (result) {
-        message.success(`模板已安装：${result.label}（${result.name}）`);
-        onInstalled?.(result);
-        handleClose();
-      } else {
-        message.error("安装失败，请检查链接或服务器日志。");
-      }
-    } catch (e) {
-      if (typeof e === "object" && e !== null && "errorFields" in e) {
-        return; // form validation
-      }
-      const err = e as { message?: string };
-      message.error(err?.message || "安装失败，请检查链接与网络。");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleInstallFile = async () => {
-    try {
-      const values = await fileForm.validateFields();
-      if (!pickedFile) {
-        message.warning("请先选择 zip 压缩包。");
-        return;
-      }
-      setSubmitting(true);
-      const result = await installTemplateFromFile(pickedFile, values.name || undefined);
-      if (result) {
-        message.success(`模板已安装：${result.label}（${result.name}）`);
-        onInstalled?.(result);
-        handleClose();
-      } else {
-        message.error("安装失败，请检查压缩包内容或服务器日志。");
-      }
-    } catch (e) {
-      if (typeof e === "object" && e !== null && "errorFields" in e) {
-        return; // form validation
-      }
-      const err = e as { message?: string };
-      message.error(err?.message || "安装失败，请确认压缩包内包含 image_template.html。");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
+export function TemplateInstallModal({ open, onClose, onInstalled }: TemplateInstallModalProps) {
+  const vm = useTemplateInstall(open, onClose, onInstalled);
+  const fileInput = useRef<HTMLInputElement>(null);
   return (
-    <Modal
-      title={
-        <Space>
-          <DownloadOutlined style={{ color: "#1677ff" }} />
-          <span>安装自定义报告模板</span>
-        </Space>
-      }
+    <Dialog
       open={open}
-      onCancel={handleClose}
-      footer={null}
-      width={620}
+      onOpenChange={(next) => {
+        if (!next) vm.close();
+      }}
     >
-      <Alert
-        type="info"
-        showIcon
-        icon={<InfoCircleOutlined />}
-        message="安装即生效"
-        description="模板安装后无需重启机器人，会立即出现在「断点续跑」与「免 Token 切换主题重绘」的模板下拉列表中。内置模板不能被覆盖，与内置模板重名时会被拒绝。"
-        style={{ marginBottom: 12 }}
-      />
-      {NAMING_GUIDE}
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        items={[
-          {
-            key: "url",
-            label: (
-              <span>
-                <GithubOutlined /> GitHub 链接
-              </span>
-            ),
-            children: (
-              <Form form={urlForm} layout="vertical">
-                <Form.Item
-                  name="repo_url"
-                  label="GitHub 仓库链接"
-                  rules={[
-                    { required: true, message: "请填写 GitHub 仓库链接" },
-                    {
-                      pattern:
-                        /^https:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/i,
-                      message:
-                        "仅支持 https://github.com 仓库链接（如 https://github.com/owner/repo）",
-                    },
-                  ]}
-                >
+      <DialogContent
+        className="max-w-2xl"
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          vm.close();
+        }}
+        onPointerDownOutside={(event) => {
+          if (vm.busy) event.preventDefault();
+        }}
+      >
+        <DialogTitle>安装自定义报告模板</DialogTitle>
+        <DialogDescription>
+          安装后即可在续跑和重绘中选择，无需重启。内置模板不能被覆盖。
+        </DialogDescription>
+        <Tabs value={vm.method} onValueChange={vm.setMethod}>
+          <TabsList aria-label="模板安装方式">
+            <TabsTrigger value="url" disabled={vm.busy}>
+              <IconBrandGithub aria-hidden="true" />
+              GitHub 链接
+            </TabsTrigger>
+            <TabsTrigger value="file" disabled={vm.busy}>
+              <IconFileZip aria-hidden="true" />
+              上传 ZIP
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value={vm.method}>
+            <form
+              className="grid gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void vm.install();
+              }}
+            >
+              {vm.method === "url" ? (
+                <label className="grid gap-2 text-sm">
+                  GitHub 仓库链接
                   <Input
-                    placeholder="https://github.com/lingyun14beta/daily-analysis-report-theme"
-                    allowClear
+                    type="url"
+                    value={vm.url}
+                    disabled={vm.busy}
+                    onChange={(event) => vm.setUrl(event.target.value)}
+                    placeholder="https://github.com/owner/repo"
                   />
-                </Form.Item>
-                <Form.Item
-                  name="name"
-                  label="模板名（可选，留空自动推断）"
-                  extra="留空时使用仓库名（自动去除 -main / -master 后缀）。"
+                </label>
+              ) : (
+                <div
+                  className="grid gap-2 rounded-xl border border-dashed border-border p-4"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (!vm.busy) vm.pickFile(event.dataTransfer.files[0] || null);
+                  }}
                 >
-                  <Input placeholder="gda_miku_dream" allowClear />
-                </Form.Item>
-                <Button
-                  type="primary"
-                  icon={<DownloadOutlined />}
-                  loading={submitting}
-                  onClick={handleInstallUrl}
-                  block
+                  <div className="grid gap-2 text-sm">
+                    <span>ZIP 压缩包</span>
+                    <input
+                      ref={fileInput}
+                      aria-label="ZIP 压缩包"
+                      className="sr-only"
+                      tabIndex={-1}
+                      type="file"
+                      accept=".zip"
+                      disabled={vm.busy}
+                      onChange={(event) => {
+                        vm.pickFile(event.target.files?.[0] || null);
+                        event.target.value = "";
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={vm.busy}
+                      onClick={() => fileInput.current?.click()}
+                    >
+                      选择 ZIP 文件
+                    </Button>
+                  </div>
+                  <p className="m-0 text-sm text-muted-foreground">
+                    可拖入单个 ZIP。请保留模板目录、组件与素材。
+                  </p>
+                  {vm.file && (
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="break-all">
+                        {vm.file.name} · {formatBytes(vm.file.size)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="移除已选压缩包"
+                        disabled={vm.busy}
+                        onClick={() => vm.pickFile(null)}
+                      >
+                        <IconX aria-hidden="true" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+              <label className="grid gap-2 text-sm">
+                模板名（可选，留空自动推断）
+                <Input
+                  value={vm.method === "file" ? vm.names.file : vm.names.url}
+                  disabled={vm.busy}
+                  onChange={(event) => vm.setName(event.target.value)}
+                  placeholder="gda_miku_dream"
+                />
+              </label>
+              {vm.error && (
+                <p
+                  role="alert"
+                  className="m-0 rounded-xl bg-destructive/10 p-3 text-sm text-destructive"
                 >
-                  下载并安装
+                  {vm.error}
+                </p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" disabled={vm.busy} onClick={vm.close}>
+                  取消
                 </Button>
-              </Form>
-            ),
-          },
-          {
-            key: "file",
-            label: (
-              <span>
-                <InboxOutlined /> 上传 zip
-              </span>
-            ),
-            children: (
-              <Form form={fileForm} layout="vertical">
-                <Form.Item label="zip 压缩包（需包含 image_template.html、html_template.html 或 report.typ）">
-                  <Dragger
-                    accept=".zip"
-                    maxCount={1}
-                    beforeUpload={(file) => {
-                      setPickedFile(file);
-                      return false; // 阻止自动上传，由手动提交触发
-                    }}
-                    onRemove={() => setPickedFile(null)}
-                  >
-                    <p className="ant-upload-drag-icon">
-                      <InboxOutlined />
-                    </p>
-                    <p className="ant-upload-text">点击或拖拽 zip 到此处</p>
-                    <p className="ant-upload-hint">
-                      单个文件，打包时请保留模板根目录（可包含 HTML 或 Typst
-                      主文件、相对导入组件、资源与可选 template.json）
-                    </p>
-                  </Dragger>
-                </Form.Item>
-                <Form.Item
-                  name="name"
-                  label="模板名（可选，留空自动推断）"
-                  extra="留空时使用压缩包根目录名（GitHub 归档的 -main 后缀会自动去除）。"
-                >
-                  <Input placeholder="gda_miku_dream" allowClear />
-                </Form.Item>
-                <Button
-                  type="primary"
-                  icon={<DownloadOutlined />}
-                  loading={submitting}
-                  onClick={handleInstallFile}
-                  block
-                >
-                  解压并安装
+                <Button type="submit" disabled={vm.busy}>
+                  <IconDownload aria-hidden="true" />
+                  {vm.busy ? "正在安装…" : vm.method === "file" ? "解压并安装" : "下载并安装"}
                 </Button>
-              </Form>
-            ),
-          },
-        ]}
-      />
-      <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-        <BulbOutlined style={{ marginRight: 6, color: "#faad14" }} />
-        模板根目录至少提供 report.typ（Typst）、image_template.html（HTML 长图）或
-        html_template.html（HTML 网页）中的一种入口，并保留相对导入的组件与资源。 template.json
-        可提供显示名和说明。内置模板参考目录：{" "}
-        <Text code style={{ fontSize: 12 }}>
-          src/infrastructure/reporting/templates/scrapbook/
-        </Text>
-      </Paragraph>
-    </Modal>
+              </div>
+            </form>
+          </TabsContent>
+        </Tabs>
+        <details className="border-t border-border pt-3 text-sm text-muted-foreground">
+          <summary className="cursor-pointer text-foreground">模板要求与命名建议</summary>
+          <div className="mt-3 grid gap-2 leading-relaxed">
+            <p className="m-0">
+              模板至少包含 <code>report.typ</code>（Typst）、<code>image_template.html</code>（HTML
+              长图）或 <code>html_template.html</code>（HTML
+              网页）中的一个入口，并保留相对导入的组件和资源。
+            </p>
+            <p className="m-0">
+              模板名建议使用小写字母、数字、下划线，长度不超过 50，并添加前缀，例如{" "}
+              <code>gda_miku_dream</code>。留空时从仓库或压缩包目录推断，自动去除归档的{" "}
+              <code>-main</code>、<code>-master</code> 后缀。
+            </p>
+            <p className="m-0">
+              根目录可放置 <code>template.json</code> 设置中文显示名，例如{" "}
+              <code>{'{"name":"初音梦境"}'}</code>。内置示例位于{" "}
+              <code>src/infrastructure/reporting/templates/scrapbook/</code>。
+            </p>
+            <a
+              className="text-secondary-ink underline underline-offset-4"
+              href="https://github.com/lingyun14beta/daily-analysis-report-theme"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              查看模板示例仓库
+            </a>
+          </div>
+        </details>
+      </DialogContent>
+    </Dialog>
   );
-};
+}

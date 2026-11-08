@@ -743,13 +743,11 @@ class ReportDispatcher:
             if not image_data:
                 return None
 
-            date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            path = os.path.join(
-                tempfile.gettempdir(), f"report_{group_id}_{date_str}.png"
-            )
-            with open(path, "wb") as f:
+            with tempfile.NamedTemporaryFile(
+                prefix="group_report_", suffix=".png", delete=False
+            ) as f:
                 f.write(image_data)
-            return path
+                return f.name
         except Exception as e:
             logger.debug(f"保存图片到临时文件失败: {e}")
             return None

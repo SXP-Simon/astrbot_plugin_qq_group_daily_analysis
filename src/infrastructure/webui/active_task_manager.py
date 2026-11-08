@@ -228,6 +228,23 @@ class ActiveTaskManager:
         )
         return True
 
+    def is_analysis_running(self, group_id: str, platform_id: str) -> bool:
+        """检查该会话完整的手动分析流程，包含准备、渲染和发送。
+
+        Args:
+            group_id: 群标识。
+            platform_id: 真实平台实例 ID。
+
+        Returns:
+            是否已有同会话的普通分析或续跑任务，其他类型保持独立。
+        """
+        return any(
+            info.group_id == group_id
+            and info.platform == platform_id
+            and info.trigger_type in {"manual", "web_ui", "llm_tool", "resume"}
+            for info in self._tasks.values()
+        )
+
     def get_active_tasks(self) -> list[dict[str, object]]:
         """获取所有当前正在运行的任务快照"""
         return [t.to_dict() for t in self._tasks.values()]

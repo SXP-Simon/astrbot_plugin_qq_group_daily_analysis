@@ -117,6 +117,8 @@ class AnalysisRecoveryService:
         """
         if render_format not in {"image", "html"}:
             return {"success": False, "reason": "不支持的报告格式"}
+        if platform_id:
+            platform_id = self.bot_manager.resolve_platform_id(platform_id)
         analysis_result: AnalysisResultPayload | None = None
         from_checkpoint = False
         # 显式重绘某次任务时，专属检查点优先于按日保存的最近一次结果。
@@ -135,7 +137,9 @@ class AnalysisRecoveryService:
                 from_checkpoint = True
         if not analysis_result and self.history_manager:
             try:
-                hist_data = await self.history_manager.get_analysis(group_id, date_str)
+                hist_data = await self.history_manager.get_analysis(
+                    group_id, date_str, platform_id=platform_id or "", trace_id=trace_id
+                )
                 # 旧 KV 记录只有摘要，不能作为可恢复的完整分析产物。
                 if (
                     is_string_mapping(hist_data)
@@ -148,7 +152,12 @@ class AnalysisRecoveryService:
             except Exception as e:
                 logger.debug(f"从 HistoryManager 获取分析记录异常: {e}")
 
-        if not analysis_result and not trace_id and self.checkpoint_store:
+        if (
+            not analysis_result
+            and not trace_id
+            and not platform_id
+            and self.checkpoint_store
+        ):
             cached_data = await asyncio.to_thread(
                 self.checkpoint_store.get_checkpoint,
                 group_id,
@@ -260,6 +269,7 @@ class AnalysisRecoveryService:
         Raises:
             ValueError: 缺少平台适配器时抛出。
         """
+        platform_id = self.bot_manager.resolve_platform_id(platform_id)
         if not date_str:
             date_str = dt.datetime.now().strftime("%Y-%m-%d")
         checkpoint_trace_id = checkpoint_trace_id or trace_id
@@ -291,19 +301,9 @@ class AnalysisRecoveryService:
         )
 
         cached_result = await self._load_analysis_checkpoint(
-            group_id, date_str, checkpoint_trace_id
+            group_id, date_str, checkpoint_trace_id, platform_id=platform_id
         )
         if cached_result is not None:
-            # 续跑任务拥有独立 ID，复用产物也必须归档到新任务，供再次续跑读取。
-            if self.checkpoint_store:
-                await asyncio.to_thread(
-                    self.checkpoint_store.save_checkpoint,
-                    group_id=group_id,
-                    date_str=date_str,
-                    stage_name=AnalysisStage.LLM_ANALYSIS.value,
-                    data=AnalysisResultSerializer.serialize(dict(cached_result)),
-                    trace_id=trace.trace_id,
-                )
             cached_topics = cached_result.get("topics", [])
             cached_titles = cached_result.get("user_titles", [])
             cached_stats = cached_result.get("statistics")
@@ -329,7 +329,19 @@ class AnalysisRecoveryService:
                 logger.info(
                     f"群 {group_id} 命中完整的 LLM 分析产物快照，跳过消息拉取与 LLM 分析，直接进入报告排版与分发"
                 )
-                async with self.task_guard.group_lock(group_id, "daily"):
+                async with self.task_guard.group_lock(group_id, "daily", platform_id):
+                    # 只有成功取得会话锁的续跑，才可为新任务归档复用产物。
+                    if self.checkpoint_store:
+                        await asyncio.to_thread(
+                            self.checkpoint_store.save_checkpoint,
+                            group_id=group_id,
+                            date_str=date_str,
+                            stage_name=AnalysisStage.LLM_ANALYSIS.value,
+                            data=AnalysisResultSerializer.serialize(
+                                dict(cached_result)
+                            ),
+                            trace_id=trace.trace_id,
+                        )
                     adapter = self.bot_manager.get_adapter(platform_id)
                     pipeline.restore_checkpoint_span(
                         AnalysisStage.LLM_ANALYSIS,
@@ -383,11 +395,20 @@ class AnalysisRecoveryService:
         logger.info(
             f"群 {group_id} 命中 Checkpoint 快照，跳过消息拉取与清洗，直接进入 LLM 幂等续跑"
         )
-        async with self.task_guard.group_lock(group_id, "daily"):
+        async with self.task_guard.group_lock(group_id, "daily", platform_id):
             adapter = self.bot_manager.get_adapter(platform_id)
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
+            if self.checkpoint_store and cached_result is not None:
+                await asyncio.to_thread(
+                    self.checkpoint_store.save_checkpoint,
+                    group_id=group_id,
+                    date_str=date_str,
+                    stage_name=AnalysisStage.LLM_ANALYSIS.value,
+                    data=AnalysisResultSerializer.serialize(dict(cached_result)),
+                    trace_id=trace.trace_id,
+                )
             if self.checkpoint_store:
                 await asyncio.to_thread(
                     self.checkpoint_store.save_checkpoint,
@@ -440,7 +461,10 @@ class AnalysisRecoveryService:
                 serializer=AnalysisResultSerializer.serialize,
             ) as step:
                 await self.history_manager.save_analysis(
-                    group_id, dict(analysis_result), date_str=date_str
+                    group_id,
+                    dict(analysis_result),
+                    date_str=date_str,
+                    platform_id=platform_id,
                 )
                 if self.checkpoint_store:
                     try:
@@ -513,7 +537,12 @@ class AnalysisRecoveryService:
         return deserialized, unified_messages, top_users
 
     async def _load_analysis_checkpoint(
-        self, group_id: str, date_str: str, checkpoint_trace_id: str
+        self,
+        group_id: str,
+        date_str: str,
+        checkpoint_trace_id: str,
+        *,
+        platform_id: str = "",
     ) -> AnalysisResultPayload | None:
         """优先加载指定任务的分析快照，缺失时仅回退同源的每日历史。
 
@@ -538,7 +567,12 @@ class AnalysisRecoveryService:
         )
         if not cached:
             try:
-                history = await self.history_manager.get_analysis(group_id, date_str)
+                history = await self.history_manager.get_analysis(
+                    group_id,
+                    date_str,
+                    platform_id=platform_id,
+                    trace_id=checkpoint_trace_id,
+                )
                 if (
                     is_string_mapping(history)
                     and isinstance(history.get("statistics"), (dict, GroupStatistics))
