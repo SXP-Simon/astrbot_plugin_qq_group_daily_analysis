@@ -3,6 +3,26 @@ import { expect, it, vi } from "vitest";
 import { SearchSelect } from "../search-select";
 import { Pagination } from "../pagination";
 
+it("预设入口可使用简短按钮文字，名称仍包含当前选择且保留原始值", () => {
+  const change = vi.fn();
+  render(
+    <SearchSelect
+      label="模型预设"
+      triggerText="选择预设"
+      value="model-a"
+      options={[
+        { value: "model-a", label: "模型 A" },
+        { value: "model-b", label: "模型 B" },
+      ]}
+      onChange={change}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "模型预设：模型 A" }));
+  fireEvent.click(screen.getByRole("button", { name: "模型 B" }));
+  expect(change).toHaveBeenCalledWith("model-b");
+  expect(screen.getByText("选择预设")).toBeInTheDocument();
+});
+
 it("群聊选项支持搜索、选择与关闭焦点恢复，未知选择不被丢弃", async () => {
   const change = vi.fn();
   render(

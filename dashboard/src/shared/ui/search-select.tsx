@@ -11,6 +11,7 @@ interface SearchSelectProps {
   onChange: (value: string) => void;
   disabled?: boolean;
   virtual?: boolean;
+  triggerText?: string;
 }
 
 export function SearchSelect({
@@ -20,6 +21,7 @@ export function SearchSelect({
   onChange,
   disabled,
   virtual = false,
+  triggerText,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -74,7 +76,7 @@ export function SearchSelect({
           aria-label={`${label}：${selected?.label ?? (value || "请选择")}`}
           className="w-full min-w-0 max-w-full justify-between text-left"
         >
-          <span className="truncate">{selected?.label ?? (value || "请选择")}</span>
+          <span className="truncate">{triggerText ?? selected?.label ?? (value || "请选择")}</span>
           <IconChevronDown aria-hidden="true" />
         </Button>
       </DialogTrigger>
