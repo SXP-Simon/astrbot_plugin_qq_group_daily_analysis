@@ -32,7 +32,7 @@ it("慢加载提示不会结束加载，重新挂载重置等待并清理计时�
     await act(async () => vi.advanceTimersByTimeAsync(29999));
     expect(screen.getByRole("status")).toHaveTextContent("正在读取…");
     await act(async () => vi.advanceTimersByTimeAsync(1));
-    expect(screen.getByRole("status")).toHaveTextContent("传输较慢，仍在加载");
+    expect(screen.getByRole("status")).toHaveTextContent("加载时间较长，仍在等待结果");
     expect(screen.getByRole("status").querySelector('[data-slot="loading-spinner"]')).toBeVisible();
     view.rerender(
       <LoadingState key="second" slowAfterMs={30000}>

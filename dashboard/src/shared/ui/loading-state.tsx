@@ -8,7 +8,7 @@ export function LoadingState({
   className,
   skeleton = false,
   slowAfterMs,
-  slowMessage = "传输较慢，仍在加载，请稍候…",
+  slowMessage = "加载时间较长，仍在等待结果…",
   ...props
 }: {
   skeleton?: boolean;
