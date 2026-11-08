@@ -26,7 +26,7 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
   );
   return (
     <div className="min-w-0 space-y-5">
-      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background py-3">
+      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-secondary px-4 py-3">
         <p
           role="status"
           className={`m-0 flex items-center gap-2 text-sm ${vm.isDirty ? "text-warning" : "text-muted-foreground"}`}
@@ -130,13 +130,16 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
               ))}
             </NativeSelect>
           </div>
-          <nav aria-label="配置分组" className="hidden space-y-1 md:block">
+          <nav
+            aria-label="配置分组"
+            className="hidden space-y-1 rounded-xl bg-secondary-soft p-2 md:block"
+          >
             {visibleCategories.map((category) => (
               <Button
                 key={category.key}
-                variant={category.key === vm.activeCategory ? "secondary" : "ghost"}
+                variant={category.key === vm.activeCategory ? "default" : "ghost"}
                 aria-current={category.key === vm.activeCategory ? "page" : undefined}
-                className={`h-auto min-h-10 w-full justify-between gap-2 whitespace-normal px-3 py-2 text-left ${category.key === vm.activeCategory ? "bg-primary/15 hover:bg-primary/20" : ""}`}
+                className="h-auto min-h-10 w-full justify-between gap-2 whitespace-normal px-3 py-2 text-left"
                 onClick={() => vm.setActiveCategory(category.key)}
               >
                 <span>{category.label}</span>
@@ -158,7 +161,7 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
         </aside>
         <section aria-label="配置字段" aria-busy={vm.loading} className="min-w-0 space-y-5">
           {vm.activeGroupMeta && (
-            <div className="space-y-2 border-b border-border pb-4">
+            <div className="space-y-2 rounded-xl border-0 border-l-2 border-solid border-primary-line bg-primary-soft px-4 py-3">
               <h2 className="m-0 text-lg font-medium">
                 {vm.activeGroupMeta.description || vm.activeCategory}
               </h2>
@@ -190,7 +193,7 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
           ) : (
             <fieldset
               disabled={vm.loading || !vm.configLoaded}
-              className="m-0 grid min-w-0 grid-cols-1 gap-x-5 border-0 p-0 lg:grid-cols-2 disabled:opacity-60"
+              className="m-0 grid min-w-0 grid-cols-1 gap-3 border-0 p-0 lg:grid-cols-2 disabled:opacity-60"
             >
               <legend className="sr-only">{vm.activeGroupMeta?.description || "配置字段"}</legend>
               {vm.currentGroupFields.map((field) => {
@@ -207,7 +210,7 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
                 return (
                   <div
                     key={`${vm.activeCategory}.${field.key}`}
-                    className={`min-w-0 ${isLongField ? "lg:col-span-2" : ""}`}
+                    className={`min-w-0 rounded-xl border border-solid border-transparent p-4 transition-colors odd:bg-secondary-soft even:bg-card hover:border-secondary-line focus-within:border-primary-line focus-within:bg-primary-soft [&>section]:border-b-0 [&>section]:pb-0 ${isLongField ? "lg:col-span-2" : ""}`}
                   >
                     <FieldRenderer
                       fieldKey={field.key}
