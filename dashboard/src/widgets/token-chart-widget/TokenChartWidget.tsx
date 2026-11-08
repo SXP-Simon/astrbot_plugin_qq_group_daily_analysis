@@ -1,3 +1,4 @@
+import { LoadingState } from "../../shared/ui/loading-state";
 import { resolveChartColor } from "../../shared/lib/chartColors";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
@@ -5,6 +6,7 @@ import type { TokenUsage } from "../../entities/trace/model/types";
 import { useTheme } from "../../shared/lib/useTheme";
 
 interface TokenChartWidgetProps {
+  loading?: boolean;
   tokenUsage?: TokenUsage | null;
   totalTokens?: number | null;
 }
@@ -19,8 +21,19 @@ const analyzerLabels: Record<string, string> = {
 const recordedCount = (value: number | null | undefined) =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 
-export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetProps) {
+export function TokenChartWidget({
+  tokenUsage,
+  totalTokens,
+  loading = false,
+}: TokenChartWidgetProps) {
   useTheme();
+  if (loading)
+    return (
+      <section aria-label="模型消耗" aria-busy="true" className="min-w-0 space-y-4">
+        <h2 className="m-0 text-lg font-medium">模型消耗</h2>
+        <LoadingState skeleton>正在读取模型用量…</LoadingState>
+      </section>
+    );
   const style = getComputedStyle(document.documentElement);
   const color = (name: string) => resolveChartColor(style.getPropertyValue(name), style.color);
   const total = recordedCount(tokenUsage?.total_tokens ?? totalTokens);

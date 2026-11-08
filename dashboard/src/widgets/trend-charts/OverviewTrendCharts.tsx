@@ -1,3 +1,4 @@
+import { LoadingState } from "../../shared/ui/loading-state";
 import { resolveChartColor } from "../../shared/lib/chartColors";
 import { memo } from "react";
 import ReactECharts from "echarts-for-react";
@@ -87,9 +88,9 @@ export const OverviewTrendCharts = memo(function OverviewTrendCharts({
         </div>
       </div>
       {vm.loading && (
-        <p role="status" className="text-sm text-muted-foreground">
+        <LoadingState skeleton={!vm.points.length} className="text-sm text-muted-foreground">
           正在读取{selectedLabel}…
-        </p>
+        </LoadingState>
       )}
       {vm.error && (
         <p role="alert" className="text-sm text-destructive">

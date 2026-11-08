@@ -1,3 +1,4 @@
+import { LoadingState } from "../../shared/ui/loading-state";
 import { IconRefresh, IconPlayerPlay } from "@tabler/icons-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../shared/ui/dialog";
 import { Button } from "../../shared/ui/button";
@@ -80,9 +81,9 @@ export function TraceDrawer({ traceId, open, onClose }: TraceDrawerProps) {
           </p>
         )}
         {vm.loading ? (
-          <p role="status" className="py-12 text-center text-muted-foreground">
+          <LoadingState skeleton className="py-12 text-center text-muted-foreground">
             正在加载任务详情…
-          </p>
+          </LoadingState>
         ) : (
           trace && (
             <>

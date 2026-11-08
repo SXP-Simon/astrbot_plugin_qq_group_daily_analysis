@@ -1,3 +1,4 @@
+import { LoadingState } from "../../shared/ui/loading-state";
 import { useState } from "react";
 import { IconDownload, IconCopy } from "@tabler/icons-react";
 import type { ReportItem } from "../../entities/report/model/types";
@@ -44,9 +45,9 @@ export function ReportPreviewModal({
           </p>
         )}
         {loading ? (
-          <p role="status" className="py-12 text-center text-muted-foreground">
+          <LoadingState skeleton className="py-12 text-center text-muted-foreground">
             正在加载报告…
-          </p>
+          </LoadingState>
         ) : (
           <>
             {report?.absolute_path && (

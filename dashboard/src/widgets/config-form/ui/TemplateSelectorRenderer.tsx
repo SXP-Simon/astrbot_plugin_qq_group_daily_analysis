@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useEffect, useMemo, useState } from "react";
 import {
   IconCheck,
@@ -163,9 +164,7 @@ export function TemplateSelectorRenderer({
         </Alert>
       )}
       {loading && (
-        <p role="status" className="m-0 text-sm text-muted-foreground">
-          正在读取模板列表…
-        </p>
+        <LoadingState className="m-0 text-sm text-muted-foreground">正在读取模板列表…</LoadingState>
       )}
       {ready && !remoteTemplates.length && (
         <p className="m-0 text-sm text-muted-foreground">暂无可用模板，请安装模板或刷新列表。</p>
