@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import { IconLoader2 } from "@tabler/icons-react";
 import { cn } from "../lib/cn";
 
@@ -7,10 +7,22 @@ export function LoadingState({
   children,
   className,
   skeleton = false,
+  slowAfterMs,
+  slowMessage = "传输较慢，仍在加载，请稍候…",
   ...props
 }: {
   skeleton?: boolean;
+  slowAfterMs?: number;
+  slowMessage?: string;
 } & ComponentProps<"div">) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    if (slowAfterMs === undefined) return;
+    // 只更新提示，不结束请求；所属预览卸载时清理计时器。
+    const timer = setTimeout(() => setSlow(true), slowAfterMs);
+    return () => clearTimeout(timer);
+  }, [slowAfterMs]);
   return (
     <div
       {...props}
@@ -24,7 +36,7 @@ export function LoadingState({
           data-slot="loading-spinner"
           className="size-4 shrink-0 animate-spin text-primary-ink motion-reduce:animate-none"
         />
-        <span>{children}</span>
+        <span>{slow ? slowMessage : children}</span>
       </div>
       {skeleton && <LoadingSkeleton />}
     </div>

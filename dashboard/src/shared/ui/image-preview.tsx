@@ -285,7 +285,12 @@ export function ImageViewer({
         ) : (
           <>
             {(loading || (src && loaded !== src)) && (
-              <LoadingState aria-label="图片加载状态" className="p-4 text-sm text-muted-foreground">
+              <LoadingState
+                key={title}
+                slowAfterMs={30_000}
+                aria-label="图片加载状态"
+                className="p-4 text-sm text-muted-foreground"
+              >
                 正在加载预览…
               </LoadingState>
             )}
