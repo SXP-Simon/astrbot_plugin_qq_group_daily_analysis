@@ -30,7 +30,7 @@ async def test_same_group_discovery_is_ambiguous_but_explicit_names_are_isolated
     from src.infrastructure.scheduler.target_resolver import ScheduledTargetResolver
 
     adapters = {
-        name: SimpleNamespace(platform_id=name, get_group_info=AsyncMock(return_value=SimpleNamespace(group_name=f"群-{name}")))
+        name: SimpleNamespace(platform_id=name, get_platform_name=lambda: "telegram", get_group_info=AsyncMock(return_value=SimpleNamespace(group_name=f"群-{name}")))
         for name in ("first", "second")
     }
     manager = Mock()

@@ -10,6 +10,8 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.shared.trace_context import TraceContext
 
@@ -118,6 +120,29 @@ def test_explicit_trace_id_wins_over_ambient_context(tmp_path):
 
     assert html_path is not None
     assert Path(html_path).name == "报告_report_source_trace.html"
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_html_filename_strips_legacy_controls_but_meta_retains_original_id(
+    tmp_path, explicit
+):
+    original_trace = "legacy_\x11日常\x10交流群\x7f_end"
+    generator = build_generator(tmp_path, "报告_${trace_id}.html", WITH_HEAD_HTML)
+    with TraceContext(trace_id=AMBIENT_TRACE if explicit else original_trace) as trace:
+        html_path, _ = asyncio.run(
+            generator.generate_html_report(
+                ANALYSIS_RESULT,
+                "344184506",
+                trace_id=original_trace if explicit else None,
+            )
+        )
+        assert trace.trace_id == (AMBIENT_TRACE if explicit else original_trace)
+
+    assert html_path is not None
+    path = Path(html_path)
+    assert path.name == "报告_legacy_日常交流群_end.html"
+    assert path.parent == tmp_path
+    assert f'content="{original_trace}"' in path.read_text(encoding="utf-8")
 
 
 def test_custom_filename_still_has_highest_priority(tmp_path):

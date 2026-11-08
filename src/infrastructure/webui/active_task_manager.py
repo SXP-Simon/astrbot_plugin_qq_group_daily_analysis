@@ -124,6 +124,10 @@ class ActiveTaskManager:
             self._tasks[task_id].current_stage = stage_str
             self._tasks[task_id].last_heartbeat = time.time()
             info = self._tasks[task_id]
+            # 群名可能在任务注册后才查到，随阶段快照同步给活跃列表和 SSE。
+            trace = TraceContext.get_active_trace(task_id)
+            if trace and trace.group_name:
+                info.group_name = trace.group_name
             try:
                 loop = asyncio.get_running_loop()
                 task = loop.create_task(

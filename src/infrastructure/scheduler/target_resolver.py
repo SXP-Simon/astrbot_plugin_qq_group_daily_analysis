@@ -114,11 +114,14 @@ class ScheduledTargetResolver:
                         self.bot_manager.get_adapter_platform_id(adapter) or pid,
                         group_id,
                     )
-                    if session in self._group_name_cache:
+                    # QQ 官方适配器自带成功/失败过期缓存，不能在这里永久固定旧名。
+                    cache_locally = adapter.get_platform_name() != "qq_official"
+                    if cache_locally and session in self._group_name_cache:
                         return self._group_name_cache[session]
                     info = await adapter.get_group_info(group_id)
                     if info and info.group_name:
-                        self._group_name_cache[session] = info.group_name
+                        if cache_locally and info.group_name != group_id:
+                            self._group_name_cache[session] = info.group_name
                         return info.group_name
         except Exception:
             pass

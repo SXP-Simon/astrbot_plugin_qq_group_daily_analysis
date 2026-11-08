@@ -8,9 +8,11 @@ import hashlib
 import os
 import random
 import re
+import time
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 from urllib.parse import quote
+from weakref import WeakValueDictionary
 
 import aiohttp
 
@@ -40,12 +42,21 @@ from .qq_markdown_images import QQMarkdownImages
 if TYPE_CHECKING:
     from astrbot.api.event import MessageChain
     from astrbot.api.star import Context
+    from botpy.http import BotHttp
 
     from ....domain.repositories.bot_client_protocol import (
         HistoryRecordProtocol,
         QQOfficialBotProtocol,
     )
     from ....domain.value_objects.analysis_results import QQOfficialMemberProfile
+
+
+class _GroupInfoQuery(Protocol):
+    """可选 SDK 群资料方法的调用契约。"""
+
+    def __call__(self, *, group_openid: str) -> object:
+        """返回原始响应或可等待的响应，交由适配器校验。"""
+        ...
 
 
 class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
@@ -55,6 +66,7 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
     AVATAR_TEMPLATE = "https://thirdqq.qlogo.cn/qqapp/{appid}/{member_openid}/640"
     HISTORY_PAGE_SIZE = 500
     MARKDOWN_CHUNK_SIZE = 3900
+    GROUP_INFO_TIMEOUT = 3
 
     def __init__(
         self,
@@ -78,6 +90,10 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         self._markdown_msg_seq = random.randint(1, 10000)
         self._member_profiles: dict[str, QQOfficialMemberProfile] = {}
         self._markdown_images: QQMarkdownImages | None = None
+        self._group_info_cache: dict[str, tuple[float, UnifiedGroup]] = {}
+        self._group_info_locks: WeakValueDictionary[str, asyncio.Lock] = (
+            WeakValueDictionary()
+        )
 
     @property
     def platform_id(self) -> str:
@@ -555,11 +571,106 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         return await self._send_chain(group_id, MessageChain([component]))
 
     async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
-        return UnifiedGroup(
-            group_id=str(group_id),
-            group_name=str(group_id),
-            platform=self.platform_name,
-        )
+        """查询官方群资料，接口不可用时保留旧群名或回退群 OpenID。
+
+        Args:
+            group_id: 当前机器人对应的群 OpenID。
+
+        Returns:
+            群资料；空标识返回 None。成功缓存一小时，失败五分钟后再尝试，
+            缓存仅属于当前适配器实例，不在不同机器人之间共享。
+
+        Raises:
+            asyncio.CancelledError: 调用方取消查询时原样传播。
+        """
+        target_id = str(group_id).strip()
+        if not target_id:
+            return None
+        # 只合并同群查询；弱引用让最后一个等待者退出后自动释放锁记录。
+        lock = self._group_info_locks.setdefault(target_id, asyncio.Lock())
+        async with lock:
+            cached = self._group_info_cache.get(target_id)
+            if cached and cached[0] > time.monotonic():
+                return cached[1]
+            result = (
+                cached[1]
+                if cached
+                else UnifiedGroup(
+                    group_id=target_id,
+                    group_name=target_id,
+                    platform=self.platform_name,
+                )
+            )
+            ttl = 300
+            try:
+                api = self.bot.api if self.bot else None
+                method: object = getattr(api, "get_group_info", None)
+                async with asyncio.timeout(self.GROUP_INFO_TIMEOUT):
+                    response: object
+                    if callable(method):
+                        # 边界已确认可调用；参数不兼容仍由下方异常回退处理。
+                        query = cast("_GroupInfoQuery", method)
+                        pending = query(group_openid=target_id)
+                        response = (
+                            await pending if is_object_awaitable(pending) else pending
+                        )
+                    else:
+                        # 旧 SDK 没有该方法，复用它的鉴权、令牌刷新与沙箱设置。
+                        from botpy.http import Route
+
+                        class GroupInfoRoute(Route):
+                            DOMAIN = "api.bot.qq.com"
+
+                        http: BotHttp | None = getattr(api, "_http", None)
+                        if http is None:
+                            raise RuntimeError("当前 QQ 客户端不支持群资料查询")
+                        response = await http.request(
+                            GroupInfoRoute(
+                                "GET",
+                                "/v2/groups/{group_openid}/info",
+                                group_openid=quote(target_id, safe=""),
+                            )
+                        )
+                if is_string_mapping(response) and is_string_mapping(
+                    response.get("data")
+                ):
+                    response = response["data"]
+                if not is_string_mapping(response):
+                    raise ValueError("群资料响应格式无效")
+                name = response.get("group_name")
+                returned_id = response.get("group_openid")
+                if returned_id is not None and returned_id != target_id:
+                    raise ValueError("群资料响应标识不匹配")
+                if (
+                    not isinstance(name, str)
+                    or not name.strip()
+                    or name.strip() == target_id
+                ):
+                    raise ValueError("群资料响应缺少有效群名")
+                count = response.get("group_member_num")
+                description = response.get("group_finger_memo")
+                result = UnifiedGroup(
+                    group_id=target_id,
+                    group_name=" ".join(name.split()),
+                    member_count=count if type(count) is int and count >= 0 else 0,
+                    description=description if isinstance(description, str) else None,
+                    platform=self.platform_name,
+                )
+                ttl = 3600
+            except Exception as exc:
+                # 不输出响应正文、令牌或重复 INFO；缺权限不影响分析与发送。
+                logger.debug(
+                    "[QQOfficial] 群 %s 资料查询未成功，继续使用缓存或群标识（%s）",
+                    target_id,
+                    type(exc).__name__,
+                )
+            if (
+                target_id not in self._group_info_cache
+                and len(self._group_info_cache) >= 256
+            ):
+                self._group_info_cache.pop(next(iter(self._group_info_cache)))
+            self._group_info_cache[target_id] = (time.monotonic() + ttl, result)
+            return result
 
     async def get_group_list(self) -> list[str]:
         if isinstance(self._plugin_instance, PluginHostProtocol):
