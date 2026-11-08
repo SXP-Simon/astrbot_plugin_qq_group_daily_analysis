@@ -3,6 +3,8 @@ import { expect, it, vi } from "vitest";
 import { TraceMetricsChart } from "../TraceMetricsChart";
 import { mockTypstTraces } from "../../../../mocks/data/typstTraces";
 import type { TraceRecord } from "../../model/types";
+import { getTraceMetrics } from "../../model/traceMetrics";
+import { createTraceMetricsOption } from "../traceMetricsOption";
 
 vi.mock("echarts-for-react", () => ({
   default: ({ option }: { option: { yAxis?: { data?: string[] } } }) => (
@@ -125,4 +127,63 @@ it("重试父阶段时精简图连同旧子树一起过滤，全量图仍可查�
   expect(screen.getByTestId("chart-categories")).not.toHaveTextContent("Typst 本地素材与下载");
   fireEvent.click(screen.getByText(/全量重试/));
   expect(screen.getByTestId("chart-categories")).toHaveTextContent("Typst 本地素材与下载");
+});
+
+it("任务指标提示不拦截鼠标，阶段名称按纯文本显示", () => {
+  const metrics = getTraceMetrics(
+    {
+      ...mockTypstTraces[0],
+      spans: [
+        {
+          trace_id: "hover",
+          span_id: "render",
+          stage_name: "RENDER_REPORT",
+          status: "success",
+          started_at: 1,
+          duration_ms: 200,
+          payload: { strategy_name: "<img src=x onerror=alert(1)>" },
+        },
+      ],
+    },
+    "all",
+  );
+  const option = createTraceMetricsOption(metrics, "duration", {
+    text: "#111111",
+    muted: "#666666",
+    background: "#ffffff",
+    border: "#dddddd",
+    accent: "rgb(30, 75, 101)",
+    danger: "#bb2222",
+  });
+  expect(option.tooltip).toMatchObject({
+    renderMode: "html",
+    enterable: false,
+    transitionDuration: 0,
+    extraCssText: expect.stringContaining("pointer-events: none"),
+  });
+  const tooltip = option.tooltip;
+  if (!tooltip || Array.isArray(tooltip) || typeof tooltip.formatter !== "function")
+    throw new Error("缺少提示格式化函数");
+  const content = tooltip.formatter(
+    {
+      componentType: "series",
+      componentSubType: "bar",
+      componentIndex: 0,
+      seriesIndex: 0,
+      seriesType: "bar",
+      name: "",
+      dataIndex: 0,
+      data: 200,
+      value: 200,
+      $vars: [],
+    },
+    "",
+    () => {},
+  );
+  expect(content).toBeInstanceOf(HTMLElement);
+  if (content instanceof HTMLElement) {
+    expect(content.textContent).toContain("<img src=x onerror=alert(1)>");
+    expect(content.textContent).toContain("200 ms");
+    expect(content.querySelector("img")).toBeNull();
+  }
 });

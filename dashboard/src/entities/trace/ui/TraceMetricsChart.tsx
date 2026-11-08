@@ -1,3 +1,4 @@
+import { resolveChartColor } from "../../../shared/lib/chartColors";
 import { useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import type { TraceRecord } from "../model/types";
@@ -14,7 +15,7 @@ export function TraceMetricsChart({ trace }: { trace: TraceRecord }) {
   useTheme();
   const metrics = useMemo(() => getTraceMetrics(trace, pipeline), [trace, pipeline]);
   const style = getComputedStyle(document.documentElement);
-  const color = (name: string) => style.getPropertyValue(name).trim() || "currentColor";
+  const color = (name: string) => resolveChartColor(style.getPropertyValue(name), style.color);
   const option = createTraceMetricsOption(metrics, mode, {
     text: color("--foreground"),
     muted: color("--muted-foreground"),

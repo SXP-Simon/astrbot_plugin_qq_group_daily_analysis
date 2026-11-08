@@ -57,7 +57,10 @@ export function createTraceMetricsOption(
     yAxis: duration ? { ...categoryAxis, inverse: true } : valueAxis,
     tooltip: {
       trigger: "item",
-      renderMode: "richText",
+      renderMode: "html",
+      enterable: false,
+      transitionDuration: 0,
+      extraCssText: "pointer-events: none; white-space: pre-wrap;",
       confine: true,
       backgroundColor: colors.background,
       borderColor: colors.border,
@@ -84,7 +87,9 @@ export function createTraceMetricsOption(
           if (delta != null)
             text += `\n相邻采样净变化：${delta > 0 ? "+" : ""}${delta.toFixed(1)} MiB`;
         }
-        return text;
+        const element = document.createElement("div");
+        element.textContent = text;
+        return element;
       },
     },
     series: memory
