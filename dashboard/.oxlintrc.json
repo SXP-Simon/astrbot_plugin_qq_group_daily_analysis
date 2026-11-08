@@ -84,6 +84,10 @@
     ],
     "no-array-constructor": "error",
     "no-var": "error",
-    "prefer-const": "error"
+    "prefer-const": "error",
+    "typescript/no-deprecated": "error"
+  },
+  "options": {
+    "typeAware": true
   }
 }

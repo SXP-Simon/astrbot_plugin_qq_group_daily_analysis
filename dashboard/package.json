@@ -46,6 +46,7 @@
     "openapi-typescript": "^7.13.0",
     "oxfmt": "0.76.0",
     "oxlint": "1.91.0",
+    "oxlint-tsgolint": "7.0.2006",
     "tailwindcss": "4.3.4",
     "typescript": "^5.7.3",
     "vite": "^5.4.14",

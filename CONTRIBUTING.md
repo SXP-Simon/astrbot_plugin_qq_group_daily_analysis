@@ -96,6 +96,10 @@ Ruff 保留现有测试目录豁免，并启用 `force-exclude`，目录扫描�
 
 前端使用 Node.js 20.19+（20.x）或 22.12+，Oxlint 与 Oxfmt 固定版本并提交 pnpm 锁文件。`pnpm lint` 检查代码，`pnpm lint:fix` 修复可自动修复的问题；`pnpm format` 统一格式，`pnpm format:check` 只读检查。类型检查仍使用 `tsc`，行为测试仍使用 Vitest。已有 ESLint 推荐规则按职责映射到 Oxlint，语法和类型检查交给 TypeScript、格式交给 Oxfmt，不自动启用新一代 React Compiler 规则。
 
+弃用接口属于错误：前端在 `.oxlintrc.json` 启用 `options.typeAware` 和 `typescript/no-deprecated`，固定 `oxlint-tsgolint` 开发依赖；暂存文件检查、`pnpm lint`、编辑器和 CI 共用规则，`tsc` 继续独立检查类型。后端 Pyright strict 已能识别弃用声明，`reportDeprecated: "error"` 显式固定该约束；完整检查和 CI 拦截，日常 Ruff 暂存检查不能代替 Pyright。工具链回归会实际调用检查器，验证已弃用 API 被拒绝、替代 API 通过。
+
+检查依赖类型声明中的 `@deprecated`（前端）或 PEP 702 弃用标记（后端），不是按方法名猜测。未标注的第三方弃用接口、动态反射和仅在未来 Python 版本中弃用的接口，仍需结合上游文档与运行测试核对；测试目录的 Python 类型检查范围保持原样，不为通过门禁添加弃用白名单。
+
 VS Code 可安装 `oxc.oxc-vscode` 扩展；仓库已为 JS/TS/React/CSS 配置保存时格式化，JSON 的自动换行设置保持不变。编辑器选择的 Python 环境也应安装 `requirements-tools.txt` 中固定的版本。
 
 首次格式化与业务改动分开审阅；生成的 API 类型和构建产物由各自生成器维护。正式界面与独立 Mock 共用页面和组件，不另建原型入口；开发 Mock 源码参与 lint、格式、类型及测试检查，生产构建排除开发模块。

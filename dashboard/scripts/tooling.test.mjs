@@ -79,7 +79,26 @@ for (const modulePath of [
 test("Oxlint preserves the existing quality gates", (t) => {
   const temporary = mkdtempSync(join(tmpdir(), "dashboard-lint-"));
   t.after(() => rmSync(temporary, { recursive: true, force: true }));
+  writeFileSync(
+    join(temporary, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { lib: ["ES2020", "DOM"], types: [] }, include: ["*.tsx"] }),
+  );
+  writeFileSync(
+    join(temporary, "old-api.tsx"),
+    "/** @deprecated 请使用新接口。 */ export function oldApi() {}",
+  );
   const cases = [
+    [
+      "deprecated-dom",
+      'export function leaving(event: BeforeUnloadEvent) { event.returnValue = ""; }',
+      "no-deprecated",
+    ],
+    ["deprecated-import", 'import { oldApi as run } from "./old-api"; run();', "no-deprecated"],
+    [
+      "modern-dom",
+      "export function leaving(event: BeforeUnloadEvent) { event.preventDefault(); }",
+      null,
+    ],
     ["any", "export const value: any = 1;", "no-explicit-any"],
     ["unused", "const unused = 1; export {};", "no-unused-vars"],
     [
@@ -113,6 +132,8 @@ test("Oxlint preserves the existing quality gates", (t) => {
         join(root, "node_modules/oxlint/bin/oxlint"),
         "--config",
         join(root, ".oxlintrc.json"),
+        "--tsconfig",
+        join(temporary, "tsconfig.json"),
         "--deny-warnings",
         "--report-unused-disable-directives",
         file,
