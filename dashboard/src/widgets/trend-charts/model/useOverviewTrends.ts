@@ -10,7 +10,7 @@ export const TREND_RANGES = [
   { value: "30d", label: "近30天", granularity: "day", count: 30 },
 ] as const;
 type Range = (typeof TREND_RANGES)[number]["value"];
-const count = z.number().finite().nonnegative();
+const count = z.number().nonnegative();
 const breakdown = z.object({ name: z.string(), total_tokens: count, request_count: count });
 const trendsSchema: z.ZodType<AnalyticsTrendsResponse> = z.object({
   granularity: z.enum(["day", "hour"]),
@@ -19,7 +19,7 @@ const trendsSchema: z.ZodType<AnalyticsTrendsResponse> = z.object({
     z.object({
       date: z.string(),
       date_full: z.string(),
-      timestamp: z.number().finite(),
+      timestamp: z.number(),
       request_count: count,
       succeeded_count: count,
       failed_count: count,
