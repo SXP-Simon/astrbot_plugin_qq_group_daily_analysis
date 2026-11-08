@@ -9,7 +9,7 @@ import type { TemplateResourceStatus } from "../../../entities/config/model/temp
 
 export function useTemplateResources(cdnBaseUrl: string, refreshVersion = 0) {
   const [status, setStatus] = useState<TemplateResourceStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState({

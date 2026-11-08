@@ -128,7 +128,7 @@ export function useManagedFiles() {
     setPage(1);
     setFiles([]);
     setTotal(0);
-    setLoading(false);
+    setLoading(value !== null && !["typst_fonts", "avatar_storage"].includes(value.key));
     setContent(null);
     setSelected([]);
     setDeleteResult(null);

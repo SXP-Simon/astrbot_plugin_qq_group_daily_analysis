@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useManagedFiles } from "../useManagedFiles";
 import {
@@ -47,6 +48,32 @@ beforeEach(() => {
     ],
     total: 1,
   }));
+});
+
+it("打开分区的首次提交就是加载态，慢请求不会先暴露空列表", async () => {
+  let finish!: (value: { items: []; total: number }) => void;
+  vi.mocked(fetchManagedFiles).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const observed: boolean[] = [];
+  const { result, unmount } = renderHook(() => {
+    const vm = useManagedFiles();
+    useLayoutEffect(() => {
+      if (vm.partition) observed.push(vm.loading);
+    }, [vm.partition, vm.loading]);
+    return vm;
+  });
+  act(() => result.current.select(partitions[1]));
+  expect(observed).toEqual([true]);
+  expect(result.current.loading).toBe(true);
+  await act(async () => finish({ items: [], total: 0 }));
+  expect(result.current.loading).toBe(false);
+  expect(observed).toEqual([true, false]);
+  act(() => result.current.select(null));
+  expect(result.current.loading).toBe(false);
+  unmount();
 });
 
 it("上传主题素材按固定清单命名，并读取现有文件修订号以安全替换", async () => {

@@ -172,6 +172,16 @@ export function ManagedFileTable({
               </td>
             </tr>
           ))}
+          {!vm.files.length && vm.loading && (
+            <tr>
+              <td
+                colSpan={4 + Number(partition.deletable) + Number(hasReferences)}
+                className="h-40 p-8 text-center text-muted-foreground"
+              >
+                <span role="status">正在读取文件列表…</span>
+              </td>
+            </tr>
+          )}
           {!vm.files.length && !vm.loading && (
             <tr>
               <td

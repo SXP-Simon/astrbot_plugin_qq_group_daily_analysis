@@ -192,9 +192,9 @@ export function ManagedFileList({
           ))}
         </div>
       )}
-      {vm.loading && (
-        <p role="status" className="m-0 text-sm text-muted-foreground">
-          正在读取文件列表…
+      {vm.loading && vm.files.length > 0 && (
+        <p role="status" className="sr-only">
+          正在刷新文件列表…
         </p>
       )}
       <ManagedFileTable

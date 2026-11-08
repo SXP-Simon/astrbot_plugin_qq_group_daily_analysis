@@ -75,6 +75,28 @@ it("本页全选保留跨页选择，取消本页只移除当前文件", async (
   expect(selectFiles).toHaveBeenLastCalledWith(["older.png"]);
 });
 
+it("首次加载在表格内占位，刷新保留已读行，不短暂显示空结果", async () => {
+  const { result } = renderHook(useManagedFiles);
+  await act(async () => {});
+  const vm = { ...result.current, files: [], loading: true, total: 0 };
+  const { rerender } = render(
+    <ManagedFileList vm={vm} partition={partition} references={references} />,
+  );
+  expect(
+    within(screen.getByRole("region", { name: "文件列表" })).getByRole("status"),
+  ).toHaveTextContent("正在读取文件列表");
+  rerender(
+    <ManagedFileList
+      vm={{ ...vm, files: [file], total: 1 }}
+      partition={partition}
+      references={references}
+    />,
+  );
+  expect(screen.getByText(file.name)).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent("正在刷新文件列表");
+  expect(within(screen.getByRole("region", { name: "文件列表" })).queryByRole("status")).toBeNull();
+});
+
 it("确认固定所选文件，删除失败保留弹窗且 Escape 不关闭父层", async () => {
   const { result } = renderHook(useManagedFiles);
   await act(async () => {});
