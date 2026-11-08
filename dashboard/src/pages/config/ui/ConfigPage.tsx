@@ -161,7 +161,7 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
         </aside>
         <section aria-label="配置字段" aria-busy={vm.loading} className="min-w-0 space-y-5">
           {vm.activeGroupMeta && (
-            <div className="space-y-2 rounded-xl border-0 border-l-2 border-solid border-primary-line bg-primary-soft px-4 py-3">
+            <div className="space-y-2 border-b border-border pb-4">
               <h2 className="m-0 text-lg font-medium">
                 {vm.activeGroupMeta.description || vm.activeCategory}
               </h2>
