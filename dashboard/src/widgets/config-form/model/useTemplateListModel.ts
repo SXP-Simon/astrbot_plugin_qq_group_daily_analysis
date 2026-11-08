@@ -4,6 +4,7 @@ export function useTemplateListModel(
   schema: SchemaFieldItem,
   value: unknown,
   onChange: (value: unknown) => void,
+  originalValue?: unknown,
 ) {
   const source: unknown = value ?? schema.default ?? [];
   const valid =
@@ -21,6 +22,22 @@ export function useTemplateListModel(
     if (typeof item.name === "string" && templates[item.name]) return item.name;
     return templateKeys.find((key) => templates[key].name === item.name) ?? templateKeys[0];
   };
+  const originals: Record<string, unknown>[] = Array.isArray(originalValue)
+    ? originalValue.filter(
+        (item: unknown): item is Record<string, unknown> =>
+          item !== null && typeof item === "object" && !Array.isArray(item),
+      )
+    : [];
+  const originalItems = items.map((item, index) => {
+    // 唯一的名称与类型跟随条目移动；重命名或重名时按原位置比较，不增加持久化身份。
+    const matches = originals.filter(
+      (entry) => entry.name === item.name && templateKey(entry) === templateKey(item),
+    );
+    const currentMatches = items.filter(
+      (entry) => entry.name === item.name && templateKey(entry) === templateKey(item),
+    );
+    return matches.length === 1 && currentMatches.length === 1 ? matches[0] : originals[index];
+  });
   const normalized = () =>
     items.map((item) => ({ ...item, __template_key: templateKey(item) ?? "character" }));
 
@@ -48,5 +65,16 @@ export function useTemplateListModel(
     [next[index], next[target]] = [next[target], next[index]];
     onChange(next);
   };
-  return { items, valid, templates, templateKeys, templateKey, add, change, remove, move };
+  return {
+    items,
+    originalItems,
+    valid,
+    templates,
+    templateKeys,
+    templateKey,
+    add,
+    change,
+    remove,
+    move,
+  };
 }

@@ -9,10 +9,12 @@ function Draft({
   fieldKey = "value",
   schema,
   initial,
+  trackChanges = false,
 }: {
   fieldKey?: string;
   schema: SchemaFieldItem;
   initial: unknown;
+  trackChanges?: boolean;
 }) {
   const [value, setValue] = useState(initial);
   return (
@@ -21,6 +23,8 @@ function Draft({
         fieldKey={fieldKey}
         fieldSchema={schema}
         value={value}
+        originalValue={initial}
+        modified={trackChanges ? JSON.stringify(value) !== JSON.stringify(initial) : undefined}
         error={validateSingleFieldWithZod(fieldKey, schema, value) ?? undefined}
         onChange={setValue}
       />
@@ -28,6 +32,62 @@ function Draft({
     </>
   );
 }
+
+it("只标记实际修改的方案字段，换序保持比较基准，撤销后恢复", () => {
+  const original = [
+    { __template_key: "plan", name: "主方案", priority: 10, quality: 80 },
+    { __template_key: "plan", name: "备用方案", priority: 20, quality: 80 },
+  ];
+  render(
+    <Draft
+      fieldKey="plans"
+      trackChanges
+      initial={original}
+      schema={{
+        type: "template_list",
+        description: "方案列表",
+        templates: {
+          plan: {
+            name: "方案",
+            items: {
+              name: { type: "string", description: "名称" },
+              priority: { type: "int", description: "优先级" },
+              quality: { type: "int", description: "图片质量" },
+            },
+          },
+        },
+      }}
+    />,
+  );
+  expect(screen.queryByText("已修改")).not.toBeInTheDocument();
+  fireEvent.change(screen.getAllByRole("spinbutton", { name: "优先级" })[0], {
+    target: { value: "12" },
+  });
+  expect(
+    screen.getAllByRole("spinbutton", { name: "优先级" })[0].closest("section"),
+  ).toHaveAttribute("data-modified", "true");
+  expect(
+    screen.getAllByRole("spinbutton", { name: "图片质量" })[0].closest("section"),
+  ).not.toHaveAttribute("data-modified");
+  fireEvent.click(screen.getByRole("button", { name: "下移 主方案" }));
+  const priorities = screen.getAllByRole("spinbutton", { name: "优先级" });
+  expect(priorities[0]).toHaveValue(20);
+  expect(priorities[0].closest("section")).not.toHaveAttribute("data-modified");
+  expect(priorities[1]).toHaveValue(12);
+  expect(priorities[1].closest("section")).toHaveAttribute("data-modified", "true");
+  fireEvent.change(priorities[1], { target: { value: "10" } });
+  expect(priorities[1].closest("section")).not.toHaveAttribute("data-modified");
+  fireEvent.click(screen.getByRole("button", { name: "上移 主方案" }));
+  expect(screen.queryByText("已修改")).not.toBeInTheDocument();
+});
+
+it("已修改和错误状态分别表达，错误字段保留红色提示", () => {
+  render(<Draft trackChanges initial={1} schema={{ type: "int", description: "并发", min: 1 }} />);
+  fireEvent.change(screen.getByRole("spinbutton", { name: "并发" }), { target: { value: "0" } });
+  expect(screen.getByText("已修改")).toBeVisible();
+  expect(screen.getByRole("alert")).toHaveTextContent("不能小于 1");
+  expect(screen.getByRole("spinbutton").closest("section")).toHaveClass("bg-destructive/5");
+});
 
 it("布尔和数字控件保留原始类型，恢复默认深拷贝配置值", () => {
   const view = render(

@@ -29,6 +29,8 @@ interface FieldRendererProps {
   fieldKey: string;
   fieldSchema: SchemaFieldItem;
   value: unknown;
+  originalValue?: unknown;
+  modified?: boolean;
   providers?: AvailableProvider[];
   personas?: AvailablePersona[];
   isSubField?: boolean;
@@ -45,6 +47,8 @@ export function FieldRenderer({
   fieldKey,
   fieldSchema,
   value,
+  originalValue,
+  modified,
   providers = [],
   personas = [],
   isSubField = false,
@@ -197,6 +201,8 @@ export function FieldRenderer({
           fieldKey={fieldKey}
           fieldSchema={fieldSchema}
           value={value}
+          originalValue={originalValue}
+          modified={modified}
           providers={providers}
           personas={personas}
           fullKeyPath={fullKeyPath || fieldKey}
@@ -215,6 +221,10 @@ export function FieldRenderer({
         current !== null && typeof current === "object" && !Array.isArray(current)
           ? (current as Record<string, unknown>)
           : {};
+      const original =
+        originalValue !== null && typeof originalValue === "object" && !Array.isArray(originalValue)
+          ? (originalValue as Record<string, unknown>)
+          : {};
       return (
         <div className="grid min-w-0 gap-4 border-0 border-l border-solid border-border pl-4">
           {Object.entries(items).map(([key, definition]) => {
@@ -226,6 +236,13 @@ export function FieldRenderer({
                 fieldKey={key}
                 fieldSchema={definition}
                 value={object[key] === undefined ? definition.default : object[key]}
+                originalValue={original[key] === undefined ? definition.default : original[key]}
+                modified={
+                  modified === undefined
+                    ? undefined
+                    : JSON.stringify(object[key] ?? definition.default) !==
+                      JSON.stringify(original[key] ?? definition.default)
+                }
                 providers={providers}
                 personas={personas}
                 isSubField
@@ -479,20 +496,34 @@ export function FieldRenderer({
     <section
       id={`cfg-field-${fullKeyPath ? fullKeyPath.replace(/\./g, "-") : fieldKey}`}
       data-field-key={fieldKey}
+      data-modified={modified || undefined}
       className={cn(
         "grid min-w-0 gap-3 border-0 border-b border-solid border-border",
         isSubField ? "pb-3" : "pb-5",
+        modified && isSubField && !error && "rounded-xl border-primary-line p-3",
+        modified &&
+          isSubField &&
+          !error &&
+          !["object", "template_list"].includes(type) &&
+          "bg-primary-soft",
         error && "rounded-xl border border-destructive/40 bg-destructive/5 p-3",
       )}
     >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <label
-          htmlFor={id}
-          title={fullKeyPath || fieldKey}
-          className={cn("text-sm font-medium", error && "text-destructive")}
-        >
-          {title}
-        </label>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <label
+            htmlFor={id}
+            title={fullKeyPath || fieldKey}
+            className={cn("text-sm font-medium", error && "text-destructive")}
+          >
+            {title}
+          </label>
+          {modified && (
+            <span className="rounded-md bg-primary-soft px-2 py-0.5 text-xs text-primary-ink">
+              已修改
+            </span>
+          )}
+        </div>
         {defaultValue !== undefined && JSON.stringify(value) !== JSON.stringify(defaultValue) && (
           <Button
             variant="ghost"

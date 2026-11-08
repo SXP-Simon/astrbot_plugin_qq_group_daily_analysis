@@ -16,6 +16,8 @@ interface TemplateListRendererProps {
   fieldKey: string;
   fieldSchema: SchemaFieldItem;
   value: unknown;
+  originalValue?: unknown;
+  modified?: boolean;
   providers?: AvailableProvider[];
   personas?: AvailablePersona[];
   fullKeyPath?: string;
@@ -26,12 +28,14 @@ export function TemplateListRenderer({
   fieldKey,
   fieldSchema,
   value,
+  originalValue,
+  modified,
   providers = [],
   personas = [],
   fullKeyPath,
   onChange,
 }: TemplateListRendererProps) {
-  const vm = useTemplateListModel(fieldSchema, value, onChange);
+  const vm = useTemplateListModel(fieldSchema, value, onChange, originalValue);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<{
     index: number;
@@ -64,6 +68,7 @@ export function TemplateListRenderer({
         {vm.items.map((item, index) => {
           const itemTemplateKey = vm.templateKey(item) ?? "character";
           const template = vm.templates[itemTemplateKey];
+          const original = vm.originalItems[index] ?? {};
           const subItems = template?.items ?? {};
           const itemContext = {
             ...Object.fromEntries(
@@ -145,6 +150,15 @@ export function TemplateListRenderer({
                           fieldKey={key}
                           fieldSchema={field}
                           value={item[key] !== undefined ? item[key] : field.default}
+                          originalValue={
+                            original[key] !== undefined ? original[key] : field.default
+                          }
+                          modified={
+                            modified === undefined
+                              ? undefined
+                              : JSON.stringify(item[key] ?? field.default) !==
+                                JSON.stringify(original[key] ?? field.default)
+                          }
                           providers={providers}
                           personas={personas}
                           isSubField
