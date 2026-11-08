@@ -38,7 +38,7 @@ export function TraceMetricsTable({
         查看图表数据
       </summary>
       <div className="mt-2 max-h-80 overflow-auto">
-        <table className="w-full border-collapse text-left text-xs">
+        <table className="ui-data-table w-full border-collapse text-left text-xs">
           <caption className="sr-only">
             {mode === "duration"
               ? "阶段耗时记录"
