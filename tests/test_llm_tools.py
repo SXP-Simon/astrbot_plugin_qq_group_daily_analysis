@@ -357,8 +357,10 @@ async def test_trigger_success_async_fire_and_forget_with_render(
     assert "topics" in msg or "话题" in msg
     assert "跳过模块: 聊天质量分析" in msg
 
-    # 等待后台任务执行
-    await asyncio.sleep(0.05)
+    # 等待实际后台任务完成，避免线程调度较慢时固定延时提前结束。
+    await asyncio.wait_for(
+        asyncio.gather(*trigger_service._background_tasks), timeout=5
+    )
     mock_analysis_service.execute_daily_analysis.assert_called_once()
     call_kwargs = mock_analysis_service.execute_daily_analysis.call_args.kwargs
     assert call_kwargs["group_id"] == "123456"
@@ -401,7 +403,10 @@ async def test_trigger_silent_mode_no_dispatch(
     assert "[分析任务已成功在后台启动]" in msg
     assert "**不会**向群聊发送长图" in msg
 
-    await asyncio.sleep(0.05)
+    # 静默分支执行完后再检查分发器，避免任务尚未启动时误判。
+    await asyncio.wait_for(
+        asyncio.gather(*trigger_service._background_tasks), timeout=5
+    )
     mock_analysis_service.execute_daily_analysis.assert_called_once()
     # 验证静默模式下未调用 report_dispatcher
     mock_report_dispatcher.dispatch.assert_not_called()
