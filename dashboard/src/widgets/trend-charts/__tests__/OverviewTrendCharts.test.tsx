@@ -99,6 +99,16 @@ describe("趋势图与明细", () => {
       { name: "输入", data: data.points.map((point) => point.prompt_tokens) },
       { name: "输出", data: data.points.map((point) => point.completion_tokens) },
     ]);
+    expect(options[1].aria).toMatchObject({
+      enabled: true,
+      label: {
+        description: `模型消耗堆叠柱图，${data.points.length} 个时间点。输入 ${data.points.reduce((sum, point) => sum + point.prompt_tokens, 0).toLocaleString()} Tokens，输出 ${data.points.reduce((sum, point) => sum + point.completion_tokens, 0).toLocaleString()} Tokens。完整数值见下方趋势明细。`,
+      },
+    });
+    for (const option of options) {
+      expect(option.aria?.label?.description).toBeTruthy();
+      expect(option.aria?.label?.description).not.toMatch(/NaN|undefined/);
+    }
     expect(options[2].series).toMatchObject([
       {
         type: "pie",

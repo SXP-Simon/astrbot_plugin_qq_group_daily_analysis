@@ -38,7 +38,6 @@ export function createOverviewTrendOptions(
   const common: EChartsOption = {
     animation: false,
     backgroundColor: "transparent",
-    aria: { enabled: true },
     textStyle: { fontFamily: '"LXGW WenKai Screen", sans-serif', color: colors.text },
     grid: { top: 26, bottom: 28, left: 8, right: 14, containLabel: true },
     xAxis: {
@@ -58,6 +57,12 @@ export function createOverviewTrendOptions(
   return [
     {
       ...common,
+      aria: {
+        enabled: true,
+        label: {
+          description: `分析次数折线图，${points.length} 个时间点，共 ${points.reduce((sum, point) => sum + point.request_count, 0)} 次分析。完整数值见下方趋势明细。`,
+        },
+      },
       tooltip: {
         ...tooltip,
         trigger: "axis",
@@ -92,6 +97,12 @@ export function createOverviewTrendOptions(
     },
     {
       ...common,
+      aria: {
+        enabled: true,
+        label: {
+          description: `模型消耗堆叠柱图，${points.length} 个时间点。输入 ${points.reduce((sum, point) => sum + point.prompt_tokens, 0).toLocaleString()} Tokens，输出 ${points.reduce((sum, point) => sum + point.completion_tokens, 0).toLocaleString()} Tokens。完整数值见下方趋势明细。`,
+        },
+      },
       legend: { top: 0, data: ["输入", "输出"], textStyle: { color: colors.muted, fontSize: 12 } },
       tooltip: {
         ...tooltip,
@@ -132,6 +143,12 @@ export function createOverviewTrendOptions(
     },
     {
       ...common,
+      aria: {
+        enabled: true,
+        label: {
+          description: `服务商消耗环形图，图中 ${providers.length} 项，共 ${providerTotal.toLocaleString()} Tokens。图例显示占比，全部渠道见下方服务商明细。`,
+        },
+      },
       xAxis: { show: false },
       yAxis: { show: false },
       tooltip: {
