@@ -71,7 +71,6 @@ export const App: React.FC = () => {
     if (!configVM.isDirty || window.parent !== window) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
-      event.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
