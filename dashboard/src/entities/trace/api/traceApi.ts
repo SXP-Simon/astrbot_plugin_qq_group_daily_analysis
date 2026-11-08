@@ -60,6 +60,21 @@ export async function fetchTraceList(
   };
 }
 
+export async function acknowledgeTrace(traceId: string, acknowledged: boolean) {
+  const response = await apiPost<unknown>(`traces/${encodeURIComponent(traceId)}/acknowledgement`, {
+    acknowledged,
+  });
+  const parsed = z
+    .object({
+      trace_id: z.literal(traceId),
+      acknowledged_at: acknowledged ? z.number().finite().positive() : z.null(),
+    })
+    .safeParse(extractData<unknown>(response));
+  if (!parsed.success) throw new Error("知晓状态未能确认，请刷新后重试。");
+  invalidateTraceCache(traceId);
+  return parsed.data;
+}
+
 export async function fetchTraceDetail(
   traceId: string,
   forceRefresh = false,
