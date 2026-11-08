@@ -23,6 +23,7 @@ describe("宿主主题变量", () => {
     }
     expect(getHostThemeStyles({ primary: "invalid", secondary: "#123456" }, true)).toEqual({
       "--secondary": "color-mix(in srgb, rgb(18, 52, 86) 14%, var(--background))",
+      "--secondary-color": "rgb(18, 52, 86)",
       "--chart-output": "rgba(18, 52, 86, 0.62)",
       "--chart-trend-output": "rgb(18, 52, 86)",
     });

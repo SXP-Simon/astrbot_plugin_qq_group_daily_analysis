@@ -7,6 +7,7 @@ export const HOST_THEME_PROPERTIES = [
   "--accent",
   "--ring",
   "--secondary",
+  "--secondary-color",
   "--chart-input",
   "--chart-output",
   "--chart-trend-input",
@@ -51,6 +52,7 @@ export function getHostThemeStyles(value: unknown, isDark: boolean): Record<stri
     } else {
       // 辅助色以低饱和底色参与按钮与选区，正文和状态语义不随之改写。
       styles["--secondary"] = `color-mix(in srgb, ${css} 14%, var(--background))`;
+      styles["--secondary-color"] = css;
       styles["--chart-output"] = `rgba(${r}, ${g}, ${b}, 0.62)`;
       styles["--chart-trend-output"] = css;
     }
