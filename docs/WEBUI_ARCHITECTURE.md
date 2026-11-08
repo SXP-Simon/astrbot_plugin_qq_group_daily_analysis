@@ -353,3 +353,7 @@ Bridge 的 `themeColors.primary`、`themeColors.secondary` 为可选字段。共
 图表颜色在传入 ECharts 前统一经过 `shared/lib/chartColors.resolveChartColor`：旧式十六进制、RGB/RGBA 直接使用，浏览器计算得到的 `color-mix`、`color(srgb ...)`、OKLCH 通过一像素 sRGB 画布转换，保留透明度。SVG 本身能显示这些 CSS 颜色，但 ECharts 5 的默认 emphasis 颜色运算无法解析它们，会丢失柱体填充或折线描边，因此不能只用 Mock 的显式 RGB 宿主配色验收。总览、模块消耗与任务指标共用转换；警告错误颜色不改。
 
 图表提示使用不接收鼠标的 HTML 浮层，动态名称写入文本节点，避免 SVG 内提示覆盖图形后反复触发移入移出。回归包含真实 ECharts SVG 的 highlight/downplay 循环、默认混合色入口和提示内容安全；浏览器验证同时覆盖默认深浅主题及宿主自定义配色。
+
+请求等待反馈使用共享 `LoadingState`，首次读取可显示局部骨架，刷新已有记录仅显示行内旋转提示，不清空内容，也不为自动轮询弹 Toast。图标和骨架遵循主题色与减少动态效果偏好；加载、失败和真实空结果分别处理。统计页通过当前任务详情是否已返回控制模型用量占位，不能把概要中缺少字段误报成最终没有记录。原页头“群聊分析”显示名调整为“AstrBot 群分析总结插件”，导航及 API 入口不变。
+
+Mock 默认读取延迟 50ms；观察加载过程可使用 `?devMode=mock&mockDelay=1500`，读取延迟限定 0–5000ms。该参数仅作用于开发 Mock 的 GET 读取，不影响 Proxy、提交操作或正式产物。
