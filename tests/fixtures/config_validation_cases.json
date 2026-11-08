@@ -1,0 +1,240 @@
+[
+  {
+    "name": "整数不能是布尔值",
+    "config": {
+      "basic": {
+        "max_messages": true
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "整数不能是数字字符串",
+    "config": {
+      "basic": {
+        "analysis_days": "2"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "并发数不能为零",
+    "config": {
+      "performance": {
+        "max_concurrent_llm": 0
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "透明度不能超过一",
+    "config": {
+      "basic": {
+        "profile_image_opacity": 1.1
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "布尔字段不接受文字",
+    "config": {
+      "basic": {
+        "filter_bot_messages": "false"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "普通文字不接受对象",
+    "config": {
+      "llm": {
+        "llm_provider_id": {}
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "枚举不接受未知选项",
+    "config": {
+      "basic": {
+        "group_list_mode": "oops"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "多选列表不接受未知格式",
+    "config": {
+      "basic": {
+        "output_format": [
+          "image",
+          "oops"
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "深层提示词必须是文字",
+    "config": {
+      "prompts": {
+        "topic_analysis_prompts": {
+          "topic_prompt": false
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "方案列表不接受数组条目",
+    "config": {
+      "daily_comic": {
+        "comic_characters": [
+          []
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "方案不能使用未知类型",
+    "config": {
+      "daily_comic": {
+        "comic_characters": [
+          {
+            "__template_key": "oops"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "文件列表不接受数字",
+    "config": {
+      "daily_comic": {
+        "comic_characters": [
+          {
+            "__template_key": "character",
+            "reference_images": [
+              1
+            ]
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "绘图方案递归校验整数",
+    "config": {
+      "daily_comic": {
+        "drawing_provider_overrides": [
+          {
+            "__template_key": "openai",
+            "priority": 0.5
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "人格映射必须是JSON对象",
+    "config": {
+      "basic": {
+        "profile_mapping_config": "[]"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "人格映射不接受破损JSON",
+    "config": {
+      "basic": {
+        "profile_mapping_config": "{\"mbti\":"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "边界值和自定义模板可用",
+    "config": {
+      "basic": {
+        "analysis_days": 1,
+        "profile_image_opacity": 0,
+        "report_template": "my-theme"
+      },
+      "llm": {
+        "llm_hard_timeout": 0
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "允许保留旧模型ID和扩展键",
+    "config": {
+      "llm": {
+        "llm_provider_id": "old-id",
+        "extension": {
+          "keep": true
+        }
+      },
+      "custom_group": {
+        "nested": [
+          1,
+          2
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "提示词原文不按JSON猜测",
+    "config": {
+      "prompts": {
+        "topic_analysis_prompts": {
+          "topic_prompt": "保留原文 [user] 与 {chat_text}"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "字符参考图和单模板旧数据",
+    "config": {
+      "daily_comic": {
+        "comic_characters": [
+          {
+            "name": "角色",
+            "reference_images": [
+              "files/test.png"
+            ],
+            "extra": {
+              "x": 1
+            }
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "映射允许空值和对象正文",
+    "config": {
+      "basic": {
+        "profile_mapping_config": "{\"mbti\":{}}"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "JSON不接受非有限数值",
+    "config": {
+      "basic": {
+        "profile_mapping_config": "{\"value\":NaN}"
+      }
+    },
+    "valid": false
+  }
+]

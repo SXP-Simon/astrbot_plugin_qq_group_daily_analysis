@@ -28,13 +28,15 @@
                 "type": "int",
                 "description": "默认分析天数",
                 "default": 1,
-                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况。QQ 官方 API 及 Telegram 无历史拉取接口，只能分析本地库缓存的消息。"
+                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况。QQ 官方 API 及 Telegram 无历史拉取接口，只能分析本地库缓存的消息。",
+                "min": 1
             },
             "max_messages": {
                 "type": "int",
                 "description": "单次分析的获取最大消息条数基准",
                 "default": 1000,
-                "hint": "单次分析的获取最大消息条数基准值，如果当天群聊消息过多，已经获取到足够的消息(达到 max_messages)，停止获取，获取到的消息数量是最新一次获取到的超过 max_messages 的消息数量，建议500-2000"
+                "hint": "单次分析的获取最大消息条数基准值，如果当天群聊消息过多，已经获取到足够的消息(达到 max_messages)，停止获取，获取到的消息数量是最新一次获取到的超过 max_messages 的消息数量，建议500-2000",
+                "min": 1
             },
             "local_history_max_messages": {
                 "type": "int",
@@ -45,7 +47,9 @@
                     "min": 10000,
                     "max": 100000,
                     "step": 1000
-                }
+                },
+                "min": 10000,
+                "max": 100000
             },
             "persist_only_allowed_groups": {
                 "type": "bool",
@@ -57,7 +61,8 @@
                 "type": "int",
                 "description": "最小消息数阈值",
                 "default": 200,
-                "hint": "进行分析所需的最小消息数量"
+                "hint": "进行分析所需的最小消息数量",
+                "min": 0
             },
             "bot_self_ids": {
                 "type": "list",
@@ -157,7 +162,9 @@
                 "type": "float",
                 "description": "人格背景图透明度",
                 "default": 0.12,
-                "hint": "建议 0.08~0.18，仅作为卡片底层装饰，避免遮挡正文。"
+                "hint": "建议 0.08~0.18，仅作为卡片底层装饰，避免遮挡正文。",
+                "min": 0,
+                "max": 1
             },
             "profile_image_size_mode": {
                 "type": "string",
@@ -187,7 +194,8 @@
                 "type": "float",
                 "description": "NapCat 流式上传阈值（MB）",
                 "default": 2.0,
-                "hint": "NapCat 专属优化特性：先按常规策略发送本地图片；发送失败且文件大小达到阈值时，复用当前 NapCat 连接调用 upload_file_stream 分块流式上传并重试一次。填 0 禁用。Docker / 容器网络环境建议保持默认或按大图需求调大。"
+                "hint": "NapCat 专属优化特性：先按常规策略发送本地图片；发送失败且文件大小达到阈值时，复用当前 NapCat 连接调用 upload_file_stream 分块流式上传并重试一次。填 0 禁用。Docker / 容器网络环境建议保持默认或按大图需求调大。",
+                "min": 0
             },
             "enable_analysis_reply": {
                 "type": "bool",
@@ -958,19 +966,22 @@
                 "type": "int",
                 "description": "LLM 请求重试次数",
                 "default": 2,
-                "hint": "当请求超时或失败时自动重试的次数，建议设置为1~3之间。"
+                "hint": "当请求超时或失败时自动重试的次数，建议设置为1~3之间。",
+                "min": 0
             },
             "llm_backoff": {
                 "type": "int",
                 "description": "LLM 请求重试退避基值（秒）",
                 "default": 2,
-                "hint": "重试之间的基准等待时间（秒）。实际等待时间会随尝试次数指数增长，并加入少量随机抖动；当专用 Provider 失败后，会继续按队列尝试默认 Provider。"
+                "hint": "重试之间的基准等待时间（秒）。实际等待时间会随尝试次数指数增长，并加入少量随机抖动；当专用 Provider 失败后，会继续按队列尝试默认 Provider。",
+                "min": 0
             },
             "llm_hard_timeout": {
                 "type": "int",
                 "description": "LLM 请求硬超时上限 (秒)",
                 "default": 0,
-                "hint": "单次大模型请求的最大等待耗时（秒）。设为 0 时自动遵循 Provider 配置的 timeout（未配置时默认兜底 300 秒）。超过此时间将主动截断请求并触发重试/降级。"
+                "hint": "单次大模型请求的最大等待耗时（秒）。设为 0 时自动遵循 Provider 配置的 timeout（未配置时默认兜底 300 秒）。超过此时间将主动截断请求并触发重试/降级。",
+                "min": 0
             },
             "enable_streaming_llm_call": {
                 "type": "bool",
@@ -1013,19 +1024,22 @@
                 "type": "int",
                 "description": "最大话题数量",
                 "default": 5,
-                "hint": "分析报告中显示的最大话题数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。"
+                "hint": "分析报告中显示的最大话题数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。",
+                "min": 0
             },
             "max_user_titles": {
                 "type": "int",
                 "description": "最大用户称号数量",
                 "default": 8,
-                "hint": "分析报告中显示的最大用户称号数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。"
+                "hint": "分析报告中显示的最大用户称号数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。",
+                "min": 0
             },
             "max_golden_quotes": {
                 "type": "int",
                 "description": "最大金句数量",
                 "default": 5,
-                "hint": "分析报告中显示的最大金句数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。"
+                "hint": "分析报告中显示的最大金句数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。",
+                "min": 0
             },
             "keep_original_persona": {
                 "description": "继承会话人设风格",
@@ -2210,19 +2224,22 @@
                 "type": "int",
                 "description": "增量分析每批消息数",
                 "default": 300,
-                "hint": "目标群每累计到此消息数就触发一个固定规模的增量分析批次；不足时持续等待，待处理消息达到多个批次时会连续处理。建议根据模型上下文和群活跃度设置。"
+                "hint": "目标群每累计到此消息数就触发一个固定规模的增量分析批次；不足时持续等待，待处理消息达到多个批次时会连续处理。建议根据模型上下文和群活跃度设置。",
+                "min": 1
             },
             "incremental_topics_per_batch": {
                 "type": "int",
                 "description": "单次增量提取话题数",
                 "default": 2,
-                "hint": "每次增量分析最多提取的话题数量。最终报告会汇总所有批次的话题。建议1-4。"
+                "hint": "每次增量分析最多提取的话题数量。最终报告会汇总所有批次的话题。建议1-4。",
+                "min": 0
             },
             "incremental_quotes_per_batch": {
                 "type": "int",
                 "description": "单次增量提取金句数",
                 "default": 2,
-                "hint": "每次增量分析最多提取的金句数量。最终报告会汇总所有批次的金句。建议1-2。"
+                "hint": "每次增量分析最多提取的金句数量。最终报告会汇总所有批次的金句。建议1-2。",
+                "min": 0
             },
             "incremental_fallback_enabled": {
                 "type": "bool",
@@ -2406,19 +2423,22 @@
                 "type": "int",
                 "description": "最大活跃任务数（任务总闸）",
                 "default": 2,
-                "hint": "限制同时有多少个群聊分析任务正在进行。主要用于【保护服务器内存和 IO】，防止瞬间读取过多群聊记录导致程序崩溃（OOM）。"
+                "hint": "限制同时有多少个群聊分析任务正在进行。主要用于【保护服务器内存和 IO】，防止瞬间读取过多群聊记录导致程序崩溃（OOM）。",
+                "min": 1
             },
             "max_concurrent_llm": {
                 "type": "int",
                 "description": "最大 LLM 请求并发数（API 闸口）",
                 "default": 4,
-                "hint": "限制同时发起的 AI 分析请求数量。主要用于【遵守 API 频率限制（RPM）】，避免因为请求过快导致 API 被封号或报错。"
+                "hint": "限制同时发起的 AI 分析请求数量。主要用于【遵守 API 频率限制（RPM）】，避免因为请求过快导致 API 被封号或报错。",
+                "min": 1
             },
             "max_concurrent_t2i": {
                 "type": "int",
                 "description": "最大 T2I渲染并发数",
                 "default": 1,
-                "hint": "限制同时开启的 T2I 渲染进程数。"
+                "hint": "限制同时开启的 T2I 渲染进程数。",
+                "min": 1
             },
             "stagger_seconds": {
                 "type": "int",
