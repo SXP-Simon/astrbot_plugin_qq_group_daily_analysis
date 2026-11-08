@@ -10,7 +10,7 @@ export function useStoredRecords(initialKind: RecordKind = "history") {
   const current = useRef(query);
   const [items, setItems] = useState<ManagedRecordEntry[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const sequence = useRef(0);
   const changeQuery = useCallback((changes: Partial<typeof query>) => {
@@ -20,6 +20,7 @@ export function useStoredRecords(initialKind: RecordKind = "history") {
     sequence.current++;
     current.current = next;
     setQuery(next);
+    setLoading(true);
     setItems([]);
     setTotal(0);
     setError("");

@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useState } from "react";
 import type { useReportsViewModel } from "../model/useReportsViewModel";
 import type { ReportItem } from "../../../entities/report/model/types";
@@ -71,9 +72,9 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
         </label>
       </div>
       {vm.loading && (
-        <p role="status" className="m-0 text-sm text-muted-foreground">
+        <LoadingState skeleton={!vm.reports.length} className="m-0 text-sm text-muted-foreground">
           正在读取报告…
-        </p>
+        </LoadingState>
       )}
       {vm.reports.length > 0 ? (
         <ReportList

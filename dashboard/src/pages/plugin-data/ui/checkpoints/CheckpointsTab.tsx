@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../../shared/ui/loading-state";
 import { useEffect, useState } from "react";
 import { IconCode, IconSettings, IconTrash } from "@tabler/icons-react";
 import { ManagedRecordDialog } from "../ManagedRecordDialog";
@@ -49,9 +50,12 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
         </p>
       )}
       {vm.loadingCheckpoints && (
-        <p role="status" className="m-0 text-sm text-muted-foreground">
+        <LoadingState
+          skeleton={!vm.checkpoints.length}
+          className="m-0 text-sm text-muted-foreground"
+        >
           正在读取阶段快照…
-        </p>
+        </LoadingState>
       )}
       <div
         className="overflow-x-auto rounded-xl border border-border"

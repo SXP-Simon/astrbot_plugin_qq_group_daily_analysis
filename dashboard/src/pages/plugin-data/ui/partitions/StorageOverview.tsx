@@ -1,3 +1,4 @@
+import { LoadingSkeleton, LoadingState } from "../../../../shared/ui/loading-state";
 import { IconFolderOpen, IconRefresh } from "@tabler/icons-react";
 import type { ManagedPartition } from "../../../../entities/plugin-data/api/managedFilesApi";
 import { partitionPresentation } from "../../../../entities/plugin-data/model/partitionPresentation";
@@ -19,7 +20,7 @@ export function StorageOverview({
   const unavailable = !vm.partitions.length && (vm.overviewLoading || !!vm.error);
   return (
     <>
-      <dl className="m-0 grid gap-4 sm:grid-cols-3">
+      <dl aria-busy={vm.overviewLoading} className="m-0 grid gap-4 sm:grid-cols-3">
         <div className="rounded-xl bg-primary-soft p-4">
           <dt className="text-sm text-muted-foreground">插件文件占用</dt>
           <dd className="m-0 mt-1 text-2xl tabular-nums">
@@ -70,15 +71,19 @@ export function StorageOverview({
           </Button>
         </div>
         {vm.overviewLoading && (
-          <p role="status" className="m-0 text-sm text-muted-foreground">
+          <LoadingState
+            skeleton={!vm.partitions.length}
+            className="m-0 text-sm text-muted-foreground"
+          >
             正在读取存储概览…
-          </p>
+          </LoadingState>
         )}
         <div
           className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-border"
           tabIndex={0}
           role="region"
           aria-label="存储分区表格，可横向滚动"
+          aria-busy={vm.overviewLoading}
         >
           <table className="ui-data-table w-full min-w-[860px] border-collapse text-left text-sm">
             <thead className="bg-muted/60 text-muted-foreground">
@@ -104,6 +109,13 @@ export function StorageOverview({
               </tr>
             </thead>
             <tbody>
+              {vm.overviewLoading && !vm.partitions.length && (
+                <tr aria-hidden="true">
+                  <td colSpan={6} className="p-4">
+                    <LoadingSkeleton />
+                  </td>
+                </tr>
+              )}
               {vm.partitions.map((item) => {
                 const ratio =
                   totalBytes > 0

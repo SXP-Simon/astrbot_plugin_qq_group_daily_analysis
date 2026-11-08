@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../../shared/ui/loading-state";
 import { useEffect, useRef, useState } from "react";
 import { IconCopy } from "@tabler/icons-react";
 import type { IncrementalBatchItem } from "../../../../entities/plugin-data/model/types";
@@ -55,9 +56,7 @@ export function BatchDetailModal({
           {batchDetail?.batch_id || "未选择批次"}
         </DialogDescription>
         {loading ? (
-          <p role="status" className="py-6 text-muted-foreground">
-            正在读取批次详情…
-          </p>
+          <LoadingState className="py-6 text-muted-foreground">正在读取批次详情…</LoadingState>
         ) : error ? (
           <div className="grid gap-3">
             <p role="alert" className="m-0 text-sm text-destructive">

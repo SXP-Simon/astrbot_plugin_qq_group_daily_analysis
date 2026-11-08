@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useRef, useState } from "react";
 import {
   IconAlertCircle,
@@ -108,9 +109,13 @@ export function LogsPage({ viewModel: vm, onViewTrace }: LogsPageProps) {
         className="h-[65dvh] min-h-80 overflow-auto rounded-xl border border-solid border-border bg-card p-2 font-sans text-[13px] leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {!vm.logs.length ? (
-          <p className="py-12 text-center text-muted-foreground">
-            {vm.loading ? "正在加载日志…" : "暂无匹配的插件运行日志"}
-          </p>
+          vm.loading ? (
+            <LoadingState skeleton className="p-4">
+              正在加载日志…
+            </LoadingState>
+          ) : (
+            <p className="py-12 text-center text-muted-foreground">暂无匹配的插件运行日志</p>
+          )
         ) : (
           vm.logs.map((item) => (
             <div

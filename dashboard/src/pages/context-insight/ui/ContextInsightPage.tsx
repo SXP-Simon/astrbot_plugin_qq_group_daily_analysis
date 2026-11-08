@@ -1,4 +1,5 @@
-import { IconArrowUpRight } from "@tabler/icons-react";
+import { LoadingState } from "../../../shared/ui/loading-state";
+import { IconLoader2, IconArrowUpRight } from "@tabler/icons-react";
 import { Button } from "../../../shared/ui/button";
 import { SearchSelect } from "../../../shared/ui/search-select";
 import { StatusTag } from "../../../shared/ui/StatusTag";
@@ -72,9 +73,9 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
         />
       </section>
       {vm.loading && (
-        <p role="status" className="m-0 text-sm text-muted-foreground">
+        <LoadingState skeleton={!vm.traces.length} className="m-0 text-sm text-muted-foreground">
           正在读取分析记录…
-        </p>
+        </LoadingState>
       )}
       {vm.traces.length > 0 && (
         <AnalysisTimelinePicker
@@ -89,6 +90,9 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
           disabled={vm.loading || vm.loadingMore}
           onClick={() => void vm.loadMore()}
         >
+          {vm.loadingMore && (
+            <IconLoader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+          )}
           {vm.loadingMore ? "正在加载…" : "加载更早记录"}
         </Button>
       )}
@@ -135,9 +139,9 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
             )}
           </div>
           {vm.detailLoading && (
-            <p role="status" className="m-0 text-sm text-muted-foreground">
+            <LoadingState className="m-0 text-sm text-muted-foreground">
               正在读取这项任务的明细…
-            </p>
+            </LoadingState>
           )}
           {vm.detailError && (
             <p role="alert" className="m-0 text-sm text-destructive">
@@ -147,6 +151,7 @@ export function ContextInsightPage({ viewModel: vm, onViewTrace }: ContextInsigh
           <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
             <ContextFunnelWidget metrics={vm.contextMetrics} />
             <TokenChartWidget
+              loading={!vm.hasDetail && !vm.detailError}
               tokenUsage={vm.tokenUsage}
               totalTokens={vm.selectedTrace.total_tokens}
             />

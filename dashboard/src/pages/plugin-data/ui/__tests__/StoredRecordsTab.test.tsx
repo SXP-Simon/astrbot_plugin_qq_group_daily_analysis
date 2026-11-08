@@ -127,3 +127,26 @@ it("限定分区保留管理和导入，列表失败不显示空数据成功状�
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(fetchManagedRecords).toHaveBeenLastCalledWith("avatar", "", 1);
 });
+
+it("首次读取显示骨架且不显示零条分页，刷新时保留已有记录", async () => {
+  let resolve!: (value: { items: (typeof one)[]; total: number }) => void;
+  vi.mocked(fetchManagedRecords).mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  render(<StoredRecordsTab />);
+  expect(screen.getByRole("status")).toHaveTextContent("正在读取记录");
+  expect(
+    screen.getByRole("status").querySelector('[data-slot="loading-spinner"]'),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "分页" })).not.toBeInTheDocument();
+  await act(async () => resolve({ items: [one], total: 1 }));
+  expect(await screen.findByText(one.name)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "刷新记录" }));
+  expect(screen.getByText(one.name)).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent("正在读取记录");
+  await act(async () => resolve({ items: [one], total: 1 }));
+  await waitFor(() => expect(screen.queryByText("正在读取记录…")).not.toBeInTheDocument());
+});

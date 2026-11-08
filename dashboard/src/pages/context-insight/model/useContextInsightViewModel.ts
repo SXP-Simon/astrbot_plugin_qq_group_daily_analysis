@@ -218,6 +218,7 @@ export function useContextInsightViewModel() {
     selectionMissing: Boolean(selectedTraceId && !selectedTrace && !loading),
     selectedTrace,
     contextMetrics,
+    hasDetail: currentDetail !== null,
     tokenUsage: currentDetail?.token_usage ?? null,
     loading,
     detailLoading,

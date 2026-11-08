@@ -1,3 +1,4 @@
+import { LoadingSkeleton, LoadingState } from "../../../shared/ui/loading-state";
 import { useEffect, useState } from "react";
 import { IconEye, IconRefresh, IconSearch, IconUpload, IconX } from "@tabler/icons-react";
 import type { RecordLocator } from "../../../entities/plugin-data/api/managedRecordsApi";
@@ -132,9 +133,7 @@ export function StoredRecordsTab({ onlyKind }: { onlyKind?: "avatar" | "history"
         label={kind === "history" ? "分析存档" : "头像缓存"}
       />
       {loading && (
-        <p role="status" className="m-0 text-sm text-muted-foreground">
-          正在读取记录…
-        </p>
+        <LoadingState className="m-0 text-sm text-muted-foreground">正在读取记录…</LoadingState>
       )}
       <div
         role="region"
@@ -169,6 +168,13 @@ export function StoredRecordsTab({ onlyKind }: { onlyKind?: "avatar" | "history"
             </tr>
           </thead>
           <tbody>
+            {loading && !items.length && (
+              <tr aria-hidden="true">
+                <td colSpan={kind === "history" ? 5 : 4} className="p-4">
+                  <LoadingSkeleton />
+                </td>
+              </tr>
+            )}
             {items.map((item) => {
               const key = recordKey(item.locator);
               return (
@@ -224,14 +230,16 @@ export function StoredRecordsTab({ onlyKind }: { onlyKind?: "avatar" | "history"
           </p>
         )}
       </div>
-      <Pagination
-        page={page}
-        pageSize={20}
-        pageSizes={[20]}
-        total={total}
-        disabled={loading || selection.busy}
-        onChange={setPage}
-      />
+      {(items.length > 0 || (!loading && !error)) && (
+        <Pagination
+          page={page}
+          pageSize={20}
+          pageSizes={[20]}
+          total={total}
+          disabled={loading || selection.busy}
+          onChange={setPage}
+        />
+      )}
       <ManagedRecordDialog
         locator={selected}
         importKind={importing ? "history" : undefined}

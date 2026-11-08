@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ContextInsightPage } from "../ContextInsightPage";
 import { useContextInsightViewModel } from "../../model/useContextInsightViewModel";
@@ -97,4 +97,25 @@ it("加载期间记录增加时区分已载入数量和首次查询总数", asyn
   render(<Page />);
   fireEvent.click(await screen.findByRole("button", { name: "加载更早记录" }));
   expect(await screen.findByText("已载入 2 条 · 首次查询共 1 条")).toBeVisible();
+});
+
+it("详情未返回时显示旋转加载和骨架，不提前断言缺少模型记录", async () => {
+  let resolve!: (trace: TraceRecord) => void;
+  vi.mocked(fetchTraceDetail).mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  render(<Page />);
+  const pending = await screen.findByText("正在读取模型用量…");
+  expect(
+    pending.closest('[role="status"]')?.querySelector('[data-slot="loading-spinner"]'),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("仅记录了任务总用量，未保存模块明细。")).not.toBeInTheDocument();
+  const region = screen.getByRole("region", { name: "模型消耗" });
+  expect(region).toHaveAttribute("aria-busy", "true");
+  await act(async () => resolve(traces[0]));
+  await waitFor(() => expect(screen.queryByText("正在读取模型用量…")).not.toBeInTheDocument());
+  expect(screen.getByText("输入 Tokens").parentElement).toHaveTextContent("未记录");
 });

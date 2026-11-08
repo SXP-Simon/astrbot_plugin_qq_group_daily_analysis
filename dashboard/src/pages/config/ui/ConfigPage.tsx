@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useState } from "react";
 import { cn } from "../../../shared/lib/cn";
 import {
@@ -199,13 +200,15 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
             </p>
           )}
           {vm.currentGroupFields.length === 0 ? (
-            <p className="py-12 text-center text-muted-foreground">
-              {vm.loading
-                ? "正在读取配置…"
-                : vm.searchQuery
-                  ? "未找到匹配该关键词的配置项"
-                  : "该分组下暂无可配置字段"}
-            </p>
+            vm.loading ? (
+              <LoadingState skeleton className="py-6">
+                正在读取配置…
+              </LoadingState>
+            ) : (
+              <p className="py-12 text-center text-muted-foreground">
+                {vm.searchQuery ? "未找到匹配该关键词的配置项" : "该分组下暂无可配置字段"}
+              </p>
+            )
           ) : (
             <fieldset
               disabled={vm.loading || !vm.configLoaded}

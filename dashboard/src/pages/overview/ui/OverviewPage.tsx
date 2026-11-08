@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { ActiveTaskBoard } from "../../../widgets/active-task-board/ActiveTaskBoard";
 import { OverviewTrendCharts } from "../../../widgets/trend-charts/OverviewTrendCharts";
 import { Button } from "../../../shared/ui/button";
@@ -102,9 +103,13 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
           {!tasksLoaded && activeTasks.length === 0 ? (
             <section aria-label="运行中任务" className="space-y-3">
               <h2 className="m-0 text-lg font-medium">正在执行中的分析任务</h2>
-              <p role="status" className="text-sm text-muted-foreground">
-                {loading ? "正在读取任务…" : "暂时无法确认运行中任务。"}
-              </p>
+              {loading ? (
+                <LoadingState skeleton>正在读取任务…</LoadingState>
+              ) : (
+                <p role="status" className="text-sm text-muted-foreground">
+                  暂时无法确认运行中任务。
+                </p>
+              )}
               <Button variant="outline" size="sm" onClick={() => void viewModel.refresh(false)}>
                 重新加载
               </Button>
@@ -147,15 +152,19 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
             </p>
           )}
           {attentionTraces.length === 0 ? (
-            <p className="my-5 text-sm text-muted-foreground">
-              {loading
-                ? "正在读取记录…"
-                : errors.recent
+            loading ? (
+              <LoadingState skeleton className="my-5">
+                正在读取记录…
+              </LoadingState>
+            ) : (
+              <p className="my-5 text-sm text-muted-foreground">
+                {errors.recent
                   ? "暂时无法确认近期结果。"
                   : acknowledgedCount > 0
                     ? "这些提醒均已知晓"
                     : "近期记录中没有失败或警告"}
-            </p>
+              </p>
+            )
           ) : (
             <ul className="m-0 max-h-[560px] list-none overflow-y-auto p-0">
               {attentionTraces.map((trace) => (

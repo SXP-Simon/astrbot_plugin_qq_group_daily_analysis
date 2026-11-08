@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../../shared/ui/loading-state";
 import { useEffect, useRef, useState } from "react";
 import { IconCopy } from "@tabler/icons-react";
 import type { CheckpointDetail } from "../../../../entities/plugin-data/model/types";
@@ -47,7 +48,7 @@ export function CheckpointDetailModal({
         <DialogTitle>阶段快照详情</DialogTitle>
         <DialogDescription>{formatStageName(ckptDetail?.stage_name)}</DialogDescription>
         {loading ? (
-          <p role="status">正在读取快照…</p>
+          <LoadingState>正在读取快照…</LoadingState>
         ) : error ? (
           <div className="grid gap-3">
             <p role="alert" className="m-0 text-sm text-destructive">

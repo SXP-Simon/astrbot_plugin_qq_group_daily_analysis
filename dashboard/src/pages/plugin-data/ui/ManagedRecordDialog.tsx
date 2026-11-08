@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useEffect, useRef, useState } from "react";
 import {
   IconAlertTriangle,
@@ -92,7 +93,7 @@ function RecordDialog({ locator, importKind, onClose, onChanged }: Props) {
           </div>
         )}
         {vm.busy && !vm.record && !importKind ? (
-          <p role="status">正在读取记录…</p>
+          <LoadingState>正在读取记录…</LoadingState>
         ) : kind === "avatar" ? (
           <div className="grid gap-3">
             <div className="flex flex-wrap items-center gap-2">

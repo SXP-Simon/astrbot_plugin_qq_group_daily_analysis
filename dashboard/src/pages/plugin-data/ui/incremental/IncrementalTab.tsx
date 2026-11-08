@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../../shared/ui/loading-state";
 import { useEffect, useState } from "react";
 import { IconEye, IconSettings, IconTrash, IconRefresh } from "@tabler/icons-react";
 import { ManagedRecordDialog } from "../ManagedRecordDialog";
@@ -129,9 +130,12 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
         <>
           <RecordSelectionActions vm={selection} label="增量批次" />
           {loadingIncremental && (
-            <p role="status" className="m-0 text-sm text-muted-foreground">
+            <LoadingState
+              skeleton={!incrBatches.length}
+              className="m-0 text-sm text-muted-foreground"
+            >
               正在读取增量批次…
-            </p>
+            </LoadingState>
           )}
           <div
             className="overflow-x-auto rounded-xl border border-border"
