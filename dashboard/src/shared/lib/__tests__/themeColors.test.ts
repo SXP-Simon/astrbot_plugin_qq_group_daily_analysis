@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getHostThemeStyles, HOST_THEME_PROPERTIES } from "../themeColors";
+import { getDefaultThemeColors, getHostThemeStyles, HOST_THEME_PROPERTIES } from "../themeColors";
 
 describe("宿主主题变量", () => {
   it.each([
@@ -39,4 +39,20 @@ describe("宿主主题变量", () => {
     for (const name of ["--warning", "--destructive", "--success", "--info", "--creative"])
       expect(light).not.toHaveProperty(name);
   });
+});
+
+it("读取当前主题的默认配置，不受正在生效的宿主覆盖干扰", () => {
+  const root = document.documentElement.style;
+  root.setProperty("--default-primary", "#123abc");
+  root.setProperty("--default-secondary", "#abc123");
+  root.setProperty("--primary", "#fedcba");
+  try {
+    expect(getDefaultThemeColors()).toEqual({ primary: "#123abc", secondary: "#abc123" });
+    root.setProperty("--default-primary", "#abcdef");
+    expect(getDefaultThemeColors().primary).toBe("#abcdef");
+  } finally {
+    root.removeProperty("--default-primary");
+    root.removeProperty("--default-secondary");
+    root.removeProperty("--primary");
+  }
 });

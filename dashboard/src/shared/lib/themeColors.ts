@@ -1,6 +1,17 @@
 import { color } from "echarts/core";
 import { z } from "zod";
 
+/** 读取当前深浅主题的原始默认色，避免把宿主覆盖值当成默认值。 */
+export function getDefaultThemeColors(): { primary: string; secondary: string } {
+  const style = getComputedStyle(document.documentElement);
+  const primary = style.getPropertyValue("--default-primary").trim();
+  const secondary = style.getPropertyValue("--default-secondary").trim();
+  return {
+    primary: /^#[\da-f]{6}$/i.test(primary) ? primary : "#000000",
+    secondary: /^#[\da-f]{6}$/i.test(secondary) ? secondary : "#000000",
+  };
+}
+
 export const HOST_THEME_PROPERTIES = [
   "--primary",
   "--primary-foreground",
