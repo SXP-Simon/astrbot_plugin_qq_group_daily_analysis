@@ -26,6 +26,32 @@ function viewModel(): ReturnType<typeof useOverviewViewModel> {
 }
 
 describe("总览页面", () => {
+  it("真实统计区保留数量、成功率、耗时和模型消耗的值及单位", () => {
+    const vm = viewModel();
+    vm.metrics = {
+      ...mockMetricsSummary,
+      today_traces: 18,
+      today_active_groups: 6,
+      total_traces: 142,
+      success_rate: 95.1,
+      avg_duration_ms: 12450,
+      today_tokens_spent: 42300,
+      total_tokens_spent: 333700,
+    };
+    render(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+    const statistics = within(screen.getByRole("region", { name: "分析统计" }));
+    const values = statistics.getAllByRole("definition").map((node) => node.textContent);
+    expect(values).toEqual([
+      "18次",
+      "6个",
+      "142次",
+      "95.1%",
+      "12.45s",
+      "42,300Tokens",
+      "333,700Tokens",
+    ]);
+  });
+
   it("并行任务和问题在统计之前；诊断、中止和发起入口保持可用", async () => {
     const vm = viewModel();
     vm.attentionTraces = [
