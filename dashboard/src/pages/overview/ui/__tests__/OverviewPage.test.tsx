@@ -56,6 +56,15 @@ describe("总览页面", () => {
       "42,300Tokens",
       "333,700Tokens",
     ]);
+    const tokens = within(statistics.getByRole("group", { name: "模型消耗" }));
+    expect(tokens.getAllByRole("term").map((node) => node.textContent)).toEqual([
+      "今日模型消耗",
+      "近30天模型消耗",
+    ]);
+    expect(tokens.getAllByRole("definition").map((node) => node.textContent)).toEqual([
+      "42,300Tokens",
+      "333,700Tokens",
+    ]);
   });
 
   it("统计置顶，任务与提醒在趋势后展示；诊断、中止和发起入口保持可用", async () => {

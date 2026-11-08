@@ -34,12 +34,6 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
     ["历史运行", metrics?.total_traces, "次"],
     ["成功率", metrics?.success_rate, "%"],
     ["平均耗时", metrics ? formatDuration(metrics.avg_duration_ms) : undefined, ""],
-    ["今日模型消耗", metrics ? formatSmartTokens(metrics.today_tokens_spent) : undefined, "Tokens"],
-    [
-      "近30天模型消耗",
-      metrics ? formatSmartTokens(metrics.total_tokens_spent) : undefined,
-      "Tokens",
-    ],
   ];
   return (
     <div className="space-y-8">
@@ -57,9 +51,9 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
             {errors.metrics}
           </p>
         )}
-        <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 items-start gap-x-6 gap-y-5 sm:grid-cols-3">
           {summaries.map(([label, value, unit]) => (
-            <div key={label}>
+            <dl key={label} className="m-0">
               <dt className="text-sm text-muted-foreground">{label}</dt>
               <dd className="m-0 mt-1 text-xl tabular-nums">
                 {value ?? "未读取"}
@@ -67,9 +61,29 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
                   <span className="ml-1 text-xs text-muted-foreground">{unit}</span>
                 )}
               </dd>
-            </div>
+            </dl>
           ))}
-        </dl>
+          <dl
+            role="group"
+            aria-label="模型消耗"
+            className="m-0 flex flex-wrap gap-x-4 gap-y-2 rounded-xl bg-secondary-soft px-3 py-2"
+          >
+            {[
+              ["今日模型消耗", metrics?.today_tokens_spent],
+              ["近30天模型消耗", metrics?.total_tokens_spent],
+            ].map(([label, value]) => (
+              <div key={label} className="min-w-0 flex-1 basis-24">
+                <dt className="text-sm text-muted-foreground">{label}</dt>
+                <dd className="m-0 mt-1 flex flex-wrap items-baseline gap-x-1 text-lg tabular-nums">
+                  {typeof value === "number" ? formatSmartTokens(value) : "未读取"}
+                  {typeof value === "number" && (
+                    <span className="text-xs text-muted-foreground">Tokens</span>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       </section>
       {metrics && (
         <OverviewTrendCharts
