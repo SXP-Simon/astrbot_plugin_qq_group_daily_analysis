@@ -45,5 +45,6 @@
   "reportCallInDefaultInitializer": "error",
   "reportTypeCommentUsage": "error",
   "reportConstantRedefinition": "error",
-  "reportMatchNotExhaustive": "error"
+  "reportMatchNotExhaustive": "error",
+  "reportDeprecated": "error"
 }
