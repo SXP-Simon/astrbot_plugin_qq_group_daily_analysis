@@ -575,6 +575,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/traces/{trace_id}/acknowledgement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 保存或撤销任务提醒的知晓状态 */
+        post: operations["acknowledgeTrace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/traces/{trace_id}": {
         parameters: {
             query?: never;
@@ -1031,6 +1048,7 @@ export interface components {
             error_stage?: string | null;
             error_message?: string | null;
             stack_trace?: string | null;
+            acknowledged_at?: number | null;
             extra?: {
                 [key: string]: unknown;
             };
@@ -2495,6 +2513,68 @@ export interface operations {
                         };
                     };
                 };
+            };
+        };
+    };
+    acknowledgeTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    acknowledged: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description 知晓状态已保存 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status?: string;
+                        data?: {
+                            trace_id: string;
+                            acknowledged_at: number | null;
+                        };
+                    };
+                };
+            };
+            /** @description 请求格式无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 任务不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 任务尚未结束 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 保存失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

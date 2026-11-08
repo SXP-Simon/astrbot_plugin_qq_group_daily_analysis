@@ -1858,6 +1858,85 @@
         }
       }
     },
+    "/traces/{trace_id}/acknowledgement": {
+      "post": {
+        "summary": "保存或撤销任务提醒的知晓状态",
+        "operationId": "acknowledgeTrace",
+        "parameters": [
+          {
+            "name": "trace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "acknowledged"
+                ],
+                "properties": {
+                  "acknowledged": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "知晓状态已保存",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "trace_id",
+                        "acknowledged_at"
+                      ],
+                      "properties": {
+                        "trace_id": {
+                          "type": "string"
+                        },
+                        "acknowledged_at": {
+                          "type": "number",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式无效"
+          },
+          "404": {
+            "description": "任务不存在"
+          },
+          "409": {
+            "description": "任务尚未结束"
+          },
+          "500": {
+            "description": "保存失败"
+          }
+        }
+      }
+    },
     "/traces/{trace_id}": {
       "get": {
         "summary": "Get full trace details with spans and metrics",
@@ -3311,6 +3390,10 @@
           },
           "stack_trace": {
             "type": "string",
+            "nullable": true
+          },
+          "acknowledged_at": {
+            "type": "number",
             "nullable": true
           },
           "extra": {

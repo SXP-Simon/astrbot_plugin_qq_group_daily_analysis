@@ -909,6 +909,65 @@ def generate_openapi_spec() -> dict[str, object]:
                     },
                 }
             },
+            "/traces/{trace_id}/acknowledgement": {
+                "post": {
+                    "summary": "保存或撤销任务提醒的知晓状态",
+                    "operationId": "acknowledgeTrace",
+                    "parameters": [
+                        {
+                            "name": "trace_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"},
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["acknowledged"],
+                                    "properties": {"acknowledged": {"type": "boolean"}},
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "知晓状态已保存",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string"},
+                                            "data": {
+                                                "type": "object",
+                                                "required": [
+                                                    "trace_id",
+                                                    "acknowledged_at",
+                                                ],
+                                                "properties": {
+                                                    "trace_id": {"type": "string"},
+                                                    "acknowledged_at": {
+                                                        "type": "number",
+                                                        "nullable": True,
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "请求格式无效"},
+                        "404": {"description": "任务不存在"},
+                        "409": {"description": "任务尚未结束"},
+                        "500": {"description": "保存失败"},
+                    },
+                },
+            },
             "/traces/{trace_id}": {
                 "get": {
                     "summary": "Get full trace details with spans and metrics",
@@ -1660,6 +1719,7 @@ def generate_openapi_spec() -> dict[str, object]:
                         "error_stage": {"type": "string", "nullable": True},
                         "error_message": {"type": "string", "nullable": True},
                         "stack_trace": {"type": "string", "nullable": True},
+                        "acknowledged_at": {"type": "number", "nullable": True},
                         "extra": {"type": "object", "additionalProperties": True},
                         "total_tokens": {"type": "number", "nullable": True},
                         "estimated_cost": {"type": "number", "nullable": True},
