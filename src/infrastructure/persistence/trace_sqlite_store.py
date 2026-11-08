@@ -104,6 +104,7 @@ class TraceSQLiteStore:
                     error_stage TEXT,
                     error_message TEXT,
                     stack_trace TEXT,
+                    acknowledged_at REAL,
                     extra_json TEXT DEFAULT '{}',
                     pid INTEGER DEFAULT 0,
                     boot_id TEXT DEFAULT ''
@@ -192,6 +193,15 @@ class TraceSQLiteStore:
                     )
             except Exception:
                 pass
+
+            # 已知晓属于展示元数据，独立保存，避免追踪快照回写覆盖人工标记。
+            if not any(
+                row[1] == "acknowledged_at"
+                for row in conn.execute("PRAGMA table_info(analysis_traces)")
+            ):
+                conn.execute(
+                    "ALTER TABLE analysis_traces ADD COLUMN acknowledged_at REAL"
+                )
 
             # 兼容性防御迁移：确保 performance_metrics 表若从早期版本升级拥有 metrics_json 字段
             try:
@@ -663,6 +673,50 @@ class TraceSQLiteStore:
                 (terminal_span_status, completed_at, trace_id),
             )
         return True
+
+    def set_trace_acknowledgement(
+        self, trace_id: str, acknowledged: bool
+    ) -> float | None:
+        """持久化或撤销已结束任务的已知晓标记，不改变执行状态。
+
+        Args:
+            trace_id: 需要标记的任务编号。
+            acknowledged: 为真时记录首次知晓时间，为假时恢复未知晓状态。
+
+        Returns:
+            当前知晓时间；撤销后为 None。
+
+        Raises:
+            KeyError: 任务不存在。
+            ValueError: 任务未结束或其状态无法识别。
+        """
+        terminal = (
+            TaskStatus.SUCCEEDED.value,
+            TaskStatus.COMPLETED.value,
+            TaskStatus.WARNING.value,
+            TaskStatus.FAILED.value,
+            TaskStatus.ABORTED.value,
+            TaskStatus.CANCELLED.value,
+            TaskStatus.SKIPPED.value,
+        )
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                f"""UPDATE analysis_traces
+                    SET acknowledged_at = CASE WHEN ? THEN COALESCE(acknowledged_at, ?) ELSE NULL END
+                    WHERE trace_id = ? AND status IN ({",".join("?" for _ in terminal)})""",
+                (acknowledged, time.time(), trace_id, *terminal),
+            )
+            if cursor.rowcount == 0:
+                if not conn.execute(
+                    "SELECT 1 FROM analysis_traces WHERE trace_id = ?", (trace_id,)
+                ).fetchone():
+                    raise KeyError(trace_id)
+                raise ValueError("任务尚未结束或状态未记录，暂不能标记已知晓。")
+            row = conn.execute(
+                "SELECT acknowledged_at FROM analysis_traces WHERE trace_id = ?",
+                (trace_id,),
+            ).fetchone()
+            return float(row[0]) if row[0] is not None else None
 
     def get_trace(self, trace_id: str) -> dict[str, object] | None:
         """获取单个 Trace 的完整树状结构（包含 Spans、ContextMetrics、TokenUsage、PerformanceMetrics）"""
