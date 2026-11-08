@@ -14,9 +14,9 @@ const activeTaskSchema: z.ZodType<ActiveTask> = z.object({
   platform: z.string(),
   trigger_type: z.string(),
   current_stage: z.string(),
-  started_at: z.number().finite(),
-  duration_s: z.number().finite(),
-  last_heartbeat: z.number().finite(),
+  started_at: z.number(),
+  duration_s: z.number(),
+  last_heartbeat: z.number(),
 });
 const eventSchema = z.object({ event: z.string(), data: z.unknown() });
 const finishedSchema = z.object({ task_id: z.string().min(1) });
