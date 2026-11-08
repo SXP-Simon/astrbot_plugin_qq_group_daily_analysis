@@ -105,25 +105,90 @@ it("JSON 编辑的不完整内容不会丢失，修正后恢复对象且清除�
   expect(screen.getByTestId("value")).toHaveTextContent('{"ready":false}');
 });
 
-it("模型和人格预设可选也可手填，已有未知 ID 保留", () => {
+it.each(["模型", "人格"])("%s只能选择已有项，搜索不写入配置，默认和清空仍可用", (kind) => {
   const change = vi.fn();
+  const title = `分析${kind}`;
   render(
     <FieldRenderer
-      fieldKey="provider_id"
-      fieldSchema={{ type: "string", description: "分析模型" }}
+      fieldKey={kind === "模型" ? "provider_id" : "persona_id"}
+      fieldSchema={{ type: "string", description: title, hint: "可选择默认配置" }}
       value="external-id"
       providers={[{ id: "model-a", name: "模型 A", type: "chat" }]}
+      personas={[{ id: "persona-a", name: "人格 A" }]}
       onChange={change}
     />,
   );
-  expect(screen.getByRole("textbox", { name: "分析模型" })).toHaveValue("external-id");
-  fireEvent.click(screen.getByRole("button", { name: /分析模型预设：/ }));
-  fireEvent.click(screen.getByRole("option", { name: /模型 A/ }));
-  expect(change).toHaveBeenCalledWith("model-a");
-  fireEvent.change(screen.getByRole("textbox", { name: "分析模型" }), {
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  const trigger = screen.getByRole("button", { name: `${title}：external-id` });
+  expect(trigger).toHaveAccessibleDescription("可选择默认配置");
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.click(trigger);
+  const search = screen.getByRole("combobox", { name: `搜索${title}` });
+  fireEvent.change(search, {
     target: { value: "manual-id" },
   });
-  expect(change).toHaveBeenLastCalledWith("manual-id");
+  fireEvent.keyDown(search, { key: "Enter" });
+  expect(screen.getByText("没有匹配的选项")).toBeInTheDocument();
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.change(search, { target: { value: `${kind} A` } });
+  fireEvent.click(screen.getByRole("option", { name: new RegExp(`${kind} A`) }));
+  expect(change).toHaveBeenCalledWith(kind === "模型" ? "model-a" : "persona-a");
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("option", { name: `使用默认${kind}` }));
+  expect(change).toHaveBeenLastCalledWith("");
+  fireEvent.click(screen.getByRole("button", { name: `清空 ${title}` }));
+  expect(change).toHaveBeenLastCalledWith("");
+});
+
+it("候选未加载或刷新后移除当前项时，保留已有 ID 和字段错误关联", () => {
+  const change = vi.fn();
+  const field = {
+    fieldKey: "custom_model",
+    fieldSchema: {
+      type: "string",
+      description: "专用模型",
+      _special: "select_provider",
+    },
+    value: "saved-id",
+    error: "请选择可用的模型",
+    onChange: change,
+  };
+  const view = render(<FieldRenderer {...field} />);
+  expect(screen.getByRole("button", { name: "专用模型：saved-id" })).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  expect(screen.getByRole("button", { name: "专用模型：saved-id" })).toHaveAccessibleDescription(
+    "请选择可用的模型",
+  );
+  view.rerender(<FieldRenderer {...field} providers={[{ id: "saved-id", name: "已配置模型" }]} />);
+  expect(screen.getByRole("button", { name: /专用模型：已配置模型/ })).toBeInTheDocument();
+  view.rerender(<FieldRenderer {...field} providers={[]} />);
+  expect(screen.getByRole("button", { name: "专用模型：saved-id" })).toBeInTheDocument();
+  expect(change).not.toHaveBeenCalled();
+});
+
+it("资源地址仍可填写自定义值，也能从预设选择", () => {
+  const change = vi.fn();
+  render(
+    <FieldRenderer
+      fieldKey="google_fonts"
+      fieldSchema={{
+        type: "string",
+        description: "字体 CSS 地址",
+        options: ["https://fonts.example"],
+      }}
+      value=""
+      onChange={change}
+    />,
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "字体 CSS 地址" }), {
+    target: { value: "https://custom.example" },
+  });
+  expect(change).toHaveBeenLastCalledWith("https://custom.example");
+  fireEvent.click(screen.getByRole("button", { name: /字体 CSS 地址预设：/ }));
+  fireEvent.click(screen.getByRole("option", { name: "https://fonts.example" }));
+  expect(change).toHaveBeenLastCalledWith("https://fonts.example");
 });
 
 it("Token 默认隐藏，可明确切换显示，修改继续传递原值", () => {

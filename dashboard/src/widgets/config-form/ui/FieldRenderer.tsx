@@ -111,19 +111,44 @@ export function FieldRenderer({
           (fieldKey === "cdn_base_url" ? TEMPLATE_CDN_PRESETS : []))
         : provider
           ? [
-              { value: "", label: "使用当前会话默认模型" },
+              { value: "", label: "使用默认模型" },
               ...providers.map((item) => ({
                 value: item.id,
                 label: `${item.name || item.id} [${item.id}]${item.type ? ` (${item.type})` : ""}`,
               })),
             ]
           : [
-              { value: "", label: "使用当前会话默认人格" },
+              { value: "", label: "使用默认人格" },
               ...personas.map((item) => ({
                 value: item.id,
                 label: `${item.name || item.id} [${item.id}]`,
               })),
             ];
+      if (!resource)
+        return (
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="min-w-0 grow">
+              <SearchSelect
+                {...common}
+                label={title}
+                value={stringValue}
+                options={presets}
+                onChange={onChange}
+                virtual
+              />
+            </div>
+            {stringValue && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`清空 ${title}`}
+                onClick={() => onChange("")}
+              >
+                <IconX aria-hidden="true" />
+              </Button>
+            )}
+          </div>
+        );
       return (
         <div className="grid min-w-0 gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -131,9 +156,7 @@ export function FieldRenderer({
               {...common}
               className="min-w-40 basis-64 grow font-mono"
               value={stringValue}
-              placeholder={
-                resource ? "选择预设，也可直接填写地址" : "选择已有配置，也可直接填写 ID"
-              }
+              placeholder="选择预设，也可直接填写地址"
               onChange={(event) => onChange(event.target.value)}
             />
             {stringValue && (
