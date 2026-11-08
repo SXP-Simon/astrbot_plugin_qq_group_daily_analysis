@@ -26,6 +26,7 @@ from ....shared.type_guards import (
 from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
 from ...config.config_migrator import LEGACY_RENDERING_RESOURCE_KEYS
+from ...config.config_validation import validate_config_for_save
 from ...config.rendering_config import (
     CUSTOM_RESOURCE_OPTION,
     DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS,
@@ -591,7 +592,9 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
             try:
                 body = await request.json()
             except Exception:
-                body = {}
+                return error_response("请求不是有效的 JSON 配置", status_code=400)
+            if not is_string_mapping(body):
+                return error_response("保存请求必须是配置对象", status_code=400)
             new_config = body.get("config")
             if not is_string_mapping(new_config):
                 return error_response("缺少有效的 config 配置数据", status_code=400)
@@ -668,6 +671,13 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                             f"无效的自动分析时间：{time_value}，有效范围为 00:00-23:59",
                             status_code=400,
                         )
+                # 旧版单个时间字符串沿用原有接收方式，落盘统一为列表。
+                auto_analysis_config["auto_analysis_time"] = configured_times
+
+            try:
+                validate_config_for_save(new_config)
+            except ValueError as exc:
+                return error_response(str(exc), status_code=400)
 
             try:
                 _normalize_comic_references_for_save(
