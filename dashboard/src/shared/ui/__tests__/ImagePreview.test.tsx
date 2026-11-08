@@ -1,26 +1,35 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ImagePreview } from "../image-preview";
 
+afterEach(() => vi.restoreAllMocks());
+
 it("图片加载后支持缩放、旋转、镜像与适应窗口，切换地址清除旧状态", () => {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
   const close = vi.fn();
   const view = render(<ImagePreview src="first.webp" title="报告示例" onClose={close} />);
   expect(screen.getByRole("button", { name: "放大" })).toBeDisabled();
   const image = screen.getByRole("img", { hidden: true });
   Object.defineProperties(image, { naturalWidth: { value: 1000 }, naturalHeight: { value: 2000 } });
   fireEvent.load(image);
+  expect(image.style.width).toBe("284px");
+  expect(image.style.height).toBe("568px");
   expect(screen.getByRole("button", { name: "放大" })).toBeEnabled();
   fireEvent.click(screen.getByRole("button", { name: "放大" }));
-  expect(screen.getByLabelText("缩放比例")).toHaveTextContent("150%");
+  expect(screen.getByLabelText("缩放比例")).toHaveTextContent("43%");
+  expect(parseFloat(image.style.width)).toBeCloseTo(426);
+  fireEvent.click(screen.getByRole("button", { name: "原始尺寸" }));
+  expect(parseFloat(image.style.width)).toBeCloseTo(1000);
   fireEvent.click(screen.getByRole("button", { name: "旋转" }));
   fireEvent.click(screen.getByRole("button", { name: "镜像" }));
   expect(image.style.transform).toContain("rotate(90deg) scaleX(-1)");
   fireEvent.click(screen.getByRole("button", { name: "适应窗口" }));
-  expect(screen.getByLabelText("缩放比例")).toHaveTextContent("100%");
+  expect(screen.getByLabelText("缩放比例")).toHaveTextContent("28%");
   expect(screen.getByRole("button", { name: "镜像" })).toHaveAttribute("aria-pressed", "false");
   fireEvent.click(screen.getByRole("button", { name: "放大" }));
   view.rerender(<ImagePreview src="second.webp" title="另一个示例" onClose={close} />);
-  expect(screen.getByLabelText("缩放比例")).toHaveTextContent("100%");
+  expect(screen.getByLabelText("缩放比例")).toHaveTextContent("—");
   expect(screen.getByRole("button", { name: "放大" })).toBeDisabled();
 });
 

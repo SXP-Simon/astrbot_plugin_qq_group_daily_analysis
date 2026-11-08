@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   IconArrowLeft,
   IconArrowRight,
@@ -31,16 +31,18 @@ export function ImagePreview({
   onNext,
   onClose,
 }: ImagePreviewProps) {
-  const viewport = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const [natural, setNatural] = useState({ width: 0, height: 0 });
   const [loaded, setLoaded] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [originalSize, setOriginalSize] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [flipped, setFlipped] = useState(false);
   useEffect(() => {
     setZoom(1);
+    setOriginalSize(false);
     setRotation(0);
     setFlipped(false);
     setNatural({ width: 0, height: 0 });
@@ -48,14 +50,14 @@ export function ImagePreview({
     setFailed(null);
   }, [src]);
   useEffect(() => {
-    const element = viewport.current;
+    const element = viewport;
     if (!element) return;
     const measure = () => setBounds({ width: element.clientWidth, height: element.clientHeight });
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [viewport]);
   const ready = Boolean(src && loaded === src && !error && failed !== src);
   const imageError =
     error || (src && failed === src ? "图片未能加载，请检查资源地址后重新预览。" : "");
@@ -67,8 +69,9 @@ export function ImagePreview({
           Math.max(1, bounds.height - 32) / natural.height,
         )
       : 1;
-  const width = natural.width * fit * zoom;
-  const height = natural.height * fit * zoom;
+  const scale = (originalSize ? 1 : fit) * zoom;
+  const width = natural.width * scale;
+  const height = natural.height * scale;
   const rotated = rotation % 180 !== 0;
 
   return (
@@ -108,13 +111,13 @@ export function ImagePreview({
             缩小
           </Button>
           <output aria-label="缩放比例" className="min-w-12 text-center text-sm tabular-nums">
-            {Math.round(zoom * 100)}%
+            {ready ? `${Math.round(scale * 100)}%` : "—"}
           </output>
           <Button
             variant="outline"
             size="sm"
-            disabled={!ready || zoom >= 8}
-            onClick={() => setZoom((value) => Math.min(8, value + 0.5))}
+            disabled={!ready || zoom >= Math.max(8, 2 / fit)}
+            onClick={() => setZoom((value) => Math.min(Math.max(8, 2 / fit), value + 0.5))}
           >
             <IconZoomIn aria-hidden="true" />
             放大
@@ -124,7 +127,19 @@ export function ImagePreview({
             size="sm"
             disabled={!ready}
             onClick={() => {
+              setOriginalSize(true);
               setZoom(1);
+            }}
+          >
+            原始尺寸
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!ready}
+            onClick={() => {
+              setZoom(1);
+              setOriginalSize(false);
               setRotation(0);
               setFlipped(false);
             }}
@@ -151,7 +166,7 @@ export function ImagePreview({
           </Button>
         </div>
         <div
-          ref={viewport}
+          ref={setViewport}
           role="region"
           aria-label="图片查看区域"
           tabIndex={0}
