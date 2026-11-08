@@ -27,7 +27,7 @@ export function StatusTag({ status }: { status: string }) {
     status === "failed"
       ? "bg-destructive/10 text-destructive"
       : status === "running"
-        ? "bg-info/10 text-info"
+        ? "bg-primary-soft text-primary-ink"
         : ["succeeded", "completed"].includes(status)
           ? "bg-success/10 text-success"
           : ["warning", "partial_success"].includes(status)

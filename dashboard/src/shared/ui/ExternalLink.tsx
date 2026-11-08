@@ -38,7 +38,7 @@ export function ExternalLink({ href, children }: { href: string; children: React
         <Button
           variant="link"
           size="sm"
-          className="h-auto whitespace-normal p-0 text-info decoration-info/40 hover:text-info hover:decoration-info"
+          className="h-auto whitespace-normal p-0 text-secondary-ink decoration-secondary-line hover:text-secondary-ink hover:decoration-secondary-ink"
         >
           {children}
         </Button>
