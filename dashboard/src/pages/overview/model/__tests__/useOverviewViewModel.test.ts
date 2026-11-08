@@ -298,3 +298,109 @@ it("重新进入总览读取已保存的标记，卸载后迟到回执不触发�
   });
   expect(fetchTraceList).toHaveBeenCalledTimes(calls);
 });
+
+it("连续勾选不同任务只提交保存，不额外读取任务、统计或历史", async () => {
+  const traces = ["a", "b", "c"].map((trace_id) => ({
+    ...mockTraces[0],
+    trace_id,
+    status: "failed" as const,
+    acknowledged_at: null,
+  }));
+  vi.mocked(fetchTraceList).mockResolvedValue({ items: traces, total: traces.length });
+  vi.mocked(acknowledgeTrace).mockImplementation(async (trace_id, known) => ({
+    trace_id,
+    acknowledged_at: known ? 123 : null,
+  }));
+  const { result } = renderHook(() => useOverviewViewModel());
+  await waitFor(() => expect(result.current.attentionTraces).toHaveLength(3));
+  for (const trace of traces)
+    await act(() => result.current.handleAcknowledge(trace.trace_id, true));
+  expect(result.current.acknowledgedCount).toBe(3);
+  expect(result.current.attentionTraces).toHaveLength(0);
+  await act(() => result.current.handleAcknowledge("b", false));
+  expect(result.current.attentionTraces.map((trace) => trace.trace_id)).toEqual(["b"]);
+  expect(acknowledgeTrace).toHaveBeenCalledTimes(4);
+  expect(fetchActiveTasks).toHaveBeenCalledTimes(1);
+  expect(fetchMetricsSummary).toHaveBeenCalledTimes(1);
+  expect(fetchTraceList).toHaveBeenCalledTimes(1);
+});
+
+it("并发保存回执乱序时，旧查询保留全部知晓结果，同时接收新任务和统计", async () => {
+  const traces = ["a", "b"].map((trace_id) => ({
+    ...mockTraces[0],
+    trace_id,
+    status: "failed" as const,
+    acknowledged_at: null,
+  }));
+  vi.mocked(fetchTraceList).mockResolvedValue({ items: traces, total: 2 });
+  const { result } = renderHook(() => useOverviewViewModel());
+  await waitFor(() => expect(result.current.attentionTraces).toHaveLength(2));
+  const old = deferred<Awaited<ReturnType<typeof fetchTraceList>>>();
+  vi.mocked(fetchTraceList).mockReturnValueOnce(old.promise);
+  const updated = { ...mockMetricsSummary, total_traces: 999 };
+  vi.mocked(fetchMetricsSummary).mockResolvedValueOnce(updated);
+  let refresh!: Promise<void>;
+  act(() => {
+    refresh = result.current.refresh();
+  });
+  const a = deferred<Awaited<ReturnType<typeof acknowledgeTrace>>>();
+  const b = deferred<Awaited<ReturnType<typeof acknowledgeTrace>>>();
+  vi.mocked(acknowledgeTrace).mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+  let saveA!: Promise<void>;
+  let saveB!: Promise<void>;
+  act(() => {
+    saveA = result.current.handleAcknowledge("a", true);
+    saveB = result.current.handleAcknowledge("b", true);
+  });
+  await act(async () => {
+    b.resolve({ trace_id: "b", acknowledged_at: 22 });
+    await saveB;
+  });
+  await act(async () => {
+    a.resolve({ trace_id: "a", acknowledged_at: 11 });
+    await saveA;
+  });
+  const newTrace = { ...traces[0], trace_id: "new" };
+  await act(async () => {
+    old.resolve({ items: [newTrace, ...traces], total: 3 });
+    await refresh;
+  });
+  expect(result.current.attentionTraces.map((trace) => trace.trace_id)).toEqual(["new"]);
+  expect(result.current.acknowledgedCount).toBe(2);
+  expect(result.current.metrics).toEqual(updated);
+  expect(fetchTraceList).toHaveBeenCalledTimes(2);
+  // 保存之后启动的查询读取数据库新状态，不永久覆盖其他页面的后续修改。
+  vi.mocked(fetchTraceList).mockResolvedValue({ items: traces, total: 2 });
+  await act(() => result.current.refresh());
+  expect(result.current.acknowledgedCount).toBe(0);
+});
+
+it("旧查询期间先知晓再撤销，null 回执也不会被旧的知晓时间覆盖", async () => {
+  const trace = {
+    ...mockTraces[0],
+    trace_id: "a",
+    status: "failed" as const,
+    acknowledged_at: null,
+  };
+  vi.mocked(fetchTraceList).mockResolvedValue({ items: [trace], total: 1 });
+  vi.mocked(acknowledgeTrace).mockImplementation(async (trace_id, known) => ({
+    trace_id,
+    acknowledged_at: known ? 123 : null,
+  }));
+  const { result } = renderHook(() => useOverviewViewModel());
+  await waitFor(() => expect(result.current.attentionTraces).toHaveLength(1));
+  const old = deferred<Awaited<ReturnType<typeof fetchTraceList>>>();
+  vi.mocked(fetchTraceList).mockReturnValueOnce(old.promise);
+  let refresh!: Promise<void>;
+  act(() => {
+    refresh = result.current.refresh();
+  });
+  await act(() => result.current.handleAcknowledge("a", true));
+  await act(() => result.current.handleAcknowledge("a", false));
+  await act(async () => {
+    old.resolve({ items: [{ ...trace, acknowledged_at: 123 }], total: 1 });
+    await refresh;
+  });
+  expect(result.current.attentionTraces[0].acknowledged_at).toBeNull();
+  expect(result.current.acknowledgedCount).toBe(0);
+});

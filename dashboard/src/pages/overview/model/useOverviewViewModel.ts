@@ -33,7 +33,7 @@ export function useOverviewViewModel(active = true) {
   const [acknowledgingIds, setAcknowledgingIds] = useState<string[]>([]);
   const [acknowledgementError, setAcknowledgementError] = useState("");
   const acknowledging = useRef(new Set<string>());
-  const requestId = useRef<symbol | null>(null);
+  const requestId = useRef<{ acknowledgements: Map<string, number | null> } | null>(null);
   const taskRevision = useRef(0);
   const endedTasks = useRef(new Set<string>());
   const cancelling = useRef(new Set<string>());
@@ -43,7 +43,7 @@ export function useOverviewViewModel(active = true) {
 
   const loadData = useCallback(async (silent = false) => {
     if (!mounted.current || !activeRef.current) return;
-    const request = Symbol();
+    const request = { acknowledgements: new Map<string, number | null>() };
     requestId.current = request;
     const revision = taskRevision.current;
     if (!silent) setLoading(true);
@@ -61,7 +61,14 @@ export function useOverviewViewModel(active = true) {
       setTasksLoaded(true);
     }
     if (summary.status === "fulfilled") setMetrics(summary.value);
-    if (recent.status === "fulfilled") setRecentTraces(recent.value.items);
+    if (recent.status === "fulfilled") {
+      setRecentTraces(
+        recent.value.items.map((trace) => {
+          const saved = request.acknowledgements.get(trace.trace_id);
+          return saved === undefined ? trace : { ...trace, acknowledged_at: saved };
+        }),
+      );
+    }
     setErrors((previous) => ({
       tasks:
         revision !== taskRevision.current
@@ -72,6 +79,7 @@ export function useOverviewViewModel(active = true) {
       metrics: summary.status === "fulfilled" ? "" : "统计数据未能更新，请刷新重试。",
       recent: recent.status === "fulfilled" ? "" : "近期分析记录未能更新，请刷新重试。",
     }));
+    requestId.current = null;
     setLoading(false);
   }, []);
 
@@ -144,6 +152,8 @@ export function useOverviewViewModel(active = true) {
     try {
       const result = await acknowledgeTrace(traceId, acknowledged);
       if (!mounted.current) return;
+      // 仅覆盖当前未完成查询中的知晓字段，其他任务和统计结果仍可正常更新。
+      requestId.current?.acknowledgements.set(traceId, result.acknowledged_at);
       setRecentTraces((previous) =>
         previous.map((trace) =>
           trace.trace_id === traceId
@@ -151,8 +161,6 @@ export function useOverviewViewModel(active = true) {
             : trace,
         ),
       );
-      // 新查询取代保存前的旧快照，迟到响应不能撤销刚保存的标记。
-      void loadData(true);
     } catch {
       if (mounted.current) setAcknowledgementError("知晓状态未能保存，请稍后重试。");
     } finally {
