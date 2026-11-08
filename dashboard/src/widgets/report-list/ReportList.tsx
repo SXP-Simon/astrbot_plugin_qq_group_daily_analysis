@@ -43,7 +43,7 @@ export function ReportList({
         return (
           <li
             key={report.filename}
-            className="grid min-w-0 gap-3 py-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] lg:items-center"
+            className="ui-list-row grid min-w-0 gap-3 rounded-xl px-3 py-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] lg:items-center"
           >
             <div className="min-w-0 space-y-2">
               <div className="flex items-start gap-2">
@@ -85,7 +85,7 @@ export function ReportList({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-auto max-w-full gap-1 px-0 py-1 text-xs text-info hover:bg-info/10"
+                    className="h-auto max-w-full gap-1 px-0 py-1 text-xs text-secondary-ink hover:bg-secondary-soft"
                     onClick={() => report.trace_id && onViewTrace(report.trace_id)}
                   >
                     查看任务
@@ -102,12 +102,7 @@ export function ReportList({
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="ghost"
-                className="bg-info/10 text-info hover:bg-info/15"
-                size="sm"
-                onClick={() => onPreview(report)}
-              >
+              <Button variant="tonal" size="sm" onClick={() => onPreview(report)}>
                 <IconEye aria-hidden="true" />
                 预览
               </Button>

@@ -168,12 +168,12 @@ export function AnalysisTimelinePicker({
                     if (node) nodes.current.set(trace.trace_id, node);
                     else nodes.current.delete(trace.trace_id);
                   }}
-                  variant={isSelected ? "secondary" : "ghost"}
+                  variant="ghost"
                   disabled={loading}
                   aria-pressed={isSelected}
                   aria-label={`选择任务 ${trace.group_name || trace.group_id} · ${trace.platform} · ${formatTimestamp(trace.started_at)} · ${trace.trace_id}`}
                   tabIndex={index === (selectedIndex < 0 ? 0 : selectedIndex) ? 0 : -1}
-                  className="grid h-full w-full min-w-0 select-none grid-cols-1 content-start items-start justify-stretch gap-2 whitespace-normal p-3 text-left font-normal"
+                  className={`grid h-full w-full min-w-0 select-none grid-cols-1 content-start items-start justify-stretch gap-2 whitespace-normal p-3 text-left font-normal ${isSelected ? "bg-primary-soft outline outline-1 -outline-offset-1 outline-primary-line hover:bg-primary-soft" : "hover:bg-secondary-soft"}`}
                   onClick={(event) => {
                     if (!moved.current || event.detail === 0) onSelectTrace(trace);
                   }}

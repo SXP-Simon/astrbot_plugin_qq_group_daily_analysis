@@ -52,7 +52,7 @@ export function TraceTable({
         aria-label="分析记录列表"
         tabIndex={0}
       >
-        <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+        <table className="ui-data-table w-full min-w-[1080px] border-collapse text-left text-sm">
           <caption className="sr-only">
             分析记录，可按耗时、模型消耗、消息留存率或开始时间排序
           </caption>
@@ -86,6 +86,7 @@ export function TraceTable({
                     <Button
                       variant="ghost"
                       size="sm"
+                      className={sortField === field ? "bg-primary-soft text-primary-ink" : ""}
                       aria-label={`按${label}排序`}
                       onClick={() => onSortChange(field)}
                     >
@@ -95,7 +96,7 @@ export function TraceTable({
                   </th>
                 );
               })}
-              <th scope="col" className="sticky right-0 bg-muted px-4 py-3 font-medium">
+              <th scope="col" className="sticky right-0 bg-secondary px-4 py-3 font-medium">
                 操作
               </th>
             </tr>
@@ -125,10 +126,7 @@ export function TraceTable({
                   ? `${Math.round(ratio * 100)}%`
                   : "未记录";
               return (
-                <tr
-                  key={trace.trace_id}
-                  className="border-0 border-t border-solid border-border hover:bg-accent/50"
-                >
+                <tr key={trace.trace_id} className="border-0 border-t border-solid border-border">
                   <td className="max-w-60 px-4 py-4">
                     <div className="break-words font-medium">{trace.group_name || "未知群"}</div>
                     <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
@@ -142,7 +140,7 @@ export function TraceTable({
                     <Button
                       variant="link"
                       size="sm"
-                      className="h-auto whitespace-normal break-all p-0 text-left font-mono text-xs"
+                      className="h-auto whitespace-normal break-all p-0 text-left font-mono text-xs text-secondary-ink"
                       onClick={() => onViewTrace(trace.trace_id)}
                     >
                       {trace.trace_id}
@@ -183,7 +181,7 @@ export function TraceTable({
                     {formatTimestamp(trace.started_at)}
                   </td>
                   <td className="sticky right-0 bg-card px-3 py-4">
-                    <Button variant="outline" size="sm" onClick={() => onViewTrace(trace.trace_id)}>
+                    <Button variant="tonal" size="sm" onClick={() => onViewTrace(trace.trace_id)}>
                       <IconEye aria-hidden="true" />
                       详情
                     </Button>
