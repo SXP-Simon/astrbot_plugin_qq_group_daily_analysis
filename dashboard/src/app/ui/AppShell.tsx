@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
-import { IconPlus, IconRefresh } from "@tabler/icons-react";
+import { IconAlertCircle, IconPlus, IconRefresh } from "@tabler/icons-react";
 import logo from "../../shared/assets/logo.png";
 import { Button } from "../../shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/tabs";
@@ -12,6 +12,7 @@ interface AppShellProps {
   onRefresh: () => void;
   onOpenTrigger: () => void;
   loading: boolean;
+  configDirty?: boolean;
 }
 
 export function AppShell({
@@ -22,6 +23,7 @@ export function AppShell({
   onRefresh,
   onOpenTrigger,
   loading,
+  configDirty = false,
 }: AppShellProps) {
   const navigation = useRef<HTMLDivElement>(null);
   const scrollFrame = useRef<number | null>(null);
@@ -136,6 +138,21 @@ export function AppShell({
             </Button>
           </div>
         </div>
+        {configDirty && activePage !== "config" && (
+          <div
+            role="status"
+            aria-label="配置未保存提醒"
+            className="sticky top-2 z-20 mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-solid border-warning/30 bg-[color-mix(in_srgb,var(--warning)_10%,var(--background))] px-4 py-2 text-warning"
+          >
+            <span className="flex items-center gap-2 text-sm">
+              <IconAlertCircle className="size-4 shrink-0" aria-hidden="true" />
+              配置有未保存的修改
+            </span>
+            <Button variant="outline" size="sm" onClick={() => onNavigate("config")}>
+              返回配置
+            </Button>
+          </div>
+        )}
         {items
           .filter((item) => visited.has(item.key))
           .map((item) => (

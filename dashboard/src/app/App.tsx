@@ -66,6 +66,17 @@ export const App: React.FC = () => {
     handleRefreshAll();
   });
 
+  useEffect(() => {
+    // 宿主沙盒没有离开确认接口；仅为独立页面注册浏览器的刷新、关闭提醒。
+    if (!configVM.isDirty || window.parent !== window) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [configVM.isDirty]);
+
   // 保持最新的 ViewModel 引用，防止 SSE 长监听闭包引用过时的分页/筛选状态
   const viewModelsRef = useRef({
     overviewVM,
@@ -241,6 +252,7 @@ export const App: React.FC = () => {
             onRefresh={handleRefreshAll}
             onOpenTrigger={triggerVM.handleOpen}
             loading={overviewVM.loading}
+            configDirty={configVM.isDirty}
           />
 
           {/* 触发任务模态框 (Feature) */}

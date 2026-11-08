@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "../ui/AppShell";
 import { usePageNavigation } from "../model/usePageNavigation";
 
-function Fixture() {
+function Fixture({ configDirty = false }: { configDirty?: boolean }) {
   const { page, visited, navigate } = usePageNavigation("overview");
   return (
     <AppShell
@@ -13,6 +13,7 @@ function Fixture() {
       onRefresh={() => {}}
       onOpenTrigger={() => {}}
       loading={false}
+      configDirty={configDirty}
       items={[
         { key: "overview", label: "总览", icon: null, children: <input aria-label="筛选群聊" /> },
         { key: "config", label: "配置", icon: null, children: <textarea aria-label="配置草稿" /> },
@@ -23,6 +24,25 @@ function Fixture() {
 }
 
 describe("正式页面导航", () => {
+  it("未保存提醒跨页可见，返回配置不丢草稿且不重复展示，保存后消失", () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const view = render(<Fixture configDirty />);
+    expect(screen.getByRole("status", { name: "配置未保存提醒" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "返回配置" }));
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName("配置");
+    expect(screen.queryByRole("status", { name: "配置未保存提醒" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "配置草稿" }), {
+      target: { value: "未保存的草稿" },
+    });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "日志" }), { button: 0, ctrlKey: false });
+    expect(screen.getByRole("status", { name: "配置未保存提醒" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "返回配置" }));
+    expect(screen.getByRole("textbox", { name: "配置草稿" })).toHaveValue("未保存的草稿");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "总览" }), { button: 0, ctrlKey: false });
+    view.rerender(<Fixture />);
+    expect(screen.queryByRole("status", { name: "配置未保存提醒" })).not.toBeInTheDocument();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();

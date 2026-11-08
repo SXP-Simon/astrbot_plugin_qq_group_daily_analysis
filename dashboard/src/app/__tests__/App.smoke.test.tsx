@@ -1,16 +1,73 @@
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "../App";
 import { toast } from "sonner";
 import * as devBridge from "../../shared/api/devBridge";
 import * as traceApi from "../../entities/trace/api/traceApi";
 import * as taskApi from "../../entities/task/api/taskApi";
+import * as configApi from "../../entities/config/api/configApi";
 
 // 本测试验证页面装配和数据加载，不在 JSDOM 中运行 Canvas 动画。
 vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
 
 describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () => {
+  it("真实配置草稿驱动跨页提醒，失败继续保护、保存或卸载后清理离开提醒", async () => {
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const sseSpy = vi.spyOn(devBridge, "devSubscribeSSE").mockImplementation(() => () => {});
+    const saveSpy = vi
+      .spyOn(configApi, "savePluginConfig")
+      .mockResolvedValueOnce({ success: false, message: "保存失败示例" })
+      .mockResolvedValue({ success: true });
+    const pending: Promise<unknown>[] = [];
+    const originalGet = devBridge.devApiGet;
+    const getSpy = vi.spyOn(devBridge, "devApiGet").mockImplementation(function <T>(
+      path: string,
+      params?: Record<string, unknown>,
+    ) {
+      const request = originalGet<T>(path, params);
+      pending.push(request);
+      return request;
+    });
+    const view = render(<App />);
+    const leaving = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    try {
+      expect(leaving()).toBe(false);
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "配置" }), { button: 0, ctrlKey: false });
+      const days = await screen.findByRole("spinbutton", { name: "默认分析天数" });
+      fireEvent.change(days, { target: { value: "3" } });
+      expect(leaving()).toBe(true);
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "报告" }), { button: 0, ctrlKey: false });
+      expect(screen.getByRole("status", { name: "配置未保存提醒" })).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "返回配置" }));
+      expect(days).toHaveValue(3);
+      fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+      await screen.findByRole("alert");
+      expect(leaving()).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+      await waitFor(() => expect(screen.getByText("没有未保存的修改")).toBeVisible());
+      expect(leaving()).toBe(false);
+      fireEvent.change(days, { target: { value: "4" } });
+      expect(leaving()).toBe(true);
+    } finally {
+      view.unmount();
+      expect(leaving()).toBe(false);
+      await act(async () => {
+        await Promise.allSettled(pending);
+      });
+      toast.dismiss();
+      getSpy.mockRestore();
+      saveSpy.mockRestore();
+      sseSpy.mockRestore();
+      scrollSpy.mockRestore();
+    }
+  }, 20000);
+
   beforeEach(() => {
     localStorage.clear();
     delete (window as { AstrBotPluginPage?: unknown }).AstrBotPluginPage;
