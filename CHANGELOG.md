@@ -8,6 +8,73 @@
 * 默认配色对齐 AstrBot；宿主支持传递自定义配色时，按钮、选中项和图表会随之更新，旧版宿主使用插件默认配色。警告和错误仍分别使用黄色、红色，避免与普通选中状态混淆。
 * 总览先展示分析统计和趋势，下方集中查看并行任务与近期异常。“需要关注”中的记录可标记为“已知晓”，换设备也会保留，并可撤销。
 
+### 界面预览
+
+部分截图使用示例数据，点击图片可查看原图。
+
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>总览</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview-20261108-b3eb04579d.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview-20261108-b3eb04579d.png" alt="总览" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>配置与校验</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/config-20261108-3d36f42581.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/config-20261108-3d36f42581.png" alt="配置与校验" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>分析记录</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/traces-20261108-de3b7d2ba0.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/traces-20261108-de3b7d2ba0.png" alt="分析记录" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告与重绘</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/reports-20261108-29096c774f.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/reports-20261108-29096c774f.png" alt="报告与重绘" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>统计与消耗</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/statistics-20261108-1ab5371b6c.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/statistics-20261108-1ab5371b6c.jpg" alt="统计与消耗" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>日志</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/logs-20261108-8ce3608813.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/logs-20261108-8ce3608813.png" alt="日志" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>任务阶段与渲染回退</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/task-diagnosis-20261108-c6b0ca7c4a.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/task-diagnosis-20261108-c6b0ca7c4a.jpg" alt="任务阶段与渲染回退" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>继续分析</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume-20261108-ee6a4545b4.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume-20261108-ee6a4545b4.jpg" alt="继续分析" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>数据与阶段快照</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/data-checkpoints-20261108-299de32635.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/data-checkpoints-20261108-299de32635.png" alt="数据与阶段快照" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>Typst 字体管理</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/typst-fonts-20261108-2d0a6ff65f.png" alt="Typst 字体管理" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告模板画廊</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/template-gallery-20261108-9440eea52d.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/template-gallery-20261108-9440eea52d.png" alt="报告模板画廊" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>报告文件管理</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/report-file-management-20261108-14aca297cb.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/report-file-management-20261108-14aca297cb.png" alt="报告文件管理" width="100%"></a>
+    </td>
+  </tr>
+</table>
+
 ### 任务详情与排障
 
 * 任务详情日志与日志页使用相同的等级配色，警告和错误更容易辨认。Ctrl+A / Command+A 只全选日志，复制使用 Ctrl+C / Command+C 或“复制日志”；修复受限环境复制后弹窗跳回顶部的问题。
@@ -68,6 +135,11 @@
 
 * 升级前按群号保存的增量数据会接续到一个机器人实例，并保留原始备份，不会复制给所有同号群。缺少平台信息或完整快照的旧任务，可能无法直接继续分析，需要选择具体会话重新发起。
 * 若只想让某一个接入分析某个群，请在启用名单中填写完整 UMO；仅填写群号仍沿用原有匹配规则。不同实例不会共享大模型分析结果，避免重复消耗需通过启用范围和并发配置控制。
+
+---
+
+<details>
+<summary>📋 点击查看历史更新日志</summary>
 
 ## [v5.9.4] - Typst 本地报告、字体与素材管理、分析任务恢复改进
 
@@ -139,11 +211,6 @@
 * 修复 Base64 图片被当作文件路径保存、出现「文件名过长」而无法留存历史报告的问题。
 * 修复重绘没有生成有效报告却返回成功、恢复时误用其他任务快照，以及历史报告扫描与索引查询筛选不一致等情况。
 * 改善持久化操作对异步分析的阻塞，补齐任务取消后的清理，并修正 Token 汇总及统计时间范围边界。
-
----
-
-<details>
-<summary>📋 点击查看历史更新日志</summary>
 
 ## [v5.9.3] - 修复容器内 T2I 地址校验，渲染方案可单独测试
 
