@@ -97,12 +97,44 @@ it("使用宿主主题与纯文本图表提示，未知模块名不会作为 HTM
     expect(document.querySelector("img")).toBeNull();
     expect(observed).toMatchObject({
       animation: false,
-      tooltip: { renderMode: "richText", confine: true, backgroundColor: "#202020" },
+      tooltip: {
+        renderMode: "html",
+        enterable: false,
+        transitionDuration: 0,
+        extraCssText: expect.stringContaining("pointer-events: none"),
+        confine: true,
+        backgroundColor: "#202020",
+      },
       series: [
         { itemStyle: { color: "rgba(90, 145, 172, 0.58)" } },
         { itemStyle: { color: "rgba(149, 122, 177, 0.54)" } },
       ],
     });
+    const tooltip = observed?.tooltip;
+    if (!tooltip || Array.isArray(tooltip) || typeof tooltip.formatter !== "function")
+      throw new Error("缺少提示格式化函数");
+    const content = tooltip.formatter(
+      {
+        componentType: "series",
+        componentSubType: "bar",
+        componentIndex: 0,
+        seriesIndex: 0,
+        seriesType: "bar",
+        name: "",
+        dataIndex: 0,
+        data: 80,
+        value: 80,
+        $vars: [],
+      },
+      "",
+      () => {},
+    );
+    expect(content).toBeInstanceOf(HTMLElement);
+    if (content instanceof HTMLElement) {
+      expect(content.textContent).toContain("<img src=x onerror=alert(1)>");
+      expect(content.querySelector("img")).toBeNull();
+      expect(content.textContent).toContain("输入 Tokens：80");
+    }
   } finally {
     document.documentElement.style.removeProperty("--chart-input");
     document.documentElement.style.removeProperty("--chart-output");

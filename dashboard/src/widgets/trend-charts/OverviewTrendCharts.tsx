@@ -1,3 +1,4 @@
+import { resolveChartColor } from "../../shared/lib/chartColors";
 import { memo } from "react";
 import ReactECharts from "echarts-for-react";
 import type { AnalyticsTrendsResponse } from "../../entities/metric/model/types";
@@ -22,7 +23,7 @@ export const OverviewTrendCharts = memo(function OverviewTrendCharts({
   const vm = useOverviewTrends(initialTrends);
   useTheme();
   const style = getComputedStyle(document.documentElement);
-  const color = (name: string) => style.getPropertyValue(name).trim() || "currentColor";
+  const color = (name: string) => resolveChartColor(style.getPropertyValue(name), style.color);
   const providerColors = [
     "--ring",
     "--info",
@@ -39,8 +40,8 @@ export const OverviewTrendCharts = memo(function OverviewTrendCharts({
     border: color("--border"),
     background: color("--card"),
     accent: color("--ring"),
-    input: style.getPropertyValue("--chart-trend-input").trim() || undefined,
-    output: style.getPropertyValue("--chart-trend-output").trim() || undefined,
+    input: color("--chart-trend-input"),
+    output: color("--chart-trend-output"),
     success: color("--success"),
     danger: color("--destructive"),
     providerColors,

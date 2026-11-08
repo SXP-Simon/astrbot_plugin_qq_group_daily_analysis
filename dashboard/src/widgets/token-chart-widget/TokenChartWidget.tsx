@@ -1,3 +1,4 @@
+import { resolveChartColor } from "../../shared/lib/chartColors";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import type { TokenUsage } from "../../entities/trace/model/types";
@@ -21,7 +22,7 @@ const recordedCount = (value: number | null | undefined) =>
 export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetProps) {
   useTheme();
   const style = getComputedStyle(document.documentElement);
-  const color = (name: string) => style.getPropertyValue(name).trim() || "currentColor";
+  const color = (name: string) => resolveChartColor(style.getPropertyValue(name), style.color);
   const total = recordedCount(tokenUsage?.total_tokens ?? totalTokens);
   const rows = Object.entries(tokenUsage?.per_analyzer ?? {})
     .map(([id, usage]) => ({
@@ -48,7 +49,27 @@ export function TokenChartWidget({ tokenUsage, totalTokens }: TokenChartWidgetPr
     textStyle: { fontFamily: '"LXGW WenKai Screen", sans-serif', color: color("--foreground") },
     tooltip: {
       trigger: "axis",
-      renderMode: "richText",
+      renderMode: "html",
+      enterable: false,
+      transitionDuration: 0,
+      extraCssText: "pointer-events: none; white-space: pre-wrap;",
+      formatter: (params: unknown) => {
+        const first: unknown = Array.isArray(params) ? params[0] : params;
+        if (
+          !first ||
+          typeof first !== "object" ||
+          !("dataIndex" in first) ||
+          typeof first.dataIndex !== "number"
+        )
+          return "";
+        const row = plotted[first.dataIndex];
+        if (!row) return "";
+        const element = document.createElement("div");
+        element.textContent = canStack
+          ? `${row.name}\n输入 Tokens：${row.input?.toLocaleString() ?? "未记录"}\n输出 Tokens：${row.output?.toLocaleString() ?? "未记录"}`
+          : `${row.name}\n总 Tokens：${row.total?.toLocaleString() ?? "未记录"}`;
+        return element;
+      },
       confine: true,
       backgroundColor: color("--card"),
       borderColor: color("--border"),

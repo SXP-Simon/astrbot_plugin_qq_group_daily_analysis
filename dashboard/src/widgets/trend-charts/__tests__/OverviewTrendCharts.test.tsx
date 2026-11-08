@@ -291,3 +291,30 @@ it("组件读取宿主主辅色变量传入输入输出系列，图例沿用系�
     document.documentElement.style.removeProperty("--chart-trend-output");
   }
 });
+
+it("默认混合色经过浏览器转换后传给图表，不依赖 Mock 的宿主 RGB 覆盖", () => {
+  vi.stubGlobal("CSS", { supports: () => true });
+  const canvas = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    fillRect: vi.fn(),
+    getImageData: () => ({ data: new Uint8ClampedArray([30, 75, 101, 255]) }),
+  } as unknown as CanvasRenderingContext2D);
+  document.documentElement.style.setProperty("--ring", "color-mix(in srgb, #3c96ca 50%, #000)");
+  document.documentElement.style.setProperty(
+    "--chart-trend-input",
+    "color-mix(in srgb, #3c96ca 50%, #000)",
+  );
+  try {
+    render(<OverviewTrendCharts initialTrends={createMockAnalyticsTrends()} />);
+    const line = chartRender.mock.calls.find(([option]) => option.series[0]?.type === "line")?.[0];
+    const bars = chartRender.mock.calls.find(([option]) => option.series[0]?.type === "bar")?.[0];
+    const pie = chartRender.mock.calls.find(([option]) => option.series[0]?.type === "pie")?.[0];
+    expect(line?.series[0].lineStyle.color).toBe("rgba(30, 75, 101, 1)");
+    expect(bars?.series[0].itemStyle.color).toBe("rgba(30, 75, 101, 1)");
+    expect(pie?.series[0].data[0].itemStyle.color).toBe("rgba(30, 75, 101, 1)");
+  } finally {
+    document.documentElement.style.removeProperty("--ring");
+    document.documentElement.style.removeProperty("--chart-trend-input");
+    canvas.mockRestore();
+    vi.unstubAllGlobals();
+  }
+});
