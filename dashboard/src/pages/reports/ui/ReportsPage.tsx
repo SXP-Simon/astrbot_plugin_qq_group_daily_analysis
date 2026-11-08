@@ -109,6 +109,9 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
           vm.selectedReport && vm.downloadingFiles.has(vm.selectedReport.filename),
         )}
         onClose={vm.closePreview}
+        onRetry={() => {
+          if (vm.selectedReport) void vm.openPreview(vm.selectedReport);
+        }}
         onDownload={vm.downloadReport}
       />
       <RerenderReportModal

@@ -75,7 +75,13 @@ it("显示报告身份与明确操作，漫画不提供换模板，图片与HTML
   preview.focus();
   fireEvent.click(preview);
   const dialog = screen.getByRole("dialog", { name: "报告预览" });
-  expect(await within(dialog).findByRole("img", { name: image.filename })).toBeVisible();
+  const previewImage = await within(dialog).findByAltText(image.filename);
+  Object.defineProperties(previewImage, {
+    naturalWidth: { value: 1000 },
+    naturalHeight: { value: 3000 },
+  });
+  fireEvent.load(previewImage);
+  expect(previewImage).toBeVisible();
   fireEvent.click(within(dialog).getByRole("button", { name: "关闭预览" }));
   await waitFor(() => expect(preview).toHaveFocus());
   const htmlRow = rows.find((row) => row.textContent?.includes(html.filename))!;
