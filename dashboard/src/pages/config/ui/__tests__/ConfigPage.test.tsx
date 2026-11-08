@@ -99,6 +99,22 @@ it("保留分组与编辑值，保存失败直接说明原因，成功保存保�
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
+it("分组显示修改数，搜索不改变计数，改回已保存值后清除", async () => {
+  render(<Page />);
+  const input = await screen.findByRole("textbox", { name: "报告名称" });
+  const nav = screen.getByRole("navigation", { name: "配置分组" });
+  const basic = within(nav).getByRole("button", { name: /基础设置/ });
+  expect(basic).not.toHaveTextContent("已修改");
+  fireEvent.change(input, { target: { value: "新名称" } });
+  expect(basic).toHaveTextContent("已修改 1 项");
+  fireEvent.change(screen.getByRole("searchbox", { name: "搜索配置名称或说明" }), {
+    target: { value: "报告名称" },
+  });
+  expect(basic).toHaveTextContent("已修改 1 项");
+  fireEvent.change(input, { target: { value: "原报告名" } });
+  expect(basic).not.toHaveTextContent("已修改");
+});
+
 it("重新读取前确认丢弃草稿，取消保留编辑并返回按钮焦点", async () => {
   render(<Page />);
   fireEvent.change(await screen.findByRole("textbox", { name: "报告名称" }), {

@@ -54,10 +54,30 @@ it("保存中继续编辑会保留新草稿，同批重复保存和重新读取�
   });
   expect(result.current.formData.basic.max_topics).toBe(7);
   expect(result.current.isDirty).toBe(true);
+  expect(result.current.modifiedFields.basic.size).toBe(1);
   expect(result.current.saving).toBe(false);
   vi.mocked(savePluginConfig).mockResolvedValue({ success: true });
   await act(async () => result.current.handleSave());
   expect(savePluginConfig).toHaveBeenLastCalledWith({ basic: { max_topics: 7 } }, "b".repeat(64));
+  expect(result.current.isDirty).toBe(false);
+  expect(result.current.modifiedFields.basic.size).toBe(0);
+});
+
+it("分组计数按一级配置项去重，撤销与保存失败都以已保存快照为基准", async () => {
+  vi.mocked(savePluginConfig).mockResolvedValue({ success: false, message: "无法写入" });
+  const { result } = renderHook(() => useConfigViewModel());
+  await waitFor(() => expect(result.current.configLoaded).toBe(true));
+  expect(result.current.modifiedFields.basic.size).toBe(0);
+  act(() => result.current.handleFieldChange("basic", "max_topics", 5));
+  act(() => result.current.handleFieldChange("basic", "plans", [{ name: "测试", priority: 1 }]));
+  act(() => result.current.handleFieldChange("basic", "plans", [{ name: "新名称", priority: 2 }]));
+  expect(result.current.modifiedFields.basic.size).toBe(2);
+  await act(async () => result.current.handleSave());
+  expect(result.current.modifiedFields.basic.size).toBe(2);
+  act(() => result.current.handleFieldChange("basic", "max_topics", 3));
+  expect([...result.current.modifiedFields.basic]).toEqual(["plans"]);
+  act(() => result.current.handleFieldChange("basic", "plans", undefined));
+  expect(result.current.modifiedFields.basic.size).toBe(0);
   expect(result.current.isDirty).toBe(false);
 });
 

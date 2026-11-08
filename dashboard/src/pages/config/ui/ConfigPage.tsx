@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { cn } from "../../../shared/lib/cn";
 import {
   IconAlertCircle,
   IconCheck,
@@ -123,6 +124,9 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
               {visibleCategories.map((category) => (
                 <option key={category.key} value={category.key}>
                   {category.label}
+                  {vm.modifiedFields[category.key]?.size
+                    ? `（已修改 ${vm.modifiedFields[category.key].size} 项）`
+                    : ""}
                   {vm.groupErrorCounts[category.key]
                     ? `（${vm.groupErrorCounts[category.key]} 项有误）`
                     : ""}
@@ -143,13 +147,18 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
                 onClick={() => vm.setActiveCategory(category.key)}
               >
                 <span>{category.label}</span>
-                <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                <span className="flex shrink-0 flex-col items-end gap-1 text-xs text-muted-foreground">
                   {vm.groupErrorCounts[category.key] > 0 ? (
                     <span className="rounded-md bg-destructive/10 px-1.5 py-0.5 text-destructive">
                       {vm.groupErrorCounts[category.key]} 项有误
                     </span>
                   ) : (
                     `${category.matchCount ?? category.totalFields} 项`
+                  )}
+                  {(vm.modifiedFields[category.key]?.size ?? 0) > 0 && (
+                    <span className="rounded-md bg-primary-soft px-1.5 py-0.5 text-primary-ink">
+                      已修改 {vm.modifiedFields[category.key].size} 项
+                    </span>
                   )}
                 </span>
               </Button>
@@ -162,9 +171,16 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
         <section aria-label="配置字段" aria-busy={vm.loading} className="min-w-0 space-y-5">
           {vm.activeGroupMeta && (
             <div className="space-y-2 border-b border-border pb-4">
-              <h2 className="m-0 text-lg font-medium">
-                {vm.activeGroupMeta.description || vm.activeCategory}
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="m-0 text-lg font-medium">
+                  {vm.activeGroupMeta.description || vm.activeCategory}
+                </h2>
+                {(vm.modifiedFields[vm.activeCategory]?.size ?? 0) > 0 && (
+                  <span className="rounded-md bg-primary-soft px-2 py-0.5 text-sm text-primary-ink">
+                    已修改 {vm.modifiedFields[vm.activeCategory].size} 项
+                  </span>
+                )}
+              </div>
               {vm.activeGroupMeta.hint && (
                 <MarkdownHint
                   content={vm.activeGroupMeta.hint}
@@ -197,6 +213,8 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
             >
               <legend className="sr-only">{vm.activeGroupMeta?.description || "配置字段"}</legend>
               {vm.currentGroupFields.map((field) => {
+                const modified = vm.modifiedFields[vm.activeCategory]?.has(field.key) ?? false;
+                const fieldError = vm.errors[vm.activeCategory]?.[field.key];
                 const isLongField =
                   ["template_list", "object", "list", "text", "file"].includes(field.schema.type) ||
                   field.key.includes("prompt") ||
@@ -210,18 +228,34 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
                 return (
                   <div
                     key={`${vm.activeCategory}.${field.key}`}
-                    className={`min-w-0 rounded-xl border border-solid border-transparent p-4 transition-colors odd:bg-secondary-soft even:bg-card hover:border-secondary-line focus-within:border-primary-line focus-within:bg-primary-soft [&>section]:border-b-0 [&>section]:pb-0 ${isLongField ? "lg:col-span-2" : ""}`}
+                    className={cn(
+                      "min-w-0 rounded-xl border border-solid p-4 transition-colors [&>section]:border-b-0 [&>section]:pb-0",
+                      !modified &&
+                        !fieldError &&
+                        "border-transparent odd:bg-secondary-soft even:bg-card hover:border-secondary-line focus-within:border-primary-line focus-within:bg-primary-soft",
+                      modified && !fieldError && "border-primary-line bg-primary-soft",
+                      modified &&
+                        !fieldError &&
+                        ["object", "template_list"].includes(field.schema.type) &&
+                        "bg-card",
+                      fieldError && "border-destructive/40 bg-destructive/5",
+                      isLongField && "lg:col-span-2",
+                    )}
                   >
                     <FieldRenderer
                       fieldKey={field.key}
                       fieldSchema={field.schema}
                       value={field.value}
+                      originalValue={
+                        vm.originalConfig[vm.activeCategory]?.[field.key] ?? field.schema.default
+                      }
+                      modified={modified}
                       templateCdnBaseUrl={vm.templateCdnBaseUrl}
                       templateRequirements={vm.templateRequirements}
                       providers={vm.providers}
                       personas={vm.personas}
                       fullKeyPath={`${vm.activeCategory}.${field.key}`}
-                      error={vm.errors[vm.activeCategory]?.[field.key]}
+                      error={fieldError}
                       subErrors={vm.errors[vm.activeCategory]}
                       onChange={(value) =>
                         vm.handleFieldChange(vm.activeCategory, field.key, value)

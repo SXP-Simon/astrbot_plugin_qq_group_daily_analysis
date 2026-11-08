@@ -185,6 +185,21 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
     return JSON.stringify(formData) !== JSON.stringify(originalConfig);
   }, [formData, originalConfig]);
 
+  // 沿用侧栏一级配置项的计数口径，列表内部多处修改只计为一个配置项。
+  const modifiedFields = useMemo(() => {
+    const result: Record<string, ReadonlySet<string>> = {};
+    for (const group of new Set([...Object.keys(originalConfig), ...Object.keys(formData)])) {
+      const original = originalConfig[group] ?? {};
+      const current = formData[group] ?? {};
+      result[group] = new Set(
+        [...new Set([...Object.keys(original), ...Object.keys(current)])].filter(
+          (field) => JSON.stringify(original[field]) !== JSON.stringify(current[field]),
+        ),
+      );
+    }
+    return result;
+  }, [formData, originalConfig]);
+
   const handleSave = async () => {
     if (savingRef.current) return;
     if (!configLoaded || loadingRef.current) {
@@ -381,6 +396,8 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
     configLoaded,
     saving,
     isDirty,
+    modifiedFields,
+    originalConfig,
     schema,
     formData,
     providers,
