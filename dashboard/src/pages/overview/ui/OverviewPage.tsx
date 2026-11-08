@@ -21,6 +21,12 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
     errors,
     feedback,
     handleCancelTask,
+    acknowledgedCount,
+    showAcknowledged,
+    setShowAcknowledged,
+    acknowledgingIds,
+    acknowledgementError,
+    handleAcknowledge,
   } = viewModel;
   const summaries = [
     ["今日分析", metrics?.today_traces, "次"],
@@ -106,6 +112,21 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
             需要关注
           </h2>
           <p className="mb-2 mt-1 text-xs text-muted-foreground">最近 20 条分析中的失败或警告</p>
+          {acknowledgedCount > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowAcknowledged(!showAcknowledged)}
+              aria-pressed={showAcknowledged}
+            >
+              {showAcknowledged ? "收起已知晓" : `显示已知晓（${acknowledgedCount}）`}
+            </Button>
+          )}
+          {acknowledgementError && (
+            <p role="alert" className="text-sm text-destructive">
+              {acknowledgementError}
+            </p>
+          )}
           {errors.recent && (
             <p role="alert" className="text-sm text-destructive">
               {errors.recent}
@@ -117,7 +138,9 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
                 ? "正在读取记录…"
                 : errors.recent
                   ? "暂时无法确认近期结果。"
-                  : "近期记录中没有失败或警告"}
+                  : acknowledgedCount > 0
+                    ? "这些提醒均已知晓"
+                    : "近期记录中没有失败或警告"}
             </p>
           ) : (
             <ul className="m-0 max-h-[560px] list-none overflow-y-auto p-0">
@@ -132,6 +155,19 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
                     </span>
                     <StatusTag status={trace.status === "failed" ? "failed" : "warning"} />
                   </div>
+                  <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      aria-label={`已知晓：${trace.group_name || trace.group_id}（${trace.trace_id}）`}
+                      checked={(trace.acknowledged_at ?? 0) > 0}
+                      disabled={acknowledgingIds.includes(trace.trace_id)}
+                      onChange={(event) =>
+                        void handleAcknowledge(trace.trace_id, event.currentTarget.checked)
+                      }
+                    />
+                    已知晓
+                  </label>
                   <p className="m-0 break-all font-mono text-xs text-muted-foreground">
                     {trace.platform} · {trace.group_id}
                   </p>

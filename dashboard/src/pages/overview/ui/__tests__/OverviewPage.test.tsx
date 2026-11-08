@@ -15,6 +15,12 @@ function viewModel(): ReturnType<typeof useOverviewViewModel> {
     activeTasks: mockActiveTasks.slice(0, 2),
     recentTraces: [],
     attentionTraces: [],
+    acknowledgedCount: 0,
+    showAcknowledged: false,
+    setShowAcknowledged: vi.fn(),
+    acknowledgingIds: [],
+    acknowledgementError: "",
+    handleAcknowledge: vi.fn().mockResolvedValue(undefined),
     loading: false,
     tasksLoaded: true,
     errors: { tasks: "", metrics: "", recent: "" },
@@ -109,4 +115,36 @@ describe("总览页面", () => {
     expect(screen.getByText("暂无正在执行的后台分析任务")).toBeVisible();
     expect(screen.getByText("近期记录中没有失败或警告")).toBeVisible();
   });
+});
+
+it("知晓控件语义明确，可显示已知晓和撤销，保存中不能重复点击", () => {
+  const vm = viewModel();
+  const trace = { ...mockTraces.find((item) => item.status === "failed")!, acknowledged_at: null };
+  vm.attentionTraces = [trace];
+  const { rerender } = render(
+    <OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />,
+  );
+  const checkbox = screen.getByRole("checkbox", { name: /已知晓/ });
+  fireEvent.click(checkbox);
+  expect(vm.handleAcknowledge).toHaveBeenCalledWith(trace.trace_id, true);
+  vm.acknowledgingIds = [trace.trace_id];
+  rerender(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+  expect(checkbox).toBeDisabled();
+  vm.acknowledgingIds = [];
+  vm.attentionTraces = [];
+  vm.acknowledgedCount = 1;
+  rerender(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+  expect(screen.getByText("这些提醒均已知晓")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "显示已知晓（1）" }));
+  expect(vm.setShowAcknowledged).toHaveBeenCalledWith(true);
+  vm.showAcknowledged = true;
+  vm.attentionTraces = [{ ...trace, acknowledged_at: 123 }];
+  rerender(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+  const known = screen.getByRole("checkbox", { name: /已知晓/ });
+  expect(known).toBeChecked();
+  fireEvent.click(known);
+  expect(vm.handleAcknowledge).toHaveBeenLastCalledWith(trace.trace_id, false);
+  vm.acknowledgementError = "知晓状态未能保存，请稍后重试。";
+  rerender(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+  expect(screen.getByRole("alert")).toHaveTextContent("未能保存");
 });

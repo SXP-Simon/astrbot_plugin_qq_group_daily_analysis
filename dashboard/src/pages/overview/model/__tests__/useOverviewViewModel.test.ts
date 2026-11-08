@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { fetchActiveTasks, cancelActiveTask } from "../../../../entities/task/api/taskApi";
 import { fetchMetricsSummary } from "../../../../entities/metric/api/metricApi";
-import { fetchTraceList } from "../../../../entities/trace/api/traceApi";
+import { acknowledgeTrace, fetchTraceList } from "../../../../entities/trace/api/traceApi";
 import type { ActiveTask } from "../../../../entities/task/model/types";
 import { useOverviewViewModel } from "../useOverviewViewModel";
 import { mockMetricsSummary } from "../../../../mocks/data/metrics";
@@ -13,7 +13,10 @@ vi.mock("../../../../entities/task/api/taskApi", () => ({
   cancelActiveTask: vi.fn(),
 }));
 vi.mock("../../../../entities/metric/api/metricApi", () => ({ fetchMetricsSummary: vi.fn() }));
-vi.mock("../../../../entities/trace/api/traceApi", () => ({ fetchTraceList: vi.fn() }));
+vi.mock("../../../../entities/trace/api/traceApi", () => ({
+  fetchTraceList: vi.fn(),
+  acknowledgeTrace: vi.fn(),
+}));
 
 const task: ActiveTask = {
   task_id: "WEB",
@@ -204,4 +207,94 @@ it("关注列表只根据明确结果和警告标记，不将正常取消误报�
     sort_by: "started_at",
     sort_order: "desc",
   });
+});
+
+it("知晓保存后收起、可显示和恢复，迟到的旧查询不能覆盖标记", async () => {
+  const trace = {
+    ...mockTraces.find((item) => item.status === "failed")!,
+    acknowledged_at: null as number | null,
+  };
+  vi.mocked(fetchTraceList).mockImplementation(async () => ({ items: [{ ...trace }], total: 1 }));
+  vi.mocked(acknowledgeTrace).mockImplementation(async (traceId, known) => {
+    trace.acknowledged_at = known ? 123 : null;
+    return { trace_id: traceId, acknowledged_at: trace.acknowledged_at };
+  });
+  const { result } = renderHook(() => useOverviewViewModel());
+  await waitFor(() => expect(result.current.attentionTraces).toHaveLength(1));
+  const old = deferred<Awaited<ReturnType<typeof fetchTraceList>>>();
+  vi.mocked(fetchTraceList).mockReturnValueOnce(old.promise);
+  let request!: Promise<void>;
+  act(() => {
+    request = result.current.refresh();
+  });
+  await act(async () => {
+    await result.current.handleAcknowledge(trace.trace_id, true);
+  });
+  expect(result.current.attentionTraces).toHaveLength(0);
+  expect(result.current.acknowledgedCount).toBe(1);
+  await act(async () => {
+    old.resolve({ items: [{ ...trace, acknowledged_at: null }], total: 1 });
+    await request;
+  });
+  expect(result.current.attentionTraces).toHaveLength(0);
+  act(() => result.current.setShowAcknowledged(true));
+  expect(result.current.attentionTraces[0]).toMatchObject({
+    status: "failed",
+    acknowledged_at: 123,
+  });
+  await act(async () => {
+    await result.current.handleAcknowledge(trace.trace_id, false);
+  });
+  expect(result.current.acknowledgedCount).toBe(0);
+  expect(result.current.attentionTraces[0].acknowledged_at).toBeNull();
+});
+
+it("保存期间禁止重复提交，失败保留原提醒并提示重试", async () => {
+  const trace = { ...mockTraces.find((item) => item.status === "failed")!, acknowledged_at: null };
+  vi.mocked(fetchTraceList).mockResolvedValue({ items: [trace], total: 1 });
+  let reject!: (reason: Error) => void;
+  vi.mocked(acknowledgeTrace).mockReturnValue(
+    new Promise((_done, fail) => {
+      reject = fail;
+    }),
+  );
+  const { result } = renderHook(() => useOverviewViewModel());
+  await waitFor(() => expect(result.current.attentionTraces).toHaveLength(1));
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.handleAcknowledge(trace.trace_id, true);
+  });
+  expect(result.current.acknowledgingIds).toEqual([trace.trace_id]);
+  await act(async () => {
+    await result.current.handleAcknowledge(trace.trace_id, true);
+  });
+  expect(acknowledgeTrace).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    reject(new Error("disk full"));
+    await pending;
+  });
+  expect(result.current.attentionTraces).toHaveLength(1);
+  expect(result.current.acknowledgementError).toContain("未能保存");
+  expect(result.current.acknowledgingIds).toEqual([]);
+});
+
+it("重新进入总览读取已保存的标记，卸载后迟到回执不触发刷新", async () => {
+  const trace = { ...mockTraces.find((item) => item.status === "failed")!, acknowledged_at: 123 };
+  vi.mocked(fetchTraceList).mockResolvedValue({ items: [trace], total: 1 });
+  const pending = deferred<Awaited<ReturnType<typeof acknowledgeTrace>>>();
+  vi.mocked(acknowledgeTrace).mockReturnValue(pending.promise);
+  const { result, unmount } = renderHook(() => useOverviewViewModel());
+  await waitFor(() => expect(result.current.acknowledgedCount).toBe(1));
+  expect(result.current.attentionTraces).toHaveLength(0);
+  let saving!: Promise<void>;
+  act(() => {
+    saving = result.current.handleAcknowledge(trace.trace_id, false);
+  });
+  const calls = vi.mocked(fetchTraceList).mock.calls.length;
+  unmount();
+  await act(async () => {
+    pending.resolve({ trace_id: trace.trace_id, acknowledged_at: null });
+    await saving;
+  });
+  expect(fetchTraceList).toHaveBeenCalledTimes(calls);
 });

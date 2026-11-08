@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { z } from "zod";
 import { fetchActiveTasks, cancelActiveTask } from "../../../entities/task/api/taskApi";
 import { fetchMetricsSummary } from "../../../entities/metric/api/metricApi";
-import { fetchTraceList } from "../../../entities/trace/api/traceApi";
+import { acknowledgeTrace, fetchTraceList } from "../../../entities/trace/api/traceApi";
 import type { ActiveTask } from "../../../entities/task/model/types";
 import type { MetricsSummary } from "../../../entities/metric/model/types";
 import type { TraceRecord } from "../../../entities/trace/model/types";
@@ -29,6 +29,10 @@ export function useOverviewViewModel(active = true) {
   const [tasksLoaded, setTasksLoaded] = useState(false);
   const [errors, setErrors] = useState({ tasks: "", metrics: "", recent: "" });
   const [feedback, setFeedback] = useState("");
+  const [showAcknowledged, setShowAcknowledged] = useState(false);
+  const [acknowledgingIds, setAcknowledgingIds] = useState<string[]>([]);
+  const [acknowledgementError, setAcknowledgementError] = useState("");
+  const acknowledging = useRef(new Set<string>());
   const requestId = useRef<symbol | null>(null);
   const taskRevision = useRef(0);
   const endedTasks = useRef(new Set<string>());
@@ -132,6 +136,31 @@ export function useOverviewViewModel(active = true) {
     }
   };
 
+  const handleAcknowledge = async (traceId: string, acknowledged: boolean) => {
+    if (acknowledging.current.has(traceId)) return;
+    acknowledging.current.add(traceId);
+    setAcknowledgingIds([...acknowledging.current]);
+    setAcknowledgementError("");
+    try {
+      const result = await acknowledgeTrace(traceId, acknowledged);
+      if (!mounted.current) return;
+      setRecentTraces((previous) =>
+        previous.map((trace) =>
+          trace.trace_id === traceId
+            ? { ...trace, acknowledged_at: result.acknowledged_at }
+            : trace,
+        ),
+      );
+      // 新查询取代保存前的旧快照，迟到响应不能撤销刚保存的标记。
+      void loadData(true);
+    } catch {
+      if (mounted.current) setAcknowledgementError("知晓状态未能保存，请稍后重试。");
+    } finally {
+      acknowledging.current.delete(traceId);
+      if (mounted.current) setAcknowledgingIds([...acknowledging.current]);
+    }
+  };
+
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -171,12 +200,23 @@ export function useOverviewViewModel(active = true) {
       trace.status === "warning" ||
       (["succeeded", "completed"].includes(trace.status) && trace.extra?.has_warnings === true),
   );
+  const acknowledgedCount = attentionTraces.filter(
+    (trace) => (trace.acknowledged_at ?? 0) > 0,
+  ).length;
 
   return {
     metrics,
     activeTasks,
     recentTraces,
-    attentionTraces,
+    attentionTraces: attentionTraces.filter(
+      (trace) => showAcknowledged || !(trace.acknowledged_at && trace.acknowledged_at > 0),
+    ),
+    acknowledgedCount,
+    showAcknowledged,
+    setShowAcknowledged,
+    acknowledgingIds,
+    acknowledgementError,
+    handleAcknowledge,
     loading,
     tasksLoaded,
     errors,
