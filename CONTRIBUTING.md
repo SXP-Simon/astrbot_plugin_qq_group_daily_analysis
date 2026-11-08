@@ -98,7 +98,7 @@ Ruff 保留现有测试目录豁免，并启用 `force-exclude`，目录扫描�
 
 VS Code 可安装 `oxc.oxc-vscode` 扩展；仓库已为 JS/TS/React/CSS 配置保存时格式化，JSON 的自动换行设置保持不变。编辑器选择的 Python 环境也应安装 `requirements-tools.txt` 中固定的版本。
 
-首次格式化与业务改动分开审阅；生成的 API 类型和构建产物由各自生成器维护。未合入的 `design-preview/` 原型暂不参与正式前端门禁。开发 mock 源码仍参与 lint、格式、类型及测试检查。
+首次格式化与业务改动分开审阅；生成的 API 类型和构建产物由各自生成器维护。正式界面与独立 Mock 共用页面和组件，不另建原型入口；开发 Mock 源码参与 lint、格式、类型及测试检查，生产构建排除开发模块。
 
 ### 1.2 WebUI 控制台前端环境
 ```bash
