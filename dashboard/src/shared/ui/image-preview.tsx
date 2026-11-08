@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogTitle } from "./dialog";
 interface ImagePreviewProps {
   src: string | null;
   title: string;
+  fitMode?: "contain" | "width";
   loading?: boolean;
   error?: string;
   position?: string;
@@ -30,6 +31,7 @@ export function ImageViewer({
   position,
   onPrevious,
   onNext,
+  fitMode = "contain",
 }: Omit<ImagePreviewProps, "onClose">) {
   const frame = useRef<HTMLDivElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -74,7 +76,7 @@ export function ImageViewer({
       ? Math.min(
           1,
           Math.max(1, bounds.width - 32) / natural.width,
-          Math.max(1, bounds.height - 32) / natural.height,
+          fitMode === "width" ? 1 : Math.max(1, bounds.height - 32) / natural.height,
         )
       : 1;
   const scale = (originalSize ? 1 : fit) * zoom;
@@ -93,6 +95,8 @@ export function ImageViewer({
   }, [width, height, viewport, rotation]);
   const changeZoom = (next: number, x?: number, y?: number) => {
     if (!ready || !viewport || !frame.current) return;
+    const nextZoom = Math.max(0.25, Math.min(Math.max(8, 2 / fit), next));
+    if (nextZoom === zoom) return;
     const area = viewport.getBoundingClientRect();
     const rect = frame.current.getBoundingClientRect();
     const clientX = x ?? area.left + area.width / 2;
@@ -103,7 +107,7 @@ export function ImageViewer({
       relativeX: rect.width ? (clientX - rect.left) / rect.width : 0.5,
       relativeY: rect.height ? (clientY - rect.top) / rect.height : 0.5,
     };
-    setZoom(Math.max(0.25, Math.min(Math.max(8, 2 / fit), next)));
+    setZoom(nextZoom);
   };
   useEffect(() => {
     if (!viewport || !ready) return;
@@ -185,7 +189,7 @@ export function ImageViewer({
             setFlipped(false);
           }}
         >
-          适应窗口
+          {fitMode === "width" ? "适应宽度" : "适应窗口"}
         </Button>
         <Button
           variant="outline"
@@ -206,6 +210,7 @@ export function ImageViewer({
           镜像
         </Button>
       </div>
+      <p className="m-0 text-xs text-muted-foreground">滚轮缩放，拖动查看；触屏可双指缩放。</p>
       <div
         ref={setViewport}
         role="region"

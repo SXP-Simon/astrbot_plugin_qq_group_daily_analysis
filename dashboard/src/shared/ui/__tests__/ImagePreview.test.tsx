@@ -105,3 +105,18 @@ it("滚轮围绕指针缩放，单指拖动、双指缩放与键盘操作可用�
   expect(area.scrollTop).toBe(stopped);
   expect(image).toHaveAttribute("draggable", "false");
 });
+
+it("报告长图按宽度展开保留可读文字，通过纵向拖动浏览，不压缩为整张缩略图", () => {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  render(<ImagePreview src="long.png" title="长报告" fitMode="width" onClose={vi.fn()} />);
+  const image = screen.getByRole("img", { hidden: true });
+  Object.defineProperties(image, {
+    naturalWidth: { value: 1000 },
+    naturalHeight: { value: 20000 },
+  });
+  fireEvent.load(image);
+  expect(image.style.width).toBe("768px");
+  expect(image.style.height).toBe("15360px");
+  expect(screen.getByRole("button", { name: "适应宽度" })).toBeEnabled();
+});
