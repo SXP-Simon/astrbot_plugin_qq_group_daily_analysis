@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { IconCopy } from "@tabler/icons-react";
-import { TAG_STYLE_MAP, type PluginLogItem } from "../../../entities/log/model/types";
+import type { PluginLogItem } from "../../../entities/log/model/types";
+import { LogEntry } from "../../../entities/log/ui/LogEntry";
 import { copyToClipboard } from "../../../shared/lib/clipboard";
 import { Button } from "../../../shared/ui/button";
 
@@ -28,7 +29,7 @@ export function TraceLogViewer({ logs }: { logs: PluginLogItem[] }) {
               size="sm"
               variant="outline"
               onClick={() => void copyLogs()}
-              title="复制当前任务日志，也可在日志区域按 Ctrl+A 或 Command+A 全选复制"
+              title="复制当前任务日志；日志区域支持 Ctrl+A 全选、Ctrl+C 复制（Mac 使用 Command）"
             >
               <IconCopy aria-hidden="true" />
               复制日志
@@ -46,25 +47,17 @@ export function TraceLogViewer({ logs }: { logs: PluginLogItem[] }) {
             onKeyDown={(event) => {
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
                 event.preventDefault();
-                void copyLogs();
+                const range = document.createRange();
+                range.selectNodeContents(event.currentTarget);
+                const selection = window.getSelection();
+                selection?.removeAllRanges();
+                selection?.addRange(range);
               }
             }}
-            className="max-h-80 overflow-auto rounded-xl bg-muted p-3 font-sans text-xs leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="max-h-80 overflow-auto rounded-xl border border-solid border-border bg-card p-2 font-sans text-[13px] leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {logs.map((log) => (
-              <div
-                key={log.id}
-                className={`whitespace-pre-wrap break-words ${["ERROR", "CRITICAL"].includes(log.level) ? "text-destructive" : "text-foreground"}`}
-              >
-                <span className="text-muted-foreground">{log.time_str} </span>
-                <span>[{log.level}] </span>
-                {log.tag && (
-                  <span title={log.tag}>[{TAG_STYLE_MAP[log.tag]?.label ?? log.tag}] </span>
-                )}
-                <span className="text-muted-foreground">[{log.location || log.logger_name}] </span>
-                {log.function_name && <span>[{log.function_name}()] </span>}
-                {log.message}
-              </div>
+              <LogEntry key={log.id} item={log} />
             ))}
           </div>
         </>

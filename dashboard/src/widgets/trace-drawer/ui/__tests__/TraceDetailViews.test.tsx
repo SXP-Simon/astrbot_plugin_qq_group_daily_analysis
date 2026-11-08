@@ -102,10 +102,10 @@ it("兼容历史产物记录，忽略无效条目；快照缺失不声称报告�
 it("日志复制尊重真实结果，并保留错误级别、来源和快捷键", async () => {
   vi.mocked(copyToClipboard).mockResolvedValueOnce(false);
   render(<TraceLogViewer logs={[{ ...log, function_name: "Renderer.generate" }]} />);
-  expect(screen.getByText("[ERROR]")).toBeVisible();
-  expect(screen.getByText("[render:10]")).toBeVisible();
-  expect(screen.getByText("[Renderer.generate()]")).toBeVisible();
-  expect(screen.getByText("[报告与模板]")).toHaveAttribute("title", "Render");
+  expect(screen.getByText("ERROR")).toBeVisible();
+  expect(screen.getByTitle("日志调用位置")).toBeVisible();
+  expect(screen.getByTitle("日志调用位置")).toHaveTextContent("Renderer.generate()");
+  expect(screen.getByText("报告与模板")).toHaveAttribute("title", "Render");
   fireEvent.click(screen.getByRole("button", { name: "复制日志" }));
   await screen.findByText("无法复制，请手动选择日志内容。");
   expect(copyToClipboard).toHaveBeenCalledWith("原始日志文本");
@@ -113,6 +113,9 @@ it("日志复制尊重真实结果，并保留错误级别、来源和快捷键"
     key: "a",
     ctrlKey: true,
   });
+  expect(copyToClipboard).toHaveBeenCalledTimes(1);
+  expect(window.getSelection()?.toString()).toContain("ERROR");
+  fireEvent.click(screen.getByRole("button", { name: "复制日志" }));
   await screen.findByText("已复制日志");
 });
 
@@ -138,3 +141,36 @@ it("正式详情保留完整记录并可打开嵌套报告预览，关闭返回�
   );
   expect(preview).toHaveFocus();
 });
+
+it.each(["ctrlKey", "metaKey"] as const)(
+  "%s+A 只选择任务日志，不复制或移动阅读位置，更新日志仍保留滚动",
+  async (modifier) => {
+    const log: PluginLogItem = {
+      id: "selection-log",
+      timestamp: 1,
+      time_str: "12:00:00",
+      level: "WARNING",
+      logger_name: "Render",
+      tag: "Render",
+      message: "需要检查网络",
+      raw: "原文",
+    };
+    const view = render(<TraceLogViewer logs={[log]} />);
+    const region = screen.getByRole("region", { name: "任务日志内容" });
+    region.focus();
+    region.scrollTop = 140;
+    const prevented = !fireEvent.keyDown(region, { key: "a", [modifier]: true });
+    expect(prevented).toBe(true);
+    expect(copyToClipboard).not.toHaveBeenCalled();
+    expect(window.getSelection()?.toString()).toContain("需要检查网络");
+    expect(window.getSelection()?.toString()).not.toContain("复制日志");
+    expect(region).toHaveFocus();
+    expect(region.scrollTop).toBe(140);
+    view.rerender(
+      <TraceLogViewer logs={[log, { ...log, id: "new-log", message: "新到达的记录" }]} />,
+    );
+    expect(screen.getByRole("region", { name: "任务日志内容" })).toBe(region);
+    expect(region.scrollTop).toBe(140);
+    expect(screen.getByText("新到达的记录")).toBeInTheDocument();
+  },
+);
