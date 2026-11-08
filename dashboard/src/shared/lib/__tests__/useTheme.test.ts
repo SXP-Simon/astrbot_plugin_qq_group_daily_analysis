@@ -1,14 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { AstrBotContext } from "../../api/bridge";
+import { getHostThemeStyles } from "../themeColors";
 
 const fetchContext = vi.hoisted(() => vi.fn());
-vi.mock("../../api/bridge", () => ({ fetchContext }));
+vi.mock("../../api/bridge", () => ({
+  fetchContext,
+  subscribeContext: (callback: (context: AstrBotContext) => void) =>
+    window.AstrBotPluginPage?.onContext?.(callback) ?? (() => {}),
+}));
 
 describe("宿主主题同步", () => {
   beforeEach(() => {
     vi.resetModules();
     localStorage.clear();
     document.documentElement.className = "";
+    document.documentElement.style.cssText = "";
     delete document.documentElement.dataset.theme;
     delete window.AstrBotPluginPage;
   });
@@ -68,4 +75,72 @@ describe("宿主主题同步", () => {
     await Promise.resolve();
     expect(document.documentElement).toHaveClass("dark");
   });
+});
+
+it("只更新颜色也会通知图表订阅，缺失颜色恢复默认且不修改状态语义色", async () => {
+  vi.resetModules();
+  document.documentElement.style.cssText = "--warning: #aa8800; --destructive: #bb1111;";
+  let notify!: (context: AstrBotContext) => void;
+  fetchContext.mockResolvedValue({ isDark: false });
+  window.AstrBotPluginPage = {
+    ready: async () => ({}),
+    onContext: (callback) => {
+      notify = callback;
+      return () => {};
+    },
+    apiGet: async () => null,
+    apiPost: async () => null,
+    subscribeSSE: async () => "test",
+    unsubscribeSSE: () => {},
+  };
+  const { useTheme } = await import("../useTheme");
+  const { result, unmount } = renderHook(() => useTheme());
+  await waitFor(() => expect(result.current.isDark).toBe(false));
+  const before = result.current.revision;
+  act(() => notify({ isDark: false, themeColors: { primary: "#123456", secondary: "#abcdef" } }));
+  expect(result.current.revision).toBeGreaterThan(before);
+  expect(result.current.isDark).toBe(false);
+  expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
+    getHostThemeStyles({ primary: "#123456" }, false)["--primary"],
+  );
+  expect(document.documentElement.style.getPropertyValue("--primary-foreground")).toBe("#ffffff");
+  const stable = result.current.revision;
+  act(() => notify({ isDark: false, themeColors: { primary: "#123456", secondary: "#abcdef" } }));
+  expect(result.current.revision).toBe(stable);
+  act(() => notify({ isDark: true }));
+  expect(document.documentElement.style.getPropertyValue("--primary")).toBe("");
+  expect(document.documentElement.style.getPropertyValue("--secondary")).toBe("");
+  expect(document.documentElement.style.getPropertyValue("--warning")).toBe("#aa8800");
+  expect(document.documentElement.style.getPropertyValue("--destructive")).toBe("#bb1111");
+  unmount();
+});
+
+it("只含配色的较新通知也优先于迟到的初始化结果", async () => {
+  vi.resetModules();
+  document.documentElement.style.cssText = "";
+  let notify!: (context: AstrBotContext) => void;
+  let resolve!: (context: AstrBotContext) => void;
+  fetchContext.mockReturnValue(
+    new Promise<AstrBotContext>((done) => {
+      resolve = done;
+    }),
+  );
+  window.AstrBotPluginPage = {
+    ready: async () => ({}),
+    onContext: (callback) => {
+      notify = callback;
+      return () => {};
+    },
+    apiGet: async () => null,
+    apiPost: async () => null,
+    subscribeSSE: async () => "test",
+    unsubscribeSSE: () => {},
+  };
+  await import("../useTheme");
+  notify({ themeColors: { primary: "#123456" } });
+  resolve({ isDark: true, themeColors: { primary: "#ffffff" } });
+  await Promise.resolve();
+  expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
+    getHostThemeStyles({ primary: "#123456" }, false)["--primary"],
+  );
 });

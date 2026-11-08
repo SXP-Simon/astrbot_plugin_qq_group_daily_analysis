@@ -1,4 +1,11 @@
-import { devApiGet, devApiPost, devApiUpload, devFetchContext, devSubscribeSSE } from "./devBridge";
+import {
+  devApiGet,
+  devApiPost,
+  devApiUpload,
+  devFetchContext,
+  devSubscribeSSE,
+  devSubscribeContext,
+} from "./devBridge";
 
 /**
  * AstrBot 插件 Page Bridge 通信底层 (Shared API Bridge)
@@ -7,6 +14,7 @@ import { devApiGet, devApiPost, devApiUpload, devFetchContext, devSubscribeSSE }
 
 export interface AstrBotContext {
   isDark?: boolean;
+  themeColors?: { primary?: string; secondary?: string };
   pluginName?: string;
   [key: string]: unknown;
 }
@@ -99,6 +107,13 @@ export async function fetchContext(): Promise<AstrBotContext> {
     return await devFetchContext();
   }
   return { isDark: false, pluginName: "astrbot_plugin_qq_group_daily_analysis" };
+}
+
+export function subscribeContext(callback: (context: AstrBotContext) => void): () => void {
+  const bridge = getBridge();
+  if (typeof bridge?.onContext === "function") return bridge.onContext(callback);
+  if (import.meta.env.DEV && !bridge) return devSubscribeContext(callback);
+  return () => {};
 }
 
 export async function apiGet<T = unknown>(

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { fetchContext, AstrBotContext } from "../api/bridge";
+import { fetchContext, subscribeContext, type AstrBotContext } from "../api/bridge";
+import { getHostThemeStyles, HOST_THEME_PROPERTIES } from "./themeColors";
 
 const THEME_CACHE_KEY = "astrbot_plugin_theme_is_dark";
 
@@ -48,70 +49,61 @@ function getInitialTheme(): boolean {
   return false;
 }
 
-// 全局单例主题状态与多组件订阅总线（杜绝各组件独立 useState 状态失步与竞态）
-let globalIsDark: boolean = getInitialTheme();
-const listeners = new Set<(val: boolean) => void>();
+// 颜色变化也生成新快照，让只订阅主题的图表在深浅模式不变时更新。
+let globalTheme = { isDark: getInitialTheme(), revision: 0 };
+let appliedStyles = "";
+const listeners = new Set<(theme: typeof globalTheme) => void>();
 
-function applyDocumentTheme(isDark: boolean) {
+function updateGlobalTheme(context: AstrBotContext) {
+  const isDark = typeof context.isDark === "boolean" ? context.isDark : globalTheme.isDark;
   document.documentElement.classList.toggle("dark", isDark);
   document.documentElement.dataset.theme = isDark ? "dark" : "light";
-}
-
-function updateGlobalTheme(newVal: boolean) {
-  applyDocumentTheme(newVal);
-  if (globalIsDark !== newVal) {
-    globalIsDark = newVal;
-    try {
-      localStorage.setItem(THEME_CACHE_KEY, String(newVal));
-    } catch {
-      // 忽略存储异常
-    }
-    listeners.forEach((fn) => fn(newVal));
+  const styles = getHostThemeStyles(context.themeColors, isDark);
+  for (const property of HOST_THEME_PROPERTIES) {
+    if (styles[property]) document.documentElement.style.setProperty(property, styles[property]);
+    else document.documentElement.style.removeProperty(property);
   }
+  const styleKey = JSON.stringify(styles);
+  if (isDark === globalTheme.isDark && styleKey === appliedStyles) return;
+  if (isDark !== globalTheme.isDark) {
+    try {
+      localStorage.setItem(THEME_CACHE_KEY, String(isDark));
+    } catch {
+      /* 沙盒可能禁用存储。 */
+    }
+  }
+  appliedStyles = styleKey;
+  globalTheme = { isDark, revision: globalTheme.revision + 1 };
+  listeners.forEach((listener) => listener(globalTheme));
 }
 
-// 统一由全局通信单例监听 AstrBot Host 事件
 if (typeof window !== "undefined") {
-  applyDocumentTheme(globalIsDark);
-  let receivedTheme = false;
+  updateGlobalTheme({ isDark: globalTheme.isDark });
+  let receivedContext = false;
   fetchContext()
-    .then((ctx) => {
-      // 宿主新通知优先于尚未返回的初始化结果。
-      if (!receivedTheme && ctx?.isDark !== undefined) {
-        updateGlobalTheme(!!ctx.isDark);
-      }
+    .then((context) => {
+      // 任何较新的上下文通知都优先于迟到的初始化快照，包括只更新颜色的通知。
+      if (!receivedContext) updateGlobalTheme(context);
     })
     .catch(() => {
-      // 初始通信失败时继续使用 URL 或本地缓存主题。
+      /* 保留 URL、缓存主题及 CSS 默认配色。 */
     });
-
-  const bridge = window.AstrBotPluginPage;
-  if (bridge && typeof bridge.onContext === "function") {
-    bridge.onContext((ctx: AstrBotContext) => {
-      if (ctx?.isDark !== undefined) {
-        receivedTheme = true;
-        updateGlobalTheme(!!ctx.isDark);
-      }
-    });
-  }
+  const unsubscribe = subscribeContext((context) => {
+    receivedContext = true;
+    updateGlobalTheme(context);
+  });
+  if (import.meta.hot) import.meta.hot.dispose(unsubscribe);
 }
 
-/**
- * 监听 AstrBot 宿主暗黑模式状态 Hook (Shared Theme Hook)
- * 全局单例响应式同步，杜绝任何页面与抽屉组件的状态割裂
- */
+/** 订阅宿主深浅模式和配色变化，页面、图表和 Portal 弹层共用同一主题。 */
 export function useTheme() {
-  const [isDark, setIsDark] = useState<boolean>(globalIsDark);
-
+  const [theme, setTheme] = useState(globalTheme);
   useEffect(() => {
-    // 挂载时立即校准为全局最新状态
-    setIsDark(globalIsDark);
-    const handler = (val: boolean) => setIsDark(val);
-    listeners.add(handler);
+    setTheme(globalTheme);
+    listeners.add(setTheme);
     return () => {
-      listeners.delete(handler);
+      listeners.delete(setTheme);
     };
   }, []);
-
-  return { isDark };
+  return theme;
 }

@@ -1,6 +1,8 @@
 import { ApiResponse, AstrBotContext, SSEEventWrapper } from "./bridge";
 import { mockHandlers, mockSSEService } from "../../mocks";
 import { mockFontDownloads } from "../../mocks/data/fontDownloads";
+import { getDevThemeContext } from "./devThemeContext";
+export { devSubscribeContext } from "./devThemeContext";
 
 const PLUGIN_BASE_PATH = "/api/plugins/astrbot_plugin_qq_group_daily_analysis";
 
@@ -94,6 +96,7 @@ export async function devFetchContext(): Promise<AstrBotContext> {
     // 独立页面沿用 URL 或缓存主题，不模拟一条强制亮色的宿主通知。
     pluginName: "astrbot_plugin_qq_group_daily_analysis",
     version: "v5.6.4",
+    ...getDevThemeContext(),
   };
 }
 
