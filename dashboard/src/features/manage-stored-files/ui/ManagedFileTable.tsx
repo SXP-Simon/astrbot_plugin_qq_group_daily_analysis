@@ -32,7 +32,7 @@ export function ManagedFileTable({
       aria-busy={vm.loading}
     >
       <table
-        className={`w-full table-fixed border-collapse text-left text-sm ${hasReferences ? "min-w-[67.5rem]" : "min-w-[50rem]"}`}
+        className={`ui-data-table w-full table-fixed border-collapse text-left text-sm ${hasReferences ? "min-w-[67.5rem]" : "min-w-[50rem]"}`}
       >
         <colgroup>
           {partition.deletable && <col className="w-12" />}
@@ -78,7 +78,11 @@ export function ManagedFileTable({
         </thead>
         <tbody>
           {vm.files.map((file) => (
-            <tr key={file.name} className="border-t border-border align-top hover:bg-muted/30">
+            <tr
+              key={file.name}
+              aria-selected={partition.deletable ? selected.has(file.name) : undefined}
+              className="border-t border-border align-top"
+            >
               {partition.deletable && (
                 <td className="p-3">
                   <input
@@ -146,7 +150,7 @@ export function ManagedFileTable({
               <td className="p-3">
                 {file.downloadable ? (
                   <Button
-                    variant="outline"
+                    variant="tonal"
                     size="sm"
                     disabled={locked}
                     onClick={() =>

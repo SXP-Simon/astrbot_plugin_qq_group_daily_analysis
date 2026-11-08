@@ -64,6 +64,7 @@ it("本页全选保留跨页选择，取消本页只移除当前文件", async (
   );
   fireEvent.click(screen.getByRole("checkbox", { name: "选择本页文件（最多 200）" }));
   expect(selectFiles).toHaveBeenLastCalledWith(["older.png", "example.png"]);
+  expect(screen.getByText("example.png").closest("tr")).toHaveAttribute("aria-selected", "false");
   rerender(
     <ManagedFileList
       vm={{ ...vm, selected: [...vm.selected, file] }}
@@ -73,6 +74,7 @@ it("本页全选保留跨页选择，取消本页只移除当前文件", async (
   );
   fireEvent.click(screen.getByRole("checkbox", { name: "选择本页文件（最多 200）" }));
   expect(selectFiles).toHaveBeenLastCalledWith(["older.png"]);
+  expect(screen.getByText("example.png").closest("tr")).toHaveAttribute("aria-selected", "true");
 });
 
 it("首次加载在表格内占位，刷新保留已读行，不短暂显示空结果", async () => {
