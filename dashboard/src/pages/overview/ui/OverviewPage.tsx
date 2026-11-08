@@ -42,7 +42,37 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
           {feedback}
         </p>
       )}
-      <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,1fr)]">
+      <section aria-labelledby="overview-metrics" className="min-w-0">
+        <h2 id="overview-metrics" className="m-0 mb-4 text-lg font-medium">
+          分析统计
+        </h2>
+        {errors.metrics && (
+          <p role="alert" className="text-sm text-destructive">
+            {errors.metrics}
+          </p>
+        )}
+        <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-4">
+          {summaries.map(([label, value, unit]) => (
+            <div key={label}>
+              <dt className="text-sm text-muted-foreground">{label}</dt>
+              <dd className="m-0 mt-1 text-xl tabular-nums">
+                {value ?? "未读取"}
+                {value !== undefined && (
+                  <span className="ml-1 text-xs text-muted-foreground">{unit}</span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+      {metrics && (
+        <OverviewTrendCharts
+          initialTrends={metrics.trends}
+          totalTraces={metrics.total_traces}
+          totalTokens={metrics.total_tokens_spent}
+        />
+      )}
+      <div className="grid min-w-0 items-start gap-8 border-0 border-t border-solid border-border pt-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,1fr)]">
         <div className="min-w-0" aria-busy={loading}>
           {errors.tasks && (
             <p role="alert" className="mb-3 text-sm text-destructive">
@@ -122,39 +152,6 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
           )}
         </section>
       </div>
-      <section
-        aria-labelledby="overview-metrics"
-        className="border-0 border-t border-solid border-border pt-5"
-      >
-        <h2 id="overview-metrics" className="m-0 mb-4 text-lg font-medium">
-          分析统计
-        </h2>
-        {errors.metrics && (
-          <p role="alert" className="text-sm text-destructive">
-            {errors.metrics}
-          </p>
-        )}
-        <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-4">
-          {summaries.map(([label, value, unit]) => (
-            <div key={label}>
-              <dt className="text-sm text-muted-foreground">{label}</dt>
-              <dd className="m-0 mt-1 text-xl tabular-nums">
-                {value ?? "未读取"}
-                {value !== undefined && (
-                  <span className="ml-1 text-xs text-muted-foreground">{unit}</span>
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-      {metrics && (
-        <OverviewTrendCharts
-          initialTrends={metrics.trends}
-          totalTraces={metrics.total_traces}
-          totalTokens={metrics.total_tokens_spent}
-        />
-      )}
     </div>
   );
 }

@@ -52,7 +52,7 @@ describe("总览页面", () => {
     ]);
   });
 
-  it("并行任务和问题在统计之前；诊断、中止和发起入口保持可用", async () => {
+  it("统计置顶，任务与提醒在趋势后展示；诊断、中止和发起入口保持可用", async () => {
     const vm = viewModel();
     vm.attentionTraces = [
       {
@@ -66,7 +66,7 @@ describe("总览页面", () => {
     const onOpenTrigger = vi.fn();
     render(<OverviewPage viewModel={vm} onViewTrace={onViewTrace} onOpenTrigger={onOpenTrigger} />);
     const headings = screen.getAllByRole("heading", { level: 2 }).map((node) => node.textContent);
-    expect(headings).toEqual(["正在执行中的分析任务 2 运行中", "需要关注", "分析统计"]);
+    expect(headings).toEqual(["分析统计", "正在执行中的分析任务 2 运行中", "需要关注"]);
     expect(screen.getByText("趋势图区域")).toBeVisible();
     expect(screen.getByText("今日模型消耗")).toBeVisible();
     expect(screen.getByText("近30天模型消耗")).toBeVisible();
