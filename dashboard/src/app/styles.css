@@ -15,6 +15,9 @@
   --color-popover-foreground: var(--foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-control: var(--primary-control);
+  --color-primary-control-foreground: var(--primary-control-foreground);
+  --color-primary-control-hover: var(--primary-control-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--foreground);
   --color-primary-soft: var(--primary-soft);
@@ -52,6 +55,9 @@
   --default-secondary: #4b9994;
   --primary: var(--default-primary);
   --primary-foreground: #263513;
+  --primary-control: color-mix(in srgb, var(--primary) 14%, var(--background));
+  --primary-control-hover: color-mix(in srgb, var(--primary) 20%, var(--background));
+  --primary-control-foreground: color-mix(in srgb, var(--primary) 38%, #000);
   --secondary-color: var(--default-secondary);
   --secondary: color-mix(in srgb, var(--secondary-color) 14%, var(--background));
   --primary-soft: color-mix(in srgb, var(--primary) 12%, transparent);
@@ -89,6 +95,9 @@
   --default-secondary: #7cb7af;
   --primary: var(--default-primary);
   --primary-foreground: #202b14;
+  --primary-control: color-mix(in srgb, var(--primary) 18%, var(--background));
+  --primary-control-hover: color-mix(in srgb, var(--primary) 24%, var(--background));
+  --primary-control-foreground: color-mix(in srgb, var(--primary) 35%, #fff);
   --secondary-color: var(--default-secondary);
   --secondary: color-mix(in srgb, var(--secondary-color) 14%, var(--background));
   --secondary-ink: color-mix(in srgb, var(--secondary-color) 65%, #fff);
