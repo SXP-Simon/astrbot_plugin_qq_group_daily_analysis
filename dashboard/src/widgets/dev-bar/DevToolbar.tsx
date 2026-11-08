@@ -15,16 +15,14 @@ import { NativeSelect } from "../../shared/ui/native-select";
 import { Switch } from "../../shared/ui/switch";
 import { getDevThemeContext, setDevThemeContext } from "../../shared/api/devThemeContext";
 import { useTheme } from "../../shared/lib/useTheme";
+import { getDefaultThemeColors } from "../../shared/lib/themeColors";
 
 export function DevToolbar() {
   const mode = getDevBridgeMode();
   const { isDark } = useTheme();
+  const defaults = getDefaultThemeColors();
   const [palette, setPalette] = useState(
-    () =>
-      getDevThemeContext().themeColors ?? {
-        primary: "#4f7fd9",
-        secondary: "#a18ad1",
-      },
+    () => getDevThemeContext().themeColors ?? getDefaultThemeColors(),
   );
   const [customColors, setCustomColors] = useState(() => Boolean(getDevThemeContext().themeColors));
 
@@ -126,16 +124,19 @@ export function DevToolbar() {
           <Button
             variant="outline"
             size="sm"
-            disabled={!customColors}
+            disabled={
+              palette.primary === defaults.primary && palette.secondary === defaults.secondary
+            }
             onClick={() => {
-              setCustomColors(false);
-              setDevThemeContext({ isDark });
+              const next = getDefaultThemeColors();
+              setPalette(next);
+              setDevThemeContext({ isDark, ...(customColors ? { themeColors: next } : {}) });
             }}
           >
             恢复插件默认配色
           </Button>
           <p className="m-0 text-xs text-muted-foreground">
-            仅保存在当前浏览器，不修改插件配置。警告和错误色保持不变。
+            开关控制模拟，恢复按钮只重置颜色。仅缓存在当前浏览器，警告和错误色不变。
           </p>
         </fieldset>
       </DialogContent>
