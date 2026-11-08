@@ -36,6 +36,10 @@ it("搜索需明确提交，清空立即生效，切换类型保留已提交条�
   expect(await screen.findByText(one.name)).toBeInTheDocument();
   expect(screen.getByText("0 B")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("checkbox", { name: `选择记录 ${one.name}` }));
+  expect(screen.getByRole("row", { name: new RegExp(one.name) })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   expect(screen.getByText(/已选 1 项/)).toBeInTheDocument();
   fireEvent.change(screen.getByRole("searchbox", { name: "搜索业务记录" }), {
     target: { value: "string-id" },
@@ -46,6 +50,10 @@ it("搜索需明确提交，清空立即生效，切换类型保留已提交条�
     expect(fetchManagedRecords).toHaveBeenLastCalledWith("history", "string-id", 1),
   );
   expect(screen.getByText(/已选 0 项/)).toBeInTheDocument();
+  expect(screen.getByRole("row", { name: new RegExp(one.name) })).toHaveAttribute(
+    "aria-selected",
+    "false",
+  );
   fireEvent.click(screen.getByRole("radio", { name: "头像缓存" }));
   await waitFor(() =>
     expect(fetchManagedRecords).toHaveBeenLastCalledWith("avatar", "string-id", 1),

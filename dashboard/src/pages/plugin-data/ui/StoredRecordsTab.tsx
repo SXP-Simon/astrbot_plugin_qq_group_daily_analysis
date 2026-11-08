@@ -143,8 +143,8 @@ export function StoredRecordsTab({ onlyKind }: { onlyKind?: "avatar" | "history"
         className="overflow-x-auto rounded-xl border border-border focus-visible:outline-2 focus-visible:outline-ring"
         aria-busy={loading}
       >
-        <table className="w-full min-w-[600px] text-left text-sm">
-          <thead className="bg-muted/60 text-muted-foreground">
+        <table className="ui-data-table w-full min-w-[600px] text-left text-sm">
+          <thead className="text-muted-foreground">
             <tr>
               <th className="w-10 p-3 font-medium">
                 <input
@@ -172,7 +172,11 @@ export function StoredRecordsTab({ onlyKind }: { onlyKind?: "avatar" | "history"
             {items.map((item) => {
               const key = recordKey(item.locator);
               return (
-                <tr key={key} className="border-t border-border hover:bg-muted/30">
+                <tr
+                  key={key}
+                  aria-selected={selection.keys.includes(key)}
+                  className="border-t border-border"
+                >
                   <td className="p-3">
                     <input
                       type="checkbox"
@@ -200,9 +204,8 @@ export function StoredRecordsTab({ onlyKind }: { onlyKind?: "avatar" | "history"
                   </td>
                   <td className="p-3">
                     <Button
-                      variant="ghost"
+                      variant="tonal"
                       size="sm"
-                      className="bg-info/10 text-info hover:bg-info/15"
                       disabled={selection.busy || loading}
                       onClick={() => setSelected(item.locator)}
                     >
