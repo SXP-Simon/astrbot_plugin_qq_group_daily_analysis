@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useId } from "react";
 import { IconRefresh } from "@tabler/icons-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
@@ -66,9 +67,7 @@ export function ResumeTaskModal({
               ))}
             </NativeSelect>
             {vm.loadingProviders && (
-              <span role="status" className="text-sm text-muted-foreground">
-                正在加载模型…
-              </span>
+              <LoadingState className="text-sm text-muted-foreground">正在加载模型…</LoadingState>
             )}
             {vm.providerError && (
               <div role="alert" className="text-sm text-destructive">
@@ -94,9 +93,7 @@ export function ResumeTaskModal({
               ))}
             </NativeSelect>
             {vm.loadingTemplates && (
-              <span role="status" className="text-sm text-muted-foreground">
-                正在加载模板…
-              </span>
+              <LoadingState className="text-sm text-muted-foreground">正在加载模板…</LoadingState>
             )}
             {vm.templateError && (
               <div role="alert" className="text-sm text-destructive">

@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { IconAlertTriangle, IconUpload } from "@tabler/icons-react";
+import { IconLoader2, IconAlertTriangle, IconUpload } from "@tabler/icons-react";
 import type { useManagedFiles } from "../model/useManagedFiles";
 import type { FileDraft } from "../model/fileDraft";
 import { Button } from "../../../shared/ui/button";
@@ -86,7 +86,15 @@ export function FileEditorDialog({
               }}
             />
             <span className="flex gap-2 text-muted-foreground">
-              <IconUpload size={16} aria-hidden="true" />
+              {vm.uploading ? (
+                <IconLoader2
+                  size={16}
+                  aria-hidden="true"
+                  className="animate-spin motion-reduce:animate-none"
+                />
+              ) : (
+                <IconUpload size={16} aria-hidden="true" />
+              )}
               {vm.uploading ? "正在读取所选文件…" : "已载入文件内容，可选择新的替换文件。"}
             </span>
           </label>

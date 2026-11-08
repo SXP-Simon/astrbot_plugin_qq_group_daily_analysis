@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useManagedFonts, type ManagedFontRow } from "../model/useManagedFonts";
 import { useBrowserFontDownload } from "../model/useBrowserFontDownload";
 import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
@@ -189,11 +190,13 @@ export function ManagedFontTable({
           {!vm.pageRows.length && (
             <tr>
               <td colSpan={7} className="p-6 text-center text-muted-foreground">
-                {vm.loading
-                  ? "正在读取字体…"
-                  : vm.status
-                    ? "没有符合条件的字体"
-                    : "尚未读取到字体状态，请重试"}
+                {vm.loading ? (
+                  <LoadingState skeleton>正在读取字体…</LoadingState>
+                ) : vm.status ? (
+                  "没有符合条件的字体"
+                ) : (
+                  "尚未读取到字体状态，请重试"
+                )}
               </td>
             </tr>
           )}

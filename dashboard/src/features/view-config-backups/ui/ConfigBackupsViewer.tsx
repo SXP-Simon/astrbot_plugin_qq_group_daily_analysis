@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { IconHistory, IconRefresh } from "@tabler/icons-react";
 import { Button } from "../../../shared/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
@@ -46,9 +47,9 @@ export function ConfigBackupsViewer() {
             </p>
           )}
           {vm.loading ? (
-            <p role="status" className="py-6 text-center text-muted-foreground">
+            <LoadingState className="py-6 text-center text-muted-foreground">
               正在读取备份列表…
-            </p>
+            </LoadingState>
           ) : vm.items.length > 0 ? (
             <>
               <ul aria-label="配置备份" className="m-0 list-none divide-y divide-border p-0">
@@ -113,9 +114,7 @@ export function ConfigBackupsViewer() {
             </p>
           ) : null}
           {vm.detailLoading && (
-            <p role="status" className="text-sm text-muted-foreground">
-              正在读取备份…
-            </p>
+            <LoadingState className="text-sm text-muted-foreground">正在读取备份…</LoadingState>
           )}
           {vm.detailError && (
             <p role="alert" className="m-0 text-sm text-destructive">

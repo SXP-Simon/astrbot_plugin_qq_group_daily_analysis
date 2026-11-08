@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { IconRefresh, IconTrash } from "@tabler/icons-react";
 import { templateCapabilities } from "../../../entities/report/model/templates";
 import { useTemplateRemoval } from "../model/useTemplateRemoval";
@@ -70,9 +71,9 @@ export function TemplateUninstallModal({
               </p>
             )}
             {vm.loading && (
-              <p role="status" className="m-0 text-sm text-muted-foreground">
+              <LoadingState className="m-0 text-sm text-muted-foreground">
                 正在读取自定义模板…
-              </p>
+              </LoadingState>
             )}
             <ul
               className="m-0 max-h-96 list-none divide-y divide-border overflow-auto p-0"

@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { IconFile, IconCopy } from "@tabler/icons-react";
 import { toast } from "sonner";
 import type { ManagedPartition } from "../../../entities/plugin-data/api/managedFilesApi";
@@ -185,7 +186,7 @@ export function ManagedFileTable({
                 colSpan={4 + Number(partition.deletable) + Number(hasReferences)}
                 className="h-40 p-8 text-center text-muted-foreground"
               >
-                <span role="status">正在读取文件列表…</span>
+                <LoadingState>正在读取文件列表…</LoadingState>
               </td>
             </tr>
           )}

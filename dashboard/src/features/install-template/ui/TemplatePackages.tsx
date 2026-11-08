@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useEffect, useRef, useState } from "react";
 import { IconCopy, IconLoader2, IconRefresh, IconTrash } from "@tabler/icons-react";
 import { templateCapabilities } from "../../../entities/report/model/templates";
@@ -94,9 +95,7 @@ export function TemplatePackages({
         </Button>
       </div>
       {(loading || vm.loading) && (
-        <p role="status" className="m-0 text-sm text-muted-foreground">
-          正在读取模板信息…
-        </p>
+        <LoadingState className="m-0 text-sm text-muted-foreground">正在读取模板信息…</LoadingState>
       )}
       {vm.error && (
         <div role="alert" className="rounded-xl bg-warning/10 p-3 text-sm text-warning">

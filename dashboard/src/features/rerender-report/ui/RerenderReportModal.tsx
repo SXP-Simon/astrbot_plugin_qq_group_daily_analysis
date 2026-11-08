@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useId } from "react";
 import type { ReportItem } from "../../../entities/report/model/types";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
@@ -92,9 +93,7 @@ export function RerenderReportModal({
               ))}
             </NativeSelect>
             {vm.loadingTemplates && (
-              <span role="status" className="text-sm text-muted-foreground">
-                正在读取模板…
-              </span>
+              <LoadingState className="text-sm text-muted-foreground">正在读取模板…</LoadingState>
             )}
             {vm.templatesReady && !vm.templateOptions.length && (
               <p role="status" className="m-0 text-sm text-muted-foreground">

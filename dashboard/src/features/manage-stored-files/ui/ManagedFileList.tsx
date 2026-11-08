@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { IconRefresh, IconUpload, IconSearch, IconX, IconTrash } from "@tabler/icons-react";
+import {
+  IconLoader2,
+  IconRefresh,
+  IconUpload,
+  IconSearch,
+  IconX,
+  IconTrash,
+} from "@tabler/icons-react";
 import type {
   ManagedFile,
   ManagedPartition,
@@ -114,7 +121,14 @@ export function ManagedFileList({
               }}
             />
             <Button variant="outline" disabled={locked} onClick={() => upload.current?.click()}>
-              <IconUpload aria-hidden="true" />
+              {vm.uploading ? (
+                <IconLoader2
+                  aria-hidden="true"
+                  className="animate-spin motion-reduce:animate-none"
+                />
+              ) : (
+                <IconUpload aria-hidden="true" />
+              )}
               {vm.uploading ? "正在读取文件…" : "上传文件"}
             </Button>
           </>

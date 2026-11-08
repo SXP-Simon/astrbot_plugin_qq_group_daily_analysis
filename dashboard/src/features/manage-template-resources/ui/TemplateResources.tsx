@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useContext, useEffect, useId, useState } from "react";
 import { IconRefresh, IconUpload } from "@tabler/icons-react";
 import { TEMPLATE_CDN_PRESETS } from "../../../entities/config/model/renderingConfig";
@@ -123,9 +124,7 @@ export function TemplateResources({
         </Button>
       </div>
       {vm.loading && (
-        <p role="status" className="m-0 text-sm text-muted-foreground">
-          正在读取素材状态…
-        </p>
+        <LoadingState className="m-0 text-sm text-muted-foreground">正在读取素材状态…</LoadingState>
       )}
       {vm.progress.total > 0 && (
         <>

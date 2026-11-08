@@ -1,3 +1,4 @@
+import { LoadingState } from "../../../shared/ui/loading-state";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ConnectedPlatform } from "../../../entities/task/api/taskApi";
 import type { LLMProviderItem } from "../../../entities/trace/api/traceApi";
@@ -213,9 +214,9 @@ export function TriggerTaskModal({
                 ))}
               </NativeSelect>
               {field.loading && (
-                <span role="status" className="text-xs text-muted-foreground">
+                <LoadingState className="text-xs text-muted-foreground">
                   正在读取{field.label}…
-                </span>
+                </LoadingState>
               )}
             </div>
           ))}
