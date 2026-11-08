@@ -404,3 +404,163 @@ it("旧查询期间先知晓再撤销，null 回执也不会被旧的知晓时�
   expect(result.current.attentionTraces[0].acknowledged_at).toBeNull();
   expect(result.current.acknowledgedCount).toBe(0);
 });
+
+it("同一短窗口的结束事件与中止回执只刷新一轮，任务立即从运行列表移除", async () => {
+  vi.useFakeTimers();
+  vi.mocked(cancelActiveTask).mockResolvedValue(true);
+  vi.mocked(fetchActiveTasks).mockResolvedValue([
+    task,
+    { ...task, task_id: "b" },
+    { ...task, task_id: "c" },
+  ]);
+  const { result } = renderHook(() => useOverviewViewModel());
+  await act(async () => {});
+  act(() => {
+    result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "WEB" } });
+    result.current.handleSSEEvent({ event: "task_timed_out", data: { task_id: "b" } });
+  });
+  await act(() => result.current.handleCancelTask("c"));
+  act(() => result.current.handleSSEEvent({ event: "task_canceled", data: { task_id: "c" } }));
+  expect(result.current.activeTasks).toEqual([]);
+  await act(() => vi.advanceTimersByTimeAsync(99));
+  expect(fetchTraceList).toHaveBeenCalledTimes(1);
+  await act(() => vi.advanceTimersByTimeAsync(1));
+  expect(fetchTraceList).toHaveBeenCalledTimes(2);
+  expect(fetchActiveTasks).toHaveBeenCalledTimes(2);
+  expect(fetchMetricsSummary).toHaveBeenCalledTimes(2);
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchTraceList).toHaveBeenCalledTimes(2);
+});
+
+it("慢刷新期间的多个结束事件最多补一轮，期间的知晓回执不会被查询覆盖", async () => {
+  vi.useFakeTimers();
+  const trace = {
+    ...mockTraces[0],
+    trace_id: "notice",
+    status: "failed" as const,
+    acknowledged_at: null,
+  };
+  vi.mocked(fetchTraceList).mockResolvedValue({ items: [trace], total: 1 });
+  vi.mocked(acknowledgeTrace).mockResolvedValue({ trace_id: trace.trace_id, acknowledged_at: 123 });
+  const { result } = renderHook(() => useOverviewViewModel());
+  await act(async () => {});
+  const pending = deferred<Awaited<ReturnType<typeof fetchTraceList>>>();
+  vi.mocked(fetchTraceList).mockReturnValueOnce(pending.promise);
+  act(() => result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "WEB" } }));
+  await act(() => vi.advanceTimersByTimeAsync(100));
+  expect(fetchTraceList).toHaveBeenCalledTimes(2);
+  act(() => {
+    for (let i = 0; i < 10; i++)
+      result.current.handleSSEEvent({ event: "task_finished", data: { task_id: `batch-${i}` } });
+  });
+  await act(() => result.current.handleAcknowledge(trace.trace_id, true));
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchTraceList).toHaveBeenCalledTimes(2);
+  await act(async () => pending.resolve({ items: [trace], total: 1 }));
+  expect(result.current.acknowledgedCount).toBe(1);
+  vi.mocked(fetchTraceList).mockResolvedValue({
+    items: [{ ...trace, acknowledged_at: 123 }],
+    total: 1,
+  });
+  await act(() => vi.advanceTimersByTimeAsync(100));
+  expect(fetchTraceList).toHaveBeenCalledTimes(3);
+  expect(result.current.acknowledgedCount).toBe(1);
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchTraceList).toHaveBeenCalledTimes(3);
+});
+
+it("手动刷新立即执行并吸收尚未开始的自动刷新", async () => {
+  vi.useFakeTimers();
+  const { result } = renderHook(() => useOverviewViewModel());
+  await act(async () => {});
+  act(() => result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "WEB" } }));
+  await act(() => result.current.refresh(false));
+  expect(fetchTraceList).toHaveBeenCalledTimes(2);
+  expect(result.current.loading).toBe(false);
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchTraceList).toHaveBeenCalledTimes(2);
+});
+
+it("旧的慢手动请求不能覆盖后发自动刷新得到的历史与统计", async () => {
+  vi.useFakeTimers();
+  const { result } = renderHook(() => useOverviewViewModel());
+  await act(async () => {});
+  const old = deferred<Awaited<ReturnType<typeof fetchTraceList>>>();
+  vi.mocked(fetchTraceList).mockReturnValueOnce(old.promise);
+  let manual!: Promise<void>;
+  act(() => {
+    manual = result.current.refresh(false);
+  });
+  const recent = { ...mockTraces[0], trace_id: "new", status: "failed" as const };
+  vi.mocked(fetchTraceList).mockResolvedValue({ items: [recent], total: 1 });
+  const metrics = { ...mockMetricsSummary, total_traces: 1000 };
+  vi.mocked(fetchMetricsSummary).mockResolvedValue(metrics);
+  act(() => result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "WEB" } }));
+  await act(() => vi.advanceTimersByTimeAsync(100));
+  expect(result.current.attentionTraces.map((trace) => trace.trace_id)).toEqual(["new"]);
+  await act(async () => {
+    old.resolve({ items: [], total: 0 });
+    await manual;
+  });
+  expect(result.current.attentionTraces.map((trace) => trace.trace_id)).toEqual(["new"]);
+  expect(result.current.metrics).toEqual(metrics);
+});
+
+it("离开总览清除待执行刷新，返回的新队列不受旧慢请求阻塞", async () => {
+  vi.useFakeTimers();
+  const view = renderHook(({ active }) => useOverviewViewModel(active), {
+    initialProps: { active: true },
+  });
+  await act(async () => {});
+  act(() =>
+    view.result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "WEB" } }),
+  );
+  view.rerender({ active: false });
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchTraceList).toHaveBeenCalledTimes(1);
+  view.rerender({ active: true });
+  await act(async () => {});
+  expect(fetchTraceList).toHaveBeenCalledTimes(2);
+  const old = deferred<Awaited<ReturnType<typeof fetchTraceList>>>();
+  vi.mocked(fetchTraceList).mockReturnValueOnce(old.promise);
+  act(() => view.result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "b" } }));
+  await act(() => vi.advanceTimersByTimeAsync(100));
+  expect(fetchTraceList).toHaveBeenCalledTimes(3);
+  act(() =>
+    view.result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "old-queued" } }),
+  );
+  view.rerender({ active: false });
+  view.rerender({ active: true });
+  await act(async () => {});
+  expect(fetchTraceList).toHaveBeenCalledTimes(4);
+  act(() =>
+    view.result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "fresh" } }),
+  );
+  await act(() => vi.advanceTimersByTimeAsync(100));
+  expect(fetchTraceList).toHaveBeenCalledTimes(5);
+  await act(async () => old.resolve({ items: [], total: 0 }));
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchTraceList).toHaveBeenCalledTimes(5);
+  act(() =>
+    view.result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "unmounted" } }),
+  );
+  view.unmount();
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchTraceList).toHaveBeenCalledTimes(5);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("自动刷新部分失败保留已有数据，不会形成无限重试", async () => {
+  vi.useFakeTimers();
+  const { result } = renderHook(() => useOverviewViewModel());
+  await act(async () => {});
+  vi.mocked(fetchMetricsSummary).mockRejectedValueOnce(new Error("网络中断"));
+  act(() => result.current.handleSSEEvent({ event: "task_finished", data: { task_id: "WEB" } }));
+  await act(() => vi.advanceTimersByTimeAsync(100));
+  expect(result.current.metrics).toEqual(mockMetricsSummary);
+  expect(result.current.errors.metrics).toContain("未能更新");
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchMetricsSummary).toHaveBeenCalledTimes(2);
+  await act(() => result.current.refresh());
+  expect(result.current.errors.metrics).toBe("");
+});

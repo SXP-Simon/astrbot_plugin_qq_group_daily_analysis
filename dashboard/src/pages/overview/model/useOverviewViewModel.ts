@@ -34,6 +34,11 @@ export function useOverviewViewModel(active = true) {
   const [acknowledgementError, setAcknowledgementError] = useState("");
   const acknowledging = useRef(new Set<string>());
   const requestId = useRef<{ acknowledgements: Map<string, number | null> } | null>(null);
+  const autoRefresh = useRef<{
+    timer: ReturnType<typeof setTimeout> | null;
+    running: boolean;
+    queued: boolean;
+  }>({ timer: null, running: false, queued: false });
   const taskRevision = useRef(0);
   const endedTasks = useRef(new Set<string>());
   const cancelling = useRef(new Set<string>());
@@ -43,6 +48,11 @@ export function useOverviewViewModel(active = true) {
 
   const loadData = useCallback(async (silent = false) => {
     if (!mounted.current || !activeRef.current) return;
+    // 手动刷新也覆盖尚未开始的自动刷新，不再额外排队读取。
+    const scheduled = autoRefresh.current;
+    if (scheduled.timer !== null) clearTimeout(scheduled.timer);
+    scheduled.timer = null;
+    scheduled.queued = false;
     const request = { acknowledgements: new Map<string, number | null>() };
     requestId.current = request;
     const revision = taskRevision.current;
@@ -83,6 +93,32 @@ export function useOverviewViewModel(active = true) {
     setLoading(false);
   }, []);
 
+  const scheduleRefresh = useCallback(() => {
+    if (!mounted.current || !activeRef.current) return;
+    const scheduled = autoRefresh.current;
+    scheduled.queued = true;
+    if (scheduled.timer !== null || scheduled.running) return;
+    // 固定短窗口合并密集事件；请求期间的新事件只在完成后补一轮。
+    const flush = async () => {
+      scheduled.timer = null;
+      if (scheduled !== autoRefresh.current || !mounted.current || !activeRef.current) return;
+      scheduled.running = true;
+      try {
+        await loadData(true);
+      } finally {
+        scheduled.running = false;
+        if (
+          scheduled === autoRefresh.current &&
+          scheduled.queued &&
+          mounted.current &&
+          activeRef.current
+        )
+          scheduled.timer = setTimeout(() => void flush(), 100);
+      }
+    };
+    scheduled.timer = setTimeout(() => void flush(), 100);
+  }, [loadData]);
+
   const handleSSEEvent = useCallback(
     (eventPayload: unknown) => {
       if (!mounted.current) return;
@@ -116,10 +152,10 @@ export function useOverviewViewModel(active = true) {
         setActiveTasks((previous) =>
           previous.filter((task) => task.task_id !== finished.data.task_id),
         );
-        void loadData(true);
+        scheduleRefresh();
       }
     },
-    [loadData],
+    [scheduleRefresh],
   );
 
   const handleCancelTask = async (taskId: string): Promise<boolean> => {
@@ -134,7 +170,7 @@ export function useOverviewViewModel(active = true) {
           endedTasks.current.delete(endedTasks.current.values().next().value!);
         setActiveTasks((previous) => previous.filter((task) => task.task_id !== taskId));
         setFeedback("中止请求已接受，后台正在清理资源。");
-        void loadData(true);
+        scheduleRefresh();
       }
       return accepted;
     } catch {
@@ -177,10 +213,15 @@ export function useOverviewViewModel(active = true) {
     };
   }, []);
   useEffect(() => {
+    const scheduled = autoRefresh.current;
     if (active) void loadData(false);
     else setLoading(false);
     return () => {
       requestId.current = null;
+      if (scheduled.timer !== null) clearTimeout(scheduled.timer);
+      scheduled.queued = false;
+      // 隐藏再进入后使用新队列，旧请求完成不能阻塞或触发新一轮读取。
+      autoRefresh.current = { timer: null, running: false, queued: false };
     };
   }, [active, loadData]);
   const hasActiveTasks = activeTasks.length > 0;
