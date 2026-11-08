@@ -118,8 +118,13 @@ export async function devApiGet<T = unknown>(
     }
   }
 
-  // 模拟异步网络延迟 (30ms ~ 100ms)
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // 开发时通过 mockDelay 检查慢加载，默认 50ms，限制在 0–5000ms；Proxy 不受影响。
+  const rawDelay = new URLSearchParams(window.location.search).get("mockDelay");
+  const delay =
+    rawDelay !== null && Number.isFinite(Number(rawDelay))
+      ? Math.min(5000, Math.max(0, Number(rawDelay)))
+      : 50;
+  await new Promise((resolve) => setTimeout(resolve, delay));
   const res = matchMockHandler("GET", path, params);
   return res as ApiResponse<T>;
 }

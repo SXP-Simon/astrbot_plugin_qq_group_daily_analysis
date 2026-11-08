@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { getDevBridgeMode, setDevBridgeMode } from "../devBridge";
+import { devApiGet, getDevBridgeMode, setDevBridgeMode } from "../devBridge";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -28,4 +28,24 @@ it("无显式参数时校验缓存模式，未知旧值不会进入虚假的代�
     localStorage: { getItem: () => "unexpected" },
   });
   expect(getDevBridgeMode()).toBe("mock");
+});
+
+it.each([
+  ["1000", 1000],
+  ["invalid", 50],
+  ["999999", 5000],
+])("Mock 读取延迟可调且有上限：%s", async (input, delay) => {
+  vi.useFakeTimers();
+  vi.stubGlobal("window", { location: { search: `?devMode=mock&mockDelay=${input}` } });
+  try {
+    const finished = vi.fn();
+    const request = devApiGet("metrics/summary").then(finished);
+    await vi.advanceTimersByTimeAsync(Number(delay) - 1);
+    expect(finished).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await request;
+    expect(finished).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
 });

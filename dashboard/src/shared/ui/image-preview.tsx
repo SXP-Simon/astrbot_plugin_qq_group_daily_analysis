@@ -1,3 +1,4 @@
+import { LoadingState } from "./loading-state";
 import { useEffect, useState } from "react";
 import {
   IconArrowLeft,
@@ -179,13 +180,12 @@ export function ImagePreview({
           ) : (
             <>
               {(loading || (src && loaded !== src)) && (
-                <p
-                  role="status"
+                <LoadingState
                   aria-label="图片加载状态"
                   className="p-4 text-sm text-muted-foreground"
                 >
                   正在加载预览…
-                </p>
+                </LoadingState>
               )}
               {!loading && !src && (
                 <p className="p-4 text-sm text-muted-foreground">此项没有可用的预览图片。</p>
