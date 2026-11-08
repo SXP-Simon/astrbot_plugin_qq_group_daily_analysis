@@ -59,7 +59,7 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
         role="region"
         aria-label="阶段快照列表"
       >
-        <table className="w-full min-w-[1100px] text-left text-sm">
+        <table className="ui-data-table w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-muted/60 text-muted-foreground">
             <tr>
               <th className="w-10 p-3 font-medium">
@@ -92,7 +92,11 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
               const key = keys[index];
               const bytes = item.data_size_bytes ?? item.data_size;
               return (
-                <tr key={key} className="border-t border-border hover:bg-muted/30">
+                <tr
+                  key={key}
+                  aria-selected={selection.keys.includes(key)}
+                  className="border-t border-border"
+                >
                   <td className="p-3">
                     <input
                       type="checkbox"
@@ -122,7 +126,7 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                       {item.stage_name}
                     </div>
                   </td>
-                  <td className="max-w-44 break-all p-3 font-mono text-xs text-info">
+                  <td className="max-w-44 break-all p-3 font-mono text-xs text-secondary-ink">
                     {item.trace_id || "按天保存，未关联任务"}
                   </td>
                   <td className="whitespace-nowrap p-3 tabular-nums">
@@ -138,8 +142,7 @@ export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="bg-info/10 text-info hover:bg-info/15"
+                        variant="tonal"
                         disabled={vm.loadingCheckpoints}
                         onClick={() => void vm.handleOpenCkptDetail(item)}
                       >

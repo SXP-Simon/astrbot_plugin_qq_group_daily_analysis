@@ -28,6 +28,9 @@ it("分区用途、完整路径和管理能力可见，管理操作传递原分�
   expect(row).toHaveTextContent("data/typst/fonts");
   expect(row).toHaveTextContent("补齐 / 替换 / 移除");
   expect(row).toHaveTextContent("< 1%");
+  const meter = within(row).getByRole("meter", { name: "Typst 字体占总空间" });
+  expect(meter).toHaveAttribute("aria-valuenow", "0.3");
+  expect(meter).toHaveAttribute("aria-valuemax", "100");
   fireEvent.click(within(row).getByRole("button", { name: "管理" }));
   expect(select).toHaveBeenCalledWith(partition);
   expect(screen.getByRole("region", { name: "存储分区表格，可横向滚动" })).toHaveAttribute(

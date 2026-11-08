@@ -79,6 +79,7 @@ it("跨页选择保持，换筛选后清除选择", () => {
   const { rerender } = render(<CheckpointsTab vm={vm} />);
   fireEvent.click(screen.getByRole("checkbox", { name: "选择本页快照" }));
   expect(screen.getByText("已选 1 项（最多 200）")).toBeInTheDocument();
+  expect(screen.getByText("trace-a").closest("tr")).toHaveAttribute("aria-selected", "true");
   rerender(
     <CheckpointsTab
       vm={{ ...vm, checkpointsPage: 2, checkpoints: [{ ...item, trace_id: "b" }] }}

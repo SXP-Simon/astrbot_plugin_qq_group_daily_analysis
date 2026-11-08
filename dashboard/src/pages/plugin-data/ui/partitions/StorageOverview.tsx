@@ -20,7 +20,7 @@ export function StorageOverview({
   return (
     <>
       <dl className="m-0 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl bg-info/10 p-4">
+        <div className="rounded-xl bg-primary-soft p-4">
           <dt className="text-sm text-muted-foreground">插件文件占用</dt>
           <dd className="m-0 mt-1 text-2xl tabular-nums">
             {unavailable ? "—" : formatBytes(totalBytes)}
@@ -36,7 +36,7 @@ export function StorageOverview({
           </dd>
           <dd className="m-0 mt-1 text-sm text-muted-foreground">按用途提供管理入口</dd>
         </div>
-        <div className="rounded-xl bg-primary/10 p-4">
+        <div className="rounded-xl bg-secondary-soft p-4">
           <dt className="text-sm text-muted-foreground">字体与原始素材</dt>
           <dd className="m-0 mt-1 text-2xl tabular-nums">
             {unavailable ? "—" : formatBytes(assetBytes)}
@@ -80,7 +80,7 @@ export function StorageOverview({
           role="region"
           aria-label="存储分区表格，可横向滚动"
         >
-          <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+          <table className="ui-data-table w-full min-w-[860px] border-collapse text-left text-sm">
             <thead className="bg-muted/60 text-muted-foreground">
               <tr>
                 <th scope="col" className="p-3 font-medium">
@@ -110,7 +110,7 @@ export function StorageOverview({
                     ? Math.min(100, Math.max(0, (item.size_bytes / totalBytes) * 100))
                     : 0;
                 return (
-                  <tr key={item.key} className="border-t border-border hover:bg-muted/30">
+                  <tr key={item.key} className="border-t border-border">
                     <th scope="row" className="w-56 p-3 font-normal">
                       <span className="font-medium">{item.name}</span>
                       <code className="mt-1 block max-w-56 break-all text-xs text-muted-foreground">
@@ -118,7 +118,7 @@ export function StorageOverview({
                       </code>
                     </th>
                     <td className="p-3 text-right tabular-nums">{item.count}</td>
-                    <td className="whitespace-nowrap p-3 text-right tabular-nums">
+                    <td className="whitespace-nowrap p-3 text-right tabular-nums text-secondary-ink">
                       {formatBytes(item.size_bytes)}
                     </td>
                     <td className="p-3">
@@ -127,10 +127,15 @@ export function StorageOverview({
                       </span>
                       <div
                         className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"
-                        aria-hidden="true"
+                        role="meter"
+                        aria-label={`${item.name}占总空间`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={ratio}
+                        aria-valuetext={`${Number(ratio.toFixed(1))}%`}
                       >
                         <div
-                          className="h-full rounded-full bg-info/60"
+                          className="h-full rounded-full bg-secondary-ink/50"
                           style={{ width: `${ratio}%` }}
                         />
                       </div>
@@ -141,7 +146,7 @@ export function StorageOverview({
                         {partitionPresentation[item.key]?.capabilities.map((label) => (
                           <span
                             key={label}
-                            className="rounded-md bg-info/10 px-2 py-0.5 text-xs text-info"
+                            className={`rounded-md px-2 py-0.5 text-xs ${["custom_templates", "config_files", "typst_fonts", "template_resources"].includes(item.key) ? "bg-primary-soft text-primary-ink" : "bg-secondary-soft text-secondary-ink"}`}
                           >
                             {label}
                           </span>
@@ -149,7 +154,7 @@ export function StorageOverview({
                       </div>
                     </td>
                     <td className="p-3">
-                      <Button variant="outline" size="sm" onClick={() => onSelect(item)}>
+                      <Button variant="tonal" size="sm" onClick={() => onSelect(item)}>
                         管理
                       </Button>
                     </td>

@@ -139,7 +139,7 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
             role="region"
             aria-label="增量批次列表"
           >
-            <table className="w-full min-w-[1050px] text-left text-sm">
+            <table className="ui-data-table w-full min-w-[1050px] text-left text-sm">
               <thead className="bg-muted/60 text-muted-foreground">
                 <tr>
                   <th className="w-10 p-3 font-medium">
@@ -180,7 +180,11 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                     batch_id: item.batch_id,
                   });
                   return (
-                    <tr key={key} className="border-t border-border hover:bg-muted/30">
+                    <tr
+                      key={key}
+                      aria-selected={selection.keys.includes(key)}
+                      className="border-t border-border"
+                    >
                       <td className="p-3">
                         <input
                           type="checkbox"
@@ -199,7 +203,7 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                       </td>
                       <td className="max-w-48 p-3">
                         <span
-                          className="block truncate font-mono text-xs text-info"
+                          className="block truncate font-mono text-xs text-secondary-ink"
                           title={item.batch_id}
                         >
                           {item.batch_id}
@@ -221,7 +225,7 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                               <span
                                 key={index}
                                 title={topic.topic}
-                                className="max-w-56 truncate rounded-md bg-warning/10 px-2 py-1 text-xs text-warning"
+                                className="max-w-56 truncate rounded-md bg-secondary-soft px-2 py-1 text-xs text-secondary-ink"
                               >
                                 {topic.topic || "未命名话题"}
                               </span>
@@ -240,8 +244,7 @@ export function IncrementalTab({ vm }: { vm: ReturnType<typeof usePluginDataView
                         <div className="flex items-center gap-1.5 whitespace-nowrap">
                           <Button
                             size="sm"
-                            variant="ghost"
-                            className="bg-info/10 text-info hover:bg-info/15"
+                            variant="tonal"
                             disabled={loadingIncremental}
                             onClick={() => void vm.handleOpenBatchDetail(item)}
                           >

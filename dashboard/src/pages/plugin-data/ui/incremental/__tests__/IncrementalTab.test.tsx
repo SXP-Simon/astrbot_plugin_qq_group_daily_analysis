@@ -158,6 +158,10 @@ it("分页选择保留其他页，取消本页全选不会清空其他页", () =
   expect(screen.getByText(/已选 1 项/)).toBeVisible();
   rerender(<IncrementalTab vm={{ ...vm, incrBatches: [batch("first")] }} />);
   expect(screen.getByLabelText("选择批次 first")).toBeChecked();
+  expect(screen.getByLabelText("选择批次 first").closest("tr")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
 });
 
 it("增量群聊可按群名或群号搜索，同号群选择携带平台身份", () => {
