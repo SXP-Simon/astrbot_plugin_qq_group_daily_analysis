@@ -198,6 +198,7 @@ export function FieldRenderer({
     if (type === "template_list")
       return (
         <TemplateListRenderer
+          templateCdnBaseUrl={templateCdnBaseUrl}
           fieldKey={fieldKey}
           fieldSchema={fieldSchema}
           value={value}

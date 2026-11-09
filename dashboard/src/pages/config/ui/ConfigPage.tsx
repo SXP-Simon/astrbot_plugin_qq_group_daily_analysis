@@ -10,6 +10,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import type { useConfigViewModel } from "../model/useConfigViewModel";
+import { ComicRotationDialog } from "../../../features/manage-comic-rotation/ui/ComicRotationDialog";
 import { FieldRenderer } from "../../../widgets/config-form/ui/FieldRenderer";
 import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
 import { Button } from "../../../shared/ui/button";
@@ -176,6 +177,7 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
                 <h2 className="m-0 text-lg font-medium">
                   {vm.activeGroupMeta.description || vm.activeCategory}
                 </h2>
+                {vm.activeCategory === "daily_comic" && <ComicRotationDialog />}
                 {(vm.modifiedFields[vm.activeCategory]?.size ?? 0) > 0 && (
                   <span className="rounded-md bg-primary-soft px-2 py-0.5 text-sm text-primary-ink">
                     已修改 {vm.modifiedFields[vm.activeCategory].size} 项

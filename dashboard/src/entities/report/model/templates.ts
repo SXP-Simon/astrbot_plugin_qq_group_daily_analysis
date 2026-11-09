@@ -150,7 +150,8 @@ export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
 export const GITHUB_REPO_OWNER = "SXP-Simon";
 export const GITHUB_REPO_NAME = "astrbot_plugin_qq_group_daily_analysis";
 export const GITHUB_REPO_BRANCH = "main";
-export function getTemplateCdnUrl(
+
+export function getReportTemplatePreviewUrl(
   templateKey: string,
   cdnBaseUrl: string | null,
 ): string | undefined {

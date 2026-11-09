@@ -1,3 +1,4 @@
+import { comicPreviewLabel } from "../../../entities/comic/model/comicPresets";
 import { LoadingState } from "../../../shared/ui/loading-state";
 import { IconFile, IconCopy } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -112,9 +113,11 @@ export function ManagedFileTable({
                     className="min-w-0 font-mono text-xs leading-relaxed [overflow-wrap:anywhere]"
                     title={file.name}
                   >
-                    {templatePrefix && file.name.startsWith(templatePrefix)
-                      ? file.name.slice(templatePrefix.length)
-                      : file.name}
+                    {partition.key === "comic_preview_cache"
+                      ? comicPreviewLabel(file.name)
+                      : templatePrefix && file.name.startsWith(templatePrefix)
+                        ? file.name.slice(templatePrefix.length)
+                        : file.name}
                   </span>
                 </span>
               </td>

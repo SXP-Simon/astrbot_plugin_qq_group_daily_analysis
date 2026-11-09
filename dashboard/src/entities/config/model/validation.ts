@@ -94,6 +94,20 @@ export function buildFieldZodSchema(fieldKey: string, field: SchemaFieldItem): z
               return;
             }
             const data = item as Record<string, unknown>;
+            if (
+              fieldKey === "comic_styles" &&
+              data.preset_id === "custom" &&
+              [data.name, data.prompt_override].some(
+                (text) => typeof text !== "string" || !text.trim(),
+              )
+            ) {
+              ctx.addIssue({
+                code: "custom",
+                path: [index],
+                message: `第 ${index + 1} 个自定义风格请填写名称和分镜提示词`,
+              });
+              return;
+            }
             const templates = field.templates;
             if (templates && Object.keys(templates).length) {
               const key =

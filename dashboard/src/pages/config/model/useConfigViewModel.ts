@@ -306,8 +306,11 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
       const groupDesc = group.description || key;
       const items = group.items || {};
 
-      const visibleItems = Object.entries(items).filter(([, item]) =>
-        isFieldVisible(item, formData),
+      const visibleItems = Object.entries(items).filter(
+        ([fieldKey, item]) =>
+          isFieldVisible(item, formData) &&
+          (fieldKey !== "comic_style_scope" ||
+            (formData.daily_comic?.comic_style_mode ?? "fixed") !== "fixed"),
       );
 
       let matchCount = 0;
@@ -361,6 +364,11 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
       .filter(([fieldKey, item]) => {
         // 过滤 schema 中声明为不可见或当前不满足 condition 的字段
         if (!isFieldVisible(item, formData)) return false;
+        if (
+          fieldKey === "comic_style_scope" &&
+          (formData.daily_comic?.comic_style_mode ?? "fixed") === "fixed"
+        )
+          return false;
         if (!q || groupMatches) return true;
         const desc = (item.description || "").toLowerCase();
         const hint = (item.hint || "").toLowerCase();

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchReportHistory } from "../../../entities/report/api/reportApi";
+import { fetchReportHistory, type ReportKind } from "../../../entities/report/api/reportApi";
 import { fetchGroupSessions } from "../../../entities/group/api/groupApi";
 import type { ReportItem } from "../../../entities/report/model/types";
 import type { GroupItem } from "../../../entities/group/model/types";
@@ -11,6 +11,7 @@ interface ReportQuery {
   search: string;
   selectedGroup?: string;
   selectedPlatform?: string;
+  reportType?: ReportKind;
   dateRange: [number, number] | null;
   sortOrder: "desc" | "asc";
 }
@@ -74,6 +75,7 @@ export function useReportsViewModel() {
           start_time: query.dateRange?.[0],
           end_time: query.dateRange?.[1],
           sort_order: query.sortOrder,
+          ...(query.reportType ? { report_type: query.reportType } : {}),
         });
         if (!active) return;
         const lastPage = Math.max(1, Math.ceil(result.total / query.pageSize));
@@ -132,6 +134,8 @@ export function useReportsViewModel() {
     setSortOrder: (sortOrder: "desc" | "asc") =>
       setQuery((current) => ({ ...current, sortOrder, page: 1 })),
     total,
+    setReportType: (reportType?: ReportKind) =>
+      setQuery((current) => ({ ...current, reportType, page: 1 })),
     setSearch: (search: string) => setQuery((current) => ({ ...current, search, page: 1 })),
     setSelectedPlatform: (selectedPlatform?: string) =>
       setQuery((current) => ({ ...current, selectedPlatform, selectedGroup: undefined, page: 1 })),

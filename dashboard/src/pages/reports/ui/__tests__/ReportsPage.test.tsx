@@ -111,6 +111,22 @@ it("日期与排序应用于全局查询，日期错误不请求，清空后恢�
   expect(await screen.findByRole("list", { name: "报告文件" })).toBeVisible();
 });
 
+it("群漫画筛选交给服务端，清空筛选后恢复全部类型", async () => {
+  render(<Page />);
+  await screen.findByRole("list", { name: "报告文件" });
+  vi.mocked(fetchReportHistory).mockResolvedValueOnce({ items: [comic], total: 1 });
+  fireEvent.change(screen.getByLabelText("报告类型"), { target: { value: "comic" } });
+  await waitFor(() =>
+    expect(fetchReportHistory).toHaveBeenLastCalledWith(
+      expect.objectContaining({ report_type: "comic", offset: 0 }),
+    ),
+  );
+  expect(screen.queryByText(image.filename)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "清空筛选" }));
+  expect(screen.getByLabelText("报告类型")).toHaveValue("");
+  expect(await screen.findByText(image.filename)).toBeVisible();
+});
+
 it("换模板仍使用保存的报告身份，成功后刷新第一页；列表失败可重试", async () => {
   vi.mocked(fetchReportHistory).mockRejectedValueOnce(new Error("宿主暂不可用"));
   render(<Page />);

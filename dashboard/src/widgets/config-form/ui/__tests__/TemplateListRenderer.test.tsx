@@ -76,7 +76,7 @@ it("新增保留预设默认值并复制嵌套数据，编辑和排序保留未�
     { __template_key: "first", name: "第一类", mode: "local", options: { values: ["示例"] } },
   ]);
   expect(first[2].options).not.toBe(second[2].options);
-  vm.change(0, "name", "新名称");
+  vm.change(0, { name: "新名称" });
   expect(change).toHaveBeenLastCalledWith([{ ...initial[0], name: "新名称" }, initial[1]]);
   vm.move(0, 1);
   expect(change).toHaveBeenLastCalledWith([initial[1], initial[0]]);

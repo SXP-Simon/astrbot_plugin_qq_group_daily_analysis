@@ -106,6 +106,11 @@ export const partitionPresentation: Record<
     filters: imageFilters,
     empty: "暂无模板预览缓存；打开模板画廊生成预览后会自动建立。",
   },
+  comic_preview_cache: {
+    capabilities: ["样图预览 / 下载", "重新获取", "多选清理"],
+    filters: [],
+    empty: "暂无漫画样图缓存。可选择风格获取样图，群聊预览也会按需建立缓存。",
+  },
   hosted_reports: {
     capabilities: ["HTML 预览", "下载 / 多选删除", "分享链接维护"],
     filters: [{ value: "html,htm", label: "HTML" }],

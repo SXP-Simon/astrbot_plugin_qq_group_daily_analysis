@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchTemplatePreview } from "../api/reportApi";
-import { getTemplateCdnUrl } from "./templates";
+import { getReportTemplatePreviewUrl } from "./templates";
 
 /** 自定义图片经插件读取；内置示例沿用所选 CDN，切换时不展示旧模板。 */
 export function useTemplatePreview(
@@ -32,7 +32,7 @@ export function useTemplatePreview(
   if (!enabled || !templateId) return { src: null, loading: false, error: "" };
   if (!isCustom)
     return {
-      src: getTemplateCdnUrl(templateId, cdnBaseUrl) ?? null,
+      src: getReportTemplatePreviewUrl(templateId, cdnBaseUrl) ?? null,
       loading: false,
       error: cdnBaseUrl === null ? "CDN 地址无效，请先修改图片渲染策略。" : "",
     };

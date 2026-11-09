@@ -21,6 +21,8 @@ export function ReportsPage({ viewModel: vm, onViewTrace }: ReportsPageProps) {
     <div className="space-y-5">
       <ReportFilterBar
         search={vm.search}
+        reportType={vm.reportType}
+        onReportTypeChange={vm.setReportType}
         selectedPlatform={vm.selectedPlatform}
         onPlatformChange={vm.setSelectedPlatform}
         selectedGroup={vm.selectedGroup}

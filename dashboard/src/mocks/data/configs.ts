@@ -1,4 +1,5 @@
 import configSchema from "../../../../_conf_schema.json";
+import type { ComicRotationEntry } from "../../entities/comic/api/comicApi";
 import { z } from "zod";
 import {
   pluginConfigResponseSchema,
@@ -35,7 +36,43 @@ export const mockPluginConfig: PluginConfigData = {
 };
 
 let configVersion = 0;
+const mockRotationDate = new Date().toLocaleDateString("sv-SE");
+let mockRotation: ComicRotationEntry[] = [
+  {
+    platform_id: null,
+    group_id: null,
+    last_style_name: "原版漫画",
+    last_style_number: 1,
+    selected_date: mockRotationDate,
+  },
+  {
+    platform_id: "aiocqhttp",
+    group_id: "123456789",
+    last_style_name: "像素 RPG 每日冒险日志",
+    last_style_number: 2,
+    selected_date: mockRotationDate,
+  },
+];
 export const configMockHandlers = {
+  "GET config/comic-rotation": () => ({
+    status: "ok",
+    data: { items: structuredClone(mockRotation) },
+  }),
+  "POST config/comic-rotation/reset": (body?: Record<string, unknown>) => {
+    if (body?.scope === "all") mockRotation = [];
+    else if (body?.scope === "global")
+      mockRotation = mockRotation.filter((item) => item.group_id !== null);
+    else if (
+      body?.scope === "group" &&
+      typeof body.group_id === "string" &&
+      typeof body.platform_id === "string"
+    )
+      mockRotation = mockRotation.filter(
+        (item) => item.platform_id !== body.platform_id || item.group_id !== body.group_id,
+      );
+    else return { status: "error", message: "请指定有效的轮换范围" };
+    return { status: "ok", data: { success: true } };
+  },
   "GET config": () => ({
     status: "ok",
     data: structuredClone({

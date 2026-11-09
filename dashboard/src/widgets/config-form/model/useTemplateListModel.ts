@@ -22,7 +22,7 @@ export function useTemplateListModel(
     if (typeof item.name === "string" && templates[item.name]) return item.name;
     return templateKeys.find((key) => templates[key].name === item.name) ?? templateKeys[0];
   };
-  const originals: Record<string, unknown>[] = Array.isArray(originalValue)
+  const savedItems: Record<string, unknown>[] = Array.isArray(originalValue)
     ? originalValue.filter(
         (item: unknown): item is Record<string, unknown> =>
           item !== null && typeof item === "object" && !Array.isArray(item),
@@ -30,13 +30,13 @@ export function useTemplateListModel(
     : [];
   const originalItems = items.map((item, index) => {
     // 唯一的名称与类型跟随条目移动；重命名或重名时按原位置比较，不增加持久化身份。
-    const matches = originals.filter(
+    const matches = savedItems.filter(
       (entry) => entry.name === item.name && templateKey(entry) === templateKey(item),
     );
     const currentMatches = items.filter(
       (entry) => entry.name === item.name && templateKey(entry) === templateKey(item),
     );
-    return matches.length === 1 && currentMatches.length === 1 ? matches[0] : originals[index];
+    return matches.length === 1 && currentMatches.length === 1 ? matches[0] : savedItems[index];
   });
   const normalized = () =>
     items.map((item) => ({ ...item, __template_key: templateKey(item) ?? "character" }));
@@ -50,9 +50,9 @@ export function useTemplateListModel(
     }
     onChange([...normalized(), item]);
   };
-  const change = (index: number, field: string, value: unknown) => {
+  const change = (index: number, updates: Record<string, unknown>) => {
     if (!valid || !items[index]) return;
-    onChange(normalized().map((item, i) => (i === index ? { ...item, [field]: value } : item)));
+    onChange(normalized().map((item, i) => (i === index ? { ...item, ...updates } : item)));
   };
   const remove = (index: number) => {
     if (!valid || !items[index]) return;
@@ -67,6 +67,7 @@ export function useTemplateListModel(
   };
   return {
     items,
+    savedItems,
     originalItems,
     valid,
     templates,

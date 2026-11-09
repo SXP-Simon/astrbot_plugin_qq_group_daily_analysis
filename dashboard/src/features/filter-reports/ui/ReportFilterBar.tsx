@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { IconRefresh, IconX } from "@tabler/icons-react";
+import { NativeSelect } from "../../../shared/ui/native-select";
+import type { ReportKind } from "../../../entities/report/api/reportApi";
 import { Input } from "../../../shared/ui/input";
 import { Button } from "../../../shared/ui/button";
 import { GroupFilters } from "../../../entities/group/ui/GroupFilters";
@@ -7,6 +9,8 @@ import type { GroupItem } from "../../../entities/group/model/types";
 
 interface ReportFilterBarProps {
   search: string;
+  reportType?: ReportKind;
+  onReportTypeChange?: (value?: ReportKind) => void;
   selectedGroup?: string;
   selectedPlatform?: string;
   onPlatformChange?: (value?: string) => void;
@@ -86,6 +90,25 @@ export function ReportFilterBar(props: ReportFilterBarProps) {
             />
           </label>
         ))}
+        {props.onReportTypeChange && (
+          <label className="grid min-w-0 gap-1 text-sm text-muted-foreground sm:w-36">
+            报告类型
+            <NativeSelect
+              value={props.reportType ?? ""}
+              onChange={(event) => {
+                const value = event.target.value;
+                props.onReportTypeChange?.(
+                  value === "comic" || value === "image" || value === "html" ? value : undefined,
+                );
+              }}
+            >
+              <option value="">全部类型</option>
+              <option value="comic">群漫画</option>
+              <option value="image">图片报告</option>
+              <option value="html">HTML 报告</option>
+            </NativeSelect>
+          </label>
+        )}
         <Button
           variant="ghost"
           onClick={() => {
