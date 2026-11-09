@@ -8,6 +8,7 @@ import os
 import time
 from io import BytesIO
 from pathlib import Path
+from stat import S_ISREG
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
@@ -29,11 +30,15 @@ class PreviewImageCache:
         self.directory = directory
         self._lock = asyncio.Lock()
 
-    async def get_jpeg(self, source: str) -> str:
+    async def get_jpeg(
+        self, source: str, *, relative_stem: Path | None = None, refresh: bool = False
+    ) -> str:
         """获取本地文件或 HTTP 图片对应的 JPEG 缓存。
 
         Args:
             source: 原图路径、file URI 或 HTTP(S) 地址。
+            relative_stem: 调用方校验过的分组路径与文件名前缀。
+            refresh: 即使命中缓存也重新获取。
 
         Returns:
             可供平台发送的 JPEG 文件绝对路径。
@@ -70,21 +75,40 @@ class PreviewImageCache:
             else:
                 raise ValueError("预览图片地址协议不受支持")
             local = local.resolve()
-            stat = local.stat()
-            if stat.st_size > self.MAX_SOURCE_BYTES:
+            source_stat = local.stat()
+            if source_stat.st_size > self.MAX_SOURCE_BYTES:
                 raise ValueError("预览图片超过 8 MiB")
-            identity = f"{local}:{stat.st_mtime_ns}:{stat.st_size}"
+            identity = f"{local}:{source_stat.st_mtime_ns}:{source_stat.st_size}"
         key = hashlib.sha256(f"jpeg-v1:{identity}".encode()).hexdigest()
         target = self.directory / f"{key}.jpg"
+        if relative_stem is not None:
+            target = (
+                self.directory
+                / relative_stem.parent
+                / f"{relative_stem.name}-{key}.jpg"
+            )
+        if (
+            self.directory.is_symlink()
+            or target.parent.is_symlink()
+            or target.is_symlink()
+        ):
+            raise ValueError("预览缓存路径不能是符号链接")
         lock_started = time.monotonic()
         async with self._lock:
             wait_ms = round((time.monotonic() - lock_started) * 1000)
+            cached = None
+            if not refresh:
+                try:
+                    cached = target.stat()
+                except FileNotFoundError:
+                    pass
             if (
-                target.is_file()
-                and target.stat().st_size
+                cached is not None
+                and S_ISREG(cached.st_mode)
+                and cached.st_size
                 and (
                     not remote
-                    or time.time() - target.stat().st_mtime < self.REMOTE_TTL_SECONDS
+                    or time.time() - cached.st_mtime < self.REMOTE_TTL_SECONDS
                 )
             ):
                 logger.debug(
@@ -146,7 +170,7 @@ class PreviewImageCache:
             raw: 已受大小限制的原图内容。
             target: 此原图对应的缓存文件。
         """
-        self.directory.mkdir(parents=True, exist_ok=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_name(f"{target.stem}.{uuid4().hex}.tmp")
         try:
             with Image.open(BytesIO(raw)) as image:
@@ -164,6 +188,12 @@ class PreviewImageCache:
             os.replace(temporary, target)
         finally:
             temporary.unlink(missing_ok=True)
-        entries = sorted(self.directory.glob("*.jpg"), key=lambda p: p.stat().st_mtime)
-        for expired in entries[: -self.MAX_ENTRIES]:
+        entries: list[tuple[float, Path]] = []
+        for path in self.directory.rglob("*.jpg"):
+            try:
+                entries.append((path.stat().st_mtime, path))
+            except FileNotFoundError:
+                continue
+        entries.sort(key=lambda entry: entry[0])
+        for _, expired in entries[: -self.MAX_ENTRIES]:
             expired.unlink(missing_ok=True)
