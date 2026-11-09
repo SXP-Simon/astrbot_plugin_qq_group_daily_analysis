@@ -292,6 +292,210 @@
         }
       }
     },
+    "/plugin-data/comic-previews/refresh": {
+      "post": {
+        "operationId": "refreshComicPreview",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "success"
+                      ],
+                      "properties": {
+                        "success": {
+                          "const": true
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "输入参数无效"
+          },
+          "500": {
+            "description": "轮换状态无法读写"
+          },
+          "502": {
+            "description": "样图暂时无法获取"
+          },
+          "503": {
+            "description": "缓存未初始化"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "preset_id",
+                  "variant"
+                ],
+                "properties": {
+                  "preset_id": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "enum": [
+                      "thumbnail",
+                      "preview"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/comic-rotation": {
+      "get": {
+        "operationId": "getComicRotation",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "items"
+                      ],
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ComicRotationEntry"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "输入参数无效"
+          },
+          "500": {
+            "description": "轮换状态无法读写"
+          }
+        }
+      }
+    },
+    "/config/comic-rotation/reset": {
+      "post": {
+        "operationId": "resetComicRotation",
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "success"
+                      ],
+                      "properties": {
+                        "success": {
+                          "const": true
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "输入参数无效"
+          },
+          "500": {
+            "description": "轮换状态无法读写"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "scope"
+                ],
+                "properties": {
+                  "scope": {
+                    "enum": [
+                      "global",
+                      "group",
+                      "all"
+                    ]
+                  },
+                  "platform_id": {
+                    "type": "string"
+                  },
+                  "group_id": {
+                    "type": "string"
+                  }
+                },
+                "if": {
+                  "properties": {
+                    "scope": {
+                      "const": "group"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "platform_id",
+                    "group_id"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/plugin-data/files/delete-many": {
       "post": {
         "operationId": "deleteManagedFiles",
@@ -2120,6 +2324,19 @@
         "operationId": "getReportHistory",
         "parameters": [
           {
+            "name": "report_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "comic",
+                "html",
+                "image"
+              ]
+            },
+            "description": "按报告类型筛选；省略时显示全部"
+          },
+          {
             "name": "platform",
             "in": "query",
             "schema": {
@@ -2603,6 +2820,39 @@
           "partition",
           "name",
           "operation"
+        ]
+      },
+      "ComicRotationEntry": {
+        "type": "object",
+        "properties": {
+          "platform_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "group_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_style_name": {
+            "type": "string"
+          },
+          "last_style_number": {
+            "type": "integer"
+          },
+          "selected_date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform_id",
+          "group_id",
+          "last_style_name",
+          "last_style_number",
+          "selected_date"
         ]
       },
       "ManagedFileDeleteMany": {

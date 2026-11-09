@@ -1131,6 +1131,15 @@ def generate_openapi_spec() -> dict[str, object]:
                     "operationId": "getReportHistory",
                     "parameters": [
                         {
+                            "name": "report_type",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "enum": ["comic", "html", "image"],
+                            },
+                            "description": "按报告类型筛选；省略时显示全部",
+                        },
+                        {
                             "name": "platform",
                             "in": "query",
                             "schema": {"type": "string"},

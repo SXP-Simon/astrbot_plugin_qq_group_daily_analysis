@@ -115,6 +115,9 @@ class ReportRoutes:
                     and start_time > end_time
                 ):
                     raise ValueError("开始日期不能晚于结束日期")
+                report_type = request.query.get("report_type", "")
+                if report_type not in {"", "comic", "html", "image"}:
+                    raise ValueError("报告类型不正确")
                 sort_order = request.query.get("sort_order", "desc")
                 if sort_order not in {"asc", "desc"}:
                     raise ValueError("排序方向不正确")
@@ -131,6 +134,7 @@ class ReportRoutes:
                 end_time,
                 sort_order,
                 request.query.get("platform"),
+                report_type,
             )
 
             # 响应数据：标准分页结构 { items, total }，同时顶层保留 items 键兼容部分直接读取
@@ -159,6 +163,7 @@ class ReportRoutes:
         end_time: float | None = None,
         sort_order: str = "desc",
         platform: str | None = None,
+        report_type: str = "",
     ) -> tuple[list[ReportHistoryItemDTO], int]:
         """在线程中完成历史产物查询和旧文件索引补录。
 
@@ -171,6 +176,7 @@ class ReportRoutes:
             end_time: 可选生成时间上界。
             sort_order: 全局生成时间排序方向。
             platform: 平台标识，空字符串筛选未记录平台的产物。
+            report_type: 产物类型，空字符串表示全部。
 
         Returns:
             当前分页记录及过滤后的总数。
@@ -229,6 +235,8 @@ class ReportRoutes:
             platform=platform,
         )
         reports = self._read_indexed_reports(artifacts, candidate_dirs, group_info_map)
+        if report_type:
+            reports = [item for item in reports if item["report_type"] == report_type]
         return reports[query_offset : query_offset + query_limit], len(reports)
 
     def _read_indexed_reports(

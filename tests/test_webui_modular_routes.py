@@ -619,6 +619,24 @@ async def test_report_scan_applies_search_before_pagination(
 
 
 @pytest.mark.asyncio
+async def test_report_type_filters_before_pagination(tmp_path, mock_trace_store, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    for name in ("comic_12345_20261001.png", "漫画_12345_20261002.png", "report_12345_20261003.html"):
+        (reports_dir / name).write_bytes(b"report")
+    route_module = importlib.import_module(ReportRoutes.__module__)
+    monkeypatch.setattr(
+        route_module, "request", MagicMock(query={"report_type": "comic", "limit": "1", "offset": "1"})
+    )
+    routes = ReportRoutes(mock_trace_store, None, report_output_dir=reports_dir)
+    for _ in range(2):
+        result = await routes.api_get_report_history()
+        body = result["data"] if "status" in result.get("data", {}) else result
+        assert body["data"]["total"] == 2
+        assert [item["report_type"] for item in body["data"]["items"]] == ["comic"]
+
+
+@pytest.mark.asyncio
 async def test_rerender_date_does_not_guess_unrelated_latest_trace(
     mock_trace_store, monkeypatch
 ):
