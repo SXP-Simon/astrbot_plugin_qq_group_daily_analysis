@@ -481,7 +481,7 @@
 ## [v5.6.0] - OneBot 方言驱动架构重构、Trace 任务级 Checkpoint 隔离防覆盖与控制台防重入控制
 
 *   **🧩 【架构重构】OneBot 平台适配器方言驱动架构 (Dialect-Driven Architecture) (#241)**：
-    *   **驱动策略层与特定协议端解耦**：引入 `OneBotDriver` 抽象基类与工厂探测体系，按运行时协议端自动路由至对应驱动（NapCat、LLOneBot、SnowLuma、StandardOneBot 等），彻底消除原适配器中大量对特定端点的盲目轮询、冗余 RPC 尝试与异常捕获。
+    *   **驱动策略层与特定协议端解耦**：引入 `OneBotDriver` 抽象基类与工厂探测体系，按运行时协议端自动路由至对应驱动（NapCat、LLOneBot、sl、StandardOneBot 等），彻底消除原适配器中大量对特定端点的盲目轮询、冗余 RPC 尝试与异常捕获。
     *   **协议端真实用户头像探测与负缓存 (#240)**：针对微信/TG/飞书等非 QQ 平台的 OneBot 桥接网关，优先提取协议端资料接口返回的真实头像 URL（正向缓存 1 小时）；未提供时写入 10 分钟负缓存并平滑回退官方 CDN，避免无谓重试。
     *   **相册与群文件结构多态解包**：下沉并精准适配各协议端的相册列表（兼容 `data` 为 `list` 数组或嵌套字典）、相册上传（LLOneBot `files` 列表与 NapCat 流式上传）及群文件根目录多层结构解析。
     *   **全链路可观测日志**：补全方言探测、驱动生命周期、相册轮询与头像正负缓存的诊断日志。
@@ -923,14 +923,14 @@
 
 ## [v4.10.9] - ✨ 新增模板 ”BlueArchive“ 蔚蓝档案 (@VanillaNahida)
 
-## [v4.10.8] - 🛠️ snowluma 被禁言避免触发分析修复 (#191)
+## [v4.10.8] - 🛠️ sl 被禁言避免触发分析修复 (#191)
 
 ## [v4.10.7] - ✨ 被禁言避免触发分析功能浪费 token，重构并优化模型请求的重试与降级补偿机制
 *   **✨ 支持禁言跳过**: 被禁言避免触发分析功能浪费 token (#191)
 *   **✨ 模型请求优化**: 重构并优化模型请求的重试与降级补偿机制 (@Rat0323)
 
-## [v4.10.6] - ✨ 支持 [SnowLuma](https://github.com/SnowLuma/SnowLuma) ，优化 HatsuneMiku 移动端适配情况
-*   **✨ 支持 SnowLuma**: 自动探测是否为 SnowLuma；支持 SnowLuma 的 get_group_msg_history 参数传递情况 (#189  @tryptophawa)。
+## [v4.10.6] - ✨ 支持 sl，优化 HatsuneMiku 移动端适配情况
+*   **✨ 支持 sl**: 自动探测是否为 sl；支持 sl 的 get_group_msg_history 参数传递情况 (#189  @tryptophawa)。
 *   **🛠️ HatsuneMiku 优化**: 优化了移动端直接使用浏览器打开 HTML 时的 UI 排版情况 (#184 @Shiitin)
 
 

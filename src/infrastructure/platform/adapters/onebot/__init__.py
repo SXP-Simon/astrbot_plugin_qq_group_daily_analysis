@@ -8,7 +8,7 @@ from .group_file_manager import OneBotGroupFileManager
 from .llbot_driver import LLOneBotDriver
 from .message_converter import OneBotMessageConverter
 from .napcat_driver import NapCatDriver
-from .snowluma_driver import SnowLumaDriver
+from .sl_driver import SLDriver
 from .standard_driver import StandardOneBotDriver
 
 __all__ = [
@@ -18,6 +18,6 @@ __all__ = [
     "OneBotDriverFactory",
     "OneBotGroupFileManager",
     "OneBotMessageConverter",
-    "SnowLumaDriver",
+    "SLDriver",
     "StandardOneBotDriver",
 ]

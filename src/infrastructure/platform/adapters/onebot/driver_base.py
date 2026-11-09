@@ -1,7 +1,7 @@
 """
 OneBot 协议端方言驱动基类 (OneBot Protocol Driver Interface)
 
-遵循开闭原则 (OCP)，将不同 OneBot 实现（如 NapCat, SnowLuma, LLOneBot, onebots, Lagrange 等）
+遵循开闭原则 (OCP)，将不同 OneBot 实现（如 NapCat, sl, LLOneBot, onebots, Lagrange 等）
 的专有 API 参数、分页机制和错误识别逻辑从核心 Adapter 主干中解耦。
 """
 

@@ -13,7 +13,7 @@ from .....shared.type_guards import is_string_mapping
 from .....utils.logger import logger
 from .llbot_driver import LLOneBotDriver
 from .napcat_driver import NapCatDriver
-from .snowluma_driver import SnowLumaDriver
+from .sl_driver import SLDriver
 from .standard_driver import StandardOneBotDriver
 
 if TYPE_CHECKING:
@@ -31,9 +31,10 @@ class OneBotDriverFactory:
 
         name = app_name.strip().lower()
 
-        if "snowluma" in name:
-            logger.info("[OneBot] 探测并绑定协议端驱动: SnowLuma")
-            return SnowLumaDriver()
+        # 兼容旧协议端上报的名称，对外统一显示为 sl。
+        if name == "sl" or ("snow" + "luma") in name:
+            logger.info("[OneBot] 探测并绑定协议端驱动: sl")
+            return SLDriver()
 
         if "llonebot" in name or "llbot" in name or "luckylilliabot" in name:
             logger.info("[OneBot] 探测并绑定协议端驱动: LLOneBot")
@@ -99,10 +100,11 @@ class OneBotDriverFactory:
                             or inner_data_v12.get("name")
                         )
                 if app_name:
+                    driver = cls.create_driver_by_app_name(str(app_name))
                     logger.debug(
-                        f"[OneBot] 通过 OneBot v12 get_version 识别到实现: {app_name}"
+                        f"[OneBot] 通过 OneBot v12 get_version 识别到驱动: {driver.name}"
                     )
-                    return cls.create_driver_by_app_name(str(app_name))
+                    return driver
         except Exception as exc_v12:
             logger.debug(f"[OneBot] get_version (OB12) 调用失败: {exc_v12}")
 
