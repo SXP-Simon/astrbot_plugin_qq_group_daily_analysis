@@ -692,9 +692,10 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
             for key, value in updates.items():
                 config_obj[key] = value
 
+            save_warnings: list[str] = []
             try:
-                if cfg_mgr:
-                    cfg_mgr.save_config()
+                if cfg_mgr and cfg_mgr.save_config() is False:
+                    save_warnings.append("部分配置刷新未完成")
             except Exception:
                 # 写盘失败时恢复运行中的配置，草稿仍可用原版本重试。
                 for key in updates:
@@ -705,7 +706,6 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 raise
 
             saved_revision = _config_revision(config_obj)
-            save_message = "配置已成功保存并持久化生效"
 
             if self.auto_scheduler is not None and self.context is not None:
                 try:
@@ -718,11 +718,12 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                         )
                 except Exception:
                     logger.warning("配置已保存，但调度刷新未完成。", exc_info=True)
-                    save_message = (
-                        "配置已保存，但调度刷新未完成；请检查运行日志并重新加载插件。"
-                    )
+                    save_warnings.append("调度刷新未完成")
 
             logger.info("WebUI 配置中心已更新并保存插件配置。")
+            save_message = "配置已成功保存并持久化生效"
+            if save_warnings:
+                save_message = f"配置已保存，但{'、'.join(save_warnings)}；请检查运行日志并重新加载插件。"
             # 只返回保存回执；宿主会自动解包 data，回传整份配置会丢失状态和新版本。
             return json_response(
                 {
