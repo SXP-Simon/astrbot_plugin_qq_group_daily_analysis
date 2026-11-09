@@ -23,7 +23,7 @@
   </tr>
 </table>
 
-_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [NapNeko/NapCatQQ<img src="https://avatars.githubusercontent.com/u/165024194?s=200&v=4" width="14px" >](https://napneko.github.io/), [LLOneBot/LuckyLilliaBot<img src="https://avatars.githubusercontent.com/u/161472069?s=200&v=4" width="14px" >](https://www.llonebot.com/), [SnowLuma/SnowLuma<img src="https://avatars.githubusercontent.com/u/216149176?s=200&v=4" width="14px" >](https://snowluma.github.io/))、**QQ 官方机器人**、**Telegram**、**Discord**，未来支持更多平台。 ✨_
+_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [NapNeko/NapCatQQ<img src="https://avatars.githubusercontent.com/u/165024194?s=200&v=4" width="14px" >](https://napneko.github.io/), [LLOneBot/LuckyLilliaBot<img src="https://avatars.githubusercontent.com/u/161472069?s=200&v=4" width="14px" >](https://www.llonebot.com/))、**QQ 官方机器人**、**Telegram**、**Discord**，未来支持更多平台。 ✨_
 
 <img src="https://count.getloli.com/@astrbot-qq-group-daily-analysis?name=astrbot-qq-group-daily-analysis&theme=booru-jaypee&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="count" />
 </div>
@@ -451,7 +451,7 @@ AI:     (自动调用 group_daily_analysis_trigger)
 
 | 平台              | 适配器类型                         | 驱动与方言支持                                                                                                                   | 特殊要求/说明                                                                                                                                                        |
 | ----------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **QQ (OneBot)**   | OneBot v11 / v12                   | **方言驱动架构**：内置 NapCat、LLOneBot (LuckyLilliaBot)、SnowLuma、Standard (go-cqhttp / Lagrange / onebots / WeChatBridge) 驱动 | 插件通过 `get_version_info` / `get_version` 自动探测并动态绑定最佳方言驱动；支持多端群相册、群文件多级解包、协议端真实头像与全链路观测日志。                       |
+| **QQ (OneBot)**   | OneBot v11 / v12                   | **方言驱动架构**：内置 NapCat、LLOneBot (LuckyLilliaBot)、Standard (go-cqhttp / Lagrange / onebots / WeChatBridge) 驱动           | 插件通过 `get_version_info` / `get_version` 自动探测并动态绑定最佳方言驱动；支持多端群相册、群文件多级解包、协议端真实头像与全链路观测日志。                       |
 | **QQ 官方机器人** | QQ Bot API v2（WebSocket/Webhook） | 官方统一 API                                                                                                                     | 需开启群全量消息；只分析启用后实时缓存的消息；图片/HTML 优先显示事件昵称，缺失时使用群内稳定匿名名；Markdown 文本使用成员艾特。                                      |
 | **Discord**       | Discord                            | Discord Gateway                                                                                                                  | **必须** 拥有 `Read Message History` (查看消息历史记录) 权限。                                                                                                       |
 | **Telegram**      | Telegram Bot API                   | Telegram Bot API                                                                                                                 | 若机器人不是群管理员，入群前需先在 BotFather 关闭隐私模式 (`/setprivacy` -> `Disable`)。若机器人已在群内且非管理员，关闭后需要先移出机器人再重新拉入，设置才会生效。 |
@@ -462,8 +462,7 @@ AI:     (自动调用 group_daily_analysis_trigger)
 > 插件采用了开放闭合原则 (OCP) 的**方言驱动解耦架构**，在连接时自动探测后端实现并无缝自适应：
 > 1. **NapCat.Onebot**：支持标准逆序分页、独有的 `upload_file_stream` 分块流式上传大图/兜底、`get_qun_album_list` 群相册列表与协议端真实头像解析。
 > 2. **LLOneBot (LuckyLilliaBot)**：支持相册上传专属 `files` 列表参数、相册列表 `data: list` 数组解包与多层嵌套兼容。
-> 3. **SnowLuma**：支持专属 `message_id` 锚点分页拉取群历史（不传 `reverseOrder`）、精准识别 `result=120` / `rejected` 发送拒绝与禁言错误。
-> 4. **Standard (go-cqhttp / Lagrange / onebots / 微信桥接 WeChatBridge)**：
+> 3. **Standard (go-cqhttp / Lagrange / onebots / 微信桥接 WeChatBridge)**：
 >    - **真实用户头像**：针对微信/企业微信接入等映射数字 ID 场景，优先通过 `get_stranger_info` / `get_user_info` 获取真实头像 URL（带 1 小时正缓存与并发去重），失败时自动回退官方 CDN 并进入 10 分钟负缓存，杜绝重复无效请求。
 >    - **群文件与相册多级解包**：自动兼容 `data.folders`、`data.album_list`、顶层列表等不同协议端返回格式，确保文件夹自动创建与归档不回退。
 >    - **全链路可观测日志**：动作发起、参数目标、原始响应 Payload 与解析降级流转全景上报，方便快速诊断排障。
