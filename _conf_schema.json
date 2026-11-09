@@ -188,7 +188,7 @@
                 "type": "bool",
                 "description": "图片传输使用 Base64 编码",
                 "default": true,
-                "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 协议端，适用于 NapCat / LLOneBot / SnowLuma / Lagrange 等支持本地路径的实现，可降低内存占用。"
+                "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 协议端，适用于 NapCat / LLOneBot / sl / Lagrange 等支持本地路径的实现，可降低内存占用。"
             },
             "napcat_stream_threshold_mb": {
                 "type": "float",
