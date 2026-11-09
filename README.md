@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/当前版本-v6.0.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
+[![Plugin Version](https://img.shields.io/badge/当前版本-v6.0.1-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件市场入口-ff69b4?style=for-the-badge)](https://cloud.astrbot.app/plugin/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot Version](https://img.shields.io/badge/AstrBot-%3E%3D4.24.1-orange.svg?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
@@ -209,7 +209,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 原有的角色人格与参考图继续在「漫画角色方案」设置。已有角色专属正文会继续使用，清空后就跟随风格方案。管理员可用 `/查看漫画风格` 浏览分镜样图，或带上风格序号、名称或 ID 直接打开指定风格。Telegram 和 QQ 官方机器人支持上一张、下一张，OneBot 使用分页合并转发。实际使用的风格在「漫画风格方案」配置，浏览样图不会修改配置或推进轮换。
 
-内置分镜与样图来自 [PR #261](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/pull/261)。
+内置分镜与样图来自 [@凉雨](https://github.com/Liangyu-G)。
 
 每日群漫画不按自然日限流：每次成功得到群分析结果时都会尝试生成一张。手动群分析、定时传统分析、定时增量最终报告，以及开启“增量分析立即报告”后的即时增量最终报告都适用。同一群已有漫画在排队或生成时，新请求会直接跳过，避免重复出图；不同群仍受漫画并发配置限制。
 
