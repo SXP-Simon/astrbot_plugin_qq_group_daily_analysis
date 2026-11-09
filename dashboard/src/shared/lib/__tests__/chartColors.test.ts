@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { color } from "echarts/core";
-import { resolveChartColor } from "../chartColors";
+import { resolveChartColor } from "@/shared/lib/chartColors";
 
 afterEach(() => {
   vi.restoreAllMocks();

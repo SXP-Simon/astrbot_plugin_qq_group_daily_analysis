@@ -1,7 +1,7 @@
 import React from "react";
-import { TraceFilterBar } from "../../../features/filter-traces/ui/TraceFilterBar";
-import { TraceTable } from "../../../widgets/trace-table/TraceTable";
-import { useTracesViewModel } from "../model/useTracesViewModel";
+import { TraceFilterBar } from "@/features/filter-traces/ui/TraceFilterBar";
+import { TraceTable } from "@/widgets/trace-table/TraceTable";
+import { useTracesViewModel } from "@/pages/traces/model/useTracesViewModel";
 
 interface TracesPageProps {
   viewModel: ReturnType<typeof useTracesViewModel>;

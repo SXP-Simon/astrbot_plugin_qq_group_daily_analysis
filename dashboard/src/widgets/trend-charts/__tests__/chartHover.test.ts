@@ -1,8 +1,8 @@
 import { expect, it, vi } from "vitest";
 import { waitFor } from "@testing-library/react";
 import { init } from "echarts";
-import { createOverviewTrendOptions } from "../overviewTrendOptions";
-import { createMockAnalyticsTrends } from "../../../mocks/data/metrics";
+import { createOverviewTrendOptions } from "@/widgets/trend-charts/overviewTrendOptions";
+import { createMockAnalyticsTrends } from "@/mocks/data/metrics";
 
 it.each([0, 1, 2])("真实 SVG 图表反复高亮和取消后仍保留图形颜色：%s", async (index) => {
   const data = createMockAnalyticsTrends();

@@ -1,10 +1,10 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useId } from "react";
-import type { ReportItem } from "../../../entities/report/model/types";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
-import { Button } from "../../../shared/ui/button";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { useRerenderReport } from "../model/useRerenderReport";
+import type { ReportItem } from "@/entities/report/model/types";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/shared/ui/dialog";
+import { Button } from "@/shared/ui/button";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { useRerenderReport } from "@/features/rerender-report/model/useRerenderReport";
 
 interface RerenderReportModalProps {
   open: boolean;

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { GroupFilters } from "../GroupFilters";
+import { GroupFilters } from "@/entities/group/ui/GroupFilters";
 
 const groups = [
   { group_id: "123", group_name: "技术群", platform: "aiocqhttp" },

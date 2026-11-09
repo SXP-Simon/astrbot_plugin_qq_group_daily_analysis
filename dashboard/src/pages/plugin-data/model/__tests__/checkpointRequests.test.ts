@@ -1,17 +1,14 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { useCheckpointsViewModel } from "../useCheckpointsViewModel";
+import { useCheckpointsViewModel } from "@/pages/plugin-data/model/useCheckpointsViewModel";
 import {
   fetchCheckpointGroups,
   fetchCheckpointsList,
   fetchCheckpointDetail,
   deleteCheckpoint,
-} from "../../../../entities/plugin-data/api/pluginDataApi";
-import type {
-  CheckpointDetail,
-  CheckpointsListResponse,
-} from "../../../../entities/plugin-data/model/types";
-vi.mock("../../../../entities/plugin-data/api/pluginDataApi");
+} from "@/entities/plugin-data/api/pluginDataApi";
+import type { CheckpointDetail, CheckpointsListResponse } from "@/entities/plugin-data/model/types";
+vi.mock("@/entities/plugin-data/api/pluginDataApi");
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 beforeEach(() => {
   vi.mocked(fetchCheckpointGroups).mockResolvedValue([]);

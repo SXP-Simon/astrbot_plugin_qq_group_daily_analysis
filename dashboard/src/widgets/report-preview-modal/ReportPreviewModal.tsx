@@ -1,12 +1,12 @@
-import { HtmlPreview } from "../../shared/ui/html-preview";
-import { ImageViewer } from "../../shared/ui/image-preview";
-import { LoadingState } from "../../shared/ui/loading-state";
+import { HtmlPreview } from "@/shared/ui/html-preview";
+import { ImageViewer } from "@/shared/ui/image-preview";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useState } from "react";
 import { IconDownload, IconCopy } from "@tabler/icons-react";
-import type { ReportItem } from "../../entities/report/model/types";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../shared/ui/dialog";
-import { Button } from "../../shared/ui/button";
-import { copyToClipboard } from "../../shared/lib/clipboard";
+import type { ReportItem } from "@/entities/report/model/types";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
+import { Button } from "@/shared/ui/button";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
 interface ReportPreviewModalProps {
   open: boolean;

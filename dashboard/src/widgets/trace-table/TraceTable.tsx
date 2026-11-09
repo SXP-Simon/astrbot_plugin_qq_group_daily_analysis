@@ -1,11 +1,11 @@
 import { IconArrowDown, IconArrowUp, IconArrowsSort, IconEye } from "@tabler/icons-react";
-import type { TraceRecord } from "../../entities/trace/model/types";
-import type { TraceSortField, TraceSortOrder } from "../../entities/trace/model/traceQuery";
-import { StatusTag } from "../../shared/ui/StatusTag";
-import { TriggerTypeTag } from "../../shared/ui/TriggerTypeTag";
-import { Button } from "../../shared/ui/button";
-import { Pagination } from "../../shared/ui/pagination";
-import { formatDuration, formatTokens, formatTimestamp } from "../../shared/lib/formatters";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import type { TraceSortField, TraceSortOrder } from "@/entities/trace/model/traceQuery";
+import { StatusTag } from "@/shared/ui/StatusTag";
+import { TriggerTypeTag } from "@/shared/ui/TriggerTypeTag";
+import { Button } from "@/shared/ui/button";
+import { Pagination } from "@/shared/ui/pagination";
+import { formatDuration, formatTokens, formatTimestamp } from "@/shared/lib/formatters";
 
 interface TraceTableProps {
   traces: TraceRecord[];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isFieldVisible, resolveDependencyValue } from "../useConfigViewModel";
-import type { SchemaFieldItem } from "../../../../entities/config/model/types";
+import { isFieldVisible, resolveDependencyValue } from "@/pages/config/model/useConfigViewModel";
+import type { SchemaFieldItem } from "@/entities/config/model/types";
 
 const field = (extra: Partial<SchemaFieldItem> = {}) =>
   ({ type: "string", ...extra }) as SchemaFieldItem;

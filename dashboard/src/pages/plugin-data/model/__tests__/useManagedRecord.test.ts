@@ -3,13 +3,11 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import {
   fetchManagedRecord,
   mutateManagedRecord,
-} from "../../../../entities/plugin-data/api/managedRecordsApi";
-import { useManagedRecord } from "../useManagedRecord";
+} from "@/entities/plugin-data/api/managedRecordsApi";
+import { useManagedRecord } from "@/pages/plugin-data/model/useManagedRecord";
 
-vi.mock("../../../../entities/plugin-data/api/managedRecordsApi", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("../../../../entities/plugin-data/api/managedRecordsApi")
-  >()),
+vi.mock("@/entities/plugin-data/api/managedRecordsApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/entities/plugin-data/api/managedRecordsApi")>()),
   fetchManagedRecord: vi.fn(),
   mutateManagedRecord: vi.fn(),
 }));

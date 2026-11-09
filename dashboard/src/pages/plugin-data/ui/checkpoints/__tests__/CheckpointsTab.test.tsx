@@ -8,10 +8,10 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { usePluginDataViewModel } from "../../../model/usePluginDataViewModel";
-import { CheckpointsTab } from "../CheckpointsTab";
-import type { RecordLocator } from "../../../../../entities/plugin-data/api/managedRecordsApi";
-vi.mock("../../ManagedRecordDialog", () => ({
+import { usePluginDataViewModel } from "@/pages/plugin-data/model/usePluginDataViewModel";
+import { CheckpointsTab } from "@/pages/plugin-data/ui/checkpoints/CheckpointsTab";
+import type { RecordLocator } from "@/entities/plugin-data/api/managedRecordsApi";
+vi.mock("@/pages/plugin-data/ui/ManagedRecordDialog", () => ({
   ManagedRecordDialog: ({ locator }: { locator: RecordLocator | null }) =>
     locator ? <output aria-label="管理目标">{locator.trace_id}</output> : null,
 }));

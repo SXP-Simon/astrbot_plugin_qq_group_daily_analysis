@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
-import { SpanTimeline } from "../SpanTimeline";
-import type { TraceSpan } from "../../model/types";
-import { buildSpanTree } from "../../model/spanTree";
+import { SpanTimeline } from "@/entities/trace/ui/SpanTimeline";
+import type { TraceSpan } from "@/entities/trace/model/types";
+import { buildSpanTree } from "@/entities/trace/model/spanTree";
 
 it("实际记录为零的阶段与未记录耗时区分", () => {
   render(

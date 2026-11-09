@@ -1,5 +1,5 @@
-import { expandAnalysisPrompt } from "../../config/model/promptSchemes";
-import type { PromptVariable } from "../../config/model/types";
+import { expandAnalysisPrompt } from "@/entities/config/model/promptSchemes";
+import type { PromptVariable } from "@/entities/config/model/types";
 
 export const storyboardVariables: Record<string, PromptVariable> = {
   chat_content: {

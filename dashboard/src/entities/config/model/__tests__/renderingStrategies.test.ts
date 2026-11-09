@@ -1,10 +1,16 @@
-import resourceCases from "../../../../../../tests/data/rendering_resources.json";
-import serviceCases from "../../../../../../tests/data/rendering_services.json";
+import resourceCases from "@plugin-tests/data/rendering_resources.json";
+import serviceCases from "@plugin-tests/data/rendering_services.json";
 import { describe, expect, it } from "vitest";
-import schema from "../../../../../../_conf_schema.json";
-import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../configContract";
-import { renderingRuntimeSchema, renderingStrategySchema } from "../renderingConfig";
-import { validateSingleFieldWithZod } from "../validation";
+import schema from "@plugin-config";
+import {
+  pluginConfigResponseSchema,
+  pluginConfigSaveSchema,
+} from "@/entities/config/model/configContract";
+import {
+  renderingRuntimeSchema,
+  renderingStrategySchema,
+} from "@/entities/config/model/renderingConfig";
+import { validateSingleFieldWithZod } from "@/entities/config/model/validation";
 
 it("Typst 固定排版不保留旧宽度和 PPI 配置", () => {
   const plan = renderingStrategySchema.parse({

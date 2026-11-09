@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { components } from "../../../shared/api/generated/schema";
+import type { components } from "@/shared/api/generated/schema";
 
 export const templateResourceFileSchema = z.object({ name: z.string(), available: z.boolean() });
 export const templateResourceStatusSchema: z.ZodType<

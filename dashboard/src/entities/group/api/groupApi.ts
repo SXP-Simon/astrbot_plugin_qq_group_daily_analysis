@@ -1,6 +1,6 @@
-import { apiGet, extractData } from "../../../shared/api/bridge";
+import { apiGet, extractData } from "@/shared/api/bridge";
 import { z } from "zod";
-import { groupItemSchema, type GroupItem } from "../model/types";
+import { groupItemSchema, type GroupItem } from "@/entities/group/model/types";
 
 let cachedGroups: GroupItem[] | null = null;
 

@@ -1,9 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { fetchReportContent } from "../reportApi";
-import { fetchManagedContent } from "../../../plugin-data/api/managedFilesApi";
-import { apiGet } from "../../../../shared/api/bridge";
-vi.mock("../../../../shared/api/bridge", async (original) => ({
-  ...(await original<typeof import("../../../../shared/api/bridge")>()),
+import { fetchReportContent } from "@/entities/report/api/reportApi";
+import { fetchManagedContent } from "@/entities/plugin-data/api/managedFilesApi";
+import { apiGet } from "@/shared/api/bridge";
+vi.mock("@/shared/api/bridge", async (original) => ({
+  ...(await original<typeof import("@/shared/api/bridge")>()),
   apiGet: vi.fn(),
 }));
 afterEach(() => vi.resetAllMocks());

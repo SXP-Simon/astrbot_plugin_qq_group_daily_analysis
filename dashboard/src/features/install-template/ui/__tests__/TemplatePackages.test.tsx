@@ -1,13 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { TemplatePackages } from "../TemplatePackages";
-import { fetchReportTemplates, uninstallTemplate } from "../../../../entities/report/api/reportApi";
-import { copyToClipboard } from "../../../../shared/lib/clipboard";
-vi.mock("../../../../entities/report/api/reportApi", () => ({
+import { TemplatePackages } from "@/features/install-template/ui/TemplatePackages";
+import { fetchReportTemplates, uninstallTemplate } from "@/entities/report/api/reportApi";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+vi.mock("@/entities/report/api/reportApi", () => ({
   fetchReportTemplates: vi.fn(),
   uninstallTemplate: vi.fn(),
 }));
-vi.mock("../../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 const groups = [
   { directory: "demo", count: 4, size_bytes: 200 },
   { directory: "other", count: 1, size_bytes: 20 },

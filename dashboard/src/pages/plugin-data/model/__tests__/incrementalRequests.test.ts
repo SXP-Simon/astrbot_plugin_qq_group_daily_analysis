@@ -1,14 +1,14 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { usePluginDataViewModel } from "../usePluginDataViewModel";
+import { usePluginDataViewModel } from "@/pages/plugin-data/model/usePluginDataViewModel";
 import {
   fetchIncrementalBatches,
   fetchIncrementalGroupDirectory,
   deleteIncrementalBatch,
   resetIncrementalGroup,
   type IncrementalBatchesResponse,
-} from "../../../../entities/plugin-data/api/pluginDataApi";
-vi.mock("../../../../entities/plugin-data/api/pluginDataApi");
+} from "@/entities/plugin-data/api/pluginDataApi";
+vi.mock("@/entities/plugin-data/api/pluginDataApi");
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 beforeEach(() => {
   vi.mocked(fetchIncrementalGroupDirectory).mockResolvedValue({

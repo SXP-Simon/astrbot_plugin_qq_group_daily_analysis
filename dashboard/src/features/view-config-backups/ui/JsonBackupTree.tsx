@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { BackupJsonValue } from "../../../entities/plugin-data/model/configBackup";
+import type { BackupJsonValue } from "@/entities/plugin-data/model/configBackup";
 
 export function JsonBackupTree({ label, value }: { label: string; value: BackupJsonValue }) {
   const [expanded, setExpanded] = useState(false);

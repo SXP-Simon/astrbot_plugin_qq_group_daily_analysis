@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
-import type { TraceRecord } from "../../entities/trace/model/types";
-import { mockHandlers } from "../handlers";
-import { mockTraces } from "../data/traces";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import { mockHandlers } from "@/mocks/handlers";
+import { mockTraces } from "@/mocks/data/traces";
 
 it("演示列表支持分页及四种排序，总数为筛选后、分页前数量", () => {
   const initialOrder = mockTraces.map((trace) => trace.trace_id);

@@ -1,9 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { fetchTemplatePreview } from "../../api/reportApi";
-import { useTemplatePreview } from "../useTemplatePreview";
+import { fetchTemplatePreview } from "@/entities/report/api/reportApi";
+import { useTemplatePreview } from "@/entities/report/model/useTemplatePreview";
 
-vi.mock("../../api/reportApi", () => ({ fetchTemplatePreview: vi.fn() }));
+vi.mock("@/entities/report/api/reportApi", () => ({ fetchTemplatePreview: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
 it("内置预览使用当前 CDN，自定义读取仅在启用时发生", async () => {

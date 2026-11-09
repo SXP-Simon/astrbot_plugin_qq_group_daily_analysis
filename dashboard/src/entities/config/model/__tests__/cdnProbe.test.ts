@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { templateCdnProbeSchema } from "../cdnProbe";
+import { templateCdnProbeSchema } from "@/entities/config/model/cdnProbe";
 
 describe("CDN 检测响应契约", () => {
   it("支持多份实际模板文件，不能用同一文件重复凑数", () => {

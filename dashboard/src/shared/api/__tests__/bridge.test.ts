@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { apiGet, apiPost, apiUpload, extractData, fetchContext, subscribeSSE } from "../bridge";
+import {
+  apiGet,
+  apiPost,
+  apiUpload,
+  extractData,
+  fetchContext,
+  subscribeSSE,
+} from "@/shared/api/bridge";
 
 describe("API 通信网桥 (Shared API Bridge)", () => {
   beforeEach(() => {

@@ -1,11 +1,11 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useRef, useState } from "react";
 import { IconArrowUp, IconPlayerPause } from "@tabler/icons-react";
-import type { useLogsViewModel } from "../model/useLogsViewModel";
-import { LogFilterBar } from "../../../features/filter-logs/ui/LogFilterBar";
-import { LogEntry } from "../../../entities/log/ui/LogEntry";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
+import type { useLogsViewModel } from "@/pages/logs/model/useLogsViewModel";
+import { LogFilterBar } from "@/features/filter-logs/ui/LogFilterBar";
+import { LogEntry } from "@/entities/log/ui/LogEntry";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/shared/ui/dialog";
 
 interface LogsPageProps {
   viewModel: ReturnType<typeof useLogsViewModel>;

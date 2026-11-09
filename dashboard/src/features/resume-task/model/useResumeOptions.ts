@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { fetchProviderList, type LLMProviderItem } from "../../../entities/trace/api/traceApi";
-import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
-import { formatTemplateOptions } from "../../../entities/report/model/templates";
+import { fetchProviderList, type LLMProviderItem } from "@/entities/trace/api/traceApi";
+import { useReportTemplates } from "@/entities/report/model/useReportTemplates";
+import { formatTemplateOptions } from "@/entities/report/model/templates";
 
 export function useResumeOptions(open: boolean) {
   const [providers, setProviders] = useState<LLMProviderItem[]>([]);

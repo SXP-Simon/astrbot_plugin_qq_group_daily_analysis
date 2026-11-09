@@ -116,6 +116,23 @@ test("Oxlint preserves the existing quality gates", (t) => {
       "export function View() { return <div />; } export function calculate() { return 1; }",
       "only-export-components",
     ],
+    ["parent-import", 'import "../../shared/ui/button";', "no-restricted-imports"],
+    [
+      "parent-type-import",
+      'import type { Item } from "../model"; export type Selected = Item;',
+      "no-restricted-imports",
+    ],
+    ["parent-reexport", 'export * from "../model";', "no-restricted-imports"],
+    [
+      "parent-lazy-import",
+      'export const load = () => import("../model");',
+      "no-restricted-imports",
+    ],
+    [
+      "module-aliases",
+      'import "@/shared/ui/button"; import "@plugin-config"; import "./sibling";',
+      null,
+    ],
     ["directive", "// oxlint-disable-next-line no-debugger\nexport const value = 1;", "Unused"],
     [
       "valid",

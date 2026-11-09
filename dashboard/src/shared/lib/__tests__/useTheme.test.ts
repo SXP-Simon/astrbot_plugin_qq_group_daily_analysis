@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type { AstrBotContext } from "../../api/bridge";
-import { getHostThemeStyles } from "../themeColors";
+import type { AstrBotContext } from "@/shared/api/bridge";
+import { getHostThemeStyles } from "@/shared/lib/themeColors";
 
 const fetchContext = vi.hoisted(() => vi.fn());
-vi.mock("../../api/bridge", () => ({
+vi.mock("@/shared/api/bridge", () => ({
   fetchContext,
   subscribeContext: (callback: (context: AstrBotContext) => void) =>
     window.AstrBotPluginPage?.onContext?.(callback) ?? (() => {}),
@@ -34,7 +34,7 @@ describe("宿主主题同步", () => {
       subscribeSSE: async () => "test",
       unsubscribeSSE: () => {},
     };
-    await import("../useTheme");
+    await import("@/shared/lib/useTheme");
     expect(document.documentElement).toHaveClass("dark");
     notify?.({ isDark: false });
     expect(document.documentElement).not.toHaveClass("dark");
@@ -61,7 +61,7 @@ describe("宿主主题同步", () => {
       subscribeSSE: async () => "test",
       unsubscribeSSE: () => {},
     };
-    await import("../useTheme");
+    await import("@/shared/lib/useTheme");
     notify?.({ isDark: true });
     resolve({ isDark: false });
     await Promise.resolve();
@@ -71,7 +71,7 @@ describe("宿主主题同步", () => {
   it("宿主初始化失败时继续使用缓存主题", async () => {
     localStorage.setItem("astrbot_plugin_theme_is_dark", "true");
     fetchContext.mockRejectedValue(new Error("宿主暂未就绪"));
-    await import("../useTheme");
+    await import("@/shared/lib/useTheme");
     await Promise.resolve();
     expect(document.documentElement).toHaveClass("dark");
   });
@@ -93,7 +93,7 @@ it("只更新颜色也会通知图表订阅，缺失颜色恢复默认且不修�
     subscribeSSE: async () => "test",
     unsubscribeSSE: () => {},
   };
-  const { useTheme } = await import("../useTheme");
+  const { useTheme } = await import("@/shared/lib/useTheme");
   const { result, unmount } = renderHook(() => useTheme());
   await waitFor(() => expect(result.current.isDark).toBe(false));
   const before = result.current.revision;
@@ -136,7 +136,7 @@ it("只含配色的较新通知也优先于迟到的初始化结果", async () =
     subscribeSSE: async () => "test",
     unsubscribeSSE: () => {},
   };
-  await import("../useTheme");
+  await import("@/shared/lib/useTheme");
   notify({ themeColors: { primary: "#123456" } });
   resolve({ isDark: true, themeColors: { primary: "#ffffff" } });
   await Promise.resolve();

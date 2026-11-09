@@ -6,10 +6,10 @@ import {
   fetchAvailableProviders,
   fetchAvailablePersonas,
   savePluginConfig,
-} from "../../../../entities/config/api/configApi";
-import { useConfigViewModel } from "../useConfigViewModel";
+} from "@/entities/config/api/configApi";
+import { useConfigViewModel } from "@/pages/config/model/useConfigViewModel";
 
-vi.mock("../../../../entities/config/api/configApi", () => ({
+vi.mock("@/entities/config/api/configApi", () => ({
   fetchPluginConfig: vi.fn(),
   fetchAvailableProviders: vi.fn(),
   fetchAvailablePersonas: vi.fn(),

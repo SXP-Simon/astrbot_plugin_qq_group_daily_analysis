@@ -5,11 +5,11 @@ import {
   IconChevronRight,
   IconLoader2,
 } from "@tabler/icons-react";
-import { resolveSpanOutcome } from "../model/spanOutcome";
-import { getRenderAttemptDiagnostic } from "../model/renderAttempts";
-import { getSpanTiming, getDurationRatio } from "../model/spanTiming";
-import { getStageSlaThreshold } from "../model/sla";
-import { formatDuration, formatStageName } from "../../../shared/lib/formatters";
+import { resolveSpanOutcome } from "@/entities/trace/model/spanOutcome";
+import { getRenderAttemptDiagnostic } from "@/entities/trace/model/renderAttempts";
+import { getSpanTiming, getDurationRatio } from "@/entities/trace/model/spanTiming";
+import { getStageSlaThreshold } from "@/entities/trace/model/sla";
+import { formatDuration, formatStageName } from "@/shared/lib/formatters";
 
 interface SpanHeaderProps {
   stageName: string;

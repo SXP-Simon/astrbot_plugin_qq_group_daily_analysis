@@ -1,6 +1,6 @@
-import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
-import { ActiveTask } from "../model/types";
-import type { components } from "../../../shared/api/generated/schema";
+import { apiGet, apiPost, extractData } from "@/shared/api/bridge";
+import { ActiveTask } from "@/entities/task/model/types";
+import type { components } from "@/shared/api/generated/schema";
 import { z } from "zod";
 
 export type ConnectedPlatform = components["schemas"]["ConnectedPlatform"];

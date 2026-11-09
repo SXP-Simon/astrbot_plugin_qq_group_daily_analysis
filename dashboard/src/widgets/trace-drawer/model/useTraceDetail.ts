@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchTraceDetail } from "../../../entities/trace/api/traceApi";
-import { fetchTraceLogs } from "../../../entities/log/api/logApi";
-import type { TraceRecord } from "../../../entities/trace/model/types";
-import type { PluginLogItem } from "../../../entities/log/model/types";
+import { fetchTraceDetail } from "@/entities/trace/api/traceApi";
+import { fetchTraceLogs } from "@/entities/log/api/logApi";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import type { PluginLogItem } from "@/entities/log/model/types";
 
 interface DetailState {
   traceId: string | null;

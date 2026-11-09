@@ -1,11 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { FontDownloadProgress } from "../FontDownloadProgress";
-import { FontUploadProgress } from "../FontUploadProgress";
-import { BrowserFontDownloadProgress } from "../BrowserFontDownloadProgress";
-import type { useFontDownload } from "../../model/useFontDownload";
-import type { useFontUpload } from "../../model/useFontUpload";
-import type { useBrowserFontDownload } from "../../model/useBrowserFontDownload";
+import { FontDownloadProgress } from "@/features/manage-typst-fonts/ui/FontDownloadProgress";
+import { FontUploadProgress } from "@/features/manage-typst-fonts/ui/FontUploadProgress";
+import { BrowserFontDownloadProgress } from "@/features/manage-typst-fonts/ui/BrowserFontDownloadProgress";
+import type { useFontDownload } from "@/features/manage-typst-fonts/model/useFontDownload";
+import type { useFontUpload } from "@/features/manage-typst-fonts/model/useFontUpload";
+import type { useBrowserFontDownload } from "@/features/manage-typst-fonts/model/useBrowserFontDownload";
 it("字体下载显示真实字节、来源、超时提示和取消入口，失败清单继续可读", () => {
   const download: ReturnType<typeof useFontDownload> = {
     progress: { done: 1, total: 3, current: "font.ttf", failed: [] },

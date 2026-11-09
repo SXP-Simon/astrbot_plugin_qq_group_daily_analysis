@@ -1,10 +1,10 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { IconHistory, IconRefresh } from "@tabler/icons-react";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
-import { Pagination } from "../../../shared/ui/pagination";
-import { formatBytes } from "../../../shared/lib/formatters";
-import { useConfigBackups } from "../model/useConfigBackups";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
+import { Pagination } from "@/shared/ui/pagination";
+import { formatBytes } from "@/shared/lib/formatters";
+import { useConfigBackups } from "@/features/view-config-backups/model/useConfigBackups";
 import { JsonBackupTree } from "./JsonBackupTree";
 
 const kindLabels = {

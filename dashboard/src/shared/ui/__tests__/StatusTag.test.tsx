@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { StatusTag } from "../StatusTag";
+import { StatusTag } from "@/shared/ui/StatusTag";
 
 describe("状态标签组件 (StatusTag Component)", () => {
   it("应当正确渲染成功状态标签 (succeeded)", () => {

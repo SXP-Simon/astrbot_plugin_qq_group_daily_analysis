@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { getTraceMetrics } from "../traceMetrics";
-import type { TraceRecord, TraceSpan } from "../types";
+import { getTraceMetrics } from "@/entities/trace/model/traceMetrics";
+import type { TraceRecord, TraceSpan } from "@/entities/trace/model/types";
 
 const base: TraceRecord = {
   trace_id: "example",

@@ -1,12 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { fetchTraceDetail } from "../../../../entities/trace/api/traceApi";
-import { fetchTraceLogs } from "../../../../entities/log/api/logApi";
-import type { TraceRecord } from "../../../../entities/trace/model/types";
-import { useTraceDetail } from "../useTraceDetail";
+import { fetchTraceDetail } from "@/entities/trace/api/traceApi";
+import { fetchTraceLogs } from "@/entities/log/api/logApi";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import { useTraceDetail } from "@/widgets/trace-drawer/model/useTraceDetail";
 
-vi.mock("../../../../entities/trace/api/traceApi", () => ({ fetchTraceDetail: vi.fn() }));
-vi.mock("../../../../entities/log/api/logApi", () => ({ fetchTraceLogs: vi.fn() }));
+vi.mock("@/entities/trace/api/traceApi", () => ({ fetchTraceDetail: vi.fn() }));
+vi.mock("@/entities/log/api/logApi", () => ({ fetchTraceLogs: vi.fn() }));
 
 const completed: TraceRecord = {
   trace_id: "example-a",

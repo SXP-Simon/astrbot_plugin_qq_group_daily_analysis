@@ -1,6 +1,6 @@
-import type { GroupItem } from "../model/types";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { SearchSelect } from "../../../shared/ui/search-select";
+import type { GroupItem } from "@/entities/group/model/types";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { SearchSelect } from "@/shared/ui/search-select";
 
 interface GroupFiltersProps {
   groups: GroupItem[];

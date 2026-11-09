@@ -4,12 +4,12 @@ import {
   expandAnalysisPrompt,
   readPromptSchemes,
   type PromptScheme,
-} from "../../../entities/config/model/promptSchemes";
-import type { PromptVariable } from "../../../entities/config/model/types";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
-import { Input } from "../../../shared/ui/input";
-import { usePromptTextHistory } from "../model/usePromptTextHistory";
+} from "@/entities/config/model/promptSchemes";
+import type { PromptVariable } from "@/entities/config/model/types";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/shared/ui/dialog";
+import { Input } from "@/shared/ui/input";
+import { usePromptTextHistory } from "@/widgets/config-form/model/usePromptTextHistory";
 import { PromptVariablePanel } from "./PromptVariablePanel";
 
 const fieldErrorClass =

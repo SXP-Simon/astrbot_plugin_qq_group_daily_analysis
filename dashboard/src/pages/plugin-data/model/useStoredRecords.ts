@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchManagedRecords,
   type ManagedRecordEntry,
-} from "../../../entities/plugin-data/api/managedRecordsApi";
+} from "@/entities/plugin-data/api/managedRecordsApi";
 
 type RecordKind = "history" | "avatar";
 export function useStoredRecords(initialKind: RecordKind = "history") {

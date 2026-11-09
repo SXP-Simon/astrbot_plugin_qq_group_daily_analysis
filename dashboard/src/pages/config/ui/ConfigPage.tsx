@@ -1,6 +1,6 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useState } from "react";
-import { cn } from "../../../shared/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import {
   IconAlertCircle,
   IconCheck,
@@ -9,14 +9,14 @@ import {
   IconDeviceFloppy,
   IconX,
 } from "@tabler/icons-react";
-import type { useConfigViewModel } from "../model/useConfigViewModel";
-import { ComicRotationDialog } from "../../../features/manage-comic-rotation/ui/ComicRotationDialog";
-import { FieldRenderer } from "../../../widgets/config-form/ui/FieldRenderer";
-import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import type { useConfigViewModel } from "@/pages/config/model/useConfigViewModel";
+import { ComicRotationDialog } from "@/features/manage-comic-rotation/ui/ComicRotationDialog";
+import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
+import { MarkdownHint } from "@/shared/ui/MarkdownHint";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 
 interface ConfigPageProps {
   viewModel: ReturnType<typeof useConfigViewModel>;

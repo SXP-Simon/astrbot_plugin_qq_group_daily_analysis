@@ -1,5 +1,5 @@
-import { renderingRuntimeSchema } from "../../../entities/config/model/renderingConfig";
-import { pluginConfigSaveSchema } from "../../../entities/config/model/configContract";
+import { renderingRuntimeSchema } from "@/entities/config/model/renderingConfig";
+import { pluginConfigSaveSchema } from "@/entities/config/model/configContract";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import {
@@ -9,15 +9,12 @@ import {
   savePluginConfig,
   AvailableProvider,
   AvailablePersona,
-} from "../../../entities/config/api/configApi";
-import { PluginSchema } from "../../../entities/config/model/types";
-import {
-  validateConfigWithZod,
-  validateFieldIssues,
-} from "../../../entities/config/model/validation";
+} from "@/entities/config/api/configApi";
+import { PluginSchema } from "@/entities/config/model/types";
+import { validateConfigWithZod, validateFieldIssues } from "@/entities/config/model/validation";
 
-import { isFieldVisible } from "../../../entities/config/model/visibility";
-export { isFieldVisible, resolveDependencyValue } from "../../../entities/config/model/visibility";
+import { isFieldVisible } from "@/entities/config/model/visibility";
+export { isFieldVisible, resolveDependencyValue } from "@/entities/config/model/visibility";
 
 export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
   const [loading, setLoading] = useState(false);

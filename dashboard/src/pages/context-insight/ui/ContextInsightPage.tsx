@@ -1,14 +1,14 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { IconLoader2, IconArrowUpRight } from "@tabler/icons-react";
-import { Button } from "../../../shared/ui/button";
-import { SearchSelect } from "../../../shared/ui/search-select";
-import { StatusTag } from "../../../shared/ui/StatusTag";
-import { ContextFunnelWidget } from "../../../widgets/context-funnel-widget/ContextFunnelWidget";
-import { TokenChartWidget } from "../../../widgets/token-chart-widget/TokenChartWidget";
-import { TraceFilterBar } from "../../../features/filter-traces/ui/TraceFilterBar";
-import { AnalysisTimelinePicker } from "../../../widgets/timeline-picker/AnalysisTimelinePicker";
-import { formatTimestamp } from "../../../shared/lib/formatters";
-import type { useContextInsightViewModel } from "../model/useContextInsightViewModel";
+import { Button } from "@/shared/ui/button";
+import { SearchSelect } from "@/shared/ui/search-select";
+import { StatusTag } from "@/shared/ui/StatusTag";
+import { ContextFunnelWidget } from "@/widgets/context-funnel-widget/ContextFunnelWidget";
+import { TokenChartWidget } from "@/widgets/token-chart-widget/TokenChartWidget";
+import { TraceFilterBar } from "@/features/filter-traces/ui/TraceFilterBar";
+import { AnalysisTimelinePicker } from "@/widgets/timeline-picker/AnalysisTimelinePicker";
+import { formatTimestamp } from "@/shared/lib/formatters";
+import type { useContextInsightViewModel } from "@/pages/context-insight/model/useContextInsightViewModel";
 
 interface ContextInsightPageProps {
   viewModel: ReturnType<typeof useContextInsightViewModel>;

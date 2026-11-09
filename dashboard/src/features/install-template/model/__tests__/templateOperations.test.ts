@@ -1,16 +1,16 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { useTemplateInstall } from "../useTemplateInstall";
-import { useTemplateRemoval } from "../useTemplateRemoval";
+import { useTemplateInstall } from "@/features/install-template/model/useTemplateInstall";
+import { useTemplateRemoval } from "@/features/install-template/model/useTemplateRemoval";
 import {
   fetchReportTemplates,
   installTemplateFromUrl,
   installTemplateFromFile,
   uninstallTemplate,
   type TemplateInstallResult,
-} from "../../../../entities/report/api/reportApi";
+} from "@/entities/report/api/reportApi";
 
-vi.mock("../../../../entities/report/api/reportApi", () => ({
+vi.mock("@/entities/report/api/reportApi", () => ({
   fetchReportTemplates: vi.fn(),
   installTemplateFromUrl: vi.fn(),
   installTemplateFromFile: vi.fn(),

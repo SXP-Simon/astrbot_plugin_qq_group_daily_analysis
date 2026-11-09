@@ -1,16 +1,11 @@
-import { LoadingState } from "../../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useRef, useState } from "react";
 import { IconCopy } from "@tabler/icons-react";
-import type { CheckpointDetail } from "../../../../entities/plugin-data/model/types";
-import { formatBytes, formatStageName, formatTimestamp } from "../../../../shared/lib/formatters";
-import { copyToClipboard } from "../../../../shared/lib/clipboard";
-import { Button } from "../../../../shared/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from "../../../../shared/ui/dialog";
+import type { CheckpointDetail } from "@/entities/plugin-data/model/types";
+import { formatBytes, formatStageName, formatTimestamp } from "@/shared/lib/formatters";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 
 export function CheckpointDetailModal({
   open,

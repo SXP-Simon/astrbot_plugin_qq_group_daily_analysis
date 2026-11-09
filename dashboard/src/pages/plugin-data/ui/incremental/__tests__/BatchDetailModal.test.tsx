@@ -1,10 +1,10 @@
-import serializedBatch from "../../../model/__tests__/fixtures/incrementalBatch.json";
+import serializedBatch from "@/pages/plugin-data/model/__tests__/fixtures/incrementalBatch.json";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { BatchDetailModal } from "../BatchDetailModal";
-import type { IncrementalBatchItem } from "../../../../../entities/plugin-data/model/types";
-import { copyToClipboard } from "../../../../../shared/lib/clipboard";
-vi.mock("../../../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+import { BatchDetailModal } from "@/pages/plugin-data/ui/incremental/BatchDetailModal";
+import type { IncrementalBatchItem } from "@/entities/plugin-data/model/types";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();

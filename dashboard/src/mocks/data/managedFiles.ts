@@ -1,8 +1,8 @@
 import type {
   ManagedFileContent,
   ManagedPartition,
-} from "../../entities/plugin-data/api/managedFilesApi";
-import { comicPresets, comicPreviewLabel } from "../../entities/comic/model/comicPresets";
+} from "@/entities/plugin-data/api/managedFilesApi";
+import { comicPresets, comicPreviewLabel } from "@/entities/comic/model/comicPresets";
 import { mockConfigBackups } from "./configBackups";
 import { mockReportHtml, mockReportImage } from "./reportContent";
 

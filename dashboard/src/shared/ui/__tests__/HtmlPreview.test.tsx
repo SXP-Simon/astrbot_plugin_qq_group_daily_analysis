@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { HtmlPreview } from "../html-preview";
+import { HtmlPreview } from "@/shared/ui/html-preview";
 afterEach(() => vi.useRealTimers());
 it("HTML 加载时正文仍可展示，外链超时给出提示，完成后移除提示且保留沙盒", () => {
   vi.useFakeTimers();

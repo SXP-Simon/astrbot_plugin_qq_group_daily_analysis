@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it } from "vitest";
-import schema from "../../../../../../_conf_schema.json";
+import schema from "@plugin-config";
 import {
   validateFieldIssues,
   validateSingleFieldWithZod,
-} from "../../../../entities/config/model/validation";
-import type { SchemaFieldItem } from "../../../../entities/config/model/types";
-import { FieldRenderer } from "../FieldRenderer";
-import { comicPresets } from "../../../../entities/comic/model/comicPresets";
-import { ComicStyleGallery } from "../ComicStyleGallery";
+} from "@/entities/config/model/validation";
+import type { SchemaFieldItem } from "@/entities/config/model/types";
+import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
+import { comicPresets } from "@/entities/comic/model/comicPresets";
+import { ComicStyleGallery } from "@/widgets/config-form/ui/ComicStyleGallery";
 
 const field: SchemaFieldItem = schema.daily_comic.items.comic_styles;
 

@@ -1,11 +1,8 @@
 import { expect, it } from "vitest";
-import { mockHandlers } from "../handlers";
-import { mockCheckpoints } from "../data/pluginData";
-import { extractData } from "../../shared/api/bridge";
-import type {
-  CheckpointsListResponse,
-  CheckpointDetail,
-} from "../../entities/plugin-data/model/types";
+import { mockHandlers } from "@/mocks/handlers";
+import { mockCheckpoints } from "@/mocks/data/pluginData";
+import { extractData } from "@/shared/api/bridge";
+import type { CheckpointsListResponse, CheckpointDetail } from "@/entities/plugin-data/model/types";
 it("快照示例支持日期、阶段与任务筛选，分页同值排序稳定", () => {
   const query = {
     group_id: "123456789",

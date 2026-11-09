@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { Switch } from "../switch";
+import { Switch } from "@/shared/ui/switch";
 
 it("开关声明名称与状态，禁用时不修改；不会意外提交外层表单", () => {
   const change = vi.fn();

@@ -2,7 +2,7 @@ import {
   CheckpointsListResponse,
   IncrementalBatchesResponse,
   PluginDataOverview,
-} from "../../entities/plugin-data/model/types";
+} from "@/entities/plugin-data/model/types";
 
 export const mockPluginDataOverview: PluginDataOverview = {
   avatars: { count: 82, size_bytes: 3120000 },

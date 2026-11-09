@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { subscribeSSE, type AstrBotPluginPageBridge } from "../bridge";
+import { subscribeSSE, type AstrBotPluginPageBridge } from "@/shared/api/bridge";
 
 afterEach(() => {
   delete window.AstrBotPluginPage;

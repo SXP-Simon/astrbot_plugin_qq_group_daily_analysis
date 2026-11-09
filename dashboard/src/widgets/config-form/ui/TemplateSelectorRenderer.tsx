@@ -1,4 +1,4 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useMemo, useState } from "react";
 import {
   IconCheck,
@@ -8,22 +8,22 @@ import {
   IconPhoto,
   IconTrash,
 } from "@tabler/icons-react";
-import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "@/entities/config/model/renderingConfig";
 import {
   KNOWN_TEMPLATES,
   supportsTemplate,
   templateCapabilities,
   type TemplateRequirements,
-} from "../../../entities/report/model/templates";
-import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
-import { useTemplatePreview } from "../../../entities/report/model/useTemplatePreview";
-import { TemplateInstallModal } from "../../../features/install-template/ui/TemplateInstallModal";
-import { TemplateUninstallModal } from "../../../features/install-template/ui/TemplateUninstallModal";
-import { Alert } from "../../../shared/ui/alert";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog";
-import { ImagePreview } from "../../../shared/ui/image-preview";
-import { SearchSelect } from "../../../shared/ui/search-select";
+} from "@/entities/report/model/templates";
+import { useReportTemplates } from "@/entities/report/model/useReportTemplates";
+import { useTemplatePreview } from "@/entities/report/model/useTemplatePreview";
+import { TemplateInstallModal } from "@/features/install-template/ui/TemplateInstallModal";
+import { TemplateUninstallModal } from "@/features/install-template/ui/TemplateUninstallModal";
+import { Alert } from "@/shared/ui/alert";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/shared/ui/dialog";
+import { ImagePreview } from "@/shared/ui/image-preview";
+import { SearchSelect } from "@/shared/ui/search-select";
 
 interface TemplateSelectorRendererProps {
   cdnBaseUrl?: string | null;

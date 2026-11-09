@@ -1,14 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { TemplateInstallModal } from "../TemplateInstallModal";
-import { TemplateUninstallModal } from "../TemplateUninstallModal";
+import { TemplateInstallModal } from "@/features/install-template/ui/TemplateInstallModal";
+import { TemplateUninstallModal } from "@/features/install-template/ui/TemplateUninstallModal";
 import {
   fetchReportTemplates,
   installTemplateFromFile,
   uninstallTemplate,
-} from "../../../../entities/report/api/reportApi";
+} from "@/entities/report/api/reportApi";
 
-vi.mock("../../../../entities/report/api/reportApi", () => ({
+vi.mock("@/entities/report/api/reportApi", () => ({
   fetchReportTemplates: vi.fn(),
   installTemplateFromUrl: vi.fn(),
   installTemplateFromFile: vi.fn(),

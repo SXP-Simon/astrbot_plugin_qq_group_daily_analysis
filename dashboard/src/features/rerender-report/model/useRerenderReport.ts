@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { rerenderReport } from "../../../entities/report/api/reportApi";
-import type { ReportItem } from "../../../entities/report/model/types";
-import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
-import { formatTemplateOptions } from "../../../entities/report/model/templates";
+import { rerenderReport } from "@/entities/report/api/reportApi";
+import type { ReportItem } from "@/entities/report/model/types";
+import { useReportTemplates } from "@/entities/report/model/useReportTemplates";
+import { formatTemplateOptions } from "@/entities/report/model/templates";
 
 export function useRerenderReport(
   open: boolean,

@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import type { SchemaFieldItem } from "../../../../entities/config/model/types";
-import { TemplateListRenderer } from "../TemplateListRenderer";
-import { useTemplateListModel } from "../../model/useTemplateListModel";
+import type { SchemaFieldItem } from "@/entities/config/model/types";
+import { TemplateListRenderer } from "@/widgets/config-form/ui/TemplateListRenderer";
+import { useTemplateListModel } from "@/widgets/config-form/model/useTemplateListModel";
 
-vi.mock("../FieldRenderer", () => ({
+vi.mock("@/widgets/config-form/ui/FieldRenderer", () => ({
   FieldRenderer: ({
     fieldKey,
     value,
@@ -21,11 +21,11 @@ vi.mock("../FieldRenderer", () => ({
     </label>
   ),
 }));
-vi.mock("../../../../features/test-t2i/ui/T2iProbe", () => ({ T2iProbe: () => null }));
-vi.mock("../../../../features/manage-typst-fonts/ui/TypstFonts", () => ({
+vi.mock("@/features/test-t2i/ui/T2iProbe", () => ({ T2iProbe: () => null }));
+vi.mock("@/features/manage-typst-fonts/ui/TypstFonts", () => ({
   TypstFonts: () => null,
 }));
-vi.mock("../../../../features/manage-template-resources/ui/TemplateResources", () => ({
+vi.mock("@/features/manage-template-resources/ui/TemplateResources", () => ({
   TemplateResources: () => null,
 }));
 

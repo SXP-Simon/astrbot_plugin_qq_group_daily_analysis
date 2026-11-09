@@ -1,6 +1,10 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { devFetchContext } from "../devBridge";
-import { devSubscribeContext, getDevThemeContext, setDevThemeContext } from "../devThemeContext";
+import { devFetchContext } from "@/shared/api/devBridge";
+import {
+  devSubscribeContext,
+  getDevThemeContext,
+  setDevThemeContext,
+} from "@/shared/api/devThemeContext";
 
 beforeEach(() => localStorage.clear());
 it("模拟配色经过上下文通知与初始化读取，恢复默认不保留旧颜色", async () => {

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchTraceList } from "../../../entities/trace/api/traceApi";
-import { fetchGroupSessions } from "../../../entities/group/api/groupApi";
-import type { TraceRecord } from "../../../entities/trace/model/types";
-import type { GroupItem } from "../../../entities/group/model/types";
-import type { TraceQuery, TraceSortField } from "../../../entities/trace/model/traceQuery";
+import { fetchTraceList } from "@/entities/trace/api/traceApi";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import type { GroupItem } from "@/entities/group/model/types";
+import type { TraceQuery, TraceSortField } from "@/entities/trace/model/traceQuery";
 
 const INITIAL_QUERY: TraceQuery = {
   page: 1,

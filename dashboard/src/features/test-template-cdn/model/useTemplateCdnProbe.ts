@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { testTemplateCdn } from "../../../entities/config/api/configApi";
-import type { TemplateCdnProbe } from "../../../entities/config/model/cdnProbe";
+import { testTemplateCdn } from "@/entities/config/api/configApi";
+import type { TemplateCdnProbe } from "@/entities/config/model/cdnProbe";
 
 export function useTemplateCdnProbe(baseUrl: string) {
   const sequence = useRef(0);

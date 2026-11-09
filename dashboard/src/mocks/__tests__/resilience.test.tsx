@@ -1,12 +1,12 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { TraceSummaryCard } from "../../widgets/trace-drawer/ui/TraceSummaryCard";
-import { TraceDrawer } from "../../widgets/trace-drawer/TraceDrawer";
-import { ActiveTaskBoard } from "../../widgets/active-task-board/ActiveTaskBoard";
-import { mockTraces } from "../data/traces";
-import { mockActiveTasks } from "../data/tasks";
-import { mockPluginLogs } from "../data/logs";
+import { TraceSummaryCard } from "@/widgets/trace-drawer/ui/TraceSummaryCard";
+import { TraceDrawer } from "@/widgets/trace-drawer/TraceDrawer";
+import { ActiveTaskBoard } from "@/widgets/active-task-board/ActiveTaskBoard";
+import { mockTraces } from "@/mocks/data/traces";
+import { mockActiveTasks } from "@/mocks/data/tasks";
+import { mockPluginLogs } from "@/mocks/data/logs";
 
 // 此处验证真实示例数据和界面操作，图表数值由实体测试覆盖，避免 JSDOM 执行 Canvas。
 vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="trace-chart" /> }));

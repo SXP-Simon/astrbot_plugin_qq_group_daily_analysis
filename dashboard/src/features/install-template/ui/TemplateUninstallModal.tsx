@@ -1,9 +1,9 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { IconRefresh, IconTrash } from "@tabler/icons-react";
-import { templateCapabilities } from "../../../entities/report/model/templates";
-import { useTemplateRemoval } from "../model/useTemplateRemoval";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import { templateCapabilities } from "@/entities/report/model/templates";
+import { useTemplateRemoval } from "@/features/install-template/model/useTemplateRemoval";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 
 interface TemplateUninstallModalProps {
   open: boolean;

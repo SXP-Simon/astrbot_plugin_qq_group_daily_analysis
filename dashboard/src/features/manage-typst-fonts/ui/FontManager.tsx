@@ -4,27 +4,30 @@ import { FontDownloadProgress } from "./FontDownloadProgress";
 import { FontUploadProgress } from "./FontUploadProgress";
 import { ManagedFontTable } from "./ManagedFontTable";
 import { FontMutationDialogs } from "./FontMutationDialogs";
-import { useManagedFonts, type ManagedFontRow } from "../model/useManagedFonts";
-import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
+import {
+  useManagedFonts,
+  type ManagedFontRow,
+} from "@/features/manage-typst-fonts/model/useManagedFonts";
+import { KNOWN_TEMPLATES } from "@/entities/report/model/templates";
 import {
   DEFAULT_TEMPLATE_CDN_BASE_URL,
   TEMPLATE_CDN_PRESETS,
-} from "../../../entities/config/model/renderingConfig";
-import { FONT_DOWNLOAD_SOURCES } from "../../../entities/config/model/typstFonts";
+} from "@/entities/config/model/renderingConfig";
+import { FONT_DOWNLOAD_SOURCES } from "@/entities/config/model/typstFonts";
 import {
   FontManagementContext,
   type FontManagementSelection,
-} from "../model/FontManagementContext";
-import { useBrowserFontDownload } from "../model/useBrowserFontDownload";
+} from "@/features/manage-typst-fonts/model/FontManagementContext";
+import { useBrowserFontDownload } from "@/features/manage-typst-fonts/model/useBrowserFontDownload";
 import { BrowserFontDownloadProgress } from "./BrowserFontDownloadProgress";
-import type { ManagedFile } from "../../../entities/plugin-data/api/managedFilesApi";
-import { ExternalLink } from "../../../shared/ui/ExternalLink";
-import { Alert } from "../../../shared/ui/alert";
-import { Button } from "../../../shared/ui/button";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { FilePicker } from "../../../shared/ui/file-picker";
-import { Input } from "../../../shared/ui/input";
-import { Pagination } from "../../../shared/ui/pagination";
+import type { ManagedFile } from "@/entities/plugin-data/api/managedFilesApi";
+import { ExternalLink } from "@/shared/ui/ExternalLink";
+import { Alert } from "@/shared/ui/alert";
+import { Button } from "@/shared/ui/button";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { FilePicker } from "@/shared/ui/file-picker";
+import { Input } from "@/shared/ui/input";
+import { Pagination } from "@/shared/ui/pagination";
 
 export function FontManager({
   onChanged,

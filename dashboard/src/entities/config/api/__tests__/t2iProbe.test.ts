@@ -1,9 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { apiPost } from "../../../../shared/api/bridge";
-import { testT2i } from "../configApi";
+import { apiPost } from "@/shared/api/bridge";
+import { testT2i } from "@/entities/config/api/configApi";
 
-vi.mock("../../../../shared/api/bridge", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../../shared/api/bridge")>()),
+vi.mock("@/shared/api/bridge", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/api/bridge")>()),
   apiPost: vi.fn(),
 }));
 beforeEach(() => vi.resetAllMocks());

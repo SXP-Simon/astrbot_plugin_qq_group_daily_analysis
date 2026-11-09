@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from "react";
 import { IconAlertCircle, IconCircleCheck, IconInfoCircle } from "@tabler/icons-react";
-import { cn } from "../lib/cn";
+import { cn } from "@/shared/lib/cn";
 
 type AlertVariant = "info" | "success" | "warning" | "destructive";
 const styles: Record<AlertVariant, string> = {

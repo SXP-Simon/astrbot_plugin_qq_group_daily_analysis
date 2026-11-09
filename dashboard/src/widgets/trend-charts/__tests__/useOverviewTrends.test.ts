@@ -1,11 +1,11 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchAnalyticsTrends } from "../../../entities/metric/api/metricApi";
-import type { AnalyticsTrendsResponse } from "../../../entities/metric/model/types";
-import { createMockAnalyticsTrends } from "../../../mocks/data/metrics";
-import { useOverviewTrends } from "../model/useOverviewTrends";
+import { fetchAnalyticsTrends } from "@/entities/metric/api/metricApi";
+import type { AnalyticsTrendsResponse } from "@/entities/metric/model/types";
+import { createMockAnalyticsTrends } from "@/mocks/data/metrics";
+import { useOverviewTrends } from "@/widgets/trend-charts/model/useOverviewTrends";
 
-vi.mock("../../../entities/metric/api/metricApi", () => ({ fetchAnalyticsTrends: vi.fn() }));
+vi.mock("@/entities/metric/api/metricApi", () => ({ fetchAnalyticsTrends: vi.fn() }));
 const initial = createMockAnalyticsTrends();
 function deferred() {
   let resolve!: (value: AnalyticsTrendsResponse | null) => void;

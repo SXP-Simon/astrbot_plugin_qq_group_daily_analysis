@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { validateSingleFieldWithZod } from "../validation";
+import { validateSingleFieldWithZod } from "@/entities/config/model/validation";
 
 it("对象编辑保留不完整草稿时阻止保存，完整对象与可选空值继续有效", () => {
   const field = { type: "object" };

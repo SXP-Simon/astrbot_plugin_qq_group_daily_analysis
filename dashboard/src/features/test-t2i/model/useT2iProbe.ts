@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { testT2i } from "../../../entities/config/api/configApi";
-import type { T2iProbe, T2iProbeInput } from "../../../entities/config/model/t2iProbe";
-import { fetchGroupSessions } from "../../../entities/group/api/groupApi";
-import type { GroupItem } from "../../../entities/group/model/types";
+import { testT2i } from "@/entities/config/api/configApi";
+import type { T2iProbe, T2iProbeInput } from "@/entities/config/model/t2iProbe";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import type { GroupItem } from "@/entities/group/model/types";
 
 export function useT2iProbe(input: T2iProbeInput) {
   const sequence = useRef(0);

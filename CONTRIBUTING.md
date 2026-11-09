@@ -239,7 +239,11 @@ dashboard/src/
    * 依托 SSE 实时事件在任务状态流转时主动淘汰相关缓存，确保数据 100% 同步。
 4. **构建输出规范**：
    * Vite 配置固定产物输出为 `pages/daily-analysis/assets/index.js`，避免动态哈希造成 Git 历史膨胀。
-5. **前端静态检查命令**：
+5. **模块引用**：
+   * 跨目录使用 `@/<层>/<模块>/...`，例如 `@/shared/ui/button`。同目录或直接子目录可用 `./`。Oxlint 在本地提交和 CI 中拦截向上查找的模块引用。
+   * 插件配置与共享漫画目录分别使用 `@plugin-config` 和 `@comic-catalog`。测试可使用 `@plugin-tests/...` 引用仓库测试数据，该别名仅在测试运行时启用。TypeScript、Vite 和 Vitest 共用 `dashboard/tsconfig.json` 中的路径定义。
+   * Python 插件内部使用包内导入，例如 `from ...shared.constants import PLUGIN_NAME`。AstrBot 按安装目录生成插件包名，生产代码不要使用顶层 `src` 或写死 `data.plugins` 下的插件包名。
+6. **前端静态检查命令**：
    ```bash
    pnpm lint        # 必须 0 警告 0 错误
    pnpm typecheck   # TypeScript 严格类型编译

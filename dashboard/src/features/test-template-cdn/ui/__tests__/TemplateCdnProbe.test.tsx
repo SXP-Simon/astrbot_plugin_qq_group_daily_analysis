@@ -8,12 +8,12 @@ import {
   within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { testTemplateCdn } from "../../../../entities/config/api/configApi";
-import type { TemplateCdnProbe as ProbeResult } from "../../../../entities/config/model/cdnProbe";
-import { TemplateCdnProbe } from "../TemplateCdnProbe";
-import { useTemplateCdnProbe } from "../../model/useTemplateCdnProbe";
+import { testTemplateCdn } from "@/entities/config/api/configApi";
+import type { TemplateCdnProbe as ProbeResult } from "@/entities/config/model/cdnProbe";
+import { TemplateCdnProbe } from "@/features/test-template-cdn/ui/TemplateCdnProbe";
+import { useTemplateCdnProbe } from "@/features/test-template-cdn/model/useTemplateCdnProbe";
 
-vi.mock("../../../../entities/config/api/configApi", () => ({ testTemplateCdn: vi.fn() }));
+vi.mock("@/entities/config/api/configApi", () => ({ testTemplateCdn: vi.fn() }));
 
 const result: ProbeResult = {
   base_url: "https://example.com",

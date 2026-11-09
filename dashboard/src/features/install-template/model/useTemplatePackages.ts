@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchReportTemplates, uninstallTemplate } from "../../../entities/report/api/reportApi";
-import type { ReportTemplateItem } from "../../../entities/report/model/templates";
-import type { ManagedFileGroup } from "../../../entities/plugin-data/api/managedFilesApi";
+import { fetchReportTemplates, uninstallTemplate } from "@/entities/report/api/reportApi";
+import type { ReportTemplateItem } from "@/entities/report/model/templates";
+import type { ManagedFileGroup } from "@/entities/plugin-data/api/managedFilesApi";
 
 export function useTemplatePackages(groups: ManagedFileGroup[], onChanged: () => void) {
   const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);

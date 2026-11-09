@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
-import type { components, paths } from "../../../shared/api/generated/schema";
+import { apiGet, apiPost, extractData } from "@/shared/api/bridge";
+import type { components, paths } from "@/shared/api/generated/schema";
 
 export type ComicRotationEntry = components["schemas"]["ComicRotationEntry"];
 export type ComicRotationScope =

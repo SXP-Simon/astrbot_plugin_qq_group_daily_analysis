@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { StorageOverview } from "../StorageOverview";
+import { StorageOverview } from "@/pages/plugin-data/ui/partitions/StorageOverview";
 
 afterEach(cleanup);
 const partition = {

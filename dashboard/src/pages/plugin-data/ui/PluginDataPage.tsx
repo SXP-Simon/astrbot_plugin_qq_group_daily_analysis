@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import { ResourceManagementContext } from "../../../features/manage-template-resources/model/ResourceManagementContext";
+import { ResourceManagementContext } from "@/features/manage-template-resources/model/ResourceManagementContext";
 import {
   IconFolder,
   IconBolt,
@@ -7,15 +7,15 @@ import {
   IconDeviceFloppy,
   IconInfoCircle,
 } from "@tabler/icons-react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../shared/ui/tabs";
-import { usePluginDataViewModel } from "../model/usePluginDataViewModel";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/ui/tabs";
+import { usePluginDataViewModel } from "@/pages/plugin-data/model/usePluginDataViewModel";
 import { StoredRecordsTab } from "./StoredRecordsTab";
 import { ManagedFilesPanel } from "./partitions/ManagedFilesPanel";
 import { IncrementalTab } from "./incremental/IncrementalTab";
 import { BatchDetailModal } from "./incremental/BatchDetailModal";
 import { CheckpointsTab } from "./checkpoints/CheckpointsTab";
 import { CheckpointDetailModal } from "./checkpoints/CheckpointDetailModal";
-import type { FontManagementRequest } from "../../../features/manage-typst-fonts/model/FontManagementContext";
+import type { FontManagementRequest } from "@/features/manage-typst-fonts/model/FontManagementContext";
 
 export const PluginDataPage: React.FC<{
   onNavigate?: (page: "reports" | "config" | "traces") => void;

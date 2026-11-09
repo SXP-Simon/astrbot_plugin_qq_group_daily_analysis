@@ -1,12 +1,9 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import {
-  refreshComicPreview,
-  type ComicPreviewRequest,
-} from "../../../../entities/comic/api/comicApi";
-import { comicPresets } from "../../../../entities/comic/model/comicPresets";
-import { Button } from "../../../../shared/ui/button";
-import { NativeSelect } from "../../../../shared/ui/native-select";
+import { refreshComicPreview, type ComicPreviewRequest } from "@/entities/comic/api/comicApi";
+import { comicPresets } from "@/entities/comic/model/comicPresets";
+import { Button } from "@/shared/ui/button";
+import { NativeSelect } from "@/shared/ui/native-select";
 
 export function ComicPreviewRefresh({ onChanged }: { onChanged: () => void }) {
   const [presetId, setPresetId] = useState("classic");

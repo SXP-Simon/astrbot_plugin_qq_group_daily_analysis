@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { OverviewTrendCharts } from "../OverviewTrendCharts";
-import { fetchAnalyticsTrends } from "../../../entities/metric/api/metricApi";
-import { createMockAnalyticsTrends } from "../../../mocks/data/metrics";
-import { createOverviewTrendOptions } from "../overviewTrendOptions";
+import { OverviewTrendCharts } from "@/widgets/trend-charts/OverviewTrendCharts";
+import { fetchAnalyticsTrends } from "@/entities/metric/api/metricApi";
+import { createMockAnalyticsTrends } from "@/mocks/data/metrics";
+import { createOverviewTrendOptions } from "@/widgets/trend-charts/overviewTrendOptions";
 
 const chartRender = vi.hoisted(() => vi.fn());
 vi.mock("echarts-for-react", () => ({
@@ -12,8 +12,8 @@ vi.mock("echarts-for-react", () => ({
     return <div data-testid="chart" />;
   },
 }));
-vi.mock("../../../entities/metric/api/metricApi", () => ({ fetchAnalyticsTrends: vi.fn() }));
-vi.mock("../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+vi.mock("@/entities/metric/api/metricApi", () => ({ fetchAnalyticsTrends: vi.fn() }));
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 beforeEach(() => vi.resetAllMocks());
 
 it("悬浮提示用语义色和系列色标记分行数据，保留零值并拒绝越界记录", () => {

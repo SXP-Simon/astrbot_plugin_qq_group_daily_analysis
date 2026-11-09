@@ -1,5 +1,5 @@
-import { resolveSpanOutcome } from "../model/spanOutcome";
-import { getRenderAttemptDiagnostic } from "../model/renderAttempts";
+import { resolveSpanOutcome } from "@/entities/trace/model/spanOutcome";
+import { getRenderAttemptDiagnostic } from "@/entities/trace/model/renderAttempts";
 
 interface SpanAlertsProps {
   stageName: string;

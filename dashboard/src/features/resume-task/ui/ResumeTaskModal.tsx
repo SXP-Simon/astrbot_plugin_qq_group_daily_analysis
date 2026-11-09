@@ -1,10 +1,10 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useId } from "react";
 import { IconRefresh } from "@tabler/icons-react";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
-import { Button } from "../../../shared/ui/button";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { useResumeOptions } from "../model/useResumeOptions";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
+import { Button } from "@/shared/ui/button";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { useResumeOptions } from "@/features/resume-task/model/useResumeOptions";
 
 interface ResumeTaskModalProps {
   open: boolean;

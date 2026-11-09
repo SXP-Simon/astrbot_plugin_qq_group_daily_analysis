@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { resumeTraceTask } from "../../../entities/trace/api/traceApi";
-import { fetchReportContent } from "../../../entities/report/api/reportApi";
-import type { TraceRecord } from "../../../entities/trace/model/types";
-import type { ReportItem } from "../../../entities/report/model/types";
+import { resumeTraceTask } from "@/entities/trace/api/traceApi";
+import { fetchReportContent } from "@/entities/report/api/reportApi";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import type { ReportItem } from "@/entities/report/model/types";
 
 export function useTraceActions(
   sourceId: string | null,

@@ -1,9 +1,12 @@
 import { expect, it } from "vitest";
 import { z } from "zod";
-import cases from "../../../../../../tests/fixtures/config_validation_cases.json";
-import schema from "../../../../../../_conf_schema.json";
-import type { PluginSchema } from "../types";
-import { validateConfigWithZod, validateSingleFieldWithZod } from "../validation";
+import cases from "@plugin-tests/fixtures/config_validation_cases.json";
+import schema from "@plugin-config";
+import type { PluginSchema } from "@/entities/config/model/types";
+import {
+  validateConfigWithZod,
+  validateSingleFieldWithZod,
+} from "@/entities/config/model/validation";
 
 it.each(cases)("与后端共用边界案例：$name", ({ config, valid }) => {
   const before = structuredClone(config);

@@ -1,12 +1,12 @@
 import { useRef } from "react";
 import { IconBrandGithub, IconFileZip, IconDownload, IconX } from "@tabler/icons-react";
-import type { TemplateInstallResult } from "../../../entities/report/api/reportApi";
-import { useTemplateInstall } from "../model/useTemplateInstall";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../shared/ui/tabs";
-import { formatBytes } from "../../../shared/lib/formatters";
+import type { TemplateInstallResult } from "@/entities/report/api/reportApi";
+import { useTemplateInstall } from "@/features/install-template/model/useTemplateInstall";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/ui/tabs";
+import { formatBytes } from "@/shared/lib/formatters";
 
 interface TemplateInstallModalProps {
   open: boolean;

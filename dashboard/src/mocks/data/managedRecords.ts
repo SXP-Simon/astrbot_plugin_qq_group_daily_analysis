@@ -1,8 +1,5 @@
-import { recordKey } from "../../entities/plugin-data/model/managedRecord";
-import type {
-  ManagedRecord,
-  RecordLocator,
-} from "../../entities/plugin-data/api/managedRecordsApi";
+import { recordKey } from "@/entities/plugin-data/model/managedRecord";
+import type { ManagedRecord, RecordLocator } from "@/entities/plugin-data/api/managedRecordsApi";
 import { mockCheckpoints, mockIncrementalBatches, incrementalMockSession } from "./pluginData";
 
 let version = 0;

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
-import { RenderAttemptsTable } from "../RenderAttemptsTable";
+import { RenderAttemptsTable } from "@/entities/trace/ui/RenderAttemptsTable";
 
 it("每轮显示实际服务地址，区分资源环境与T2I服务", () => {
   render(

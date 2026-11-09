@@ -4,7 +4,7 @@ import {
   installTemplateFromUrl,
   installTemplateFromFile,
   type TemplateInstallResult,
-} from "../../../entities/report/api/reportApi";
+} from "@/entities/report/api/reportApi";
 
 export function useTemplateInstall(
   open: boolean,

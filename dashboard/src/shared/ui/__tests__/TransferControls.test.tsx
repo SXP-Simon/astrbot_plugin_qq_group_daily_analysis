@@ -1,10 +1,10 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { Alert } from "../alert";
-import { Progress } from "../progress";
-import { CopyButton } from "../copy-button";
-import { copyToClipboard } from "../../lib/clipboard";
-vi.mock("../../lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+import { Alert } from "@/shared/ui/alert";
+import { Progress } from "@/shared/ui/progress";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 it("进度只在已知时声明数值，拒绝非有限百分比并限制边界", () => {
   const view = render(<Progress label="上传" value={0} />);

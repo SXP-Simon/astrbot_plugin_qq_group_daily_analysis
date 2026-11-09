@@ -1,23 +1,23 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ReportsPage } from "../ReportsPage";
-import { useReportsViewModel } from "../../model/useReportsViewModel";
+import { ReportsPage } from "@/pages/reports/ui/ReportsPage";
+import { useReportsViewModel } from "@/pages/reports/model/useReportsViewModel";
 import {
   fetchReportHistory,
   fetchReportContent,
   fetchReportTemplates,
   rerenderReport,
-} from "../../../../entities/report/api/reportApi";
-import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
-import type { ReportItem } from "../../../../entities/report/model/types";
+} from "@/entities/report/api/reportApi";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import type { ReportItem } from "@/entities/report/model/types";
 
-vi.mock("../../../../entities/report/api/reportApi", () => ({
+vi.mock("@/entities/report/api/reportApi", () => ({
   fetchReportHistory: vi.fn(),
   fetchReportContent: vi.fn(),
   fetchReportTemplates: vi.fn(),
   rerenderReport: vi.fn(),
 }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
+vi.mock("@/entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 const image: ReportItem = {
   filename: "example-a.png",
   modified_at: 200,

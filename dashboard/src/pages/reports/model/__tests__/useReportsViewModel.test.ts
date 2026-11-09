@@ -1,15 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { fetchReportHistory } from "../../../../entities/report/api/reportApi";
-import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
-import type { ReportItem } from "../../../../entities/report/model/types";
-import { useReportsViewModel } from "../useReportsViewModel";
+import { fetchReportHistory } from "@/entities/report/api/reportApi";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import type { ReportItem } from "@/entities/report/model/types";
+import { useReportsViewModel } from "@/pages/reports/model/useReportsViewModel";
 
-vi.mock("../../../../entities/report/api/reportApi", () => ({
+vi.mock("@/entities/report/api/reportApi", () => ({
   fetchReportHistory: vi.fn(),
   fetchReportContent: vi.fn(),
 }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
+vi.mock("@/entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 const first: ReportItem = {
   filename: "example-a.png",
   size_bytes: 100,

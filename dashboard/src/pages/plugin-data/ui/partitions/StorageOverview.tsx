@@ -1,10 +1,10 @@
-import { LoadingSkeleton, LoadingState } from "../../../../shared/ui/loading-state";
+import { LoadingSkeleton, LoadingState } from "@/shared/ui/loading-state";
 import { IconFolderOpen, IconRefresh } from "@tabler/icons-react";
-import type { ManagedPartition } from "../../../../entities/plugin-data/api/managedFilesApi";
-import { partitionPresentation } from "../../../../entities/plugin-data/model/partitionPresentation";
-import type { useManagedFiles } from "../../../../features/manage-stored-files/model/useManagedFiles";
-import { formatBytes } from "../../../../shared/lib/formatters";
-import { Button } from "../../../../shared/ui/button";
+import type { ManagedPartition } from "@/entities/plugin-data/api/managedFilesApi";
+import { partitionPresentation } from "@/entities/plugin-data/model/partitionPresentation";
+import type { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
+import { formatBytes } from "@/shared/lib/formatters";
+import { Button } from "@/shared/ui/button";
 
 export function StorageOverview({
   vm,

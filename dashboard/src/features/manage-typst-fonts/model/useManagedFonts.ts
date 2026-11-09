@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchTypstFonts } from "../../../entities/config/api/configApi";
-import type { TypstFontStatus } from "../../../entities/config/model/typstFonts";
+import { fetchTypstFonts } from "@/entities/config/api/configApi";
+import type { TypstFontStatus } from "@/entities/config/model/typstFonts";
 import {
   deleteManagedFiles,
   fetchManagedFiles,
   type ManagedFile,
-} from "../../../entities/plugin-data/api/managedFilesApi";
+} from "@/entities/plugin-data/api/managedFilesApi";
 
 import { useFontDownload } from "./useFontDownload";
 import { useFontUpload } from "./useFontUpload";

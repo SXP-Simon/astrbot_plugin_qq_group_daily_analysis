@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { useState } from "react";
-import { FieldRenderer } from "../FieldRenderer";
-import { expandAnalysisPrompt } from "../../../../entities/config/model/promptSchemes";
-import type { PromptVariable } from "../../../../entities/config/model/types";
+import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
+import { expandAnalysisPrompt } from "@/entities/config/model/promptSchemes";
+import type { PromptVariable } from "@/entities/config/model/types";
 
 const variables: Record<string, PromptVariable> = {
   messages_text: {

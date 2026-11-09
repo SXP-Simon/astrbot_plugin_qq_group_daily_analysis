@@ -1,5 +1,5 @@
 import type { EChartsOption } from "echarts";
-import type { AnalyticsTrendPoint, ProviderBreakdownItem } from "../../entities/metric/model/types";
+import type { AnalyticsTrendPoint, ProviderBreakdownItem } from "@/entities/metric/model/types";
 
 interface Palette {
   text: string;

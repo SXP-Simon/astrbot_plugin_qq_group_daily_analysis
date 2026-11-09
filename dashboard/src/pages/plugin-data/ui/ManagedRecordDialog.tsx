@@ -1,4 +1,4 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useRef, useState } from "react";
 import {
   IconAlertTriangle,
@@ -8,11 +8,11 @@ import {
   IconTrash,
   IconZoomIn,
 } from "@tabler/icons-react";
-import { useManagedRecord } from "../model/useManagedRecord";
-import type { RecordLocator } from "../../../entities/plugin-data/api/managedRecordsApi";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
-import { copyToClipboard } from "../../../shared/lib/clipboard";
+import { useManagedRecord } from "@/pages/plugin-data/model/useManagedRecord";
+import type { RecordLocator } from "@/entities/plugin-data/api/managedRecordsApi";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
 type Props = {
   locator: RecordLocator | null;

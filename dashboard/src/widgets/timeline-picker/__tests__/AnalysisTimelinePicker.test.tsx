@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { TraceRecord } from "../../../entities/trace/model/types";
-import { AnalysisTimelinePicker } from "../AnalysisTimelinePicker";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import { AnalysisTimelinePicker } from "@/widgets/timeline-picker/AnalysisTimelinePicker";
 
 const traces: TraceRecord[] = ["a", "b", "c"].map((id, index) => ({
   trace_id: `example-${id}`,

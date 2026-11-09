@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { formatTriggerType } from "../lib/formatters";
+import { formatTriggerType } from "@/shared/lib/formatters";
 
 export function TriggerTypeTag({
   triggerType,

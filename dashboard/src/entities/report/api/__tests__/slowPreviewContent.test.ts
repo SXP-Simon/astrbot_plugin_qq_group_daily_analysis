@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { fetchReportContent, fetchTemplatePreview } from "../reportApi";
-import { fetchManagedContent } from "../../../plugin-data/api/managedFilesApi";
+import { fetchReportContent, fetchTemplatePreview } from "@/entities/report/api/reportApi";
+import { fetchManagedContent } from "@/entities/plugin-data/api/managedFilesApi";
 
 const image = {
   filename: "large.png",

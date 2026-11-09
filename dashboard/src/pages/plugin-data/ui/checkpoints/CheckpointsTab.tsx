@@ -1,21 +1,16 @@
-import { LoadingState } from "../../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useState } from "react";
 import { IconCode, IconSettings, IconTrash } from "@tabler/icons-react";
-import { ManagedRecordDialog } from "../ManagedRecordDialog";
-import { RecordSelectionActions } from "../RecordSelectionActions";
-import { useRecordSelection, recordKey } from "../../model/useRecordSelection";
-import type { RecordLocator } from "../../../../entities/plugin-data/api/managedRecordsApi";
-import type { CheckpointItem } from "../../../../entities/plugin-data/model/types";
-import type { usePluginDataViewModel } from "../../model/usePluginDataViewModel";
-import { formatBytes, formatTimestamp, formatStageName } from "../../../../shared/lib/formatters";
-import { Button } from "../../../../shared/ui/button";
-import { Pagination } from "../../../../shared/ui/pagination";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from "../../../../shared/ui/dialog";
+import { ManagedRecordDialog } from "@/pages/plugin-data/ui/ManagedRecordDialog";
+import { RecordSelectionActions } from "@/pages/plugin-data/ui/RecordSelectionActions";
+import { useRecordSelection, recordKey } from "@/pages/plugin-data/model/useRecordSelection";
+import type { RecordLocator } from "@/entities/plugin-data/api/managedRecordsApi";
+import type { CheckpointItem } from "@/entities/plugin-data/model/types";
+import type { usePluginDataViewModel } from "@/pages/plugin-data/model/usePluginDataViewModel";
+import { formatBytes, formatTimestamp, formatStageName } from "@/shared/lib/formatters";
+import { Button } from "@/shared/ui/button";
+import { Pagination } from "@/shared/ui/pagination";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 import { CheckpointFilterBar } from "./CheckpointFilterBar";
 
 export function CheckpointsTab({ vm }: { vm: ReturnType<typeof usePluginDataViewModel> }) {

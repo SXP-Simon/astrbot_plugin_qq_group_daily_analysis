@@ -1,16 +1,16 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import { fetchPluginConfig, savePluginConfig } from "../../../../entities/config/api/configApi";
+import { fetchPluginConfig, savePluginConfig } from "@/entities/config/api/configApi";
 import {
   pluginConfigResponseSchema,
   pluginConfigSaveSchema,
-} from "../../../../entities/config/model/configContract";
-import { useConfigViewModel } from "../useConfigViewModel";
-import schema from "../../../../../../_conf_schema.json";
-import type { PluginSchema } from "../../../../entities/config/model/types";
+} from "@/entities/config/model/configContract";
+import { useConfigViewModel } from "@/pages/config/model/useConfigViewModel";
+import schema from "@plugin-config";
+import type { PluginSchema } from "@/entities/config/model/types";
 
-vi.mock("../../../../entities/config/api/configApi", () => ({
+vi.mock("@/entities/config/api/configApi", () => ({
   fetchPluginConfig: vi.fn(),
   savePluginConfig: vi.fn(),
   fetchAvailableProviders: vi.fn().mockResolvedValue([]),

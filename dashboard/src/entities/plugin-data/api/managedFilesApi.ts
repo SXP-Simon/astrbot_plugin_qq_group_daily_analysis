@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { apiGet, apiPost, apiUpload, extractData } from "../../../shared/api/bridge";
-import type { components } from "../../../shared/api/generated/schema";
+import { apiGet, apiPost, apiUpload, extractData } from "@/shared/api/bridge";
+import type { components } from "@/shared/api/generated/schema";
 
 export type ManagedPartition = components["schemas"]["ManagedPartition"];
 export type ManagedFile = components["schemas"]["ManagedFile"];

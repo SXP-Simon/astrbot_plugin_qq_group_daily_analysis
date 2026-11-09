@@ -5,7 +5,7 @@ import {
   formatDuration,
   formatPercent,
   formatTokens,
-} from "../formatters";
+} from "@/shared/lib/formatters";
 
 describe("数据格式化工具库 (Shared Formatters Library)", () => {
   describe("formatBytes (字节换算)", () => {

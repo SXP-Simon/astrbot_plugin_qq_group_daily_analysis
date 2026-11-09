@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { copyToClipboard } from "../clipboard";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
 afterEach(() => {
   document.body.replaceChildren();

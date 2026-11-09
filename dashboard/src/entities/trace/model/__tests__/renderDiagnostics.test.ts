@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { getRenderAttemptDiagnostic } from "../renderAttempts";
+import { getRenderAttemptDiagnostic } from "@/entities/trace/model/renderAttempts";
 
 it("只有后续明确成功且为最后一轮时才标记渲染恢复", () => {
   expect(

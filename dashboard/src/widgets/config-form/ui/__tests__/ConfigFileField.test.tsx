@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { ConfigFileField } from "../ConfigFileField";
-import {
-  fetchConfigFileContent,
-  uploadConfigFile,
-} from "../../../../entities/config/api/configApi";
+import { ConfigFileField } from "@/widgets/config-form/ui/ConfigFileField";
+import { fetchConfigFileContent, uploadConfigFile } from "@/entities/config/api/configApi";
 
-vi.mock("../../../../entities/config/api/configApi", () => ({
+vi.mock("@/entities/config/api/configApi", () => ({
   fetchConfigFileContent: vi.fn(),
   uploadConfigFile: vi.fn(),
 }));

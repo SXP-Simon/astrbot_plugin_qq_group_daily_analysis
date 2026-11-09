@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { IconPhoto } from "@tabler/icons-react";
-import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "@/entities/config/model/renderingConfig";
 import {
   GITHUB_REPO_BRANCH,
   GITHUB_REPO_NAME,
   GITHUB_REPO_OWNER,
-} from "../../../entities/report/model/templates";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
-import { ImagePreview } from "../../../shared/ui/image-preview";
-import { comicPresets } from "../../../entities/comic/model/comicPresets";
+} from "@/entities/report/model/templates";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/shared/ui/dialog";
+import { ImagePreview } from "@/shared/ui/image-preview";
+import { comicPresets } from "@/entities/comic/model/comicPresets";
 
 function ComicStyleThumbnail({ name, src }: { name: string; src?: string }) {
   const [failed, setFailed] = useState<string>();

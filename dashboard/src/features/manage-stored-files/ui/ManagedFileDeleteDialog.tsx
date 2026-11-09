@@ -1,10 +1,7 @@
-import type {
-  ManagedFile,
-  ManagedPartition,
-} from "../../../entities/plugin-data/api/managedFilesApi";
-import type { useManagedFiles } from "../model/useManagedFiles";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import type { ManagedFile, ManagedPartition } from "@/entities/plugin-data/api/managedFilesApi";
+import type { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 
 export function ManagedFileDeleteDialog({
   vm,

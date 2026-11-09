@@ -5,7 +5,7 @@ import {
   mutateManagedRecord,
   recordKey,
   type RecordLocator,
-} from "../../../entities/plugin-data/api/managedRecordsApi";
+} from "@/entities/plugin-data/api/managedRecordsApi";
 
 export function useRecordSelection(locators: RecordLocator[], onChanged: () => void) {
   const removing = useRef(false);
@@ -81,4 +81,4 @@ export function useRecordSelection(locators: RecordLocator[], onChanged: () => v
   return { selected, keys: selected.map(recordKey), select, busy, progress, result, remove, clear };
 }
 
-export { recordKey } from "../../../entities/plugin-data/api/managedRecordsApi";
+export { recordKey } from "@/entities/plugin-data/api/managedRecordsApi";

@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { StageMetricsBadges } from "../StageMetricsBadges";
-import { TaskStageBadge } from "../../../task/ui/TaskStageBadge";
+import { StageMetricsBadges } from "@/entities/trace/ui/StageMetricsBadges";
+import { TaskStageBadge } from "@/entities/task/ui/TaskStageBadge";
 
-vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 
 it("编译 CPU 耗时与墙钟独立展示，配额未知时不声称无限制", () => {
   render(

@@ -1,11 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import { fetchReportContent } from "../../../../entities/report/api/reportApi";
-import type { ReportItem } from "../../../../entities/report/model/types";
-import { useReportActions } from "../useReportActions";
+import { fetchReportContent } from "@/entities/report/api/reportApi";
+import type { ReportItem } from "@/entities/report/model/types";
+import { useReportActions } from "@/pages/reports/model/useReportActions";
 
-vi.mock("../../../../entities/report/api/reportApi", () => ({ fetchReportContent: vi.fn() }));
+vi.mock("@/entities/report/api/reportApi", () => ({ fetchReportContent: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 const image: ReportItem = {
   filename: "example-a.png",

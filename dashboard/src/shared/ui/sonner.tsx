@@ -7,7 +7,7 @@ import {
   IconX,
   IconLoader2,
 } from "@tabler/icons-react";
-import { useTheme } from "../lib/useTheme";
+import { useTheme } from "@/shared/lib/useTheme";
 
 export function Toaster() {
   const { isDark } = useTheme();

@@ -1,10 +1,13 @@
-import { Button } from "../../../shared/ui/button";
+import { Button } from "@/shared/ui/button";
 import { useRef } from "react";
-import { Alert } from "../../../shared/ui/alert";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
-import type { ManagedFile } from "../../../entities/plugin-data/api/managedFilesApi";
-import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
-import { useManagedFonts, type ManagedFontRow } from "../model/useManagedFonts";
+import { Alert } from "@/shared/ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/shared/ui/dialog";
+import type { ManagedFile } from "@/entities/plugin-data/api/managedFilesApi";
+import { KNOWN_TEMPLATES } from "@/entities/report/model/templates";
+import {
+  useManagedFonts,
+  type ManagedFontRow,
+} from "@/features/manage-typst-fonts/model/useManagedFonts";
 
 export function FontMutationDialogs({
   vm,

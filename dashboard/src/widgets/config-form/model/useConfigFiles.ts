@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { fetchConfigFileContent, uploadConfigFile } from "../../../entities/config/api/configApi";
+import { fetchConfigFileContent, uploadConfigFile } from "@/entities/config/api/configApi";
 
 export function useConfigFiles(
   value: unknown,

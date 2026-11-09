@@ -1,13 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { TemplateResources } from "../TemplateResources";
-import { ResourceManagementContext } from "../../model/ResourceManagementContext";
+import { TemplateResources } from "@/features/manage-template-resources/ui/TemplateResources";
+import { ResourceManagementContext } from "@/features/manage-template-resources/model/ResourceManagementContext";
 import {
   fetchTemplateResources,
   downloadTemplateResource,
-} from "../../../../entities/config/api/templateResourceApi";
+} from "@/entities/config/api/templateResourceApi";
 
-vi.mock("../../../../entities/config/api/templateResourceApi", () => ({
+vi.mock("@/entities/config/api/templateResourceApi", () => ({
   fetchTemplateResources: vi.fn(),
   downloadTemplateResource: vi.fn(),
 }));

@@ -9,24 +9,24 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import { TriggerTaskModal } from "../ui/TriggerTaskModal";
-import { useTriggerTask } from "../model/useTriggerTask";
+import { TriggerTaskModal } from "@/features/trigger-task/ui/TriggerTaskModal";
+import { useTriggerTask } from "@/features/trigger-task/model/useTriggerTask";
 import {
   fetchConnectedPlatforms,
   triggerNewTask,
   type ConnectedPlatform,
   type TriggerTaskResult,
-} from "../../../entities/task/api/taskApi";
-import { fetchProviderList } from "../../../entities/trace/api/traceApi";
-import { fetchReportTemplates } from "../../../entities/report/api/reportApi";
-import type { GroupItem } from "../../../entities/group/model/types";
+} from "@/entities/task/api/taskApi";
+import { fetchProviderList } from "@/entities/trace/api/traceApi";
+import { fetchReportTemplates } from "@/entities/report/api/reportApi";
+import type { GroupItem } from "@/entities/group/model/types";
 
-vi.mock("../../../entities/task/api/taskApi", () => ({
+vi.mock("@/entities/task/api/taskApi", () => ({
   fetchConnectedPlatforms: vi.fn(),
   triggerNewTask: vi.fn(),
 }));
-vi.mock("../../../entities/trace/api/traceApi", () => ({ fetchProviderList: vi.fn() }));
-vi.mock("../../../entities/report/api/reportApi", () => ({ fetchReportTemplates: vi.fn() }));
+vi.mock("@/entities/trace/api/traceApi", () => ({ fetchProviderList: vi.fn() }));
+vi.mock("@/entities/report/api/reportApi", () => ({ fetchReportTemplates: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), warning: vi.fn() } }));
 const platforms: ConnectedPlatform[] = [
   { id: "qq-main", type: "aiocqhttp", display_name: "QQ 主号", label: "QQ 主号" },

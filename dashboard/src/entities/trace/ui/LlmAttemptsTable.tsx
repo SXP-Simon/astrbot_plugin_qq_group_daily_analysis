@@ -1,6 +1,6 @@
-import { formatDuration } from "../../../shared/lib/formatters";
-import { llmAttemptSchema } from "../model/llmAttempts";
-import { resolveSpanOutcome } from "../model/spanOutcome";
+import { formatDuration } from "@/shared/lib/formatters";
+import { llmAttemptSchema } from "@/entities/trace/model/llmAttempts";
+import { resolveSpanOutcome } from "@/entities/trace/model/spanOutcome";
 
 const areaNames = new Map(
   Object.entries({

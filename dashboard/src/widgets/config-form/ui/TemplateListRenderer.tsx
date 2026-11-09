@@ -1,18 +1,18 @@
 import { useRef, useState } from "react";
 import { IconArrowDown, IconArrowUp, IconPlus, IconTrash } from "@tabler/icons-react";
-import { isFieldVisible } from "../../../entities/config/model/visibility";
-import type { SchemaFieldItem } from "../../../entities/config/model/types";
-import type { AvailableProvider, AvailablePersona } from "../../../entities/config/api/configApi";
+import { isFieldVisible } from "@/entities/config/model/visibility";
+import type { SchemaFieldItem } from "@/entities/config/model/types";
+import type { AvailableProvider, AvailablePersona } from "@/entities/config/api/configApi";
 import { FieldRenderer } from "./FieldRenderer";
 import { ComicStyleGallery } from "./ComicStyleGallery";
-import { comicPresets, resolveComicStyleName } from "../../../entities/comic/model/comicPresets";
-import { T2iProbe } from "../../../features/test-t2i/ui/T2iProbe";
-import { TemplateResources } from "../../../features/manage-template-resources/ui/TemplateResources";
-import { TypstFonts } from "../../../features/manage-typst-fonts/ui/TypstFonts";
-import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
-import { useTemplateListModel } from "../model/useTemplateListModel";
+import { comicPresets, resolveComicStyleName } from "@/entities/comic/model/comicPresets";
+import { T2iProbe } from "@/features/test-t2i/ui/T2iProbe";
+import { TemplateResources } from "@/features/manage-template-resources/ui/TemplateResources";
+import { TypstFonts } from "@/features/manage-typst-fonts/ui/TypstFonts";
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "@/entities/config/model/renderingConfig";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/shared/ui/dialog";
+import { useTemplateListModel } from "@/widgets/config-form/model/useTemplateListModel";
 
 interface TemplateListRendererProps {
   templateCdnBaseUrl?: string | null;

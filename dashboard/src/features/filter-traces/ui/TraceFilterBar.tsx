@@ -1,10 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { IconRefresh, IconX } from "@tabler/icons-react";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { GroupFilters } from "../../../entities/group/ui/GroupFilters";
-import type { GroupItem } from "../../../entities/group/model/types";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { GroupFilters } from "@/entities/group/ui/GroupFilters";
+import type { GroupItem } from "@/entities/group/model/types";
 
 interface TraceFilterBarProps {
   search: string;

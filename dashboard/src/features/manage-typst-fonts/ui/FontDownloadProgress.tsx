@@ -1,8 +1,8 @@
-import type { useFontDownload } from "../model/useFontDownload";
-import { formatBytes } from "../../../shared/lib/formatters";
-import { Alert } from "../../../shared/ui/alert";
-import { Button } from "../../../shared/ui/button";
-import { Progress } from "../../../shared/ui/progress";
+import type { useFontDownload } from "@/features/manage-typst-fonts/model/useFontDownload";
+import { formatBytes } from "@/shared/lib/formatters";
+import { Alert } from "@/shared/ui/alert";
+import { Button } from "@/shared/ui/button";
+import { Progress } from "@/shared/ui/progress";
 
 export function FontDownloadProgress({
   download,

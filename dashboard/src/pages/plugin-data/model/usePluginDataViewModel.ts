@@ -9,7 +9,7 @@ import {
   IncrementalBatchItem,
   IncrementalCursorInfo,
   IncrementalGroupDirectoryItem,
-} from "../../../entities/plugin-data/api/pluginDataApi";
+} from "@/entities/plugin-data/api/pluginDataApi";
 
 import { useCheckpointsViewModel } from "./useCheckpointsViewModel";
 

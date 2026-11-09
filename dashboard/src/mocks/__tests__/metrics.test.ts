@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mockHandlers } from "../handlers";
-import { mockMetricsSummary } from "../data/metrics";
+import { mockHandlers } from "@/mocks/handlers";
+import { mockMetricsSummary } from "@/mocks/data/metrics";
 
 describe("趋势示例接口", () => {
   it.each([

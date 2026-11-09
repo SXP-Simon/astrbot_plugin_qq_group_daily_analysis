@@ -1,13 +1,11 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import { fileURLToPath, URL } from "node:url";
+import { moduleAliases } from "./moduleAliases";
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: moduleAliases,
   },
   test: {
     globals: true,

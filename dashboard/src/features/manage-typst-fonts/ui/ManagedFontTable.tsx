@@ -1,11 +1,14 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
-import { useManagedFonts, type ManagedFontRow } from "../model/useManagedFonts";
-import { useBrowserFontDownload } from "../model/useBrowserFontDownload";
-import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
-import { formatBytes } from "../../../shared/lib/formatters";
-import { Button } from "../../../shared/ui/button";
-import { ExternalLink } from "../../../shared/ui/ExternalLink";
-import { FilePicker } from "../../../shared/ui/file-picker";
+import { LoadingState } from "@/shared/ui/loading-state";
+import {
+  useManagedFonts,
+  type ManagedFontRow,
+} from "@/features/manage-typst-fonts/model/useManagedFonts";
+import { useBrowserFontDownload } from "@/features/manage-typst-fonts/model/useBrowserFontDownload";
+import { KNOWN_TEMPLATES } from "@/entities/report/model/templates";
+import { formatBytes } from "@/shared/lib/formatters";
+import { Button } from "@/shared/ui/button";
+import { ExternalLink } from "@/shared/ui/ExternalLink";
+import { FilePicker } from "@/shared/ui/file-picker";
 
 export function ManagedFontTable({
   vm,

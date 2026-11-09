@@ -1,6 +1,6 @@
 import { IconPlus } from "@tabler/icons-react";
-import type { PromptVariable } from "../../../entities/config/model/types";
-import { Button } from "../../../shared/ui/button";
+import type { PromptVariable } from "@/entities/config/model/types";
+import { Button } from "@/shared/ui/button";
 
 interface PromptVariablePanelProps {
   variables: Record<string, PromptVariable>;

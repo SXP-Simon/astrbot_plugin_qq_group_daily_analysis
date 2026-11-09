@@ -1,19 +1,19 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { useReportTemplates } from "../../../../entities/report/model/useReportTemplates";
-import { fetchTemplatePreview } from "../../../../entities/report/api/reportApi";
-import { TemplateSelectorRenderer } from "../TemplateSelectorRenderer";
-import type { ReportTemplateItem } from "../../../../entities/report/model/templates";
+import { useReportTemplates } from "@/entities/report/model/useReportTemplates";
+import { fetchTemplatePreview } from "@/entities/report/api/reportApi";
+import { TemplateSelectorRenderer } from "@/widgets/config-form/ui/TemplateSelectorRenderer";
+import type { ReportTemplateItem } from "@/entities/report/model/templates";
 
-vi.mock("../../../../entities/report/model/useReportTemplates", () => ({
+vi.mock("@/entities/report/model/useReportTemplates", () => ({
   useReportTemplates: vi.fn(),
 }));
-vi.mock("../../../../entities/report/api/reportApi", () => ({ fetchTemplatePreview: vi.fn() }));
-vi.mock("../../../../features/install-template/ui/TemplateInstallModal", () => ({
+vi.mock("@/entities/report/api/reportApi", () => ({ fetchTemplatePreview: vi.fn() }));
+vi.mock("@/features/install-template/ui/TemplateInstallModal", () => ({
   TemplateInstallModal: ({ open, onInstalled }: { open: boolean; onInstalled: () => void }) =>
     open ? <button onClick={onInstalled}>完成安装示例</button> : null,
 }));
-vi.mock("../../../../features/install-template/ui/TemplateUninstallModal", () => ({
+vi.mock("@/features/install-template/ui/TemplateUninstallModal", () => ({
   TemplateUninstallModal: ({
     open,
     onUninstalled,

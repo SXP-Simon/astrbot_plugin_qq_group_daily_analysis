@@ -16,7 +16,10 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@plugin-config": ["../_conf_schema.json"],
+      "@comic-catalog": ["../src/shared/comic_prompt_templates.json"],
+      "@plugin-tests/*": ["../tests/*"]
     }
   },
   "include": ["src"]

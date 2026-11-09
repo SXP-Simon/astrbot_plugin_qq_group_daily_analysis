@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { LogEntry } from "../LogEntry";
-import type { PluginLogItem } from "../../model/types";
+import { LogEntry } from "@/entities/log/ui/LogEntry";
+import type { PluginLogItem } from "@/entities/log/model/types";
 
 const log: PluginLogItem = {
   id: "log-example",

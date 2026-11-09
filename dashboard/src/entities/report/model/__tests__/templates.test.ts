@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getReportTemplatePreviewUrl, supportsTemplate, templateCapabilities } from "../templates";
+import {
+  getReportTemplatePreviewUrl,
+  supportsTemplate,
+  templateCapabilities,
+} from "@/entities/report/model/templates";
 
 describe("模板预览使用配置模块校验后的地址", () => {
   it("拼接已规范化的 CDN 根地址", () => {

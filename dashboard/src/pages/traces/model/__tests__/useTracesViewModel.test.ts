@@ -1,12 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { fetchTraceList } from "../../../../entities/trace/api/traceApi";
-import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
-import type { TraceRecord } from "../../../../entities/trace/model/types";
-import { useTracesViewModel } from "../useTracesViewModel";
+import { fetchTraceList } from "@/entities/trace/api/traceApi";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import { useTracesViewModel } from "@/pages/traces/model/useTracesViewModel";
 
-vi.mock("../../../../entities/trace/api/traceApi", () => ({ fetchTraceList: vi.fn() }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
+vi.mock("@/entities/trace/api/traceApi", () => ({ fetchTraceList: vi.fn() }));
+vi.mock("@/entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 
 const trace: TraceRecord = {
   trace_id: "example-a",

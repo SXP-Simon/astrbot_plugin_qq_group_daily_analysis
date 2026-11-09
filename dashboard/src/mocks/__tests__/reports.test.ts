@@ -1,10 +1,10 @@
 import { afterEach, expect, it } from "vitest";
-import { mockHandlers } from "../handlers";
-import { mockReportHistory } from "../data/reports";
-import { mockTraces } from "../data/traces";
-import { mockReportImage, mockReportImageBytes, mockReportHtml } from "../data/reportContent";
-import { extractData } from "../../shared/api/bridge";
-import type { ReportItem } from "../../entities/report/model/types";
+import { mockHandlers } from "@/mocks/handlers";
+import { mockReportHistory } from "@/mocks/data/reports";
+import { mockTraces } from "@/mocks/data/traces";
+import { mockReportImage, mockReportImageBytes, mockReportHtml } from "@/mocks/data/reportContent";
+import { extractData } from "@/shared/api/bridge";
+import type { ReportItem } from "@/entities/report/model/types";
 
 const savedReports = structuredClone(mockReportHistory);
 const savedArtifacts = mockTraces.map((trace) => structuredClone(trace.report_files));

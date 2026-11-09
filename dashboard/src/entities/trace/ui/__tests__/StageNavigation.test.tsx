@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { SpanTimeline } from "../SpanTimeline";
-import type { TraceSpan } from "../../model/types";
+import { SpanTimeline } from "@/entities/trace/ui/SpanTimeline";
+import type { TraceSpan } from "@/entities/trace/model/types";
 
 const first: TraceSpan = {
   trace_id: "recovered",

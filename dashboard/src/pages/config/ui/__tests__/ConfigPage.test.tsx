@@ -1,22 +1,22 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import type { SchemaFieldItem } from "../../../../entities/config/model/types";
+import type { SchemaFieldItem } from "@/entities/config/model/types";
 import {
   fetchPluginConfig,
   savePluginConfig,
   fetchAvailableProviders,
   fetchAvailablePersonas,
-} from "../../../../entities/config/api/configApi";
-import { ConfigPage } from "../ConfigPage";
-import { useConfigViewModel } from "../../model/useConfigViewModel";
+} from "@/entities/config/api/configApi";
+import { ConfigPage } from "@/pages/config/ui/ConfigPage";
+import { useConfigViewModel } from "@/pages/config/model/useConfigViewModel";
 
-vi.mock("../../../../entities/config/api/configApi", () => ({
+vi.mock("@/entities/config/api/configApi", () => ({
   fetchPluginConfig: vi.fn(),
   savePluginConfig: vi.fn(),
   fetchAvailableProviders: vi.fn(),
   fetchAvailablePersonas: vi.fn(),
 }));
-vi.mock("../../../../widgets/config-form/ui/FieldRenderer", () => ({
+vi.mock("@/widgets/config-form/ui/FieldRenderer", () => ({
   FieldRenderer: ({
     fieldKey,
     fieldSchema,

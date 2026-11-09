@@ -1,11 +1,11 @@
-import { DownloadBatch } from "../../../entities/config/api/downloadBatch";
+import { DownloadBatch } from "@/entities/config/api/downloadBatch";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   downloadTemplateResource,
   fetchTemplateResources,
-} from "../../../entities/config/api/templateResourceApi";
-import { cdnBaseUrlSchema } from "../../../entities/config/model/renderingConfig";
-import type { TemplateResourceStatus } from "../../../entities/config/model/templateResources";
+} from "@/entities/config/api/templateResourceApi";
+import { cdnBaseUrlSchema } from "@/entities/config/model/renderingConfig";
+import type { TemplateResourceStatus } from "@/entities/config/model/templateResources";
 
 export function useTemplateResources(cdnBaseUrl: string, refreshVersion = 0) {
   const [status, setStatus] = useState<TemplateResourceStatus | null>(null);

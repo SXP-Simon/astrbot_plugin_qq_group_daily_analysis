@@ -1,18 +1,18 @@
 import { useId, useState, type TextareaHTMLAttributes } from "react";
 import { IconAlertCircle, IconBraces, IconEye } from "@tabler/icons-react";
-import { Button } from "../../../shared/ui/button";
+import { Button } from "@/shared/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
   DialogTrigger,
-} from "../../../shared/ui/dialog";
+} from "@/shared/ui/dialog";
 import {
   readComicStoryboard,
   storyboardVariables,
-} from "../../../entities/comic/model/comicStoryboardPrompt";
-import { usePromptTextHistory } from "../model/usePromptTextHistory";
+} from "@/entities/comic/model/comicStoryboardPrompt";
+import { usePromptTextHistory } from "@/widgets/config-form/model/usePromptTextHistory";
 import { PromptVariablePanel } from "./PromptVariablePanel";
 
 interface ComicStoryboardEditorProps {

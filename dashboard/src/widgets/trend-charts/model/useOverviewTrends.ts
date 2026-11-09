@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { fetchAnalyticsTrends } from "../../../entities/metric/api/metricApi";
-import type { AnalyticsTrendsResponse } from "../../../entities/metric/model/types";
+import { fetchAnalyticsTrends } from "@/entities/metric/api/metricApi";
+import type { AnalyticsTrendsResponse } from "@/entities/metric/model/types";
 
 export const TREND_RANGES = [
   { value: "48h", label: "近48小时", granularity: "hour", count: 48 },

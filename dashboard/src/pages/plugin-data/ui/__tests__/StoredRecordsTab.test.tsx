@@ -1,15 +1,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { StoredRecordsTab } from "../StoredRecordsTab";
+import { StoredRecordsTab } from "@/pages/plugin-data/ui/StoredRecordsTab";
 import {
   fetchManagedRecords,
   fetchManagedRecord,
   mutateManagedRecord,
-} from "../../../../entities/plugin-data/api/managedRecordsApi";
-vi.mock("../../../../entities/plugin-data/api/managedRecordsApi", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("../../../../entities/plugin-data/api/managedRecordsApi")
-  >()),
+} from "@/entities/plugin-data/api/managedRecordsApi";
+vi.mock("@/entities/plugin-data/api/managedRecordsApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/entities/plugin-data/api/managedRecordsApi")>()),
   fetchManagedRecords: vi.fn(),
   fetchManagedRecord: vi.fn(),
   mutateManagedRecord: vi.fn(),

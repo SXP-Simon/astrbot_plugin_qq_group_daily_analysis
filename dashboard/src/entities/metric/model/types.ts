@@ -1,4 +1,4 @@
-import type { components } from "../../../shared/api/generated/schema";
+import type { components } from "@/shared/api/generated/schema";
 
 export type AnalyticsTrendPoint = components["schemas"]["AnalyticsTrendPoint"];
 export type ProviderBreakdownItem = components["schemas"]["ProviderBreakdownItem"];

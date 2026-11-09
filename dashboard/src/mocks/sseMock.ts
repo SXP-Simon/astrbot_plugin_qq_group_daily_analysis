@@ -5,7 +5,7 @@
 
 import { mockActiveTasks } from "./data/tasks";
 import { mockPluginLogs } from "./data/logs";
-import type { PluginLogItem } from "../entities/log/model/types";
+import type { PluginLogItem } from "@/entities/log/model/types";
 
 export interface SSEListener {
   onMessage: (event: unknown) => void;

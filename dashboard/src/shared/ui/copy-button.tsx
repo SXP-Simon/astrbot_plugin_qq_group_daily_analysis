@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { IconCopy } from "@tabler/icons-react";
-import { copyToClipboard } from "../lib/clipboard";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 import { Button } from "./button";
 
 export function CopyButton({

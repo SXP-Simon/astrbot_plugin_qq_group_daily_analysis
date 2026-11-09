@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { mockHandlers } from "../handlers";
-import { mockReportHistory } from "../data/reports";
+import { mockHandlers } from "@/mocks/handlers";
+import { mockReportHistory } from "@/mocks/data/reports";
 
 it("历史群聊选项保留跨平台同号群，查询先按平台筛选再分页", () => {
   const groups = mockHandlers["GET groups"]({ by_session: true }).data;

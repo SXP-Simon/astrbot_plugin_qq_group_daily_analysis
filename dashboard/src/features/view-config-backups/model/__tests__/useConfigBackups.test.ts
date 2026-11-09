@@ -1,14 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import {
-  fetchConfigBackup,
-  fetchConfigBackups,
-} from "../../../../entities/plugin-data/api/pluginDataApi";
-import type { ConfigBackupDetail } from "../../../../entities/plugin-data/model/configBackup";
-import { mockConfigBackups } from "../../../../mocks/data/configBackups";
-import { useConfigBackups } from "../useConfigBackups";
+import { fetchConfigBackup, fetchConfigBackups } from "@/entities/plugin-data/api/pluginDataApi";
+import type { ConfigBackupDetail } from "@/entities/plugin-data/model/configBackup";
+import { mockConfigBackups } from "@/mocks/data/configBackups";
+import { useConfigBackups } from "@/features/view-config-backups/model/useConfigBackups";
 
-vi.mock("../../../../entities/plugin-data/api/pluginDataApi", () => ({
+vi.mock("@/entities/plugin-data/api/pluginDataApi", () => ({
   fetchConfigBackups: vi.fn(),
   fetchConfigBackup: vi.fn(),
 }));

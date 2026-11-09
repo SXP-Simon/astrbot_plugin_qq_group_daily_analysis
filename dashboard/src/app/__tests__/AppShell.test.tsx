@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AppShell } from "../ui/AppShell";
-import { usePageNavigation } from "../model/usePageNavigation";
+import { AppShell } from "@/app/ui/AppShell";
+import { usePageNavigation } from "@/app/model/usePageNavigation";
 
 function Fixture({ configDirty = false }: { configDirty?: boolean }) {
   const { page, visited, navigate } = usePageNavigation("overview");

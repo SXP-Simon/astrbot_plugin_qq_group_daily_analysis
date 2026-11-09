@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
-import type { TraceRecord } from "../../entities/trace/model/types";
-import { Button } from "../../shared/ui/button";
-import { StatusTag } from "../../shared/ui/StatusTag";
-import { formatTimestamp, formatDuration } from "../../shared/lib/formatters";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import { Button } from "@/shared/ui/button";
+import { StatusTag } from "@/shared/ui/StatusTag";
+import { formatTimestamp, formatDuration } from "@/shared/lib/formatters";
 
 interface AnalysisTimelinePickerProps {
   traces: TraceRecord[];

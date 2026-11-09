@@ -1,22 +1,22 @@
 import { useId, useState } from "react";
 import { IconEye, IconEyeOff, IconPlus, IconRestore, IconX } from "@tabler/icons-react";
-import { resolveOptionLabel } from "../../../entities/config/model/optionLabel";
-import { isFieldVisible } from "../../../entities/config/model/visibility";
+import { resolveOptionLabel } from "@/entities/config/model/optionLabel";
+import { isFieldVisible } from "@/entities/config/model/visibility";
 import {
   CUSTOM_RESOURCE_OPTION,
   TEMPLATE_CDN_PRESETS,
-} from "../../../entities/config/model/renderingConfig";
-import type { SchemaFieldItem } from "../../../entities/config/model/types";
-import type { AvailableProvider, AvailablePersona } from "../../../entities/config/api/configApi";
-import type { TemplateRequirements } from "../../../entities/report/model/templates";
-import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { Switch } from "../../../shared/ui/switch";
-import { SearchSelect } from "../../../shared/ui/search-select";
-import { cn } from "../../../shared/lib/cn";
-import { TemplateCdnProbe } from "../../../features/test-template-cdn/ui/TemplateCdnProbe";
+} from "@/entities/config/model/renderingConfig";
+import type { SchemaFieldItem } from "@/entities/config/model/types";
+import type { AvailableProvider, AvailablePersona } from "@/entities/config/api/configApi";
+import type { TemplateRequirements } from "@/entities/report/model/templates";
+import { MarkdownHint } from "@/shared/ui/MarkdownHint";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { Switch } from "@/shared/ui/switch";
+import { SearchSelect } from "@/shared/ui/search-select";
+import { cn } from "@/shared/lib/cn";
+import { TemplateCdnProbe } from "@/features/test-template-cdn/ui/TemplateCdnProbe";
 import { TemplateListRenderer } from "./TemplateListRenderer";
 import { TemplateSelectorRenderer } from "./TemplateSelectorRenderer";
 import { ConfigFileField } from "./ConfigFileField";

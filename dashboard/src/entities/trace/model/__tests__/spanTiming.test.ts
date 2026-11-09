@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getDurationRatio, getSpanTiming } from "../spanTiming";
+import { getDurationRatio, getSpanTiming } from "@/entities/trace/model/spanTiming";
 
 describe("阶段耗时与占比", () => {
   it("保留真实零耗时，未知耗时不会变成零或随时钟增长", () => {

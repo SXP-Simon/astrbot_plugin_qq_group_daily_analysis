@@ -1,4 +1,4 @@
-import type { TraceRecord, TraceSpan } from "../../entities/trace/model/types";
+import type { TraceRecord, TraceSpan } from "@/entities/trace/model/types";
 
 interface Step {
   stage: string;

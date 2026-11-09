@@ -1,12 +1,12 @@
-import configSchema from "../../../../_conf_schema.json";
-import type { ComicRotationEntry } from "../../entities/comic/api/comicApi";
+import configSchema from "@plugin-config";
+import type { ComicRotationEntry } from "@/entities/comic/api/comicApi";
 import { z } from "zod";
 import {
   pluginConfigResponseSchema,
   pluginConfigSaveSchema,
-} from "../../entities/config/model/configContract";
-import type { PluginConfigData, SchemaFieldItem } from "../../entities/config/model/types";
-import type { AvailablePersona, AvailableProvider } from "../../entities/config/api/configApi";
+} from "@/entities/config/model/configContract";
+import type { PluginConfigData, SchemaFieldItem } from "@/entities/config/model/types";
+import type { AvailablePersona, AvailableProvider } from "@/entities/config/api/configApi";
 
 function defaults(items: Record<string, SchemaFieldItem>): Record<string, unknown> {
   return Object.fromEntries(

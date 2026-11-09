@@ -1,16 +1,16 @@
-import { renderingConfigSchema } from "../../entities/config/model/renderingConfig";
+import { renderingConfigSchema } from "@/entities/config/model/renderingConfig";
 import { describe, it, expect } from "vitest";
-import { mockHandlers } from "../handlers";
-import { createMswHandlerDefinitions } from "../mswHandlers";
-import { mockTraces } from "../data/traces";
-import { groupItemSchema } from "../../entities/group/model/types";
+import { mockHandlers } from "@/mocks/handlers";
+import { createMswHandlerDefinitions } from "@/mocks/mswHandlers";
+import { mockTraces } from "@/mocks/data/traces";
+import { groupItemSchema } from "@/entities/group/model/types";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import configSchema from "../../../../_conf_schema.json";
-import { mockPluginConfig } from "../data/configs";
-import { mockCheckpoints } from "../data/pluginData";
-import { extractData } from "../../shared/api/bridge";
-import { mockActiveTasks } from "../data/tasks";
+import configSchema from "@plugin-config";
+import { mockPluginConfig } from "@/mocks/data/configs";
+import { mockCheckpoints } from "@/mocks/data/pluginData";
+import { extractData } from "@/shared/api/bridge";
+import { mockActiveTasks } from "@/mocks/data/tasks";
 
 it("同号群按实例分别触发，重复请求拒绝，续跑沿用原会话", () => {
   const group = "mock-session-isolation",

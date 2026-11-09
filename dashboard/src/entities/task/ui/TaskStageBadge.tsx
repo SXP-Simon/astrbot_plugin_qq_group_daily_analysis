@@ -1,5 +1,5 @@
 import { IconActivity } from "@tabler/icons-react";
-import { formatStageName } from "../../../shared/lib/formatters";
+import { formatStageName } from "@/shared/lib/formatters";
 
 export function TaskStageBadge({ stage }: { stage: string }) {
   return (

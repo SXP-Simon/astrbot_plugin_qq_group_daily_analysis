@@ -1,19 +1,17 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ManagedRecordDialog } from "../ManagedRecordDialog";
+import { ManagedRecordDialog } from "@/pages/plugin-data/ui/ManagedRecordDialog";
 import {
   fetchManagedRecord,
   mutateManagedRecord,
-} from "../../../../entities/plugin-data/api/managedRecordsApi";
-import { copyToClipboard } from "../../../../shared/lib/clipboard";
-vi.mock("../../../../entities/plugin-data/api/managedRecordsApi", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("../../../../entities/plugin-data/api/managedRecordsApi")
-  >()),
+} from "@/entities/plugin-data/api/managedRecordsApi";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+vi.mock("@/entities/plugin-data/api/managedRecordsApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/entities/plugin-data/api/managedRecordsApi")>()),
   fetchManagedRecord: vi.fn(),
   mutateManagedRecord: vi.fn(),
 }));
-vi.mock("../../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 afterEach(() => {
   cleanup();

@@ -1,21 +1,21 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ContextInsightPage } from "../ContextInsightPage";
-import { useContextInsightViewModel } from "../../model/useContextInsightViewModel";
-import { fetchTraceList, fetchTraceDetail } from "../../../../entities/trace/api/traceApi";
-import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
-import type { TraceRecord } from "../../../../entities/trace/model/types";
+import { ContextInsightPage } from "@/pages/context-insight/ui/ContextInsightPage";
+import { useContextInsightViewModel } from "@/pages/context-insight/model/useContextInsightViewModel";
+import { fetchTraceList, fetchTraceDetail } from "@/entities/trace/api/traceApi";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import type { TraceRecord } from "@/entities/trace/model/types";
 
-vi.mock("../../../../entities/trace/api/traceApi", () => ({
+vi.mock("@/entities/trace/api/traceApi", () => ({
   fetchTraceList: vi.fn(),
   fetchTraceDetail: vi.fn(),
 }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
-vi.mock("../../../../widgets/timeline-picker/AnalysisTimelinePicker", () => ({
+vi.mock("@/entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
+vi.mock("@/widgets/timeline-picker/AnalysisTimelinePicker", () => ({
   AnalysisTimelinePicker: () => null,
 }));
 vi.mock("echarts-for-react", () => ({ default: () => null }));
-vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 
 const traces: TraceRecord[] = ["a", "b"].map((id) => ({
   trace_id: `example-${id}`,

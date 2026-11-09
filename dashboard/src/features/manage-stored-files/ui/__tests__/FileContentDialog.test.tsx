@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { FileContentDialog } from "../FileContentDialog";
-import { useManagedFiles } from "../../model/useManagedFiles";
+import { FileContentDialog } from "@/features/manage-stored-files/ui/FileContentDialog";
+import { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
 import {
   fetchManagedContent,
   fetchManagedFiles,
   fetchManagedPartitions,
   mutateManagedFile,
   type ManagedFileContent,
-} from "../../../../entities/plugin-data/api/managedFilesApi";
+} from "@/entities/plugin-data/api/managedFilesApi";
 
-vi.mock("../../../../entities/plugin-data/api/managedFilesApi", () => ({
+vi.mock("@/entities/plugin-data/api/managedFilesApi", () => ({
   fetchManagedPartitions: vi.fn(),
   fetchManagedFiles: vi.fn(),
   fetchManagedContent: vi.fn(),

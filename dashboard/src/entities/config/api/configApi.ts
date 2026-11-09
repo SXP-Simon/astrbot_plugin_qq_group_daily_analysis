@@ -1,26 +1,29 @@
 import { z } from "zod";
-import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../model/configContract";
-import { cdnBaseUrlSchema } from "../model/renderingConfig";
+import {
+  pluginConfigResponseSchema,
+  pluginConfigSaveSchema,
+} from "@/entities/config/model/configContract";
+import { cdnBaseUrlSchema } from "@/entities/config/model/renderingConfig";
 import {
   fontTransferSchema,
   typstFontStatusSchema,
   type FontDownloadSource,
   type FontTransfer,
   type TypstFontStatus,
-} from "../model/typstFonts";
-import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
-import { PluginConfigData } from "../model/types";
+} from "@/entities/config/model/typstFonts";
+import { apiGet, apiPost, extractData } from "@/shared/api/bridge";
+import { PluginConfigData } from "@/entities/config/model/types";
 import {
   t2iProbeRequestSchema,
   t2iProbeSchema,
   type T2iProbe,
   type T2iProbeInput,
-} from "../model/t2iProbe";
+} from "@/entities/config/model/t2iProbe";
 import {
   templateCdnProbeSchema,
   type TemplateCdnProbe,
   type TemplateCdnProbeRequest,
-} from "../model/cdnProbe";
+} from "@/entities/config/model/cdnProbe";
 
 export async function testTemplateCdn(baseUrl: string): Promise<TemplateCdnProbe> {
   const input = cdnBaseUrlSchema.safeParse(baseUrl);

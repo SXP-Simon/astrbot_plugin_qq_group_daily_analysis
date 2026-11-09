@@ -1,10 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { apiPost } from "../../../../shared/api/bridge";
-import { cancelActiveTask, triggerNewTask } from "../taskApi";
-import { resumeTraceTask } from "../../../trace/api/traceApi";
+import { apiPost } from "@/shared/api/bridge";
+import { cancelActiveTask, triggerNewTask } from "@/entities/task/api/taskApi";
+import { resumeTraceTask } from "@/entities/trace/api/traceApi";
 
-vi.mock("../../../../shared/api/bridge", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../../shared/api/bridge")>()),
+vi.mock("@/shared/api/bridge", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/api/bridge")>()),
   apiPost: vi.fn(),
 }));
 afterEach(() => vi.clearAllMocks());

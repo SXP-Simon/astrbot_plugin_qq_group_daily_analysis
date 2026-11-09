@@ -1,5 +1,5 @@
-import { apiGet, extractData } from "../../../shared/api/bridge";
-import { MetricsSummary, AnalyticsTrendsResponse } from "../model/types";
+import { apiGet, extractData } from "@/shared/api/bridge";
+import { MetricsSummary, AnalyticsTrendsResponse } from "@/entities/metric/model/types";
 
 export async function fetchMetricsSummary(): Promise<MetricsSummary> {
   const res = await apiGet<MetricsSummary>("metrics/summary");

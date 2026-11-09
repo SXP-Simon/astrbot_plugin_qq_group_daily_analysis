@@ -1,4 +1,4 @@
-import type { components } from "../../../shared/api/generated/schema";
+import type { components } from "@/shared/api/generated/schema";
 
 export type SectionStats = components["schemas"]["SectionStats"];
 export type PluginDataOverview = components["schemas"]["PluginDataOverview"];

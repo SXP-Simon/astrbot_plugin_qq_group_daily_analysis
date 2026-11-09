@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { DownloadBatch } from "../../../entities/config/api/downloadBatch";
+import { DownloadBatch } from "@/entities/config/api/downloadBatch";
 import {
   startManagedUpload,
   uploadManagedChunk,
   type ManagedFile,
-} from "../../../entities/plugin-data/api/managedFilesApi";
+} from "@/entities/plugin-data/api/managedFilesApi";
 
 interface FontUploadProgress {
   name: string;

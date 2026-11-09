@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { devApiGet, getDevBridgeMode, setDevBridgeMode } from "../devBridge";
+import { devApiGet, getDevBridgeMode, setDevBridgeMode } from "@/shared/api/devBridge";
 
 afterEach(() => vi.unstubAllGlobals());
 

@@ -2,15 +2,15 @@ import { useContext, useEffect, useState } from "react";
 import {
   ResourceManagementContext,
   type ResourceManagementRequest,
-} from "../../../features/manage-template-resources/model/ResourceManagementContext";
-import { useManagedFiles } from "../../../features/manage-stored-files/model/useManagedFiles";
-import { useConfigFileReferences } from "../../../features/manage-stored-files/model/useConfigFileReferences";
+} from "@/features/manage-template-resources/model/ResourceManagementContext";
+import { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
+import { useConfigFileReferences } from "@/features/manage-stored-files/model/useConfigFileReferences";
 import {
   partitionNavigation,
   type PartitionNavigation,
-} from "../../../entities/plugin-data/model/partitionPresentation";
-import type { ManagedPartition } from "../../../entities/plugin-data/api/managedFilesApi";
-import type { FontManagementRequest } from "../../../features/manage-typst-fonts/model/FontManagementContext";
+} from "@/entities/plugin-data/model/partitionPresentation";
+import type { ManagedPartition } from "@/entities/plugin-data/api/managedFilesApi";
+import type { FontManagementRequest } from "@/features/manage-typst-fonts/model/FontManagementContext";
 
 export interface StorageNavigation {
   onNavigate?: (page: "reports" | "config" | "traces") => void;

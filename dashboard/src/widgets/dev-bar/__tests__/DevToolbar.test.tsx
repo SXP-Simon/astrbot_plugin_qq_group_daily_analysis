@@ -1,10 +1,10 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { DevToolbar } from "../DevToolbar";
-import { mockSSEService } from "../../../mocks/sseMock";
+import { DevToolbar } from "@/widgets/dev-bar/DevToolbar";
+import { mockSSEService } from "@/mocks/sseMock";
 import { toast } from "sonner";
-import { getDevThemeContext } from "../../../shared/api/devThemeContext";
+import { getDevThemeContext } from "@/shared/api/devThemeContext";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: vi.fn() } }));
 

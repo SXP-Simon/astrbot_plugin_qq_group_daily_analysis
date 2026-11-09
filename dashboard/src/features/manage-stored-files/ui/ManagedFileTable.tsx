@@ -1,14 +1,14 @@
-import { comicPreviewLabel } from "../../../entities/comic/model/comicPresets";
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { comicPreviewLabel } from "@/entities/comic/model/comicPresets";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { IconFile, IconCopy } from "@tabler/icons-react";
 import { toast } from "sonner";
-import type { ManagedPartition } from "../../../entities/plugin-data/api/managedFilesApi";
-import { partitionPresentation } from "../../../entities/plugin-data/model/partitionPresentation";
-import { formatBytes } from "../../../shared/lib/formatters";
-import { copyToClipboard } from "../../../shared/lib/clipboard";
-import { Button } from "../../../shared/ui/button";
-import type { useManagedFiles } from "../model/useManagedFiles";
-import type { useConfigFileReferences } from "../model/useConfigFileReferences";
+import type { ManagedPartition } from "@/entities/plugin-data/api/managedFilesApi";
+import { partitionPresentation } from "@/entities/plugin-data/model/partitionPresentation";
+import { formatBytes } from "@/shared/lib/formatters";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import { Button } from "@/shared/ui/button";
+import type { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
+import type { useConfigFileReferences } from "@/features/manage-stored-files/model/useConfigFileReferences";
 
 export function ManagedFileTable({
   vm,

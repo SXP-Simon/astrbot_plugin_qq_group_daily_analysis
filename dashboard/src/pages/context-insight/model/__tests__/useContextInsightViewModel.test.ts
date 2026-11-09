@@ -1,15 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { fetchTraceList, fetchTraceDetail } from "../../../../entities/trace/api/traceApi";
-import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
-import type { TraceRecord } from "../../../../entities/trace/model/types";
-import { useContextInsightViewModel } from "../useContextInsightViewModel";
+import { fetchTraceList, fetchTraceDetail } from "@/entities/trace/api/traceApi";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import { useContextInsightViewModel } from "@/pages/context-insight/model/useContextInsightViewModel";
 
-vi.mock("../../../../entities/trace/api/traceApi", () => ({
+vi.mock("@/entities/trace/api/traceApi", () => ({
   fetchTraceList: vi.fn(),
   fetchTraceDetail: vi.fn(),
 }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
+vi.mock("@/entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 
 const first: TraceRecord = {
   trace_id: "example-a",

@@ -1,6 +1,6 @@
 import { IconAlertCircle, IconCheck, IconLoader2, IconPlugConnected } from "@tabler/icons-react";
-import { Button } from "../../../shared/ui/button";
-import { useTemplateCdnProbe } from "../model/useTemplateCdnProbe";
+import { Button } from "@/shared/ui/button";
+import { useTemplateCdnProbe } from "@/features/test-template-cdn/model/useTemplateCdnProbe";
 
 export function TemplateCdnProbe({ baseUrl }: { baseUrl: string }) {
   const { loading, result, error, run } = useTemplateCdnProbe(baseUrl);

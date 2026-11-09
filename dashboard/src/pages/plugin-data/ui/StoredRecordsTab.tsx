@@ -1,13 +1,13 @@
-import { LoadingSkeleton, LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingSkeleton, LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useState } from "react";
 import { IconEye, IconRefresh, IconSearch, IconUpload, IconX } from "@tabler/icons-react";
-import type { RecordLocator } from "../../../entities/plugin-data/api/managedRecordsApi";
-import { formatBytes } from "../../../shared/lib/formatters";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { Pagination } from "../../../shared/ui/pagination";
-import { useStoredRecords } from "../model/useStoredRecords";
-import { useRecordSelection, recordKey } from "../model/useRecordSelection";
+import type { RecordLocator } from "@/entities/plugin-data/api/managedRecordsApi";
+import { formatBytes } from "@/shared/lib/formatters";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Pagination } from "@/shared/ui/pagination";
+import { useStoredRecords } from "@/pages/plugin-data/model/useStoredRecords";
+import { useRecordSelection, recordKey } from "@/pages/plugin-data/model/useRecordSelection";
 import { RecordSelectionActions } from "./RecordSelectionActions";
 import { ManagedRecordDialog } from "./ManagedRecordDialog";
 

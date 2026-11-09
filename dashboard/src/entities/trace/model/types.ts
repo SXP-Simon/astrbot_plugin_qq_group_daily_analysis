@@ -1,4 +1,4 @@
-import type { components } from "../../../shared/api/generated/schema";
+import type { components } from "@/shared/api/generated/schema";
 
 export type TraceSpan = components["schemas"]["TraceSpan"];
 export type ContextMetrics = components["schemas"]["ContextMetrics"];

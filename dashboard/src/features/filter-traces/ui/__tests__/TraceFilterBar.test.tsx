@@ -1,7 +1,7 @@
 import { useState, type ComponentProps } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { TraceFilterBar } from "../TraceFilterBar";
+import { TraceFilterBar } from "@/features/filter-traces/ui/TraceFilterBar";
 
 function props(): ComponentProps<typeof TraceFilterBar> {
   return {

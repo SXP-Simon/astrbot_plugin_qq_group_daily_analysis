@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import schema from "../../../../../../_conf_schema.json";
-import { FieldRenderer } from "../FieldRenderer";
+import schema from "@plugin-config";
+import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
 
-vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 
 function FontField({ fieldKey }: { fieldKey: "google_fonts" | "gstatic" }) {
   const [value, setValue] = useState<unknown>("https://saved.example/proxy");

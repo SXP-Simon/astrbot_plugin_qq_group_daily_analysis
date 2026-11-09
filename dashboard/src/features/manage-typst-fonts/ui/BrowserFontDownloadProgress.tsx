@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
-import { formatBytes } from "../../../shared/lib/formatters";
-import type { useBrowserFontDownload } from "../model/useBrowserFontDownload";
-import { Alert, AlertDescription } from "../../../shared/ui/alert";
-import { Button } from "../../../shared/ui/button";
-import { CopyButton } from "../../../shared/ui/copy-button";
-import { Progress } from "../../../shared/ui/progress";
+import { formatBytes } from "@/shared/lib/formatters";
+import type { useBrowserFontDownload } from "@/features/manage-typst-fonts/model/useBrowserFontDownload";
+import { Alert, AlertDescription } from "@/shared/ui/alert";
+import { Button } from "@/shared/ui/button";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { Progress } from "@/shared/ui/progress";
 
 export function BrowserFontDownloadProgress({
   download,

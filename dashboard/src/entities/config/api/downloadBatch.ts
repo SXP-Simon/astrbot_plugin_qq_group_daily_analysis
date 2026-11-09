@@ -1,4 +1,4 @@
-import { apiPost, extractData } from "../../../shared/api/bridge";
+import { apiPost, extractData } from "@/shared/api/bridge";
 
 /** 单次页面队列的请求所有权；取消必须由后端确认，不能只中断页面等待。 */
 export class DownloadBatch {

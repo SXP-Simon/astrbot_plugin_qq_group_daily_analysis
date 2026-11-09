@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IconPlayerStop } from "@tabler/icons-react";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/shared/ui/dialog";
 
 interface CancelTaskButtonProps {
   taskId: string;

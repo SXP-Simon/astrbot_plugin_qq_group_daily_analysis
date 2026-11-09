@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { IconX } from "@tabler/icons-react";
-import { cn } from "../lib/cn";
+import { cn } from "@/shared/lib/cn";
 
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;

@@ -1,4 +1,4 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useRef, useState } from "react";
 import {
   IconLoader2,
@@ -8,16 +8,13 @@ import {
   IconX,
   IconTrash,
 } from "@tabler/icons-react";
-import type {
-  ManagedFile,
-  ManagedPartition,
-} from "../../../entities/plugin-data/api/managedFilesApi";
-import { partitionPresentation } from "../../../entities/plugin-data/model/partitionPresentation";
-import type { useManagedFiles } from "../model/useManagedFiles";
-import type { useConfigFileReferences } from "../model/useConfigFileReferences";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { Pagination } from "../../../shared/ui/pagination";
+import type { ManagedFile, ManagedPartition } from "@/entities/plugin-data/api/managedFilesApi";
+import { partitionPresentation } from "@/entities/plugin-data/model/partitionPresentation";
+import type { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
+import type { useConfigFileReferences } from "@/features/manage-stored-files/model/useConfigFileReferences";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Pagination } from "@/shared/ui/pagination";
 import { ManagedFileDeleteDialog } from "./ManagedFileDeleteDialog";
 import { ManagedFileTable } from "./ManagedFileTable";
 

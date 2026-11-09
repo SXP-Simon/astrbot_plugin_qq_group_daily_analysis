@@ -1,4 +1,4 @@
-import type { TypstFontPreset } from "../../entities/config/model/typstFonts";
+import type { TypstFontPreset } from "@/entities/config/model/typstFonts";
 
 // 演示字体与后端固定清单使用相同版本、下载地址和目标文件名。
 export const mockFontPresets: TypstFontPreset[] = [

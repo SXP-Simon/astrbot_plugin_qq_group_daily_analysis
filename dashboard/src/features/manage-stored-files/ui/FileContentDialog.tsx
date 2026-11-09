@@ -1,15 +1,15 @@
-import { HtmlPreview } from "../../../shared/ui/html-preview";
-import { ImagePreview } from "../../../shared/ui/image-preview";
+import { HtmlPreview } from "@/shared/ui/html-preview";
+import { ImagePreview } from "@/shared/ui/image-preview";
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { IconAlertTriangle, IconDownload, IconEdit } from "@tabler/icons-react";
-import type { useManagedFiles } from "../model/useManagedFiles";
-import type { ManagedFileContent } from "../../../entities/plugin-data/api/managedFilesApi";
+import type { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
+import type { ManagedFileContent } from "@/entities/plugin-data/api/managedFilesApi";
 import { FileEditorDialog } from "./FileEditorDialog";
-import type { FileDraft } from "../model/fileDraft";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../shared/ui/tabs";
+import type { FileDraft } from "@/features/manage-stored-files/model/fileDraft";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/ui/tabs";
 
 type Props = {
   vm: ReturnType<typeof useManagedFiles>;

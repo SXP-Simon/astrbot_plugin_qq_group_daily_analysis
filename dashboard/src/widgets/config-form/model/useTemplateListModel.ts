@@ -1,4 +1,4 @@
-import type { SchemaFieldItem } from "../../../entities/config/model/types";
+import type { SchemaFieldItem } from "@/entities/config/model/types";
 
 export function useTemplateListModel(
   schema: SchemaFieldItem,

@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
-import { mockConfigBackups } from "../../../../mocks/data/configBackups";
-import { configBackupDetailSchema, configBackupListSchema } from "../configBackup";
+import { mockConfigBackups } from "@/mocks/data/configBackups";
+import {
+  configBackupDetailSchema,
+  configBackupListSchema,
+} from "@/entities/plugin-data/model/configBackup";
 
 it("备份契约保留当前 Schema 不认识的嵌套键值，允许旧文件缺少版本和时间", () => {
   expect(

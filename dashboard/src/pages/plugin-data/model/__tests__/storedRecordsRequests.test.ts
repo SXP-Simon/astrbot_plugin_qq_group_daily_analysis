@@ -1,8 +1,8 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { useStoredRecords } from "../useStoredRecords";
-import { fetchManagedRecords } from "../../../../entities/plugin-data/api/managedRecordsApi";
-vi.mock("../../../../entities/plugin-data/api/managedRecordsApi", () => ({
+import { useStoredRecords } from "@/pages/plugin-data/model/useStoredRecords";
+import { fetchManagedRecords } from "@/entities/plugin-data/api/managedRecordsApi";
+vi.mock("@/entities/plugin-data/api/managedRecordsApi", () => ({
   fetchManagedRecords: vi.fn(),
 }));
 afterEach(() => {

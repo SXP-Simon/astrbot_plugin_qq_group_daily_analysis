@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ExternalLink } from "../ExternalLink";
-import { copyToClipboard } from "../../lib/clipboard";
+import { ExternalLink } from "@/shared/ui/ExternalLink";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
-vi.mock("../../lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 afterEach(() => vi.resetAllMocks());
 
 it("外部地址可键盘选择和复制，关闭后回到原入口，不依赖新标签页权限", async () => {

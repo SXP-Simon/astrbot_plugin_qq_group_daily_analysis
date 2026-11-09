@@ -1,17 +1,17 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { TraceMetricsChart } from "../TraceMetricsChart";
-import { mockTypstTraces } from "../../../../mocks/data/typstTraces";
-import type { TraceRecord } from "../../model/types";
-import { getTraceMetrics } from "../../model/traceMetrics";
-import { createTraceMetricsOption } from "../traceMetricsOption";
+import { TraceMetricsChart } from "@/entities/trace/ui/TraceMetricsChart";
+import { mockTypstTraces } from "@/mocks/data/typstTraces";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import { getTraceMetrics } from "@/entities/trace/model/traceMetrics";
+import { createTraceMetricsOption } from "@/entities/trace/ui/traceMetricsOption";
 
 vi.mock("echarts-for-react", () => ({
   default: ({ option }: { option: { yAxis?: { data?: string[] } } }) => (
     <pre data-testid="chart-categories">{JSON.stringify(option.yAxis?.data || [])}</pre>
   ),
 }));
-vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 
 it("保留三类图表与数据查看，未知耗时不成为零或累计总耗时", () => {
   render(

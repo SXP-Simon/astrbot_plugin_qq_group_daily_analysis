@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchReportTemplates } from "../api/reportApi";
+import { fetchReportTemplates } from "@/entities/report/api/reportApi";
 import type { ReportTemplateItem } from "./templates";
 
 type RenderFormat = Parameters<typeof fetchReportTemplates>[0];

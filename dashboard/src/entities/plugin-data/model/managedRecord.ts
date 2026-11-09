@@ -1,4 +1,4 @@
-import type { components } from "../../../shared/api/generated/schema";
+import type { components } from "@/shared/api/generated/schema";
 
 type RecordLocator = components["schemas"]["RecordLocator"];
 export function recordKey(locator: RecordLocator) {

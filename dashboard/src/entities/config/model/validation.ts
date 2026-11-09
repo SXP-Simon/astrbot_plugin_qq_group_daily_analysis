@@ -2,8 +2,8 @@ import { cdnBaseUrlSchema, fontBaseUrlSchema, renderingStrategySchema } from "./
 import { z } from "zod";
 import { PluginSchema, SchemaFieldItem } from "./types";
 import { isFieldVisible } from "./visibility";
-import { resolveComicStyleName } from "../../comic/model/comicPresets";
-import { readComicStoryboard } from "../../comic/model/comicStoryboardPrompt";
+import { resolveComicStyleName } from "@/entities/comic/model/comicPresets";
+import { readComicStoryboard } from "@/entities/comic/model/comicStoryboardPrompt";
 
 export interface ConfigValidationError {
   groupKey: string;

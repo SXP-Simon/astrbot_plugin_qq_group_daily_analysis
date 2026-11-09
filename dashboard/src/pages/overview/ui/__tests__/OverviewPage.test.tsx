@@ -1,12 +1,12 @@
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { OverviewPage } from "../OverviewPage";
-import type { useOverviewViewModel } from "../../model/useOverviewViewModel";
-import { mockMetricsSummary } from "../../../../mocks/data/metrics";
-import { mockActiveTasks } from "../../../../mocks/data/tasks";
-import { mockTraces } from "../../../../mocks/data/traces";
+import { OverviewPage } from "@/pages/overview/ui/OverviewPage";
+import type { useOverviewViewModel } from "@/pages/overview/model/useOverviewViewModel";
+import { mockMetricsSummary } from "@/mocks/data/metrics";
+import { mockActiveTasks } from "@/mocks/data/tasks";
+import { mockTraces } from "@/mocks/data/traces";
 
-vi.mock("../../../../widgets/trend-charts/OverviewTrendCharts", () => ({
+vi.mock("@/widgets/trend-charts/OverviewTrendCharts", () => ({
   OverviewTrendCharts: () => <div>趋势图区域</div>,
 }));
 function viewModel(): ReturnType<typeof useOverviewViewModel> {

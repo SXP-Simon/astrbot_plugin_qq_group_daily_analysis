@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getDefaultThemeColors, getHostThemeStyles, HOST_THEME_PROPERTIES } from "../themeColors";
+import {
+  getDefaultThemeColors,
+  getHostThemeStyles,
+  HOST_THEME_PROPERTIES,
+} from "@/shared/lib/themeColors";
 
 describe("宿主主题变量", () => {
   it.each([

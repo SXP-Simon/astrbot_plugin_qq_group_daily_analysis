@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { fetchReportContent } from "../../../entities/report/api/reportApi";
-import type { ReportItem } from "../../../entities/report/model/types";
+import { fetchReportContent } from "@/entities/report/api/reportApi";
+import type { ReportItem } from "@/entities/report/model/types";
 
 export function useReportActions() {
   const epoch = useRef(0);

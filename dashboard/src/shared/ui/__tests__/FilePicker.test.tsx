@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { FilePicker } from "../file-picker";
+import { FilePicker } from "@/shared/ui/file-picker";
 
 it("多选将同一批文件一次性交给调用方，仍可重新选择相同批次", () => {
   const selected = vi.fn();

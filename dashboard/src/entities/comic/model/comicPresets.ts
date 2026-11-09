@@ -1,4 +1,4 @@
-import catalog from "../../../../../src/shared/comic_prompt_templates.json";
+import catalog from "@comic-catalog";
 
 export const comicPresets = Object.entries(catalog).map(([id, item]) => ({ id, ...item }));
 

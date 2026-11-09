@@ -1,15 +1,12 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useId, useRef, useState } from "react";
-import type { ConnectedPlatform } from "../../../entities/task/api/taskApi";
-import type { LLMProviderItem } from "../../../entities/trace/api/traceApi";
-import {
-  type ReportTemplateItem,
-  formatTemplateOptions,
-} from "../../../entities/report/model/templates";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { NativeSelect } from "../../../shared/ui/native-select";
+import type { ConnectedPlatform } from "@/entities/task/api/taskApi";
+import type { LLMProviderItem } from "@/entities/trace/api/traceApi";
+import { type ReportTemplateItem, formatTemplateOptions } from "@/entities/report/model/templates";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { NativeSelect } from "@/shared/ui/native-select";
 
 interface TriggerTaskModalProps {
   open: boolean;
