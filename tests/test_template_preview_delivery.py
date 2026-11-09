@@ -159,7 +159,7 @@ async def test_telegram_all_paths_send_cached_jpeg(tmp_path, monkeypatch, operat
     handler = TelegramTemplatePreviewHandler(
         config, service, PreviewImageCache(tmp_path / "cache")
     )
-    monkeypatch.setattr(handler, "_build_keyboard", lambda _: None)
+    monkeypatch.setattr(handler, "_build_keyboard", lambda _, **kwargs: None)
     received = []
 
     async def send_photo(**kwargs):

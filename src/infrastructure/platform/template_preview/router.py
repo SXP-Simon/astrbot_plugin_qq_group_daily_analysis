@@ -49,6 +49,8 @@ class TemplatePreviewHandler(Protocol):
         platform_id: str,
         available_templates: list[str],
         template_name: str = "",
+        *,
+        comic: bool = False,
     ) -> (
         Awaitable[tuple[bool, list[MessageEventResult]]]
         | tuple[bool, list[MessageEventResult]]
@@ -95,19 +97,19 @@ class TemplatePreviewRouter:
 
     async def view_comic_styles(
         self, event: AstrMessageEvent, selection: str
-    ) -> MessageEventResult:
-        """浏览静态漫画样图，OneBot 目录使用分页缩略图。
+    ) -> MessageEventResult | None:
+        """优先使用平台交互预览，OneBot 目录使用分页缩略图。
 
         Args:
             event: 已通过管理员和群聊检查的命令事件。
             selection: 风格序号、ID、名称或“第 N 页”。
 
         Returns:
-            预览消息或文字目录。
+            待发送消息；平台已发送交互预览时返回空。
         """
         event.should_call_llm(False)
         prefix = get_command_prefix(self._context, event)
-        command = f"{prefix}查看漫画模板"
+        command = f"{prefix}查看漫画风格"
         ids = list(COMIC_PRESETS)
         rows = [
             f"{i}. {COMIC_PRESETS[key].name}（{key}）" for i, key in enumerate(ids, 1)
@@ -127,11 +129,6 @@ class TemplatePreviewRouter:
             page = int(page_text)
             if not 1 <= page <= pages:
                 return event.plain_result(f"页码范围为 1–{pages}。")
-        if page is not None and event.get_platform_name() != "aiocqhttp":
-            return event.plain_result(
-                "漫画风格\n" + "\n".join(rows) + f"\n使用 {command} 序号 查看单张示例。"
-            ).use_t2i(False)
-
         if page is not None:
             chosen = ids[(page - 1) * page_size : page * page_size]
         elif (
@@ -147,6 +144,23 @@ class TemplatePreviewRouter:
                 return event.plain_result(
                     f"找不到这个漫画风格。使用 {command} 查看目录。"
                 )
+        for handler in self._handlers:
+            if not handler.supports(event):
+                continue
+            response = handler.handle_view_templates(
+                event, event.get_platform_id(), ids, chosen[0], comic=True
+            )
+            handled, results = (
+                await response if inspect.isawaitable(response) else response
+            )
+            if handled:
+                return results[0] if results else None
+            break
+        if page is not None and event.get_platform_name() != "aiocqhttp":
+            return event.plain_result(
+                "漫画风格\n" + "\n".join(rows) + f"\n使用 {command} 序号 查看单张示例。"
+            ).use_t2i(False)
+
         nodes: list[Node] = []
         deadline = time.monotonic() + 10
         for key in chosen:

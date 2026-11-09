@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from PIL import Image
 
+from ....shared.comic_presets import COMIC_PRESETS
 from ....shared.type_guards import is_string_mapping
 from ....utils.logger import logger
 from ..command_prefix import get_command_prefix
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 
     from ....application.services.template_command_service import TemplateCommandService
     from ...config.config_manager import ConfigManager
+    from .comic_preview_cache import ComicPreviewCache
     from .image_cache import PreviewImageCache
 
 
@@ -41,10 +43,13 @@ class QQOfficialTemplatePreviewHandler:
         config_manager: ConfigManager,
         template_service: TemplateCommandService,
         image_cache: PreviewImageCache,
+        *,
+        comic_preview_cache: ComicPreviewCache | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.template_service = template_service
         self.image_cache = image_cache
+        self.comic_preview_cache = comic_preview_cache
         self._context: Context | None = None
 
     @staticmethod
@@ -66,6 +71,8 @@ class QQOfficialTemplatePreviewHandler:
         platform_id: str,
         available_templates: list[str],
         template_name: str = "",
+        *,
+        comic: bool = False,
     ) -> tuple[bool, list[MessageEventResult]]:
         """准备图片后展示预览，优先图文同卡，回退时先图后说明。
 
@@ -74,6 +81,7 @@ class QQOfficialTemplatePreviewHandler:
             platform_id: 平台实例标识。
             available_templates: 按显示序号排序的模板列表。
             template_name: 指定模板；留空时查看当前模板。
+            comic: 是否为只读漫画风格预览。
 
         Returns:
             已处理标记和待发送回复，正常预览在处理器内发送完毕。
@@ -84,7 +92,7 @@ class QQOfficialTemplatePreviewHandler:
             return True, [
                 event.plain_result("没有可用模板。").use_markdown(False).use_t2i(False)
             ]
-        current = self.config_manager.get_report_template()
+        current = "" if comic else self.config_manager.get_report_template()
         selected = template_name or current
         if selected not in available_templates:
             selected = available_templates[0]
@@ -97,17 +105,37 @@ class QQOfficialTemplatePreviewHandler:
             message_id,
             selected,
         )
-        text = (
-            f"{selected} · {index + 1}/{len(available_templates)}\n"
-            + ("当前正在使用" if selected == current else f"当前使用：{current}")
-            + "\n\n按钮填入命令后，请确认发送。"
-        )
-        source = self.template_service.resolve_template_preview_source(selected)
+        total = len(available_templates)
+        if comic:
+            prefix = get_command_prefix(self._context, event)
+            text = (
+                f"{COMIC_PRESETS[selected].name} · {index + 1}/{total}"
+                f"\n\n也可发送 {prefix}查看漫画风格 序号或名称。"
+            )
+            source = (
+                f"{self.config_manager.get_template_assets_base_url()}"
+                f"/comic_previews/{selected}/preview.webp"
+                if self.comic_preview_cache
+                else None
+            )
+        else:
+            text = f"{selected} · {index + 1}/{total}\n" + (
+                "当前正在使用" if selected == current else f"当前使用：{current}"
+            )
+            source = self.template_service.resolve_template_preview_source(selected)
+        text += "\n\n按钮填入命令后，请确认发送。"
         path: str | None = None
-        notice = "这个自定义模板没有附带预览图。"
+        notice = "漫画样图暂不可用。" if comic else "这个自定义模板没有附带预览图。"
         if source:
             try:
-                path = await self.image_cache.get_jpeg(source)
+                if comic and self.comic_preview_cache is not None:
+                    path = str(
+                        await self.comic_preview_cache.get_preview(
+                            selected, "preview", deadline=time.monotonic() + 10
+                        )
+                    )
+                else:
+                    path = await self.image_cache.get_jpeg(source)
             except Exception as exc:
                 logger.warning(
                     "[模板预览] QQ 图片准备失败: message_id=%s template=%s reason=%s",
@@ -115,7 +143,8 @@ class QQOfficialTemplatePreviewHandler:
                     selected,
                     _describe_preview_error(exc),
                 )
-                notice = "这张预览图暂时无法获取，模板仍可正常选择。"
+                if not comic:
+                    notice = "这张预览图暂时无法获取，模板仍可正常选择。"
 
         image_markdown = ""
         if source and path:
@@ -161,7 +190,7 @@ class QQOfficialTemplatePreviewHandler:
             and getattr(event, "bot", None) is not None
             and message_id
             and await self._send_native_preview(
-                event, text, index, len(available_templates), sequence, image_markdown
+                event, text, index, total, sequence, image_markdown, comic=comic
             )
         ):
             logger.debug(
@@ -181,17 +210,20 @@ class QQOfficialTemplatePreviewHandler:
             ):
                 failures += 1
                 image_failed = True
-                notice = "预览图发送失败，仍可使用按钮选择模板。"
+                notice = (
+                    "漫画样图发送失败，仍可浏览其他风格。"
+                    if comic
+                    else "预览图发送失败，仍可使用按钮选择模板。"
+                )
         native_sent = await self._send_native_preview(
-            event, text, index, len(available_templates), sequence + 1
+            event, text, index, total, sequence + 1, comic=comic
         )
         if not native_sent:
             host_calls += 1
             prefix = get_command_prefix(self._context, event)
-            plain = (
-                text
-                + f"\n查看：{prefix}查看模板 序号或名称\n使用此模板：{prefix}设置模板 {index + 1}"
-            )
+            plain = text
+            if not comic:
+                plain += f"\n查看：{prefix}查看模板 序号或名称\n使用此模板：{prefix}设置模板 {index + 1}"
             if not await self._send_host_preview(
                 event, event.plain_result(plain), "plain", selected
             ):
@@ -260,6 +292,8 @@ class QQOfficialTemplatePreviewHandler:
         total: int,
         sequence: int,
         image_markdown: str = "",
+        *,
+        comic: bool = False,
     ) -> bool:
         """发送原生卡片；图文同卡强制校验转存，失败后交给调用方回退。
 
@@ -270,6 +304,7 @@ class QQOfficialTemplatePreviewHandler:
             total: 模板数量。
             sequence: 本次预览统一分配的回复序号，回退时递增以避免重复。
             image_markdown: 可公开访问的原图标记；留空时仅发送说明。
+            comic: 使用漫画翻页指令，省略应用报告模板的按钮。
 
         Returns:
             原生消息是否获得有效的消息 ID。
@@ -284,13 +319,15 @@ class QQOfficialTemplatePreviewHandler:
 
                 prefix = get_command_prefix(self._context, event)
                 buttons: list[Button] = []
-                for button_id, (label, command) in enumerate(
-                    [
-                        ("上一张", f"{prefix}查看模板 {(index - 1) % total + 1}"),
-                        ("下一张", f"{prefix}查看模板 {(index + 1) % total + 1}"),
-                        ("使用此模板", f"{prefix}设置模板 {index + 1}"),
-                    ]
-                ):
+                command_name = "查看漫画风格" if comic else "查看模板"
+                command = f"{prefix}{command_name}"
+                actions = [
+                    ("上一张", f"{command} {(index - 1) % total + 1}"),
+                    ("下一张", f"{command} {(index + 1) % total + 1}"),
+                ]
+                if not comic:
+                    actions.append(("使用此模板", f"{prefix}设置模板 {index + 1}"))
+                for button_id, (label, command) in enumerate(actions):
                     buttons.append(
                         {
                             "id": f"template_{button_id}",

@@ -151,8 +151,10 @@ def test_comic_style_directory_is_read_only_and_has_platform_fallback(platform):
         nodes = event.chain_result.call_args.args[0][0].nodes
         assert len(nodes) == 5
         assert "第 1/4 页" in nodes[0].content[0].text
+        assert "查看漫画风格 第 2 页" in nodes[0].content[0].text
     else:
         assert COMIC_PRESETS["classic"].name in event.plain_result.call_args.args[0]
+        assert "查看漫画风格 序号" in event.plain_result.call_args.args[0]
         event.chain_result.assert_not_called()
 
 
