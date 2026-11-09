@@ -6,7 +6,7 @@ from src.infrastructure.platform.adapters.onebot import (
     LLOneBotDriver,
     NapCatDriver,
     OneBotDriverFactory,
-    SnowLumaDriver,
+    SLDriver,
     StandardOneBotDriver,
 )
 from src.infrastructure.platform.adapters.onebot_adapter import OneBotAdapter
@@ -33,10 +33,11 @@ class MockBot:
 
 
 def test_driver_factory_detection():
-    # 1. SnowLuma 识别
-    d1 = OneBotDriverFactory.create_driver_by_app_name("SnowLuma")
-    assert isinstance(d1, SnowLumaDriver)
-    assert d1.name == "snowluma"
+    # 1. sl 及旧协议端版本标识
+    for app_name in ("sl", " SL ", "Snow" + "Luma.OneBot"):
+        driver = OneBotDriverFactory.create_driver_by_app_name(app_name)
+        assert isinstance(driver, SLDriver)
+        assert driver.name == "sl"
 
     # 2. LLOneBot 识别 (支持多种常见命名)
     d2_1 = OneBotDriverFactory.create_driver_by_app_name("LLOneBot")
@@ -56,6 +57,7 @@ def test_driver_factory_detection():
     d4 = OneBotDriverFactory.create_driver_by_app_name("onebots")
     assert isinstance(d4, StandardOneBotDriver)
     assert d4.name == "standard"
+    assert OneBotDriverFactory.create_driver_by_app_name("slack-bridge").name == "standard"
 
     # 5. 空/None 默认标准驱动
     d5 = OneBotDriverFactory.create_driver_by_app_name(None)
@@ -64,9 +66,9 @@ def test_driver_factory_detection():
 
 def test_driver_factory_detect_driver_with_mock_bot():
     # 1. OneBot v11 异步通过 get_version_info 探测
-    bot_snow = MockBot({"get_version_info": {"app_name": "SnowLuma"}})
-    driver_snow = asyncio.run(OneBotDriverFactory.detect_driver(bot_snow))
-    assert isinstance(driver_snow, SnowLumaDriver)
+    bot_sl = MockBot({"get_version_info": {"app_name": "sl"}})
+    driver_sl = asyncio.run(OneBotDriverFactory.detect_driver(bot_sl))
+    assert isinstance(driver_sl, SLDriver)
 
     bot_napcat = MockBot({"get_version_info": {"app_name": "NapCat.Onebot"}})
     driver_napcat = asyncio.run(OneBotDriverFactory.detect_driver(bot_napcat))
@@ -88,25 +90,25 @@ def test_driver_factory_detect_driver_with_mock_bot():
     bot_v12_wrapped = MockBot(
         {
             "get_version_info": Exception("Action not found"),
-            "get_version": {"status": "ok", "data": {"impl": "SnowLuma"}},
+            "get_version": {"status": "ok", "data": {"impl": "sl"}},
         }
     )
     driver_v12_wrapped = asyncio.run(OneBotDriverFactory.detect_driver(bot_v12_wrapped))
-    assert isinstance(driver_v12_wrapped, SnowLumaDriver)
+    assert isinstance(driver_v12_wrapped, SLDriver)
 
     # 2. OneBot v12 异步通过 get_version + impl 字段探测
     bot_v12 = MockBot(
         {
             "get_version_info": Exception("Action not found"),
             "get_version": {
-                "impl": "SnowLuma",
+                "impl": "sl",
                 "version": "1.0",
                 "onebot_version": "12",
             },
         }
     )
     driver_v12 = asyncio.run(OneBotDriverFactory.detect_driver(bot_v12))
-    assert isinstance(driver_v12, SnowLumaDriver)
+    assert isinstance(driver_v12, SLDriver)
 
     # 3. 失败/超时回退标准驱动
     bot_fail = MockBot(
@@ -120,12 +122,12 @@ def test_driver_factory_detect_driver_with_mock_bot():
 
 
 # ==========================================
-# 2. SnowLuma 专有行为测试
+# 2. sl 专有行为测试
 # ==========================================
 
 
-def test_snowluma_history_pagination_params_and_anchor():
-    driver = SnowLumaDriver()
+def test_sl_history_pagination_params_and_anchor():
+    driver = SLDriver()
     params = driver.build_history_params(
         group_id="123456", count=50, anchor_id="msg_999"
     )
@@ -136,14 +138,14 @@ def test_snowluma_history_pagination_params_and_anchor():
     assert anchor == "mid_100"
 
 
-def test_snowluma_mute_and_rejection_error_handling():
-    driver = SnowLumaDriver()
+def test_sl_mute_and_rejection_error_handling():
+    driver = SLDriver()
 
-    # 1. SnowLuma 特有 result=120 错误
+    # 1. sl 特有 result=120 错误
     exc1 = RuntimeError("send group message rejected: result=120 err=group mute")
     assert driver.is_mute_exception(exc1) is True
 
-    # 2. SnowLuma retcode=100 + rejected + muted
+    # 2. sl retcode=100 + rejected + muted
     exc2 = Exception("retcode=100 send group message rejected: muted")
     assert driver.is_mute_exception(exc2) is True
 
@@ -425,15 +427,15 @@ def test_adapter_find_album_id_matches_name():
 
 
 def test_adapter_auto_detects_and_binds_driver():
-    bot = MockBot({"get_version_info": {"app_name": "SnowLuma", "app_version": "1.0"}})
+    bot = MockBot({"get_version_info": {"app_name": "sl", "app_version": "1.0"}})
     adapter = OneBotAdapter(bot)
 
     async def run_fetch():
         return await adapter.fetch_messages(group_id="123456", days=1, max_count=10)
 
     _ = asyncio.run(run_fetch())
-    assert isinstance(adapter._driver, SnowLumaDriver)
-    assert adapter._driver.name == "snowluma"
+    assert isinstance(adapter._driver, SLDriver)
+    assert adapter._driver.name == "sl"
 
 
 # ==========================================
@@ -613,10 +615,10 @@ def test_adapter_concurrent_ensure_driver_deduplication():
 
 
 def test_adapter_cold_start_mute_exception_recognition():
-    # 验证标准驱动与 cold-start 下对 SnowLuma result=120 / rejected 异常识别
+    # 验证标准驱动与 cold-start 下对 sl result=120 / rejected 异常识别
     adapter = OneBotAdapter(MockBot())
-    exc_snowluma = RuntimeError("send group message rejected: result=120 err=")
-    assert adapter._is_mute_exception(exc_snowluma) is True
+    exc_sl = RuntimeError("send group message rejected: result=120 err=")
+    assert adapter._is_mute_exception(exc_sl) is True
 
 
 # ==========================================
