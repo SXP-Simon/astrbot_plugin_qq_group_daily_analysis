@@ -222,6 +222,7 @@ class GroupDailyAnalysis(Star):
             config_manager=self.config_manager,
             template_service=self.template_command_service,
             image_cache=preview_image_cache,
+            comic_preview_cache=comic_preview_cache,
         )
         self.template_preview_router = TemplatePreviewRouter(
             handlers=[
@@ -229,6 +230,7 @@ class GroupDailyAnalysis(Star):
                     self.config_manager,
                     self.template_command_service,
                     preview_image_cache,
+                    comic_preview_cache=comic_preview_cache,
                 ),
                 self.telegram_template_preview_handler,
             ],
@@ -665,9 +667,9 @@ class GroupDailyAnalysis(Star):
         ):
             yield result
 
-    @filter.command("查看漫画模板", alias={"view_comic_templates"})
+    @filter.command("查看漫画风格", alias={"view_comic_styles"})
     @filter.permission_type(PermissionType.ADMIN)
-    async def view_comic_templates(
+    async def view_comic_styles(
         self, event: AstrMessageEvent
     ) -> AsyncGenerator[MessageEventResult]:
         """查看漫画风格目录、分页缩略图或单张大图。
@@ -683,7 +685,9 @@ class GroupDailyAnalysis(Star):
             return
         parts = event.get_message_str().strip().split(maxsplit=1)
         selection = parts[1] if len(parts) == 2 else ""
-        yield await self.template_preview_router.view_comic_styles(event, selection)
+        result = await self.template_preview_router.view_comic_styles(event, selection)
+        if result is not None:
+            yield result
 
     @filter.command("分析设置", alias={"analysis_settings"})
     @filter.permission_type(PermissionType.ADMIN)
