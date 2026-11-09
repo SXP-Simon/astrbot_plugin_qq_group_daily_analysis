@@ -1684,37 +1684,54 @@ class ConfigManager:
         )
         return prompt if isinstance(prompt, str) else ""
 
-    def save_config(self) -> None:
-        """保存配置到 AstrBot 配置系统，失败时交由调用方处理。
+    def save_config(self) -> bool:
+        """保存配置到 AstrBot，再刷新运行时选项和升级备份。
+
+        Returns:
+            配置已写入后，后续刷新全部成功时返回 True。
 
         Raises:
             Exception: AstrBot 保存配置时发生的原始异常。
         """
+        strategies = self.get_group("t2i_rendering").get("t2i_rendering_strategies")
+        previous_order = None
+        if is_object_list(strategies):
+            try:
+                parse_rendering_strategies(strategies)
+            except ValueError:
+                # 其他设置仍可保存；无效方案保持原样，交给配置页修正。
+                pass
+            else:
+                # 解析器已校验优先级；只重排原始条目，保留未知扩展字段。
+                ordered = sorted(
+                    strategies,
+                    key=lambda item: parse_rendering_strategies([item])[0]["priority"],
+                )
+                previous_order = strategies[:]
+                strategies[:] = ordered
         try:
-            strategies = self.get_group("t2i_rendering").get("t2i_rendering_strategies")
-            if is_object_list(strategies):
-                try:
-                    parse_rendering_strategies(strategies)
-                except ValueError:
-                    # 其他设置仍可保存；无效方案保持原样，交给配置页修正。
-                    pass
-                else:
-                    # 解析器已校验优先级；只重排原始条目，保留未知扩展字段。
-                    ordered = sorted(
-                        strategies,
-                        key=lambda item: parse_rendering_strategies([item])[0][
-                            "priority"
-                        ],
-                    )
-                    strategies[:] = ordered
             cast("ConfigWriter", self.config).save_config()
-            self.refresh_rendering_schema_options()
-            if self._upgrade_tracking_active:
-                self._migrator.protect_upgrade_data()
-            logger.info("配置已保存")
         except Exception as e:
+            if previous_order is not None and is_object_list(strategies):
+                strategies[:] = previous_order
             logger.error(f"保存配置失败: {e}")
             raise
+
+        refreshed = True
+        try:
+            self.refresh_rendering_schema_options()
+        except Exception:
+            refreshed = False
+            logger.warning("配置已保存，但配置选项刷新失败。", exc_info=True)
+        if self._upgrade_tracking_active:
+            try:
+                if self._migrator.protect_upgrade_data() is None:
+                    refreshed = False
+            except Exception:
+                refreshed = False
+                logger.warning("配置已保存，但升级备份刷新失败。", exc_info=True)
+        logger.info("配置已保存")
+        return refreshed
 
     def reload_config(self):
         """重新加载配置"""
