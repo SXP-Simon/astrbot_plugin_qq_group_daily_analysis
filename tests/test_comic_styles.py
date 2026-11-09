@@ -73,7 +73,7 @@ def test_custom_style_requires_complete_text_and_joins_rotation(tmp_path, monkey
     with pytest.raises(ValueError, match="第 2 个自定义风格请填写名称和分镜提示词"):
         validate_config_for_save(config)
 
-    custom["prompt_override"] = "以四格手绘记录对话。"
+    custom["prompt_override"] = "用 ${topic_count} 格手绘记录话题：${chat_content}"
     validate_config_for_save(config)
     manager = object.__new__(config_manager.ConfigManager)
     manager.config = config

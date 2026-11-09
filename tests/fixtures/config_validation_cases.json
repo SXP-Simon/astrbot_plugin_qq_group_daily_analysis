@@ -194,7 +194,7 @@
     "config": {
       "prompts": {
         "topic_analysis_prompts": {
-          "topic_prompt": "保留原文 [user] 与 {chat_text}"
+          "topic_prompt": "保留原文 [user] 与 {chat_text}，最多 ${max_topics} 个话题\n${messages_text}"
         }
       }
     },
