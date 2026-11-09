@@ -91,7 +91,7 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
         // 深拷贝一份 formData
         setFormData(structuredClone(data.config));
 
-        const validation = validateConfigWithZod(data.config, data.schema);
+        const validation = validateConfigWithZod(data.config, data.schema, data.config);
         setErrors(validation.errorMap);
         const keys = Object.keys(data.schema);
         setActiveCategory((current) => (keys.includes(current) ? current : (keys[0] ?? "basic")));
@@ -144,7 +144,12 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
     // 实时校验当前字段，即时清除或更新错误提示
     const fieldSchema = schema[groupKey]?.items[fieldKey];
     if (fieldSchema) {
-      const fieldErrors = validateFieldIssues(fieldKey, fieldSchema, value);
+      const fieldErrors = validateFieldIssues(
+        fieldKey,
+        fieldSchema,
+        value,
+        originalConfig[groupKey]?.[fieldKey],
+      );
       setErrors((prevErrors) => ({
         ...prevErrors,
         [groupKey]: {
@@ -188,7 +193,7 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
     setSaveError("");
     if (focusTimer.current) clearTimeout(focusTimer.current);
     // 1. 保存前使用 Zod 执行严格校验
-    const validationResult = validateConfigWithZod(formData, schema);
+    const validationResult = validateConfigWithZod(formData, schema, originalConfig);
 
     if (!validationResult.isValid) {
       setErrors(validationResult.errorMap);

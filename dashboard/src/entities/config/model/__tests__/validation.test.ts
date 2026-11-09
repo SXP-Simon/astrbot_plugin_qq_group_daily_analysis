@@ -71,3 +71,28 @@ it("定时时间保留空列表关闭语义，接受中文冒号", () => {
   expect(validateSingleFieldWithZod("auto_analysis_time", { type: "list" }, [])).toBeNull();
   expect(validateSingleFieldWithZod("auto_analysis_time", { type: "list" }, ["23：00"])).toBeNull();
 });
+
+it("旧格式漫画正文换序后仍可保存，但修改正文或新增副本需使用普通变量", () => {
+  const legacy = {
+    preset_id: "classic",
+    name: "旧正文",
+    prompt_override: "{chat_content} 共 {topic_count:02d} 格。",
+  };
+  const ordinary = { preset_id: "scp_dossier" };
+  const previous = { daily_comic: { comic_styles: [legacy, ordinary] } };
+  const reordered = { daily_comic: { comic_styles: [ordinary, legacy] } };
+  expect(validateConfigWithZod(reordered, schema as PluginSchema, previous).isValid).toBe(true);
+  for (const changed of [
+    { ...legacy, prompt_override: "{chat_content} 共 {topic_count:03d} 格。" },
+    { ...legacy, name: "新副本" },
+  ]) {
+    const result = validateConfigWithZod(
+      { daily_comic: { comic_styles: [legacy, changed] } },
+      schema as PluginSchema,
+      previous,
+    );
+    expect(result.errorMap.daily_comic?.["comic_styles.1.prompt_override"]).toContain(
+      "不带格式修饰",
+    );
+  }
+});

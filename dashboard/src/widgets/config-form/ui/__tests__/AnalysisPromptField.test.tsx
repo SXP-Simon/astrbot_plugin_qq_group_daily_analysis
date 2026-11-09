@@ -71,6 +71,7 @@ it("保留升级前的正文，新方案可插入变量、预览、单选，删�
   expect(body).toHaveValue(defaultPrompt);
   fireEvent.change(body, { target: { value: "先手动编辑正文" } });
   fireEvent.click(modal.getByRole("button", { name: "应用到草稿" }));
+  expect(screen.getByTestId("draft")).toHaveTextContent(JSON.stringify(original));
   expect(name).toHaveFocus();
   expect(name).toBeInvalid();
   expect(name).toHaveAccessibleDescription("请填写方案名称");
@@ -79,6 +80,7 @@ it("保留升级前的正文，新方案可插入变量、预览、单选，删�
   fireEvent.change(name, { target: { value: "技术群" } });
   expect(name).toBeValid();
   fireEvent.click(modal.getByRole("button", { name: "应用到草稿" }));
+  expect(screen.getByTestId("draft")).toHaveTextContent(JSON.stringify(original));
   expect(body).toHaveFocus();
   body.setSelectionRange(0, body.value.length);
   fireEvent.click(modal.getByRole("button", { name: "插入 ${messages_text}" }));

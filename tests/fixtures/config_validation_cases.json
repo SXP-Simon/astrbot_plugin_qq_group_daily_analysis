@@ -253,6 +253,39 @@
     "valid": false
   },
   {
+    "name": "拒绝拼错的漫画变量",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "classic", "prompt_override": "${chat_content} ${topic_count} ${topic_cout}" }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "拒绝新增带超大格式宽度的漫画正文",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "classic", "prompt_override": "{chat_content:>1000000000} {topic_count}" }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "漫画正文保留作为示例的转义格式标记",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "classic", "prompt_override": "{chat_content} {topic_count}，示例 {{topic_count:02d}}" }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
     "name": "旧角色专属正文也必须写出核心话题",
     "config": {
       "daily_comic": {

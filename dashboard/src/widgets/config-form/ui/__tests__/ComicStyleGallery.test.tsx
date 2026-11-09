@@ -27,7 +27,7 @@ function Settings({
       fieldSchema={field}
       originalValue={saved}
       value={value}
-      subErrors={validateFieldIssues("comic_styles", field, value)}
+      subErrors={validateFieldIssues("comic_styles", field, value, saved)}
       onChange={(next) => {
         setValue(next);
         onChange?.(next);
@@ -65,13 +65,9 @@ it("用风格方案选用内置模板，恢复默认时只清空当前提示词�
 });
 
 it("旧分镜插入变量可撤销，缺少必填变量时不能应用", () => {
-  render(
-    <Settings
-      saved={[
-        { preset_id: "classic", prompt_override: '输出 {"scene":"分镜"}，共 {max_count} 格。' },
-      ]}
-    />,
-  );
+  const initial = '输出 {"scene":"分镜"}，共 {max_count} 格。';
+  render(<Settings saved={[{ preset_id: "classic", prompt_override: initial }]} />);
+  const outerPrompt = screen.getByRole("textbox", { name: "自定义分镜提示词" });
   fireEvent.click(screen.getByRole("button", { name: "变量与预览" }));
   const editor = within(screen.getByRole("dialog", { name: "漫画分镜提示词" }));
   const body = editor.getByRole<HTMLTextAreaElement>("textbox", { name: "分镜提示词正文" });
@@ -87,6 +83,7 @@ it("旧分镜插入变量可撤销，缺少必填变量时不能应用", () => {
   fireEvent.change(body, { target: { value: "旧分镜：{chat_content}" } });
   fireEvent.click(editor.getByRole("button", { name: "应用到草稿" }));
   expect(body).toHaveFocus();
+  expect(outerPrompt).toHaveValue(initial);
   expect(body).toHaveAccessibleDescription("请插入必填变量 ${topic_count}");
   body.setSelectionRange(body.value.length, body.value.length);
   fireEvent.click(editor.getByRole("button", { name: "插入 {topic_count}" }));

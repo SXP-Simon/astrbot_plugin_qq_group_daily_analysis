@@ -21,7 +21,11 @@ export interface ConfigValidationResult {
 const TIME_REGEX = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
 /** 校验声明字段，递归检查对象与方案，保留未声明的扩展值。 */
-export function buildFieldZodSchema(fieldKey: string, field: SchemaFieldItem): z.ZodType {
+export function buildFieldZodSchema(
+  fieldKey: string,
+  field: SchemaFieldItem,
+  previous?: unknown,
+): z.ZodType {
   if (fieldKey === "cdn_base_url") return cdnBaseUrlSchema.optional();
   if (["google_fonts", "gstatic"].includes(fieldKey)) return fontBaseUrlSchema.optional();
   if (fieldKey === "t2i_rendering_strategies") return z.array(renderingStrategySchema).optional();
@@ -62,7 +66,13 @@ export function buildFieldZodSchema(fieldKey: string, field: SchemaFieldItem): z
         if (items && typeof items.type !== "string") {
           for (const [key, child] of Object.entries(items as Record<string, SchemaFieldItem>)) {
             if (child.hidden || !isFieldVisible(child, { current: data })) continue;
-            const result = buildFieldZodSchema(key, child).safeParse(data[key] ?? child.default);
+            const oldValue =
+              previous && typeof previous === "object"
+                ? (previous as Record<string, unknown>)[key]
+                : undefined;
+            const result = buildFieldZodSchema(key, child, oldValue).safeParse(
+              data[key] ?? child.default,
+            );
             if (!result.success)
               for (const issue of result.error.issues)
                 ctx.addIssue({
@@ -82,6 +92,24 @@ export function buildFieldZodSchema(fieldKey: string, field: SchemaFieldItem): z
         }
         const values: unknown[] = value;
         const comicStyleNames = new Set<string>();
+        const promptKey =
+          fieldKey === "comic_styles"
+            ? "prompt_override"
+            : fieldKey === "comic_characters"
+              ? "storyboard_prompt"
+              : undefined;
+        const savedPrompts = new Map<string, number>();
+        if (promptKey && Array.isArray(previous)) {
+          for (const row of previous as unknown[]) {
+            const body =
+              row && typeof row === "object"
+                ? (row as Record<string, unknown>)[promptKey]
+                : undefined;
+            if (typeof body === "string") {
+              savedPrompts.set(body, (savedPrompts.get(body) ?? 0) + 1);
+            }
+          }
+        }
         values.forEach((item, index) => {
           if (field.type === "template_list") {
             if (!item || typeof item !== "object" || Array.isArray(item)) {
@@ -130,10 +158,23 @@ export function buildFieldZodSchema(fieldKey: string, field: SchemaFieldItem): z
                 });
                 return;
               }
-              const result = buildFieldZodSchema(fieldKey, {
-                type: "object",
-                items: template.items,
-              }).safeParse(data);
+              const body = promptKey ? data[promptKey] : undefined;
+              let previousItem: Record<string, string> | undefined;
+              if (promptKey && typeof body === "string") {
+                const savedCount = savedPrompts.get(body) ?? 0;
+                if (savedCount > 0) {
+                  savedPrompts.set(body, savedCount - 1);
+                  previousItem = { [promptKey]: body };
+                }
+              }
+              const result = buildFieldZodSchema(
+                fieldKey,
+                {
+                  type: "object",
+                  items: template.items,
+                },
+                previousItem,
+              ).safeParse(data);
               if (!result.success)
                 for (const issue of result.error.issues)
                   ctx.addIssue({
@@ -178,8 +219,9 @@ export function buildFieldZodSchema(fieldKey: string, field: SchemaFieldItem): z
             message: "时间格式不正确，请输入 24 小时制 HH:MM 格式（如 23:30）",
           });
         if (value.trim() && (fieldKey === "prompt_override" || fieldKey === "storyboard_prompt")) {
-          const { error } = readComicStoryboard(value);
-          if (error) ctx.addIssue({ code: "custom", message: error });
+          const { error, hasLegacyModifiers } = readComicStoryboard(value);
+          if (error && !(hasLegacyModifiers && value === previous))
+            ctx.addIssue({ code: "custom", message: error });
         }
         if (value.trim() && fieldKey === "profile_mapping_config") {
           try {
@@ -218,8 +260,9 @@ export function validateFieldIssues(
   fieldKey: string,
   field: SchemaFieldItem,
   value: unknown,
+  previous?: unknown,
 ): Record<string, string> {
-  const result = buildFieldZodSchema(fieldKey, field).safeParse(value);
+  const result = buildFieldZodSchema(fieldKey, field, previous).safeParse(value);
   if (result.success) return {};
   if (
     field.type === "template_list" &&
@@ -242,6 +285,7 @@ export function validateFieldIssues(
 export function validateConfigWithZod(
   formData: Record<string, Record<string, unknown>>,
   schema: PluginSchema,
+  previous?: Record<string, Record<string, unknown>>,
 ): ConfigValidationResult {
   const errors: ConfigValidationError[] = [];
   const errorMap: Record<string, Record<string, string>> = {};
@@ -253,7 +297,9 @@ export function validateConfigWithZod(
       if (field.hidden || !isFieldVisible(field, formData)) return;
 
       const value = groupData[fieldKey] !== undefined ? groupData[fieldKey] : field.default;
-      for (const [path, message] of Object.entries(validateFieldIssues(fieldKey, field, value))) {
+      for (const [path, message] of Object.entries(
+        validateFieldIssues(fieldKey, field, value, previous?.[groupKey]?.[fieldKey]),
+      )) {
         errors.push({ groupKey, path, message });
         (errorMap[groupKey] ??= {})[path] = message;
       }

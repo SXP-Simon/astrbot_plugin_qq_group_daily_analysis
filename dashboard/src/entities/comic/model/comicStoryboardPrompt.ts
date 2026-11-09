@@ -26,9 +26,11 @@ const legacyVariables = new Map(Object.entries(variables));
 export function readComicStoryboard(template: string) {
   const used = new Set<string>();
   let expanded: string;
+  let unknown: string[] = [];
   if (template.includes("$")) {
     const preview = expandAnalysisPrompt(template, variables);
     expanded = preview.expanded;
+    unknown = preview.unknown;
     for (const key of preview.used) used.add(key);
   } else {
     let invalidBraces = false;
@@ -56,16 +58,19 @@ export function readComicStoryboard(template: string) {
   }
   const hasLegacyModifiers =
     !template.includes("$") &&
-    /\{(?:chat_content|topic_count|max_count)(?:!|:|\.|\[)/.test(template);
+    /(?:^|[^{])(?:\{\{)*\{(?:chat_content|topic_count|max_count)(?:!|:|\.|\[)/.test(template);
   const missing = Object.keys(storyboardVariables).filter(
     (key) => !used.has(key) && !(key === "topic_count" && used.has("max_count")),
   );
   return {
     expanded: hasLegacyModifiers ? null : expanded,
+    hasLegacyModifiers,
     error: hasLegacyModifiers
       ? "请改用不带格式修饰的变量，便于检查和预览。"
-      : missing.length
-        ? "请插入必填变量 " + missing.map((key) => "${" + key + "}").join("、")
-        : "",
+      : unknown.length
+        ? "不支持变量 " + unknown.map((key) => "${" + key + "}").join("、")
+        : missing.length
+          ? "请插入必填变量 " + missing.map((key) => "${" + key + "}").join("、")
+          : "",
   };
 }
