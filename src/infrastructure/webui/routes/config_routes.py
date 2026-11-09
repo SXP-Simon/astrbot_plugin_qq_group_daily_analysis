@@ -675,7 +675,7 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 auto_analysis_config["auto_analysis_time"] = configured_times
 
             try:
-                validate_config_for_save(new_config)
+                validate_config_for_save(new_config, config_obj)
             except ValueError as exc:
                 return error_response(str(exc), status_code=400)
 
@@ -685,11 +685,24 @@ font:20px sans-serif}p{font-size:14px;color:#475569}</style></head>
                 )
             except ValueError as exc:
                 return error_response(str(exc), status_code=400)
-            for key, value in save_dto["config"].items():
+            updates = save_dto["config"]
+            previous_values: dict[str, object] = {
+                key: config_obj[key] for key in updates if key in config_obj
+            }
+            for key, value in updates.items():
                 config_obj[key] = value
 
-            if cfg_mgr:
-                cfg_mgr.save_config()
+            try:
+                if cfg_mgr:
+                    cfg_mgr.save_config()
+            except Exception:
+                # 写盘失败时恢复运行中的配置，草稿仍可用原版本重试。
+                for key in updates:
+                    if key in previous_values:
+                        config_obj[key] = previous_values[key]
+                    elif key in config_obj:
+                        del config_obj[key]
+                raise
 
             saved_revision = _config_revision(config_obj)
             save_message = "配置已成功保存并持久化生效"
