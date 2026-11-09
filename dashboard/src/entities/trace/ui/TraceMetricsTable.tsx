@@ -1,4 +1,4 @@
-import type { TraceMetrics, MetricsViewMode } from "../model/traceMetrics";
+import type { TraceMetrics, MetricsViewMode } from "@/entities/trace/model/traceMetrics";
 
 export function TraceMetricsTable({
   metrics,

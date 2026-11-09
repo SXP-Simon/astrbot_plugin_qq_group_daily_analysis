@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { useBrowserFontDownload } from "../useBrowserFontDownload";
+import { useBrowserFontDownload } from "@/features/manage-typst-fonts/model/useBrowserFontDownload";
 
 let requests: FontRequest[];
 class FontRequest {

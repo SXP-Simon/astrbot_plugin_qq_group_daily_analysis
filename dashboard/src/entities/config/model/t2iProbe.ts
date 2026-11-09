@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { components } from "../../../shared/api/generated/schema";
+import type { components } from "@/shared/api/generated/schema";
 import {
   DEFAULT_CUSTOM_T2I_REQUEST_TIMEOUT_MS,
   renderingStrategySchema,

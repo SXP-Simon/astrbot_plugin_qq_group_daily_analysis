@@ -1,13 +1,13 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { testT2i } from "../../../../entities/config/api/configApi";
-import type { T2iProbe as ProbeResult } from "../../../../entities/config/model/t2iProbe";
-import { T2iProbe } from "../T2iProbe";
-import { fetchGroupSessions } from "../../../../entities/group/api/groupApi";
-import { useT2iProbe } from "../../model/useT2iProbe";
+import { testT2i } from "@/entities/config/api/configApi";
+import type { T2iProbe as ProbeResult } from "@/entities/config/model/t2iProbe";
+import { T2iProbe } from "@/features/test-t2i/ui/T2iProbe";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import { useT2iProbe } from "@/features/test-t2i/model/useT2iProbe";
 
-vi.mock("../../../../entities/config/api/configApi", () => ({ testT2i: vi.fn() }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
+vi.mock("@/entities/config/api/configApi", () => ({ testT2i: vi.fn() }));
+vi.mock("@/entities/group/api/groupApi", () => ({ fetchGroupSessions: vi.fn() }));
 
 const input = {
   service_endpoint: "http://127.0.0.1:8999",

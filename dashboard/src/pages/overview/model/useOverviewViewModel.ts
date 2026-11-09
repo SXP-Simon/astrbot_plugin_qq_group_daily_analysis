@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { z } from "zod";
-import { fetchActiveTasks, cancelActiveTask } from "../../../entities/task/api/taskApi";
-import { fetchMetricsSummary } from "../../../entities/metric/api/metricApi";
-import { acknowledgeTrace, fetchTraceList } from "../../../entities/trace/api/traceApi";
-import type { ActiveTask } from "../../../entities/task/model/types";
-import type { MetricsSummary } from "../../../entities/metric/model/types";
-import type { TraceRecord } from "../../../entities/trace/model/types";
+import { fetchActiveTasks, cancelActiveTask } from "@/entities/task/api/taskApi";
+import { fetchMetricsSummary } from "@/entities/metric/api/metricApi";
+import { acknowledgeTrace, fetchTraceList } from "@/entities/trace/api/traceApi";
+import type { ActiveTask } from "@/entities/task/model/types";
+import type { MetricsSummary } from "@/entities/metric/model/types";
+import type { TraceRecord } from "@/entities/trace/model/types";
 
 const activeTaskSchema: z.ZodType<ActiveTask> = z.object({
   task_id: z.string().min(1),

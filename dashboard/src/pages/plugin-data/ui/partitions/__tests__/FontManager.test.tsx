@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { FontManager } from "../../../../../features/manage-typst-fonts/ui/FontManager";
-import { downloadTypstFonts, fetchTypstFonts } from "../../../../../entities/config/api/configApi";
+import { FontManager } from "@/features/manage-typst-fonts/ui/FontManager";
+import { downloadTypstFonts, fetchTypstFonts } from "@/entities/config/api/configApi";
 import {
   deleteManagedFiles,
   fetchManagedContent,
@@ -10,14 +10,14 @@ import {
   startManagedUpload,
   uploadManagedChunk,
   type ManagedFile,
-} from "../../../../../entities/plugin-data/api/managedFilesApi";
-import { mockFontPresets } from "../../../../../mocks/data/fontPresets";
+} from "@/entities/plugin-data/api/managedFilesApi";
+import { mockFontPresets } from "@/mocks/data/fontPresets";
 
-vi.mock("../../../../../entities/config/api/configApi", () => ({
+vi.mock("@/entities/config/api/configApi", () => ({
   downloadTypstFonts: vi.fn(),
   fetchTypstFonts: vi.fn(),
 }));
-vi.mock("../../../../../entities/plugin-data/api/managedFilesApi", () => ({
+vi.mock("@/entities/plugin-data/api/managedFilesApi", () => ({
   deleteManagedFiles: vi.fn(),
   fetchManagedContent: vi.fn(),
   fetchManagedFiles: vi.fn(),

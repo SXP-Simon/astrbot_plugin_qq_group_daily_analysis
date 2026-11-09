@@ -1,8 +1,8 @@
 import { IconCheck, IconAlertCircle, IconPhoto, IconLoader2 } from "@tabler/icons-react";
-import { Button } from "../../../shared/ui/button";
-import { SearchSelect } from "../../../shared/ui/search-select";
-import type { T2iProbeInput } from "../../../entities/config/model/t2iProbe";
-import { useT2iProbe } from "../model/useT2iProbe";
+import { Button } from "@/shared/ui/button";
+import { SearchSelect } from "@/shared/ui/search-select";
+import type { T2iProbeInput } from "@/entities/config/model/t2iProbe";
+import { useT2iProbe } from "@/features/test-t2i/model/useT2iProbe";
 
 export function T2iProbe({ input }: { input: T2iProbeInput }) {
   const { loading, result, error, run, groupOptions, groupKey, setGroupKey, groupsError } =

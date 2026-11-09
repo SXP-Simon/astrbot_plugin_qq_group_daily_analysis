@@ -8,19 +8,16 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { useManagedFiles } from "../../model/useManagedFiles";
-import { ManagedFileList } from "../ManagedFileList";
-import type {
-  ManagedFile,
-  ManagedPartition,
-} from "../../../../entities/plugin-data/api/managedFilesApi";
-import { copyToClipboard } from "../../../../shared/lib/clipboard";
-import { fetchManagedPartitions } from "../../../../entities/plugin-data/api/managedFilesApi";
+import { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
+import { ManagedFileList } from "@/features/manage-stored-files/ui/ManagedFileList";
+import type { ManagedFile, ManagedPartition } from "@/entities/plugin-data/api/managedFilesApi";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import { fetchManagedPartitions } from "@/entities/plugin-data/api/managedFilesApi";
 
-vi.mock("../../../../entities/plugin-data/api/managedFilesApi", () => ({
+vi.mock("@/entities/plugin-data/api/managedFilesApi", () => ({
   fetchManagedPartitions: vi.fn(),
 }));
-vi.mock("../../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 beforeEach(() => vi.mocked(fetchManagedPartitions).mockResolvedValue([]));
 const partition: ManagedPartition = {
   key: "reports",

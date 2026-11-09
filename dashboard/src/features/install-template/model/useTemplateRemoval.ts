@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { fetchReportTemplates, uninstallTemplate } from "../../../entities/report/api/reportApi";
-import type { ReportTemplateItem } from "../../../entities/report/model/templates";
+import { fetchReportTemplates, uninstallTemplate } from "@/entities/report/api/reportApi";
+import type { ReportTemplateItem } from "@/entities/report/model/templates";
 
 export function useTemplateRemoval(
   open: boolean,

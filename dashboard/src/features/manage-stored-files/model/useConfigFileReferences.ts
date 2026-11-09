@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPluginConfig } from "../../../entities/config/api/configApi";
+import { fetchPluginConfig } from "@/entities/config/api/configApi";
 
 export function useConfigFileReferences(enabled: boolean) {
   const [references, setReferences] = useState(new Map<string, string[]>());

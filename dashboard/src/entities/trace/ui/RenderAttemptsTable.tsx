@@ -1,6 +1,6 @@
-import { formatDuration } from "../../../shared/lib/formatters";
-import { renderAttemptSchema } from "../model/renderAttempts";
-import { resolveSpanOutcome } from "../model/spanOutcome";
+import { formatDuration } from "@/shared/lib/formatters";
+import { renderAttemptSchema } from "@/entities/trace/model/renderAttempts";
+import { resolveSpanOutcome } from "@/entities/trace/model/spanOutcome";
 
 const serviceNames = { astrbot: "AstrBot T2I", custom: "自定义 T2I", typst: "Typst 本地排版" };
 const statusLabels = {

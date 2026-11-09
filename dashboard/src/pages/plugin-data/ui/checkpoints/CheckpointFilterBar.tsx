@@ -1,10 +1,10 @@
-import { GroupFilters } from "../../../../entities/group/ui/GroupFilters";
+import { GroupFilters } from "@/entities/group/ui/GroupFilters";
 import { IconRefresh } from "@tabler/icons-react";
-import { Button } from "../../../../shared/ui/button";
-import { Input } from "../../../../shared/ui/input";
-import { NativeSelect } from "../../../../shared/ui/native-select";
-import { formatStageName } from "../../../../shared/lib/formatters";
-import type { usePluginDataViewModel } from "../../model/usePluginDataViewModel";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { formatStageName } from "@/shared/lib/formatters";
+import type { usePluginDataViewModel } from "@/pages/plugin-data/model/usePluginDataViewModel";
 
 export function CheckpointFilterBar({ vm }: { vm: ReturnType<typeof usePluginDataViewModel> }) {
   const stages = [

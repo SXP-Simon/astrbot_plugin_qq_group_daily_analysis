@@ -1,10 +1,10 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
-import { ActiveTaskBoard } from "../../../widgets/active-task-board/ActiveTaskBoard";
-import { OverviewTrendCharts } from "../../../widgets/trend-charts/OverviewTrendCharts";
-import { Button } from "../../../shared/ui/button";
-import { StatusTag } from "../../../shared/ui/StatusTag";
-import { formatDuration, formatSmartTokens, formatTimestamp } from "../../../shared/lib/formatters";
-import type { useOverviewViewModel } from "../model/useOverviewViewModel";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { ActiveTaskBoard } from "@/widgets/active-task-board/ActiveTaskBoard";
+import { OverviewTrendCharts } from "@/widgets/trend-charts/OverviewTrendCharts";
+import { Button } from "@/shared/ui/button";
+import { StatusTag } from "@/shared/ui/StatusTag";
+import { formatDuration, formatSmartTokens, formatTimestamp } from "@/shared/lib/formatters";
+import type { useOverviewViewModel } from "@/pages/overview/model/useOverviewViewModel";
 
 interface OverviewPageProps {
   viewModel: ReturnType<typeof useOverviewViewModel>;

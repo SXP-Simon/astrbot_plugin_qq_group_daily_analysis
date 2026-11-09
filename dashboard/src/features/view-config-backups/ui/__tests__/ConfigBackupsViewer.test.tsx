@@ -1,13 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import {
-  fetchConfigBackup,
-  fetchConfigBackups,
-} from "../../../../entities/plugin-data/api/pluginDataApi";
-import { mockConfigBackups } from "../../../../mocks/data/configBackups";
-import { ConfigBackupsViewer } from "../ConfigBackupsViewer";
+import { fetchConfigBackup, fetchConfigBackups } from "@/entities/plugin-data/api/pluginDataApi";
+import { mockConfigBackups } from "@/mocks/data/configBackups";
+import { ConfigBackupsViewer } from "@/features/view-config-backups/ui/ConfigBackupsViewer";
 
-vi.mock("../../../../entities/plugin-data/api/pluginDataApi", () => ({
+vi.mock("@/entities/plugin-data/api/pluginDataApi", () => ({
   fetchConfigBackups: vi.fn(),
   fetchConfigBackup: vi.fn(),
 }));

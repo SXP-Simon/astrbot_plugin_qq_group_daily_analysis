@@ -1,19 +1,19 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { fetchActiveTasks, cancelActiveTask } from "../../../../entities/task/api/taskApi";
-import { fetchMetricsSummary } from "../../../../entities/metric/api/metricApi";
-import { acknowledgeTrace, fetchTraceList } from "../../../../entities/trace/api/traceApi";
-import type { ActiveTask } from "../../../../entities/task/model/types";
-import { useOverviewViewModel } from "../useOverviewViewModel";
-import { mockMetricsSummary } from "../../../../mocks/data/metrics";
-import { mockTraces } from "../../../../mocks/data/traces";
+import { fetchActiveTasks, cancelActiveTask } from "@/entities/task/api/taskApi";
+import { fetchMetricsSummary } from "@/entities/metric/api/metricApi";
+import { acknowledgeTrace, fetchTraceList } from "@/entities/trace/api/traceApi";
+import type { ActiveTask } from "@/entities/task/model/types";
+import { useOverviewViewModel } from "@/pages/overview/model/useOverviewViewModel";
+import { mockMetricsSummary } from "@/mocks/data/metrics";
+import { mockTraces } from "@/mocks/data/traces";
 
-vi.mock("../../../../entities/task/api/taskApi", () => ({
+vi.mock("@/entities/task/api/taskApi", () => ({
   fetchActiveTasks: vi.fn(),
   cancelActiveTask: vi.fn(),
 }));
-vi.mock("../../../../entities/metric/api/metricApi", () => ({ fetchMetricsSummary: vi.fn() }));
-vi.mock("../../../../entities/trace/api/traceApi", () => ({
+vi.mock("@/entities/metric/api/metricApi", () => ({ fetchMetricsSummary: vi.fn() }));
+vi.mock("@/entities/trace/api/traceApi", () => ({
   fetchTraceList: vi.fn(),
   acknowledgeTrace: vi.fn(),
 }));

@@ -4,10 +4,10 @@ import {
   triggerNewTask,
   fetchConnectedPlatforms,
   type ConnectedPlatform,
-} from "../../../entities/task/api/taskApi";
-import { fetchProviderList, type LLMProviderItem } from "../../../entities/trace/api/traceApi";
-import { useReportTemplates } from "../../../entities/report/model/useReportTemplates";
-import type { GroupItem } from "../../../entities/group/model/types";
+} from "@/entities/task/api/taskApi";
+import { fetchProviderList, type LLMProviderItem } from "@/entities/trace/api/traceApi";
+import { useReportTemplates } from "@/entities/report/model/useReportTemplates";
+import type { GroupItem } from "@/entities/group/model/types";
 
 export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void) {
   const [open, setOpen] = useState(false);

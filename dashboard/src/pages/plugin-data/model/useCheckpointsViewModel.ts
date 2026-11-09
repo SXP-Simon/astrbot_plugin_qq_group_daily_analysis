@@ -5,8 +5,8 @@ import {
   fetchCheckpointsList,
   fetchCheckpointDetail,
   deleteCheckpoint,
-} from "../../../entities/plugin-data/api/pluginDataApi";
-import type { CheckpointItem, CheckpointDetail } from "../../../entities/plugin-data/model/types";
+} from "@/entities/plugin-data/api/pluginDataApi";
+import type { CheckpointItem, CheckpointDetail } from "@/entities/plugin-data/model/types";
 
 interface CheckpointQuery {
   page: number;

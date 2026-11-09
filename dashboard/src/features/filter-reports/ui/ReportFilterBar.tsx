@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { IconRefresh, IconX } from "@tabler/icons-react";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import type { ReportKind } from "../../../entities/report/api/reportApi";
-import { Input } from "../../../shared/ui/input";
-import { Button } from "../../../shared/ui/button";
-import { GroupFilters } from "../../../entities/group/ui/GroupFilters";
-import type { GroupItem } from "../../../entities/group/model/types";
+import { NativeSelect } from "@/shared/ui/native-select";
+import type { ReportKind } from "@/entities/report/api/reportApi";
+import { Input } from "@/shared/ui/input";
+import { Button } from "@/shared/ui/button";
+import { GroupFilters } from "@/entities/group/ui/GroupFilters";
+import type { GroupItem } from "@/entities/group/model/types";
 
 interface ReportFilterBarProps {
   search: string;

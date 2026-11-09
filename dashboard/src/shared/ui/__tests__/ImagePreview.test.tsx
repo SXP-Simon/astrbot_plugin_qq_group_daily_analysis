@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ImagePreview } from "../image-preview";
+import { ImagePreview } from "@/shared/ui/image-preview";
 
 afterEach(() => vi.restoreAllMocks());
 

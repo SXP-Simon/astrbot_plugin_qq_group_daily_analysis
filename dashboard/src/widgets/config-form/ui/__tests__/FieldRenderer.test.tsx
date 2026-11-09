@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { FieldRenderer } from "../FieldRenderer";
-import type { SchemaFieldItem } from "../../../../entities/config/model/types";
-import { validateSingleFieldWithZod } from "../../../../entities/config/model/validation";
+import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
+import type { SchemaFieldItem } from "@/entities/config/model/types";
+import { validateSingleFieldWithZod } from "@/entities/config/model/validation";
 
 function Draft({
   fieldKey = "value",

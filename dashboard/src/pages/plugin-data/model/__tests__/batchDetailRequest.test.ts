@@ -3,10 +3,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import {
   fetchIncrementalBatchDetail,
   type IncrementalBatchItem,
-} from "../../../../entities/plugin-data/api/pluginDataApi";
-import { usePluginDataViewModel } from "../usePluginDataViewModel";
+} from "@/entities/plugin-data/api/pluginDataApi";
+import { usePluginDataViewModel } from "@/pages/plugin-data/model/usePluginDataViewModel";
 
-vi.mock("../../../../entities/plugin-data/api/pluginDataApi");
+vi.mock("@/entities/plugin-data/api/pluginDataApi");
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();

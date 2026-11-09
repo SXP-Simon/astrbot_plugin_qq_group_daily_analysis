@@ -486,14 +486,7 @@ class ConfigMigrator:
 
     def migrate_legacy_comic_storyboard_prompts(self) -> None:
         """自动将旧版默认漫画分镜提示词升级迁移至包含 GOOD/BAD 正反例的新版模板。"""
-        try:
-            from ..analysis.analyzers.comic_analyzer import (
-                DEFAULT_COMIC_STORYBOARD_PROMPT,
-            )
-        except Exception:
-            from src.infrastructure.analysis.analyzers.comic_analyzer import (
-                DEFAULT_COMIC_STORYBOARD_PROMPT,
-            )
+        from ...shared.comic_presets import DEFAULT_COMIC_STORYBOARD_PROMPT
 
         modified = False
 

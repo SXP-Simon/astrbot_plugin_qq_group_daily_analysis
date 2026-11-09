@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { FontDownloadSource } from "../../../entities/config/model/typstFonts";
+import type { FontDownloadSource } from "@/entities/config/model/typstFonts";
 
 export interface FontManagementSelection {
   theme: string;

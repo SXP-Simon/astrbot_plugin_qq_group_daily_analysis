@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { renderingSaveSchema, renderingStrategySchema } from "../renderingConfig";
+import {
+  renderingSaveSchema,
+  renderingStrategySchema,
+} from "@/entities/config/model/renderingConfig";
 
 it("旧自定义方案默认在线字体，AstrBot 方案不保留字体模式", () => {
   expect(renderingStrategySchema.parse({ __template_key: "custom" }).font_mode).toBe("network");

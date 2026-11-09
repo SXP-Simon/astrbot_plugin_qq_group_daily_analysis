@@ -1,16 +1,16 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useContext, useEffect, useId, useState } from "react";
 import { IconRefresh, IconUpload } from "@tabler/icons-react";
-import { TEMPLATE_CDN_PRESETS } from "../../../entities/config/model/renderingConfig";
-import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
-import { useTemplateResources } from "../model/useTemplateResources";
-import { ResourceManagementContext } from "../model/ResourceManagementContext";
-import { Alert } from "../../../shared/ui/alert";
-import { Button } from "../../../shared/ui/button";
-import { CopyButton } from "../../../shared/ui/copy-button";
-import { Input } from "../../../shared/ui/input";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { Progress } from "../../../shared/ui/progress";
+import { TEMPLATE_CDN_PRESETS } from "@/entities/config/model/renderingConfig";
+import { KNOWN_TEMPLATES } from "@/entities/report/model/templates";
+import { useTemplateResources } from "@/features/manage-template-resources/model/useTemplateResources";
+import { ResourceManagementContext } from "@/features/manage-template-resources/model/ResourceManagementContext";
+import { Alert } from "@/shared/ui/alert";
+import { Button } from "@/shared/ui/button";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { Input } from "@/shared/ui/input";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { Progress } from "@/shared/ui/progress";
 
 export function TemplateResources({
   cdnBaseUrl,

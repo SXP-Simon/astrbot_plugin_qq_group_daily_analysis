@@ -1,10 +1,10 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { apiGet } from "../../../../shared/api/bridge";
-import { fetchConnectedPlatforms } from "../taskApi";
-import { mockConnectedPlatforms } from "../../../../mocks/data/tasks";
+import { apiGet } from "@/shared/api/bridge";
+import { fetchConnectedPlatforms } from "@/entities/task/api/taskApi";
+import { mockConnectedPlatforms } from "@/mocks/data/tasks";
 
-vi.mock("../../../../shared/api/bridge", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../../shared/api/bridge")>()),
+vi.mock("@/shared/api/bridge", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/api/bridge")>()),
   apiGet: vi.fn(),
 }));
 

@@ -1,8 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { EChartsOption } from "echarts";
-import { TokenChartWidget } from "../TokenChartWidget";
-import type { TokenUsage } from "../../../entities/trace/model/types";
+import { TokenChartWidget } from "@/widgets/token-chart-widget/TokenChartWidget";
+import type { TokenUsage } from "@/entities/trace/model/types";
 
 let observed: EChartsOption | undefined;
 vi.mock("echarts-for-react", () => ({
@@ -11,7 +11,7 @@ vi.mock("echarts-for-react", () => ({
     return <div data-testid="token-chart" />;
   },
 }));
-vi.mock("../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 const usage: TokenUsage = {
   trace_id: "demo",
   prompt_tokens: 80,

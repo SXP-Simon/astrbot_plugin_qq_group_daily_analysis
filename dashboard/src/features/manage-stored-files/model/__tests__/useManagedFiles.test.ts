@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { useManagedFiles } from "../useManagedFiles";
+import { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
 import {
   deleteManagedFiles,
   fetchManagedContent,
@@ -9,9 +9,9 @@ import {
   fetchManagedPartitions,
   mutateManagedFile,
   type ManagedPartition,
-} from "../../../../entities/plugin-data/api/managedFilesApi";
+} from "@/entities/plugin-data/api/managedFilesApi";
 
-vi.mock("../../../../entities/plugin-data/api/managedFilesApi", () => ({
+vi.mock("@/entities/plugin-data/api/managedFilesApi", () => ({
   fetchManagedPartitions: vi.fn(),
   fetchManagedFiles: vi.fn(),
   fetchManagedContent: vi.fn(),

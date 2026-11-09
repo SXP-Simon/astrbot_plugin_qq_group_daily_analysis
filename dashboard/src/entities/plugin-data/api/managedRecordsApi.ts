@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
-import type { components } from "../../../shared/api/generated/schema";
+import { apiGet, apiPost, extractData } from "@/shared/api/bridge";
+import type { components } from "@/shared/api/generated/schema";
 
 export type RecordLocator = components["schemas"]["RecordLocator"];
 export type ManagedRecord = components["schemas"]["ManagedRecord"];
@@ -51,4 +51,4 @@ export async function mutateManagedRecord(input: ManagedRecordMutation) {
   }
 }
 
-export { recordKey } from "../model/managedRecord";
+export { recordKey } from "@/entities/plugin-data/model/managedRecord";

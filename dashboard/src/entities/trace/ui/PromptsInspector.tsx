@@ -1,10 +1,10 @@
 import { useId, useState } from "react";
 import { IconCopy } from "@tabler/icons-react";
-import { Button } from "../../../shared/ui/button";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { copyToClipboard } from "../../../shared/lib/clipboard";
-import { formatTokens } from "../../../shared/lib/formatters";
-import { getPromptGroups, type PromptRecord } from "../model/promptRecords";
+import { Button } from "@/shared/ui/button";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import { formatTokens } from "@/shared/lib/formatters";
+import { getPromptGroups, type PromptRecord } from "@/entities/trace/model/promptRecords";
 
 export function PromptsInspector({ prompts }: { prompts?: unknown }) {
   const groups = getPromptGroups(prompts);

@@ -1,12 +1,12 @@
-import configSchema from "../../../../_conf_schema.json";
-import type { ComicRotationEntry } from "../../entities/comic/api/comicApi";
+import configSchema from "@plugin-config";
+import type { ComicRotationEntry } from "@/entities/comic/api/comicApi";
 import { z } from "zod";
 import {
   pluginConfigResponseSchema,
   pluginConfigSaveSchema,
-} from "../../entities/config/model/configContract";
-import type { PluginConfigData, SchemaFieldItem } from "../../entities/config/model/types";
-import type { AvailablePersona, AvailableProvider } from "../../entities/config/api/configApi";
+} from "@/entities/config/model/configContract";
+import type { PluginConfigData, SchemaFieldItem } from "@/entities/config/model/types";
+import type { AvailablePersona, AvailableProvider } from "@/entities/config/api/configApi";
 
 function defaults(items: Record<string, SchemaFieldItem>): Record<string, unknown> {
   return Object.fromEntries(
@@ -108,6 +108,21 @@ export const configMockHandlers = {
       message: "配置已成功保存并持久化生效",
     };
   },
+};
+
+// 模拟升级后保留的正文，以及已保存但未启用的自定义方案。
+const originalTopicPrompt =
+  "提取最多 ${max_topics} 个技术讨论话题，保留关键决定与待办。\n\n群聊消息：\n${messages_text}";
+mockPluginConfig.config.prompts.topic_analysis_prompts = {
+  topic_prompt: originalTopicPrompt,
+  topic_prompt_schemes: [
+    { name: null, text: originalTopicPrompt, selected: true },
+    {
+      name: "简明会议纪要",
+      text: "从以下消息提取结论和行动项，最多 ${max_topics} 个话题。\n\n${messages_text}",
+      selected: false,
+    },
+  ],
 };
 
 mockPluginConfig.config.daily_comic.comic_characters = [

@@ -1,5 +1,5 @@
 import { mockTypstTraces } from "./typstTraces";
-import type { TraceRecord } from "../../entities/trace/model/types";
+import type { TraceRecord } from "@/entities/trace/model/types";
 
 /**
  * 结构化拟真 Mock 链路数据矩阵

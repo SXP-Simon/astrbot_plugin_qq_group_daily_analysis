@@ -27,6 +27,7 @@ export interface SchemaFieldItem {
    */
   condition?: Record<string, unknown>;
   items?: SchemaFieldItem | Record<string, SchemaFieldItem>;
+  prompt_variables?: Record<string, PromptVariable>;
   templates?: Record<
     string,
     {
@@ -37,6 +38,14 @@ export interface SchemaFieldItem {
     }
   >;
   [key: string]: unknown;
+}
+
+export interface PromptVariable {
+  label: string;
+  description: string;
+  example: string;
+  required?: boolean;
+  config_field?: string;
 }
 
 export interface SchemaGroupItem {

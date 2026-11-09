@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchTemplatePreview } from "../api/reportApi";
+import { fetchTemplatePreview } from "@/entities/report/api/reportApi";
 import { getReportTemplatePreviewUrl } from "./templates";
 
 /** 自定义图片经插件读取；内置示例沿用所选 CDN，切换时不展示旧模板。 */

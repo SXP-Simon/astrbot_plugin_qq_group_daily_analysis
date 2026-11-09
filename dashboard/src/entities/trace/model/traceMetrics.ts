@@ -1,7 +1,7 @@
 import type { TraceRecord, TraceSpan } from "./types";
 import { buildSpanTree, spanGroupKey, type SpanTreeNode } from "./spanTree";
 import { getDurationRatio } from "./spanTiming";
-import { formatStageName } from "../../../shared/lib/formatters";
+import { formatStageName } from "@/shared/lib/formatters";
 
 export type MetricsViewMode = "duration" | "memory" | "dataflow";
 export type PipelineMode = "effective" | "all";

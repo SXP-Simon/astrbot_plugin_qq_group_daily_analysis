@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import type { TraceRecord } from "../../../entities/trace/model/types";
-import { TraceTable } from "../TraceTable";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import { TraceTable } from "@/widgets/trace-table/TraceTable";
 
 const trace: TraceRecord = {
   trace_id: "example-a",

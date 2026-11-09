@@ -1,11 +1,11 @@
 import { expect, it } from "vitest";
-import { mockHandlers } from "../handlers";
-import { extractData } from "../../shared/api/bridge";
+import { mockHandlers } from "@/mocks/handlers";
+import { extractData } from "@/shared/api/bridge";
 import type {
   IncrementalBatchItem,
   IncrementalBatchesResponse,
-} from "../../entities/plugin-data/model/types";
-import { mockIncrementalBatches } from "../data/pluginData";
+} from "@/entities/plugin-data/model/types";
+import { mockIncrementalBatches } from "@/mocks/data/pluginData";
 
 it("增量批次与游标遵守秒级时间契约，详情时间与列表一致", () => {
   const now = Date.now() / 1000;

@@ -1,6 +1,6 @@
 import { IconAlertCircle, IconAlertTriangle } from "@tabler/icons-react";
-import { TAG_STYLE_MAP, type PluginLogItem } from "../model/types";
-import { Button } from "../../../shared/ui/button";
+import { TAG_STYLE_MAP, type PluginLogItem } from "@/entities/log/model/types";
+import { Button } from "@/shared/ui/button";
 
 const levelStyles: Record<string, string> = {
   DEBUG: "bg-creative/15 text-creative",

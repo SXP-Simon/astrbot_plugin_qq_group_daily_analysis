@@ -1,9 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { apiGet } from "../../../../shared/api/bridge";
-import { fetchTraceDetail, invalidateTraceCache } from "../traceApi";
-import type { TraceRecord } from "../../model/types";
+import { apiGet } from "@/shared/api/bridge";
+import { fetchTraceDetail, invalidateTraceCache } from "@/entities/trace/api/traceApi";
+import type { TraceRecord } from "@/entities/trace/model/types";
 
-vi.mock("../../../../shared/api/bridge", () => ({
+vi.mock("@/shared/api/bridge", () => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
   extractData: (value: unknown) => value,

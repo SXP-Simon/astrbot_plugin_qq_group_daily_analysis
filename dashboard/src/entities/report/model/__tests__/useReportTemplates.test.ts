@@ -1,10 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchReportTemplates } from "../../api/reportApi";
-import { useReportTemplates } from "../useReportTemplates";
-import type { ReportTemplateItem } from "../templates";
+import { fetchReportTemplates } from "@/entities/report/api/reportApi";
+import { useReportTemplates } from "@/entities/report/model/useReportTemplates";
+import type { ReportTemplateItem } from "@/entities/report/model/templates";
 
-vi.mock("../../api/reportApi", () => ({ fetchReportTemplates: vi.fn() }));
+vi.mock("@/entities/report/api/reportApi", () => ({ fetchReportTemplates: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
 describe("模板能力列表", () => {

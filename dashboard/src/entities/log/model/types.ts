@@ -1,4 +1,4 @@
-import type { components } from "../../../shared/api/generated/schema";
+import type { components } from "@/shared/api/generated/schema";
 import { z } from "zod";
 
 export type PluginLogItem = components["schemas"]["PluginLogItem"];

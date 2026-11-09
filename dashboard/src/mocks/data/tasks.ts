@@ -1,6 +1,6 @@
 import { mockTypstTraces } from "./typstTraces";
-import type { ActiveTask } from "../../entities/task/model/types";
-import type { ConnectedPlatform } from "../../entities/task/api/taskApi";
+import type { ActiveTask } from "@/entities/task/model/types";
+import type { ConnectedPlatform } from "@/entities/task/api/taskApi";
 
 export const mockConnectedPlatforms: ConnectedPlatform[] = [
   {

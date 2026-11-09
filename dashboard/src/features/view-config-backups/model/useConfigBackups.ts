@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  fetchConfigBackup,
-  fetchConfigBackups,
-} from "../../../entities/plugin-data/api/pluginDataApi";
+import { fetchConfigBackup, fetchConfigBackups } from "@/entities/plugin-data/api/pluginDataApi";
 import type {
   ConfigBackupDetail,
   ConfigBackupInfo,
-} from "../../../entities/plugin-data/model/configBackup";
+} from "@/entities/plugin-data/model/configBackup";
 
 export function useConfigBackups() {
   const [open, setOpen] = useState(false);

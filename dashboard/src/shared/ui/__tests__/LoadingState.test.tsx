@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { LoadingState } from "../loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 
 it("加载提示有主题色图标和文本，骨架对读屏隐藏并尊重减少动态效果", () => {
   const view = render(

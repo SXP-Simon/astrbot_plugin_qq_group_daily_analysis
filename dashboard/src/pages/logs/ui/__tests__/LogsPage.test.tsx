@@ -1,16 +1,16 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { LogsPage } from "../LogsPage";
-import { useLogsViewModel } from "../../model/useLogsViewModel";
-import { fetchPluginLogs, clearPluginLogs } from "../../../../entities/log/api/logApi";
-import { copyToClipboard } from "../../../../shared/lib/clipboard";
+import { LogsPage } from "@/pages/logs/ui/LogsPage";
+import { useLogsViewModel } from "@/pages/logs/model/useLogsViewModel";
+import { fetchPluginLogs, clearPluginLogs } from "@/entities/log/api/logApi";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
-vi.mock("../../../../entities/log/api/logApi", () => ({
+vi.mock("@/entities/log/api/logApi", () => ({
   fetchPluginLogs: vi.fn(),
   clearPluginLogs: vi.fn(),
 }));
-vi.mock("../../../../shared/api/bridge", () => ({ subscribeSSE: vi.fn() }));
-vi.mock("../../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("@/shared/api/bridge", () => ({ subscribeSSE: vi.fn() }));
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 const onViewTrace = vi.fn();
 function Page() {
   return <LogsPage viewModel={useLogsViewModel()} onViewTrace={onViewTrace} />;

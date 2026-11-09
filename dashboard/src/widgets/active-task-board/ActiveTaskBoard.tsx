@@ -1,10 +1,10 @@
 import { useId, useRef } from "react";
 import { IconArrowRight, IconPlus } from "@tabler/icons-react";
-import type { ActiveTask } from "../../entities/task/model/types";
-import { TaskStageBadge } from "../../entities/task/ui/TaskStageBadge";
-import { CancelTaskButton } from "../../features/cancel-task/ui/CancelTaskButton";
-import { Button } from "../../shared/ui/button";
-import { TriggerTypeTag } from "../../shared/ui/TriggerTypeTag";
+import type { ActiveTask } from "@/entities/task/model/types";
+import { TaskStageBadge } from "@/entities/task/ui/TaskStageBadge";
+import { CancelTaskButton } from "@/features/cancel-task/ui/CancelTaskButton";
+import { Button } from "@/shared/ui/button";
+import { TriggerTypeTag } from "@/shared/ui/TriggerTypeTag";
 
 interface ActiveTaskBoardProps {
   tasks: ActiveTask[];

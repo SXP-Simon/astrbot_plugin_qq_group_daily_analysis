@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchManagedPartitions, mutateManagedFile } from "./managedFilesApi";
-import { apiGet, apiPost } from "../../../shared/api/bridge";
+import { apiGet, apiPost } from "@/shared/api/bridge";
 
-vi.mock("../../../shared/api/bridge", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../shared/api/bridge")>()),
+vi.mock("@/shared/api/bridge", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/api/bridge")>()),
   apiGet: vi.fn(),
   apiPost: vi.fn(),
 }));

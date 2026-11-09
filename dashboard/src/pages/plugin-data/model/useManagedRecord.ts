@@ -8,7 +8,7 @@ import {
   recordKey,
   type ManagedRecord,
   type RecordLocator,
-} from "../../../entities/plugin-data/api/managedRecordsApi";
+} from "@/entities/plugin-data/api/managedRecordsApi";
 
 export function useManagedRecord(
   locator: RecordLocator | null,

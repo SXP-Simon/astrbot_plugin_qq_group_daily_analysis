@@ -8,11 +8,11 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { IncrementalTab } from "../IncrementalTab";
-import { usePluginDataViewModel } from "../../../model/usePluginDataViewModel";
-import type { RecordLocator } from "../../../../../entities/plugin-data/api/managedRecordsApi";
+import { IncrementalTab } from "@/pages/plugin-data/ui/incremental/IncrementalTab";
+import { usePluginDataViewModel } from "@/pages/plugin-data/model/usePluginDataViewModel";
+import type { RecordLocator } from "@/entities/plugin-data/api/managedRecordsApi";
 
-vi.mock("../../ManagedRecordDialog", () => ({
+vi.mock("@/pages/plugin-data/ui/ManagedRecordDialog", () => ({
   ManagedRecordDialog: ({ locator }: { locator: RecordLocator | null }) =>
     locator ? (
       <output aria-label="管理目标">

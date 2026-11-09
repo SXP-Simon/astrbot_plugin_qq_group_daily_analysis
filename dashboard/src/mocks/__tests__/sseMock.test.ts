@@ -1,9 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mockSSEService } from "../sseMock";
-import { mockActiveTasks } from "../data/tasks";
-import { mockPluginLogs } from "../data/logs";
-import { mockHandlers } from "../handlers";
-import { logEntrySchema } from "../../entities/log/model/types";
+import { mockSSEService } from "@/mocks/sseMock";
+import { mockActiveTasks } from "@/mocks/data/tasks";
+import { mockPluginLogs } from "@/mocks/data/logs";
+import { mockHandlers } from "@/mocks/handlers";
+import { logEntrySchema } from "@/entities/log/model/types";
 
 afterEach(() => vi.useRealTimers());
 

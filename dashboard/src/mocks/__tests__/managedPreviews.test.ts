@@ -1,8 +1,8 @@
 import { expect, it } from "vitest";
-import { mockHandlers } from "../handlers";
-import { extractData } from "../../shared/api/bridge";
-import { mockReportImageBytes } from "../data/reportContent";
-import type { ManagedFileContent } from "../../entities/plugin-data/api/managedFilesApi";
+import { mockHandlers } from "@/mocks/handlers";
+import { extractData } from "@/shared/api/bridge";
+import { mockReportImageBytes } from "@/mocks/data/reportContent";
+import type { ManagedFileContent } from "@/entities/plugin-data/api/managedFilesApi";
 it("管理入口使用可读报告图片而非单像素占位，HTML 与报告页保持相同示例", () => {
   const image = extractData<ManagedFileContent>(
     mockHandlers["GET plugin-data/files/content"]({

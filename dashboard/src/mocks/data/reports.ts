@@ -1,8 +1,5 @@
-import { ReportItem } from "../../entities/report/model/types";
-import {
-  DEFAULT_REPORT_TEMPLATES,
-  ReportTemplateItem,
-} from "../../entities/report/model/templates";
+import { ReportItem } from "@/entities/report/model/types";
+import { DEFAULT_REPORT_TEMPLATES, ReportTemplateItem } from "@/entities/report/model/templates";
 
 import { mockTraces } from "./traces";
 

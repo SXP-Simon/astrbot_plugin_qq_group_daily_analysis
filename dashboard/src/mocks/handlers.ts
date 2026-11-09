@@ -1,8 +1,8 @@
 import { managedRecordMockHandlers } from "./data/managedRecords";
 import { managedMockFiles, putManagedMockFile, managedFileMockHandlers } from "./data/managedFiles";
 import { mockTemplateResources, mockTypstFonts } from "./data/templateResources";
-import { supportsTemplate } from "../entities/report/model/templates";
-import { renderingRuntimeSchema } from "../entities/config/model/renderingConfig";
+import { supportsTemplate } from "@/entities/report/model/templates";
+import { renderingRuntimeSchema } from "@/entities/config/model/renderingConfig";
 import { mockFontDownloadProgress, mockFontDownloads } from "./data/fontDownloads";
 import { mockMetricsSummary, createMockAnalyticsTrends } from "./data/metrics";
 import { mockActiveTasks, mockConnectedPlatforms } from "./data/tasks";
@@ -14,8 +14,8 @@ import { mockPluginLogs } from "./data/logs";
 import { mockConfigBackups } from "./data/configBackups";
 import { mockGroups } from "./data/groups";
 import { mockSSEService } from "./sseMock";
-import { TAG_STYLE_MAP } from "../entities/log/model/types";
-import type { AvailableTag } from "../entities/log/model/types";
+import { TAG_STYLE_MAP } from "@/entities/log/model/types";
+import type { AvailableTag } from "@/entities/log/model/types";
 import {
   mockPluginDataOverview,
   mockCheckpoints,

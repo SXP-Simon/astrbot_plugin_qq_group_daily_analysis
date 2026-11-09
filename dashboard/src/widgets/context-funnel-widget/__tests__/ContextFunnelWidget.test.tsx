@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
-import { ContextFunnelWidget } from "../ContextFunnelWidget";
+import { ContextFunnelWidget } from "@/widgets/context-funnel-widget/ContextFunnelWidget";
 
 it("读取、有效、过滤数量与留存率对应实际记录，不把占比当作进度", () => {
   render(

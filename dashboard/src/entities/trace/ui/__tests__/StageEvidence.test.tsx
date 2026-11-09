@@ -1,8 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import { expect, it } from "vitest";
-import { SpanAlerts } from "../SpanAlerts";
-import { LlmAttemptsTable } from "../LlmAttemptsTable";
-import { StageMetric } from "../StageMetric";
+import { SpanAlerts } from "@/entities/trace/ui/SpanAlerts";
+import { LlmAttemptsTable } from "@/entities/trace/ui/LlmAttemptsTable";
+import { StageMetric } from "@/entities/trace/ui/StageMetric";
 
 it("后续恢复提示与原始失败原因分别保留，不用成功提示替换故障证据", () => {
   render(

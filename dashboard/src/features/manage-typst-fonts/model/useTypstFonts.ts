@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchTypstFonts } from "../../../entities/config/api/configApi";
-import type { TypstFontStatus } from "../../../entities/config/model/typstFonts";
+import { fetchTypstFonts } from "@/entities/config/api/configApi";
+import type { TypstFontStatus } from "@/entities/config/model/typstFonts";
 
 import { useFontDownload } from "./useFontDownload";
 

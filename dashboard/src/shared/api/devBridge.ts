@@ -1,6 +1,6 @@
 import { ApiResponse, AstrBotContext, SSEEventWrapper } from "./bridge";
-import { mockHandlers, mockSSEService } from "../../mocks";
-import { mockFontDownloads } from "../../mocks/data/fontDownloads";
+import { mockHandlers, mockSSEService } from "@/mocks";
+import { mockFontDownloads } from "@/mocks/data/fontDownloads";
 import { getDevThemeContext } from "./devThemeContext";
 export { devSubscribeContext } from "./devThemeContext";
 

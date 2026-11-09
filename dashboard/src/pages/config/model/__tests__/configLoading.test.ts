@@ -1,16 +1,16 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import { fetchPluginConfig, savePluginConfig } from "../../../../entities/config/api/configApi";
+import { fetchPluginConfig, savePluginConfig } from "@/entities/config/api/configApi";
 import {
   pluginConfigResponseSchema,
   pluginConfigSaveSchema,
-} from "../../../../entities/config/model/configContract";
-import { useConfigViewModel } from "../useConfigViewModel";
-import schema from "../../../../../../_conf_schema.json";
-import type { PluginSchema } from "../../../../entities/config/model/types";
+} from "@/entities/config/model/configContract";
+import { useConfigViewModel } from "@/pages/config/model/useConfigViewModel";
+import schema from "@plugin-config";
+import type { PluginSchema } from "@/entities/config/model/types";
 
-vi.mock("../../../../entities/config/api/configApi", () => ({
+vi.mock("@/entities/config/api/configApi", () => ({
   fetchPluginConfig: vi.fn(),
   savePluginConfig: vi.fn(),
   fetchAvailableProviders: vi.fn().mockResolvedValue([]),
@@ -21,16 +21,23 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: v
 beforeEach(() => vi.clearAllMocks());
 
 it.each([
-  { group: "performance", field: "max_concurrent_llm", invalid: 0, valid: 2 },
+  {
+    group: "performance",
+    field: "max_concurrent_llm",
+    errorPath: "max_concurrent_llm",
+    invalid: 0,
+    valid: 2,
+  },
   {
     group: "daily_comic",
     field: "drawing_provider_overrides",
+    errorPath: "drawing_provider_overrides.0.priority",
     invalid: [{ __template_key: "openai", priority: 0.5 }],
     valid: [{ __template_key: "openai", priority: 1 }],
   },
 ])(
   "$group.$field 校验失败不发送保存请求，修正后可保存",
-  async ({ group, field, invalid, valid }) => {
+  async ({ group, field, errorPath, invalid, valid }) => {
     vi.mocked(fetchPluginConfig).mockResolvedValue({
       config: { [group]: { [field]: invalid } },
       schema: schema as PluginSchema,
@@ -42,9 +49,10 @@ it.each([
       await result.current.handleSave();
     });
     expect(savePluginConfig).not.toHaveBeenCalled();
-    expect(result.current.errors[group][field]).toBeTruthy();
+    expect(result.current.errors[group][errorPath]).toBeTruthy();
     expect(result.current.activeCategory).toBe(group);
     act(() => result.current.handleFieldChange(group, field, valid));
+    expect(result.current.errors[group]?.[errorPath]).toBeUndefined();
     await act(async () => {
       await result.current.handleSave();
     });
@@ -82,7 +90,9 @@ it.each(["wrong", 123, null])(
     const { result } = renderHook(() => useConfigViewModel());
     await waitFor(() => expect(result.current.configLoaded).toBe(true));
     expect(result.current.templateCdnBaseUrl).toBeNull();
-    expect(result.current.errors.t2i_rendering.t2i_rendering_strategies).toBeTruthy();
+    expect(
+      result.current.errors.t2i_rendering["t2i_rendering_strategies.0.cdn_base_url"],
+    ).toBeTruthy();
     act(() => result.current.setSearchQuery("隐藏错误字段"));
     await act(async () => {
       await result.current.handleSave();

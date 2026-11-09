@@ -1,18 +1,18 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { fetchReportContent } from "../../../../entities/report/api/reportApi";
-import { fetchTraceDetail, resumeTraceTask } from "../../../../entities/trace/api/traceApi";
-import type { TraceRecord } from "../../../../entities/trace/model/types";
-import type { ReportItem } from "../../../../entities/report/model/types";
-import { useTraceActions } from "../useTraceActions";
-import { useTraceDrawerViewModel } from "../useTraceDrawerViewModel";
+import { fetchReportContent } from "@/entities/report/api/reportApi";
+import { fetchTraceDetail, resumeTraceTask } from "@/entities/trace/api/traceApi";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import type { ReportItem } from "@/entities/report/model/types";
+import { useTraceActions } from "@/widgets/trace-drawer/model/useTraceActions";
+import { useTraceDrawerViewModel } from "@/widgets/trace-drawer/model/useTraceDrawerViewModel";
 
-vi.mock("../../../../entities/report/api/reportApi", () => ({ fetchReportContent: vi.fn() }));
-vi.mock("../../../../entities/trace/api/traceApi", () => ({
+vi.mock("@/entities/report/api/reportApi", () => ({ fetchReportContent: vi.fn() }));
+vi.mock("@/entities/trace/api/traceApi", () => ({
   resumeTraceTask: vi.fn(),
   fetchTraceDetail: vi.fn(),
 }));
-vi.mock("../../../../entities/log/api/logApi", () => ({
+vi.mock("@/entities/log/api/logApi", () => ({
   fetchTraceLogs: vi.fn().mockResolvedValue([]),
 }));
 

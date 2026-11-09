@@ -1,8 +1,8 @@
-import type { useFontUpload } from "../model/useFontUpload";
-import { formatBytes } from "../../../shared/lib/formatters";
-import { Alert } from "../../../shared/ui/alert";
-import { Button } from "../../../shared/ui/button";
-import { Progress } from "../../../shared/ui/progress";
+import type { useFontUpload } from "@/features/manage-typst-fonts/model/useFontUpload";
+import { formatBytes } from "@/shared/lib/formatters";
+import { Alert } from "@/shared/ui/alert";
+import { Button } from "@/shared/ui/button";
+import { Progress } from "@/shared/ui/progress";
 
 export function FontUploadProgress({ upload }: { upload: ReturnType<typeof useFontUpload> }) {
   const { progress, elapsed, running, cancelling, cancel } = upload;

@@ -1,4 +1,7 @@
-import { usePartitionManager, type StorageNavigation } from "../../model/usePartitionManager";
+import {
+  usePartitionManager,
+  type StorageNavigation,
+} from "@/pages/plugin-data/model/usePartitionManager";
 import { StorageOverview } from "./StorageOverview";
 import { ManagedPartitionDrawer } from "./ManagedPartitionDrawer";
 

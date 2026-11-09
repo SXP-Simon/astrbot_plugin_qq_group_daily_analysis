@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveOptionLabel } from "../optionLabel";
+import { resolveOptionLabel } from "@/entities/config/model/optionLabel";
 
 const OPTIONS = ["auto", "zh-Hans", "zh-Hant", "en", "ja"];
 const LABELS = ["自动（按群聊判断）", "简体中文", "繁體中文", "ENGLISH", "日本語"];

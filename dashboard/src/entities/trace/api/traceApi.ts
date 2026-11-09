@@ -1,6 +1,6 @@
-import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
+import { apiGet, apiPost, extractData } from "@/shared/api/bridge";
 import { z } from "zod";
-import { TraceRecord } from "../model/types";
+import { TraceRecord } from "@/entities/trace/model/types";
 
 export interface ListTracesParams {
   limit?: number;

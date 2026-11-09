@@ -32,6 +32,17 @@
     "no-invalid-regexp": "error",
     "no-irregular-whitespace": "error",
     "no-loss-of-precision": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "regex": "(?:^|/)\\.\\.(?:/|$)",
+            "message": "请使用 @/ 或对应的数据别名引用上层模块。"
+          }
+        ]
+      }
+    ],
     "no-misleading-character-class": "error",
     "no-nonoctal-decimal-escape": "error",
     "no-prototype-builtins": "error",

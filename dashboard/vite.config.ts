@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { fileURLToPath, URL } from "node:url";
+import { moduleAliases } from "./moduleAliases";
 
 const devOnlyModule =
   /[/\\]src[/\\](?:mocks[/\\]|shared[/\\]api[/\\]dev(?:Bridge|ThemeContext)\.ts$|widgets[/\\]dev-bar[/\\])/;
@@ -31,9 +31,7 @@ export default defineConfig({
   base: "./",
   plugins: [react(), tailwindcss(), classicScriptPlugin()],
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: moduleAliases.filter(({ find }) => find !== "@plugin-tests"),
   },
   build: {
     outDir: "../pages/daily-analysis",

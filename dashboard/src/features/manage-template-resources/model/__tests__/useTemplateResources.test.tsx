@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   downloadTemplateResource,
   fetchTemplateResources,
-} from "../../../../entities/config/api/templateResourceApi";
-import { useTemplateResources } from "../useTemplateResources";
-import * as bridge from "../../../../shared/api/bridge";
+} from "@/entities/config/api/templateResourceApi";
+import { useTemplateResources } from "@/features/manage-template-resources/model/useTemplateResources";
+import * as bridge from "@/shared/api/bridge";
 
-vi.mock("../../../../entities/config/api/templateResourceApi", () => ({
+vi.mock("@/entities/config/api/templateResourceApi", () => ({
   fetchTemplateResources: vi.fn(),
   downloadTemplateResource: vi.fn(),
 }));

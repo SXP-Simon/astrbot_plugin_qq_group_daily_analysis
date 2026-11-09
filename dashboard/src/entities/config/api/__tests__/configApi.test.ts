@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { apiGet, apiPost } from "../../../../shared/api/bridge";
-import { fetchPluginConfig, savePluginConfig, testTemplateCdn } from "../configApi";
+import { apiGet, apiPost } from "@/shared/api/bridge";
+import {
+  fetchPluginConfig,
+  savePluginConfig,
+  testTemplateCdn,
+} from "@/entities/config/api/configApi";
 
-vi.mock("../../../../shared/api/bridge", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../../shared/api/bridge")>()),
+vi.mock("@/shared/api/bridge", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/api/bridge")>()),
   apiGet: vi.fn(),
   apiPost: vi.fn(),
 }));

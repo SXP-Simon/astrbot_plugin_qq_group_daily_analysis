@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import schema from "../../../../../../_conf_schema.json";
-import { FieldRenderer } from "../FieldRenderer";
+import schema from "@plugin-config";
+import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
 
-vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 
 function ConfigField({ kind = "custom" }: { kind?: "custom" | "strategy" | "mainland" }) {
   // 不含新字段的旧条目，仍应默认显示在线字体的地址。

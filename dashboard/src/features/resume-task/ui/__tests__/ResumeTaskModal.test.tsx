@@ -1,11 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { ResumeTaskModal } from "../ResumeTaskModal";
-import { fetchProviderList } from "../../../../entities/trace/api/traceApi";
-import { fetchReportTemplates } from "../../../../entities/report/api/reportApi";
+import { ResumeTaskModal } from "@/features/resume-task/ui/ResumeTaskModal";
+import { fetchProviderList } from "@/entities/trace/api/traceApi";
+import { fetchReportTemplates } from "@/entities/report/api/reportApi";
 
-vi.mock("../../../../entities/trace/api/traceApi", () => ({ fetchProviderList: vi.fn() }));
-vi.mock("../../../../entities/report/api/reportApi", () => ({ fetchReportTemplates: vi.fn() }));
+vi.mock("@/entities/trace/api/traceApi", () => ({ fetchProviderList: vi.fn() }));
+vi.mock("@/entities/report/api/reportApi", () => ({ fetchReportTemplates: vi.fn() }));
 
 beforeEach(() => {
   vi.resetAllMocks();

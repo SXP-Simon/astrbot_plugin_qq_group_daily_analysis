@@ -1,10 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { fetchConfigFileContent, uploadConfigFile } from "../../../entities/config/api/configApi";
+import { fetchConfigFileContent, uploadConfigFile } from "@/entities/config/api/configApi";
 import { useConfigFiles, useConfigImage } from "./useConfigFiles";
 import { toast } from "sonner";
 
-vi.mock("../../../entities/config/api/configApi", () => ({
+vi.mock("@/entities/config/api/configApi", () => ({
   fetchConfigFileContent: vi.fn(),
   uploadConfigFile: vi.fn(),
 }));

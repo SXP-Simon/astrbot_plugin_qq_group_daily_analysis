@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { Button } from "../button";
+import { Button } from "@/shared/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,9 +8,9 @@ import {
   DialogDescription,
   DialogTitle,
   DialogTrigger,
-} from "../dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../tabs";
-import { NativeSelect } from "../native-select";
+} from "@/shared/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+import { NativeSelect } from "@/shared/ui/native-select";
 import { useState } from "react";
 
 describe("基础控件的交互约定", () => {

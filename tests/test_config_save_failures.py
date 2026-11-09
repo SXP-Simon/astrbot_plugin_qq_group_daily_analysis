@@ -1,4 +1,5 @@
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -81,6 +82,33 @@ async def test_webui_returns_success_and_refreshes_scheduler_after_write(manager
     manager.config.save_config.assert_called_once_with()
     scheduler.schedule_jobs.assert_called_once_with(routes.context)
     scheduler.incremental_trigger.refresh_target_states.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["options", "backup"])
+async def test_post_write_failure_keeps_saved_config_and_warns(manager, tmp_path, failure):
+    path = tmp_path / "config.json"
+    manager.config.save_config.side_effect = lambda: path.write_text(
+        json.dumps(manager.config), encoding="utf-8"
+    )
+    manager.refresh_rendering_schema_options = MagicMock()
+    manager._upgrade_tracking_active = True
+    manager._migrator = MagicMock()
+    if failure == "options":
+        manager.refresh_rendering_schema_options.side_effect = RuntimeError("选项刷新失败")
+    else:
+        manager._migrator.protect_upgrade_data.side_effect = RuntimeError("备份失败")
+    routes = ConfigRoutes(MagicMock(config_manager=manager))
+    with patch("src.infrastructure.webui.routes.config_routes.request") as request:
+        request.json = AsyncMock(return_value={"config": {"basic": {"max_topics": 5}}})
+        response = await routes.api_save_config()
+
+    assert response["status_code"] == 200
+    assert "部分配置刷新未完成" in response["data"]["message"]
+    assert json.loads(path.read_text(encoding="utf-8")) == manager.config == {
+        "basic": {"max_topics": 5}
+    }
+    manager._migrator.protect_upgrade_data.assert_called_once_with()
 
 
 @pytest.mark.asyncio

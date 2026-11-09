@@ -1,14 +1,14 @@
 import { useContext, useState } from "react";
 import { FontDownloadProgress } from "./FontDownloadProgress";
-import { KNOWN_TEMPLATES } from "../../../entities/report/model/templates";
-import { useTypstFonts } from "../model/useTypstFonts";
-import { FONT_DOWNLOAD_SOURCES } from "../../../entities/config/model/typstFonts";
-import { FontManagementContext } from "../model/FontManagementContext";
-import { ExternalLink } from "../../../shared/ui/ExternalLink";
-import { Alert } from "../../../shared/ui/alert";
-import { Button } from "../../../shared/ui/button";
-import { CopyButton } from "../../../shared/ui/copy-button";
-import { NativeSelect } from "../../../shared/ui/native-select";
+import { KNOWN_TEMPLATES } from "@/entities/report/model/templates";
+import { useTypstFonts } from "@/features/manage-typst-fonts/model/useTypstFonts";
+import { FONT_DOWNLOAD_SOURCES } from "@/entities/config/model/typstFonts";
+import { FontManagementContext } from "@/features/manage-typst-fonts/model/FontManagementContext";
+import { ExternalLink } from "@/shared/ui/ExternalLink";
+import { Alert } from "@/shared/ui/alert";
+import { Button } from "@/shared/ui/button";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { NativeSelect } from "@/shared/ui/native-select";
 
 export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
   const navigation = useContext(FontManagementContext);

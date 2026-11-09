@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import schema from "../../../../../../_conf_schema.json";
-import { renderingRuntimeSchema } from "../../../../entities/config/model/renderingConfig";
-import { FieldRenderer } from "../FieldRenderer";
-import { testT2i } from "../../../../entities/config/api/configApi";
+import schema from "@plugin-config";
+import { renderingRuntimeSchema } from "@/entities/config/model/renderingConfig";
+import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
+import { testT2i } from "@/entities/config/api/configApi";
 
-vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
-vi.mock("../../../../entities/config/api/configApi", () => ({ testT2i: vi.fn() }));
-vi.mock("../../../../entities/group/api/groupApi", () => ({
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+vi.mock("@/entities/config/api/configApi", () => ({ testT2i: vi.fn() }));
+vi.mock("@/entities/group/api/groupApi", () => ({
   fetchGroupSessions: vi.fn().mockResolvedValue([]),
 }));
 

@@ -1,10 +1,10 @@
 import type { Dispatch, SetStateAction } from "react";
 import { IconLoader2, IconAlertTriangle, IconUpload } from "@tabler/icons-react";
-import type { useManagedFiles } from "../model/useManagedFiles";
-import type { FileDraft } from "../model/fileDraft";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import type { useManagedFiles } from "@/features/manage-stored-files/model/useManagedFiles";
+import type { FileDraft } from "@/features/manage-stored-files/model/fileDraft";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 
 export function FileEditorDialog({
   vm,

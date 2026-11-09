@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { IconTrash } from "@tabler/icons-react";
-import type { useRecordSelection } from "../model/useRecordSelection";
-import type { RecordLocator } from "../../../entities/plugin-data/api/managedRecordsApi";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import type { useRecordSelection } from "@/pages/plugin-data/model/useRecordSelection";
+import type { RecordLocator } from "@/entities/plugin-data/api/managedRecordsApi";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 
 export function RecordSelectionActions({
   vm,

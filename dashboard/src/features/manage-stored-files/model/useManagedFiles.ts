@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { readUploadFile } from "../../../shared/lib/fileUpload";
+import { readUploadFile } from "@/shared/lib/fileUpload";
 import type { FileDraft } from "./fileDraft";
 import {
   fetchManagedContent,
@@ -13,7 +13,7 @@ import {
   type ManagedPartition,
   type ManagedFile,
   type ManagedFileGroup,
-} from "../../../entities/plugin-data/api/managedFilesApi";
+} from "@/entities/plugin-data/api/managedFilesApi";
 
 export function useManagedFiles() {
   const [partitions, setPartitions] = useState<ManagedPartition[]>([]);

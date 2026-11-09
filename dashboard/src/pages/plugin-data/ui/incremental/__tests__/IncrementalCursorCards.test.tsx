@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
-import { IncrementalCursorCards } from "../IncrementalCursorCards";
+import { IncrementalCursorCards } from "@/pages/plugin-data/ui/incremental/IncrementalCursorCards";
 afterEach(cleanup);
 it("初始游标不伪造时间，零批次与零去重数仍明确显示", () => {
   render(

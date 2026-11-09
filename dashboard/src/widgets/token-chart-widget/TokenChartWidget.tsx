@@ -1,9 +1,9 @@
-import { LoadingState } from "../../shared/ui/loading-state";
-import { resolveChartColor } from "../../shared/lib/chartColors";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { resolveChartColor } from "@/shared/lib/chartColors";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
-import type { TokenUsage } from "../../entities/trace/model/types";
-import { useTheme } from "../../shared/lib/useTheme";
+import type { TokenUsage } from "@/entities/trace/model/types";
+import { useTheme } from "@/shared/lib/useTheme";
 
 interface TokenChartWidgetProps {
   loading?: boolean;

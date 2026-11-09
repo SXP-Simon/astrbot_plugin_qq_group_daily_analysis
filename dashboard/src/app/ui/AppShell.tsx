@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { IconAlertCircle, IconPlus, IconRefresh } from "@tabler/icons-react";
-import logo from "../../shared/assets/logo.png";
-import { Button } from "../../shared/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/tabs";
+import logo from "@/shared/assets/logo.png";
+import { Button } from "@/shared/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
 interface AppShellProps {
   activePage: string;

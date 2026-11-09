@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { IconCopy } from "@tabler/icons-react";
-import type { PluginLogItem } from "../../../entities/log/model/types";
-import { LogEntry } from "../../../entities/log/ui/LogEntry";
-import { copyToClipboard } from "../../../shared/lib/clipboard";
-import { Button } from "../../../shared/ui/button";
+import type { PluginLogItem } from "@/entities/log/model/types";
+import { LogEntry } from "@/entities/log/ui/LogEntry";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import { Button } from "@/shared/ui/button";
 
 export function TraceLogViewer({ logs }: { logs: PluginLogItem[] }) {
   const [copyResult, setCopyResult] = useState("");

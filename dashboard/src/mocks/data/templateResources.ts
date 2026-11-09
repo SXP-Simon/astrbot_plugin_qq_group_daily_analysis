@@ -1,6 +1,6 @@
 import { mockFontPresets } from "./fontPresets";
-import type { TypstFontStatus } from "../../entities/config/model/typstFonts";
-import type { TemplateResourceStatus } from "../../entities/config/model/templateResources";
+import type { TypstFontStatus } from "@/entities/config/model/typstFonts";
+import type { TemplateResourceStatus } from "@/entities/config/model/templateResources";
 
 // 使用当前主题的真实资源名，仅在演示页面模拟下载，不发起网络请求。
 const themeFiles: Record<string, string[]> = {

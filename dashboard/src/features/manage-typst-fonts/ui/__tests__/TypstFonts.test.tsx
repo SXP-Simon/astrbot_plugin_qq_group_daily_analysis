@@ -1,16 +1,16 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { TypstFonts } from "../TypstFonts";
+import { TypstFonts } from "@/features/manage-typst-fonts/ui/TypstFonts";
 import {
   downloadTypstFonts,
   fetchTypstFonts,
   fetchFontDownloadProgress,
-} from "../../../../entities/config/api/configApi";
-import { mockTypstFonts } from "../../../../mocks/data/templateResources";
-import { mockHandlers } from "../../../../mocks/handlers";
-import { FontManagementContext } from "../../model/FontManagementContext";
+} from "@/entities/config/api/configApi";
+import { mockTypstFonts } from "@/mocks/data/templateResources";
+import { mockHandlers } from "@/mocks/handlers";
+import { FontManagementContext } from "@/features/manage-typst-fonts/model/FontManagementContext";
 
-vi.mock("../../../../entities/config/api/configApi", () => ({
+vi.mock("@/entities/config/api/configApi", () => ({
   downloadTypstFonts: vi.fn(),
   fetchTypstFonts: vi.fn(),
   fetchFontDownloadProgress: vi.fn().mockResolvedValue(null),
@@ -176,7 +176,7 @@ it("可从字体进度取消当前文件且不启动后续字体", async () => {
       rejectDownload = reject;
     });
   });
-  const bridge = await import("../../../../shared/api/bridge");
+  const bridge = await import("@/shared/api/bridge");
   const cancelApi = vi.spyOn(bridge, "apiPost").mockImplementation(async (_path, body) => {
     expect(body).toEqual({ download_id: activeId });
     rejectDownload?.(new Error("下载已取消"));

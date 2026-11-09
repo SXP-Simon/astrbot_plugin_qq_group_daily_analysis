@@ -1,15 +1,13 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { useRecordSelection, recordKey } from "../useRecordSelection";
+import { useRecordSelection, recordKey } from "@/pages/plugin-data/model/useRecordSelection";
 import {
   fetchManagedRecord,
   mutateManagedRecord,
   type RecordLocator,
-} from "../../../../entities/plugin-data/api/managedRecordsApi";
-vi.mock("../../../../entities/plugin-data/api/managedRecordsApi", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("../../../../entities/plugin-data/api/managedRecordsApi")
-  >()),
+} from "@/entities/plugin-data/api/managedRecordsApi";
+vi.mock("@/entities/plugin-data/api/managedRecordsApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/entities/plugin-data/api/managedRecordsApi")>()),
   fetchManagedRecord: vi.fn(),
   mutateManagedRecord: vi.fn(),
 }));

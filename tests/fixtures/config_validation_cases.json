@@ -194,8 +194,116 @@
     "config": {
       "prompts": {
         "topic_analysis_prompts": {
-          "topic_prompt": "保留原文 [user] 与 {chat_text}"
+          "topic_prompt": "保留原文 [user] 与 {chat_text}，最多 ${max_topics} 个话题\n${messages_text}"
         }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "漫画方案留空后使用相同内置名称时不允许保存",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "scrapbook_diary", "name": "" },
+          { "preset_id": "scrapbook_diary", "name": "  " }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "漫画自定义方案名称不能与另一方案的内置名称重复",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "classic" },
+          {
+            "preset_id": "custom",
+            "name": " 原版漫画 ",
+            "prompt_override": "手绘漫画：${chat_content}，共 ${topic_count} 格。",
+            "enable": false
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "漫画方案可以复用同一内置风格并分别命名",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "scrapbook_diary", "name": "生活手账" },
+          { "preset_id": "scrapbook_diary", "name": "旅行手账" }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "内置风格的自定义正文也必须写出话题数量",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "classic", "prompt_override": "请画漫画：${chat_content}，示例 $${topic_count}" }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "拒绝拼错的漫画变量",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "classic", "prompt_override": "${chat_content} ${topic_count} ${topic_cout}" }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "拒绝新增带超大格式宽度的漫画正文",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "classic", "prompt_override": "{chat_content:>1000000000} {topic_count}" }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "漫画正文保留作为示例的转义格式标记",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "classic", "prompt_override": "{chat_content} {topic_count}，示例 {{topic_count:02d}}" }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "旧角色专属正文也必须写出核心话题",
+    "config": {
+      "daily_comic": {
+        "comic_characters": [
+          { "name": "角色", "storyboard_prompt": "画 {max_count} 格，示例 {{chat_content}}" }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "漫画风格仍接受旧正文的数量别名及普通 JSON 花括号",
+    "config": {
+      "daily_comic": {
+        "comic_styles": [
+          { "preset_id": "custom", "name": "旧风格", "prompt_override": "{chat_content} 共 {max_count} 格，输出 {\"scene\":\"正文\"}" }
+        ],
+        "comic_characters": [{ "name": "角色", "storyboard_prompt": "" }]
       }
     },
     "valid": true

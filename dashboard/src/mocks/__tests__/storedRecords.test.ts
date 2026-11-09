@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { managedRecordMockHandlers as handlers } from "../data/managedRecords";
+import { managedRecordMockHandlers as handlers } from "@/mocks/data/managedRecords";
 
 it("同分钟同号群的会话存档保留独立键和实例身份", () => {
   const items = handlers["GET plugin-data/records"]({

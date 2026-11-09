@@ -1,7 +1,10 @@
 import { expect, it } from "vitest";
-import cases from "../../../../../../tests/data/t2i_endpoints.json";
-import { renderingStrategySchema, t2iEndpointSchema } from "../renderingConfig";
-import { pluginConfigSaveSchema } from "../configContract";
+import cases from "@plugin-tests/data/t2i_endpoints.json";
+import {
+  renderingStrategySchema,
+  t2iEndpointSchema,
+} from "@/entities/config/model/renderingConfig";
+import { pluginConfigSaveSchema } from "@/entities/config/model/configContract";
 
 it.each(cases.valid)("服务地址 %s 与后端一致规范化为 %s", (input, expected) => {
   expect(t2iEndpointSchema.parse(input)).toBe(expected);

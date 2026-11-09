@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchReportHistory, type ReportKind } from "../../../entities/report/api/reportApi";
-import { fetchGroupSessions } from "../../../entities/group/api/groupApi";
-import type { ReportItem } from "../../../entities/report/model/types";
-import type { GroupItem } from "../../../entities/group/model/types";
+import { fetchReportHistory, type ReportKind } from "@/entities/report/api/reportApi";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import type { ReportItem } from "@/entities/report/model/types";
+import type { GroupItem } from "@/entities/group/model/types";
 import { useReportActions } from "./useReportActions";
 
 interface ReportQuery {

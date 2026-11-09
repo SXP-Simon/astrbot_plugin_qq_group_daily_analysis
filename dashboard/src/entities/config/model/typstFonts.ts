@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { components, operations } from "../../../shared/api/generated/schema";
+import type { components, operations } from "@/shared/api/generated/schema";
 
 export type TypstFontStatus = components["schemas"]["TypstFontStatus"];
 export type TypstFontPreset = components["schemas"]["TypstFontPreset"];

@@ -1,22 +1,22 @@
 import { IconX } from "@tabler/icons-react";
-import { Alert } from "../../../../shared/ui/alert";
-import { Button } from "../../../../shared/ui/button";
-import { CopyButton } from "../../../../shared/ui/copy-button";
-import { Dialog, DialogClose, DialogContent, DialogTitle } from "../../../../shared/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../../shared/ui/tabs";
+import { Alert } from "@/shared/ui/alert";
+import { Button } from "@/shared/ui/button";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/shared/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/ui/tabs";
 import { useState, type ReactNode } from "react";
-import { usePartitionManager } from "../../model/usePartitionManager";
-import { StoredRecordsTab } from "../StoredRecordsTab";
+import { usePartitionManager } from "@/pages/plugin-data/model/usePartitionManager";
+import { StoredRecordsTab } from "@/pages/plugin-data/ui/StoredRecordsTab";
 import { ComicPreviewRefresh } from "./ComicPreviewRefresh";
-import { ManagedFileList } from "../../../../features/manage-stored-files/ui/ManagedFileList";
-import { FileContentDialog } from "../../../../features/manage-stored-files/ui/FileContentDialog";
-import { FileEditorDialog } from "../../../../features/manage-stored-files/ui/FileEditorDialog";
-import { FontManager } from "../../../../features/manage-typst-fonts/ui/FontManager";
-import { TemplatePackages } from "../../../../features/install-template/ui/TemplatePackages";
-import { TemplateInstallModal } from "../../../../features/install-template/ui/TemplateInstallModal";
-import { TemplateResources } from "../../../../features/manage-template-resources/ui/TemplateResources";
-import { ConfigBackupsViewer } from "../../../../features/view-config-backups/ui/ConfigBackupsViewer";
-import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../../entities/config/model/renderingConfig";
+import { ManagedFileList } from "@/features/manage-stored-files/ui/ManagedFileList";
+import { FileContentDialog } from "@/features/manage-stored-files/ui/FileContentDialog";
+import { FileEditorDialog } from "@/features/manage-stored-files/ui/FileEditorDialog";
+import { FontManager } from "@/features/manage-typst-fonts/ui/FontManager";
+import { TemplatePackages } from "@/features/install-template/ui/TemplatePackages";
+import { TemplateInstallModal } from "@/features/install-template/ui/TemplateInstallModal";
+import { TemplateResources } from "@/features/manage-template-resources/ui/TemplateResources";
+import { ConfigBackupsViewer } from "@/features/view-config-backups/ui/ConfigBackupsViewer";
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "@/entities/config/model/renderingConfig";
 
 export function ManagedPartitionDrawer({
   manager,

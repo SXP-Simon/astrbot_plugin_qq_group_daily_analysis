@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { TypstFontPreset } from "../../../entities/config/model/typstFonts";
+import type { TypstFontPreset } from "@/entities/config/model/typstFonts";
 
 interface BrowserFontTransfer {
   font: TypstFontPreset;

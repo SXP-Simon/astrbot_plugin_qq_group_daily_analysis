@@ -1,26 +1,23 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ManagedFilesPanel } from "../ManagedFilesPanel";
-import { TemplatePackages } from "../../../../../features/install-template/ui/TemplatePackages";
+import { ManagedFilesPanel } from "@/pages/plugin-data/ui/partitions/ManagedFilesPanel";
+import { TemplatePackages } from "@/features/install-template/ui/TemplatePackages";
 import {
   fetchManagedContent,
   fetchManagedFiles,
   fetchManagedPartitions,
   mutateManagedFile,
-} from "../../../../../entities/plugin-data/api/managedFilesApi";
-import {
-  fetchReportTemplates,
-  uninstallTemplate,
-} from "../../../../../entities/report/api/reportApi";
+} from "@/entities/plugin-data/api/managedFilesApi";
+import { fetchReportTemplates, uninstallTemplate } from "@/entities/report/api/reportApi";
 
-vi.mock("../../../../../entities/plugin-data/api/managedFilesApi", () => ({
+vi.mock("@/entities/plugin-data/api/managedFilesApi", () => ({
   fetchManagedContent: vi.fn(),
   fetchManagedFiles: vi.fn(),
   fetchManagedPartitions: vi.fn(),
   mutateManagedFile: vi.fn(),
   deleteManagedFiles: vi.fn(),
 }));
-vi.mock("../../../../../entities/report/api/reportApi", () => ({
+vi.mock("@/entities/report/api/reportApi", () => ({
   fetchReportTemplates: vi.fn(),
   uninstallTemplate: vi.fn(),
 }));

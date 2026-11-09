@@ -1,25 +1,25 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { TraceSummaryCard } from "../TraceSummaryCard";
-import { TraceLogViewer } from "../TraceLogViewer";
-import { TraceDrawer } from "../../TraceDrawer";
-import { fetchTraceDetail } from "../../../../entities/trace/api/traceApi";
-import { fetchReportContent } from "../../../../entities/report/api/reportApi";
-import { copyToClipboard } from "../../../../shared/lib/clipboard";
-import type { TraceRecord } from "../../../../entities/trace/model/types";
-import type { PluginLogItem } from "../../../../entities/log/model/types";
+import { TraceSummaryCard } from "@/widgets/trace-drawer/ui/TraceSummaryCard";
+import { TraceLogViewer } from "@/widgets/trace-drawer/ui/TraceLogViewer";
+import { TraceDrawer } from "@/widgets/trace-drawer/TraceDrawer";
+import { fetchTraceDetail } from "@/entities/trace/api/traceApi";
+import { fetchReportContent } from "@/entities/report/api/reportApi";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import type { PluginLogItem } from "@/entities/log/model/types";
 
-vi.mock("../../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
-vi.mock("../../../../entities/trace/api/traceApi", () => ({
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("@/entities/trace/api/traceApi", () => ({
   fetchTraceDetail: vi.fn(),
   resumeTraceTask: vi.fn(),
   fetchProviderList: vi.fn().mockResolvedValue([]),
 }));
-vi.mock("../../../../entities/report/api/reportApi", () => ({
+vi.mock("@/entities/report/api/reportApi", () => ({
   fetchReportContent: vi.fn(),
   fetchReportTemplates: vi.fn().mockResolvedValue([]),
 }));
-vi.mock("../../../../entities/log/api/logApi", () => ({
+vi.mock("@/entities/log/api/logApi", () => ({
   fetchTraceLogs: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("echarts-for-react", () => ({ default: () => <div>图表</div> }));

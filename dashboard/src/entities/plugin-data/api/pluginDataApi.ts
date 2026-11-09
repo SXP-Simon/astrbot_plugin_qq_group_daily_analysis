@@ -1,6 +1,9 @@
-import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
+import { apiGet, apiPost, extractData } from "@/shared/api/bridge";
 import { z } from "zod";
-import { configBackupListSchema, configBackupDetailSchema } from "../model/configBackup";
+import {
+  configBackupListSchema,
+  configBackupDetailSchema,
+} from "@/entities/plugin-data/model/configBackup";
 
 import {
   PluginDataOverview,
@@ -9,9 +12,9 @@ import {
   IncrementalBatchItem,
   CheckpointsListResponse,
   CheckpointDetail,
-} from "../model/types";
+} from "@/entities/plugin-data/model/types";
 
-export * from "../model/types";
+export * from "@/entities/plugin-data/model/types";
 
 export async function fetchConfigBackups() {
   const response = await apiGet<unknown>("plugin-data/config-backups");

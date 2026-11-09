@@ -1,5 +1,5 @@
 import type { EChartsOption } from "echarts";
-import type { MetricsViewMode, TraceMetrics } from "../model/traceMetrics";
+import type { MetricsViewMode, TraceMetrics } from "@/entities/trace/model/traceMetrics";
 
 interface ChartPalette {
   text: string;

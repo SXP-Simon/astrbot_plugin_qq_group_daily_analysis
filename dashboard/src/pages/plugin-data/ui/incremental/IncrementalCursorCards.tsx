@@ -1,5 +1,5 @@
-import { formatTimestamp } from "../../../../shared/lib/formatters";
-import type { IncrementalCursorInfo } from "../../../../entities/plugin-data/model/types";
+import { formatTimestamp } from "@/shared/lib/formatters";
+import type { IncrementalCursorInfo } from "@/entities/plugin-data/model/types";
 
 export function IncrementalCursorCards({
   cursor,

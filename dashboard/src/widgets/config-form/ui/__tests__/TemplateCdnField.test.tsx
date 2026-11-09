@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { testTemplateCdn } from "../../../../entities/config/api/configApi";
+import { testTemplateCdn } from "@/entities/config/api/configApi";
 import {
   DEFAULT_TEMPLATE_CDN_BASE_URL,
   TEMPLATE_CDN_PRESETS,
-} from "../../../../entities/config/model/renderingConfig";
-import { FieldRenderer } from "../FieldRenderer";
+} from "@/entities/config/model/renderingConfig";
+import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
 
-vi.mock("../../../../entities/config/api/configApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../../entities/config/api/configApi")>()),
+vi.mock("@/entities/config/api/configApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/entities/config/api/configApi")>()),
   testTemplateCdn: vi.fn(),
 }));
-vi.mock("../../../../shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => ({ isDark: false }) }));
 
 function CdnField({ initial, fieldKey = "cdn_base_url" }: { initial: string; fieldKey?: string }) {
   const [value, setValue] = useState<unknown>(initial);

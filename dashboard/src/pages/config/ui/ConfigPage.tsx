@@ -1,6 +1,6 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useState } from "react";
-import { cn } from "../../../shared/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import {
   IconAlertCircle,
   IconCheck,
@@ -9,14 +9,14 @@ import {
   IconDeviceFloppy,
   IconX,
 } from "@tabler/icons-react";
-import type { useConfigViewModel } from "../model/useConfigViewModel";
-import { ComicRotationDialog } from "../../../features/manage-comic-rotation/ui/ComicRotationDialog";
-import { FieldRenderer } from "../../../widgets/config-form/ui/FieldRenderer";
-import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
+import type { useConfigViewModel } from "@/pages/config/model/useConfigViewModel";
+import { ComicRotationDialog } from "@/features/manage-comic-rotation/ui/ComicRotationDialog";
+import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
+import { MarkdownHint } from "@/shared/ui/MarkdownHint";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 
 interface ConfigPageProps {
   viewModel: ReturnType<typeof useConfigViewModel>;
@@ -192,15 +192,6 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
               )}
             </div>
           )}
-          {vm.groupErrorCounts[vm.activeCategory] > 0 && (
-            <p
-              role="alert"
-              className="m-0 rounded-xl bg-destructive/10 p-3 text-sm text-destructive"
-            >
-              当前分组内有 {vm.groupErrorCounts[vm.activeCategory]}{" "}
-              项配置填写有误，请核对并修改标红字段。
-            </p>
-          )}
           {vm.currentGroupFields.length === 0 ? (
             vm.loading ? (
               <LoadingState skeleton className="py-6">
@@ -243,7 +234,6 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
                         !fieldError &&
                         ["object", "template_list"].includes(field.schema.type) &&
                         "bg-card",
-                      fieldError && "border-destructive/40 bg-destructive/5",
                       isLongField && "lg:col-span-2",
                     )}
                   >
@@ -257,6 +247,7 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
                       modified={modified}
                       templateCdnBaseUrl={vm.templateCdnBaseUrl}
                       templateRequirements={vm.templateRequirements}
+                      promptExampleConfig={vm.formData?.analysis_features}
                       providers={vm.providers}
                       personas={vm.personas}
                       fullKeyPath={`${vm.activeCategory}.${field.key}`}

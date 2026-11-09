@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { IconCopy } from "@tabler/icons-react";
-import type { TraceRecord } from "../../../entities/trace/model/types";
+import type { TraceRecord } from "@/entities/trace/model/types";
 import {
   formatDuration,
   formatTokens,
   formatTimestamp,
   formatPercent,
   formatTriggerType,
-} from "../../../shared/lib/formatters";
-import { copyToClipboard } from "../../../shared/lib/clipboard";
-import { Button } from "../../../shared/ui/button";
+} from "@/shared/lib/formatters";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import { Button } from "@/shared/ui/button";
 import { TraceReportFiles } from "./TraceReportFiles";
 
 interface TraceSummaryCardProps {

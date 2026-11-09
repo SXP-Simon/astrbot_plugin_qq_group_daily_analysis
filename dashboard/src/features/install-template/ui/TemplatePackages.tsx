@@ -1,14 +1,14 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useRef, useState } from "react";
 import { IconCopy, IconLoader2, IconRefresh, IconTrash } from "@tabler/icons-react";
-import { templateCapabilities } from "../../../entities/report/model/templates";
-import type { ManagedFileGroup } from "../../../entities/plugin-data/api/managedFilesApi";
-import { formatBytes } from "../../../shared/lib/formatters";
-import { copyToClipboard } from "../../../shared/lib/clipboard";
-import { Button } from "../../../shared/ui/button";
-import { SearchSelect } from "../../../shared/ui/search-select";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../../shared/ui/dialog";
-import { useTemplatePackages } from "../model/useTemplatePackages";
+import { templateCapabilities } from "@/entities/report/model/templates";
+import type { ManagedFileGroup } from "@/entities/plugin-data/api/managedFilesApi";
+import { formatBytes } from "@/shared/lib/formatters";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import { Button } from "@/shared/ui/button";
+import { SearchSelect } from "@/shared/ui/search-select";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
+import { useTemplatePackages } from "@/features/install-template/model/useTemplatePackages";
 
 export function TemplatePackages({
   groups,

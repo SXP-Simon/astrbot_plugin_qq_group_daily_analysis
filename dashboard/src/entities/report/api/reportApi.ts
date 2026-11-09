@@ -1,6 +1,6 @@
-import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
-import { ReportItem } from "../model/types";
-import { ReportTemplateItem } from "../model/templates";
+import { apiGet, apiPost, extractData } from "@/shared/api/bridge";
+import { ReportItem } from "@/entities/report/model/types";
+import { ReportTemplateItem } from "@/entities/report/model/templates";
 
 export type ReportKind = "comic" | "image" | "html";
 

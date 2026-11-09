@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { getPromptGroups } from "../promptRecords";
+import { getPromptGroups } from "@/entities/trace/model/promptRecords";
 
 it("保留历史字符串、未知模块和含 retry 或井号的正常模块", () => {
   const groups = getPromptGroups({

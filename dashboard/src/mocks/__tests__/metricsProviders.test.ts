@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { createMockAnalyticsTrends } from "../data/metrics";
+import { createMockAnalyticsTrends } from "@/mocks/data/metrics";
 
 it("多渠道示例保留长名称且各范围的次数与消耗和时间桶一致", () => {
   for (const range of [7, 14, 30]) {

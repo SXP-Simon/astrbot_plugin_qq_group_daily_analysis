@@ -1,4 +1,4 @@
-import type { ContextMetrics } from "../../entities/trace/model/types";
+import type { ContextMetrics } from "@/entities/trace/model/types";
 
 interface ContextFunnelWidgetProps {
   metrics: Partial<ContextMetrics>;

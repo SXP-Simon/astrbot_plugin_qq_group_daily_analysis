@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import { Toaster } from "../sonner";
+import { Toaster } from "@/shared/ui/sonner";
 const theme = vi.hoisted(() => ({ isDark: false }));
-vi.mock("../../lib/useTheme", () => ({ useTheme: () => theme }));
+vi.mock("@/shared/lib/useTheme", () => ({ useTheme: () => theme }));
 afterEach(() => {
   toast.dismiss();
   theme.isDark = false;

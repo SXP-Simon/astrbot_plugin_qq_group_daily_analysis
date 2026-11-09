@@ -1,6 +1,6 @@
 import { useEffect, useState, type ComponentProps } from "react";
 import { IconLoader2 } from "@tabler/icons-react";
-import { cn } from "../lib/cn";
+import { cn } from "@/shared/lib/cn";
 
 /** 在请求所属区域显示加载反馈；骨架只占位，不冒充真实数据。 */
 export function LoadingState({

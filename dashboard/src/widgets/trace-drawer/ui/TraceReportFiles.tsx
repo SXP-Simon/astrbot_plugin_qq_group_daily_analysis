@@ -1,6 +1,6 @@
 import { IconDownload, IconEye, IconFile } from "@tabler/icons-react";
-import { Button } from "../../../shared/ui/button";
-import { formatBytes } from "../../../shared/lib/formatters";
+import { Button } from "@/shared/ui/button";
+import { formatBytes } from "@/shared/lib/formatters";
 
 interface TraceReportFilesProps {
   files: { filename: string; isHtml: boolean; isComic: boolean; size?: number }[];

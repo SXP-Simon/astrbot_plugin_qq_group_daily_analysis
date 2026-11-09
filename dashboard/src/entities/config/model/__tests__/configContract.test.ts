@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
-import cases from "../../../../../../tests/fixtures/cdn_url_cases.json";
-import schema from "../../../../../../_conf_schema.json";
-import { pluginConfigResponseSchema, pluginConfigSaveSchema } from "../configContract";
+import cases from "@plugin-tests/fixtures/cdn_url_cases.json";
+import schema from "@plugin-config";
+import {
+  pluginConfigResponseSchema,
+  pluginConfigSaveSchema,
+} from "@/entities/config/model/configContract";
 import {
   cdnBaseUrlSchema,
   DEFAULT_TEMPLATE_CDN_BASE_URL,
   renderingRuntimeSchema,
-} from "../renderingConfig";
-import { validateSingleFieldWithZod } from "../validation";
+} from "@/entities/config/model/renderingConfig";
+import { validateSingleFieldWithZod } from "@/entities/config/model/validation";
 
 describe("CDN 前后端共享边界", () => {
   it.each(cases)("$input → $normalized", ({ input, normalized }) => {

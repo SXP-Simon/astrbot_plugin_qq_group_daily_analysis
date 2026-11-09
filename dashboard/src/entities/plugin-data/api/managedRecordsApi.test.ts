@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiGet } from "../../../shared/api/bridge";
+import { apiGet } from "@/shared/api/bridge";
 import { fetchManagedRecord } from "./managedRecordsApi";
 
-vi.mock("../../../shared/api/bridge", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../shared/api/bridge")>()),
+vi.mock("@/shared/api/bridge", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/api/bridge")>()),
   apiGet: vi.fn(),
 }));
 afterEach(() => vi.clearAllMocks());

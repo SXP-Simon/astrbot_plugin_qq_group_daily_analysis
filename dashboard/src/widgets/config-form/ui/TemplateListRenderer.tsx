@@ -1,18 +1,18 @@
 import { useRef, useState } from "react";
 import { IconArrowDown, IconArrowUp, IconPlus, IconTrash } from "@tabler/icons-react";
-import { isFieldVisible } from "../../../entities/config/model/visibility";
-import type { SchemaFieldItem } from "../../../entities/config/model/types";
-import type { AvailableProvider, AvailablePersona } from "../../../entities/config/api/configApi";
+import { isFieldVisible } from "@/entities/config/model/visibility";
+import type { SchemaFieldItem } from "@/entities/config/model/types";
+import type { AvailableProvider, AvailablePersona } from "@/entities/config/api/configApi";
 import { FieldRenderer } from "./FieldRenderer";
 import { ComicStyleGallery } from "./ComicStyleGallery";
-import { comicPresets } from "../../../entities/comic/model/comicPresets";
-import { T2iProbe } from "../../../features/test-t2i/ui/T2iProbe";
-import { TemplateResources } from "../../../features/manage-template-resources/ui/TemplateResources";
-import { TypstFonts } from "../../../features/manage-typst-fonts/ui/TypstFonts";
-import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
-import { Button } from "../../../shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../../shared/ui/dialog";
-import { useTemplateListModel } from "../model/useTemplateListModel";
+import { comicPresets, resolveComicStyleName } from "@/entities/comic/model/comicPresets";
+import { T2iProbe } from "@/features/test-t2i/ui/T2iProbe";
+import { TemplateResources } from "@/features/manage-template-resources/ui/TemplateResources";
+import { TypstFonts } from "@/features/manage-typst-fonts/ui/TypstFonts";
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "@/entities/config/model/renderingConfig";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/shared/ui/dialog";
+import { useTemplateListModel } from "@/widgets/config-form/model/useTemplateListModel";
 
 interface TemplateListRendererProps {
   templateCdnBaseUrl?: string | null;
@@ -24,6 +24,8 @@ interface TemplateListRendererProps {
   providers?: AvailableProvider[];
   personas?: AvailablePersona[];
   fullKeyPath?: string;
+  validationPath?: string;
+  subErrors?: Record<string, string>;
   onChange: (val: unknown) => void;
 }
 
@@ -37,6 +39,8 @@ export function TemplateListRenderer({
   providers = [],
   personas = [],
   fullKeyPath,
+  validationPath = fieldKey,
+  subErrors,
   onChange,
 }: TemplateListRendererProps) {
   const vm = useTemplateListModel(fieldSchema, value, onChange, originalValue);
@@ -103,7 +107,7 @@ export function TemplateListRenderer({
 
   return (
     <div className="min-w-0 space-y-4">
-      {!vm.valid && (
+      {!vm.valid && !subErrors?.[validationPath] && (
         <p role="alert" className="text-sm text-destructive">
           配置条目格式不正确，请检查原始配置。当前内容未被改写。
         </p>
@@ -113,6 +117,7 @@ export function TemplateListRenderer({
       )}
       <div className="space-y-6">
         {vm.items.map((item, index) => {
+          const itemPath = `${validationPath}.${index}`;
           const itemTemplateKey = vm.templateKey(item) ?? "character";
           const template = vm.templates[itemTemplateKey];
           const original = vm.originalItems[index] ?? {};
@@ -123,6 +128,20 @@ export function TemplateListRenderer({
             ),
             ...item,
           };
+          const visibleFields = Object.entries(subItems).filter(
+            ([key, field]) =>
+              !field.hidden &&
+              (!comicCharacters ||
+                key !== "storyboard_prompt" ||
+                (typeof item.storyboard_prompt === "string" && item.storyboard_prompt.trim())) &&
+              isFieldVisible(field, { item: itemContext }),
+          );
+          const itemErrors = Object.entries(subErrors ?? {}).filter(([path]) => {
+            if (path === itemPath) return true;
+            if (!path.startsWith(`${itemPath}.`)) return false;
+            const key = path.slice(itemPath.length + 1).split(".")[0];
+            return !visibleFields.some(([fieldKey]) => fieldKey === key);
+          });
           const preset = comicStyles
             ? comicPresets.find(({ id }) => item.preset_id === id)
             : undefined;
@@ -133,14 +152,17 @@ export function TemplateListRenderer({
               )
             : undefined;
           const name = String(
-            item.name ||
-              (customStyle ? "自定义风格" : preset?.name) ||
+            (comicStyles
+              ? resolveComicStyleName(item.preset_id, item.name) ||
+                (customStyle ? "自定义风格" : undefined)
+              : item.name) ||
               template?.name ||
               `条目 ${index + 1}`,
           );
           return (
             <section
               key={`${fieldKey}_${index}`}
+              data-config-path={itemPath}
               aria-label={`${index + 1}. ${name}`}
               className="min-w-0 space-y-4 border-0 border-b border-solid border-border pb-5"
             >
@@ -203,6 +225,16 @@ export function TemplateListRenderer({
                   </Button>
                 </div>
               </div>
+              {itemErrors.map(([path, message]) => (
+                <p
+                  key={path}
+                  role="alert"
+                  tabIndex={-1}
+                  className="m-0 break-words rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  {message}
+                </p>
+              ))}
               {comicStyles && !customStyle && (
                 <div className="flex flex-wrap items-center gap-2">
                   <ComicStyleGallery
@@ -234,87 +266,92 @@ export function TemplateListRenderer({
                   </p>
                 )}
               <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
-                {Object.entries(subItems)
-                  .filter(
-                    ([key, field]) =>
-                      (!comicCharacters ||
-                        key !== "storyboard_prompt" ||
-                        (typeof item.storyboard_prompt === "string" &&
-                          item.storyboard_prompt.trim())) &&
-                      isFieldVisible(field, { item: itemContext }),
-                  )
-                  .map(([key, field]) => {
-                    const styleSource = comicStyles && key === "preset_id";
-                    let displayField = field;
-                    if (styleSource && (customStyle || savedComicStyles.length)) {
-                      displayField = {
-                        ...field,
-                        hint: customStyle
-                          ? "下拉框显示上次保存的方案。删除最后一条同名且正文相同的自定义方案，或把它切换为其他风格后保存，该选项会消失。暂时不用时，可以关闭「启用此方案」再保存，保留下拉选项。"
-                          : field.hint,
-                        options: [
-                          ...savedComicStyles.map(({ value }) => value),
-                          ...(field.options ?? []),
-                        ],
-                        labels: [
-                          ...savedComicStyles.map(({ label }) => label),
-                          ...(field.labels ?? []),
-                        ],
-                      };
-                    } else if (customStyle && key === "prompt_override") {
-                      displayField = {
-                        ...field,
-                        default: undefined,
-                        hint: "填写完整分镜提示词。可用 `${chat_content}` 指定话题位置，未写此变量时会把群聊话题附在正文末尾。",
-                      };
-                    } else if (customStyle && key === "name") {
-                      displayField = { ...field, hint: "填写便于辨认的自定义风格名称。" };
-                    }
-                    const fullWidth =
-                      ["template_list", "text", "file", "object"].includes(field.type) ||
-                      ["prompt", "image", "url", "key"].some((part) => key.includes(part));
-                    return (
-                      <div key={key} className={fullWidth ? "min-w-0 xl:col-span-2" : "min-w-0"}>
-                        <FieldRenderer
-                          fieldKey={key}
-                          fieldSchema={displayField}
-                          value={
-                            (styleSource ? savedStyle?.value : undefined) ??
-                            (item[key] !== undefined ? item[key] : field.default)
+                {visibleFields.map(([key, field]) => {
+                  const childPath = `${itemPath}.${key}`;
+                  const styleSource = comicStyles && key === "preset_id";
+                  let displayField = field;
+                  if (styleSource && (customStyle || savedComicStyles.length)) {
+                    displayField = {
+                      ...field,
+                      hint: customStyle
+                        ? "下拉框显示上次保存的方案。删除最后一条同名且正文相同的自定义方案，或把它切换为其他风格后保存，该选项会消失。暂时不用时，可以关闭「启用此方案」再保存，保留下拉选项。"
+                        : field.hint,
+                      options: [
+                        ...savedComicStyles.map(({ value }) => value),
+                        ...(field.options ?? []),
+                      ],
+                      labels: [
+                        ...savedComicStyles.map(({ label }) => label),
+                        ...(field.labels ?? []),
+                      ],
+                    };
+                  } else if (customStyle && key === "prompt_override") {
+                    displayField = {
+                      ...field,
+                      default: undefined,
+                      hint: "填写完整分镜提示词，须包含 `${chat_content}`（核心话题列表）和 `${topic_count}`（话题数量）。",
+                    };
+                  } else if (customStyle && key === "name") {
+                    displayField = { ...field, hint: "填写便于辨认且不重复的自定义风格名称。" };
+                  }
+                  const fullWidth =
+                    ["template_list", "text", "file", "object"].includes(field.type) ||
+                    ["prompt", "image", "url", "key"].some((part) => key.includes(part));
+                  return (
+                    <div key={key} className={fullWidth ? "min-w-0 xl:col-span-2" : "min-w-0"}>
+                      <FieldRenderer
+                        fieldKey={key}
+                        fieldSchema={displayField}
+                        value={
+                          (styleSource ? savedStyle?.value : undefined) ??
+                          (item[key] !== undefined ? item[key] : field.default)
+                        }
+                        originalValue={original[key] !== undefined ? original[key] : field.default}
+                        modified={
+                          modified === undefined
+                            ? undefined
+                            : JSON.stringify(item[key] ?? field.default) !==
+                              JSON.stringify(original[key] ?? field.default)
+                        }
+                        providers={providers}
+                        personas={personas}
+                        isSubField
+                        scope={item}
+                        comicPresetPrompt={
+                          comicStyles && key === "prompt_override" ? preset?.prompt : undefined
+                        }
+                        fullKeyPath={`${fullKeyPath || fieldKey}.templates.${itemTemplateKey}.${key}`}
+                        validationPath={childPath}
+                        error={subErrors?.[childPath]}
+                        subErrors={subErrors}
+                        onChange={(next) => {
+                          const selected = styleSource
+                            ? savedComicStyles.find(({ value }) => value === next)
+                            : undefined;
+                          if (!selected) {
+                            vm.change(index, { [key]: next });
+                            return;
                           }
-                          originalValue={
-                            original[key] !== undefined ? original[key] : field.default
+                          const usedNames = new Set(
+                            vm.items
+                              .filter((_, itemIndex) => itemIndex !== index)
+                              .map((item) => resolveComicStyleName(item.preset_id, item.name)),
+                          );
+                          const baseName = selected.name.trim();
+                          let copyName = baseName;
+                          for (let number = 2; usedNames.has(copyName); number++) {
+                            copyName = `${baseName}（${number}）`;
                           }
-                          modified={
-                            modified === undefined
-                              ? undefined
-                              : JSON.stringify(item[key] ?? field.default) !==
-                                JSON.stringify(original[key] ?? field.default)
-                          }
-                          providers={providers}
-                          personas={personas}
-                          isSubField
-                          scope={item}
-                          fullKeyPath={`${fullKeyPath || fieldKey}.templates.${itemTemplateKey}.${key}`}
-                          onChange={(next) => {
-                            const selected = styleSource
-                              ? savedComicStyles.find(({ value }) => value === next)
-                              : undefined;
-                            vm.change(
-                              index,
-                              selected
-                                ? {
-                                    preset_id: "custom",
-                                    name: selected.name,
-                                    prompt_override: selected.prompt,
-                                  }
-                                : { [key]: next },
-                            );
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
+                          vm.change(index, {
+                            preset_id: "custom",
+                            name: copyName,
+                            prompt_override: selected.prompt,
+                          });
+                        }}
+                      />
+                    </div>
+                  );
+                })}
               </div>
               {fieldKey === "t2i_rendering_strategies" && (
                 <>

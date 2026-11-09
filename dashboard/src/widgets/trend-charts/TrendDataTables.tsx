@@ -1,4 +1,4 @@
-import type { AnalyticsTrendPoint, ProviderBreakdownItem } from "../../entities/metric/model/types";
+import type { AnalyticsTrendPoint, ProviderBreakdownItem } from "@/entities/metric/model/types";
 
 export function TrendDataTables({
   points,

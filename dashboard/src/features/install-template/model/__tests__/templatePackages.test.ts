@@ -1,8 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { useTemplatePackages } from "../useTemplatePackages";
-import { fetchReportTemplates, uninstallTemplate } from "../../../../entities/report/api/reportApi";
-vi.mock("../../../../entities/report/api/reportApi", () => ({
+import { useTemplatePackages } from "@/features/install-template/model/useTemplatePackages";
+import { fetchReportTemplates, uninstallTemplate } from "@/entities/report/api/reportApi";
+vi.mock("@/entities/report/api/reportApi", () => ({
   fetchReportTemplates: vi.fn(),
   uninstallTemplate: vi.fn(),
 }));

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchContext, subscribeContext, type AstrBotContext } from "../api/bridge";
+import { fetchContext, subscribeContext, type AstrBotContext } from "@/shared/api/bridge";
 import { getHostThemeStyles, HOST_THEME_PROPERTIES } from "./themeColors";
 
 const THEME_CACHE_KEY = "astrbot_plugin_theme_is_dark";

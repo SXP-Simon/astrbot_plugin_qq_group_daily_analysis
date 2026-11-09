@@ -6,9 +6,9 @@ import {
   IconPalette,
   IconArrowUpRight,
 } from "@tabler/icons-react";
-import type { ReportItem } from "../../entities/report/model/types";
-import { Button } from "../../shared/ui/button";
-import { formatTimestamp } from "../../shared/lib/formatters";
+import type { ReportItem } from "@/entities/report/model/types";
+import { Button } from "@/shared/ui/button";
+import { formatTimestamp } from "@/shared/lib/formatters";
 
 interface ReportListProps {
   reports: ReportItem[];

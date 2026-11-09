@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { devApiPost, devApiGet } from "../../shared/api/devBridge";
-import { mockTraces } from "../data/traces";
+import { devApiPost, devApiGet } from "@/shared/api/devBridge";
+import { mockTraces } from "@/mocks/data/traces";
 
 it("Mock 通过正式通信路径保存、查询和撤销知晓，保留任务结果", async () => {
   const trace = mockTraces.find((item) => item.status === "failed")!;

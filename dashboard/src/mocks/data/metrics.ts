@@ -1,4 +1,4 @@
-import type { MetricsSummary, AnalyticsTrendsResponse } from "../../entities/metric/model/types";
+import type { MetricsSummary, AnalyticsTrendsResponse } from "@/entities/metric/model/types";
 
 const now = new Date();
 const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();

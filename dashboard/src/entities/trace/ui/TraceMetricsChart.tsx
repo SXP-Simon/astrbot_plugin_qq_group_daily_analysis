@@ -1,13 +1,17 @@
-import { resolveChartColor } from "../../../shared/lib/chartColors";
+import { resolveChartColor } from "@/shared/lib/chartColors";
 import { useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
-import type { TraceRecord } from "../model/types";
-import { getTraceMetrics, type MetricsViewMode, type PipelineMode } from "../model/traceMetrics";
+import type { TraceRecord } from "@/entities/trace/model/types";
+import {
+  getTraceMetrics,
+  type MetricsViewMode,
+  type PipelineMode,
+} from "@/entities/trace/model/traceMetrics";
 import { createTraceMetricsOption } from "./traceMetricsOption";
 import { TraceMetricsTable } from "./TraceMetricsTable";
-import { useTheme } from "../../../shared/lib/useTheme";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../shared/ui/tabs";
-import { Button } from "../../../shared/ui/button";
+import { useTheme } from "@/shared/lib/useTheme";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/ui/tabs";
+import { Button } from "@/shared/ui/button";
 
 export function TraceMetricsChart({ trace }: { trace: TraceRecord }) {
   const [mode, setMode] = useState<MetricsViewMode>("duration");

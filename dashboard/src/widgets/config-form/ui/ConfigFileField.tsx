@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { IconFile, IconPhoto, IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
-import { useConfigFiles, useConfigImage } from "../model/useConfigFiles";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { ImagePreview } from "../../../shared/ui/image-preview";
-import { FilePicker } from "../../../shared/ui/file-picker";
+import { useConfigFiles, useConfigImage } from "@/widgets/config-form/model/useConfigFiles";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { ImagePreview } from "@/shared/ui/image-preview";
+import { FilePicker } from "@/shared/ui/file-picker";
 
 function ReferenceImage({ path }: { path: string }) {
   const image = useConfigImage(path);

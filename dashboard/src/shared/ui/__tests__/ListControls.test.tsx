@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { SearchSelect } from "../search-select";
-import { Pagination } from "../pagination";
+import { SearchSelect } from "@/shared/ui/search-select";
+import { Pagination } from "@/shared/ui/pagination";
 
 it("预设入口可使用简短按钮文字，名称仍包含当前选择且保留原始值", () => {
   const change = vi.fn();

@@ -1,4 +1,4 @@
-import { PluginLogItem } from "../../entities/log/model/types";
+import { PluginLogItem } from "@/entities/log/model/types";
 
 /**
  * 结构化拟真 Mock 插件日志矩阵 (全级别、多标签、多链路、多平台覆盖)

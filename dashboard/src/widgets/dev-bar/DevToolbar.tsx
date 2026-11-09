@@ -1,21 +1,21 @@
 import { IconAdjustments, IconBolt, IconSunMoon } from "@tabler/icons-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { getDevBridgeMode, setDevBridgeMode } from "../../shared/api/devBridge";
-import { mockSSEService } from "../../mocks/sseMock";
-import { Button } from "../../shared/ui/button";
+import { getDevBridgeMode, setDevBridgeMode } from "@/shared/api/devBridge";
+import { mockSSEService } from "@/mocks/sseMock";
+import { Button } from "@/shared/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
   DialogTrigger,
-} from "../../shared/ui/dialog";
-import { NativeSelect } from "../../shared/ui/native-select";
-import { Switch } from "../../shared/ui/switch";
-import { getDevThemeContext, setDevThemeContext } from "../../shared/api/devThemeContext";
-import { useTheme } from "../../shared/lib/useTheme";
-import { getDefaultThemeColors } from "../../shared/lib/themeColors";
+} from "@/shared/ui/dialog";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { Switch } from "@/shared/ui/switch";
+import { getDevThemeContext, setDevThemeContext } from "@/shared/api/devThemeContext";
+import { useTheme } from "@/shared/lib/useTheme";
+import { getDefaultThemeColors } from "@/shared/lib/themeColors";
 
 export function DevToolbar() {
   const mode = getDevBridgeMode();

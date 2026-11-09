@@ -1,17 +1,17 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { useLogsViewModel } from "../useLogsViewModel";
-import { fetchPluginLogs, clearPluginLogs } from "../../../../entities/log/api/logApi";
-import { subscribeSSE } from "../../../../shared/api/bridge";
-import { copyToClipboard } from "../../../../shared/lib/clipboard";
-import type { PluginLogItem } from "../../../../entities/log/model/types";
+import { useLogsViewModel } from "@/pages/logs/model/useLogsViewModel";
+import { fetchPluginLogs, clearPluginLogs } from "@/entities/log/api/logApi";
+import { subscribeSSE } from "@/shared/api/bridge";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import type { PluginLogItem } from "@/entities/log/model/types";
 
-vi.mock("../../../../entities/log/api/logApi", () => ({
+vi.mock("@/entities/log/api/logApi", () => ({
   fetchPluginLogs: vi.fn(),
   clearPluginLogs: vi.fn(),
 }));
-vi.mock("../../../../shared/api/bridge", () => ({ subscribeSSE: vi.fn() }));
-vi.mock("../../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("@/shared/api/bridge", () => ({ subscribeSSE: vi.fn() }));
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 
 const entry: PluginLogItem = {
   id: "example-log",

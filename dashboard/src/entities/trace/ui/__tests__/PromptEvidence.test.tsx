@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { PromptsInspector } from "../PromptsInspector";
-import { SpanPayloadViewer } from "../SpanPayloadViewer";
-import { copyToClipboard } from "../../../../shared/lib/clipboard";
+import { PromptsInspector } from "@/entities/trace/ui/PromptsInspector";
+import { SpanPayloadViewer } from "@/entities/trace/ui/SpanPayloadViewer";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
-vi.mock("../../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 
 it("切换模块与完整重试记录，保留系统提示词、正文和零消耗", async () => {
   render(

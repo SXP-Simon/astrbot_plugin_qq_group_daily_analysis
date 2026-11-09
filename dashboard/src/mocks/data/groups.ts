@@ -1,4 +1,4 @@
-import type { GroupItem } from "../../entities/group/model/types";
+import type { GroupItem } from "@/entities/group/model/types";
 
 export const mockGroups: GroupItem[] = [
   { group_id: "123456789", group_name: "技术交流与闲聊吹水群", platform: "aiocqhttp_main" },

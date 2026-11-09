@@ -1,6 +1,6 @@
 import * as React from "react";
 import { IconChevronDown } from "@tabler/icons-react";
-import { cn } from "../lib/cn";
+import { cn } from "@/shared/lib/cn";
 
 export const NativeSelect = React.forwardRef<
   HTMLSelectElement,

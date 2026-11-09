@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { mockTraces } from "../data/traces";
+import { mockTraces } from "@/mocks/data/traces";
 
 it("模型用量示例沿用实际分析模块标识并保留输入输出记录", () => {
   const names = new Set([

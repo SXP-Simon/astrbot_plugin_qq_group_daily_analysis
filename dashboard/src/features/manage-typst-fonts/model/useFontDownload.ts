@@ -1,16 +1,16 @@
-import { DownloadBatch } from "../../../entities/config/api/downloadBatch";
+import { DownloadBatch } from "@/entities/config/api/downloadBatch";
 import { useEffect, useRef, useState } from "react";
 import {
   downloadTypstFonts,
   fetchTypstFonts,
   fetchFontDownloadProgress,
-} from "../../../entities/config/api/configApi";
-import { cdnBaseUrlSchema } from "../../../entities/config/model/renderingConfig";
+} from "@/entities/config/api/configApi";
+import { cdnBaseUrlSchema } from "@/entities/config/model/renderingConfig";
 import type {
   FontDownloadSource,
   FontTransfer,
   TypstFontStatus,
-} from "../../../entities/config/model/typstFonts";
+} from "@/entities/config/model/typstFonts";
 
 export function useFontDownload(
   onStatus: (status: TypstFontStatus) => void,

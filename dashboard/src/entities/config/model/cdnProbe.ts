@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { components } from "../../../shared/api/generated/schema";
+import type { components } from "@/shared/api/generated/schema";
 
 export type TemplateCdnProbe = components["schemas"]["TemplateCdnProbe"];
 export type TemplateCdnProbeRequest = components["schemas"]["TemplateCdnProbeRequest"];

@@ -12,6 +12,18 @@ const schemaField: z.ZodType<SchemaFieldItem> = z.lazy(() =>
       options: z.array(z.union([z.string(), z.number()])).optional(),
       labels: z.array(z.string()).optional(),
       condition: z.record(z.string(), z.unknown()).optional(),
+      prompt_variables: z
+        .record(
+          z.string(),
+          z.object({
+            label: z.string(),
+            description: z.string(),
+            example: z.string(),
+            required: z.boolean().optional(),
+            config_field: z.string().optional(),
+          }),
+        )
+        .optional(),
       items: z.union([schemaField, z.record(z.string(), schemaField)]).optional(),
       templates: z
         .record(

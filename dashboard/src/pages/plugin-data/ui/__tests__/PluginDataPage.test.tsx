@@ -1,15 +1,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { PluginDataPage } from "../PluginDataPage";
-import type { FontManagementRequest } from "../../../../features/manage-typst-fonts/model/FontManagementContext";
+import { PluginDataPage } from "@/pages/plugin-data/ui/PluginDataPage";
+import type { FontManagementRequest } from "@/features/manage-typst-fonts/model/FontManagementContext";
 import {
   fetchIncrementalGroupDirectory,
   fetchCheckpointGroups,
   fetchCheckpointsList,
-} from "../../../../entities/plugin-data/api/pluginDataApi";
+} from "@/entities/plugin-data/api/pluginDataApi";
 
-vi.mock("../../../../entities/plugin-data/api/pluginDataApi");
-vi.mock("../partitions/ManagedFilesPanel", () => ({
+vi.mock("@/entities/plugin-data/api/pluginDataApi");
+vi.mock("@/pages/plugin-data/ui/partitions/ManagedFilesPanel", () => ({
   ManagedFilesPanel: ({
     onOpenDataTab,
     fontRequest,
@@ -23,11 +23,21 @@ vi.mock("../partitions/ManagedFilesPanel", () => ({
     </div>
   ),
 }));
-vi.mock("../StoredRecordsTab", () => ({ StoredRecordsTab: () => <div>分析存档内容</div> }));
-vi.mock("../incremental/IncrementalTab", () => ({ IncrementalTab: () => <div>增量批次内容</div> }));
-vi.mock("../checkpoints/CheckpointsTab", () => ({ CheckpointsTab: () => <div>阶段快照内容</div> }));
-vi.mock("../incremental/BatchDetailModal", () => ({ BatchDetailModal: () => null }));
-vi.mock("../checkpoints/CheckpointDetailModal", () => ({ CheckpointDetailModal: () => null }));
+vi.mock("@/pages/plugin-data/ui/StoredRecordsTab", () => ({
+  StoredRecordsTab: () => <div>分析存档内容</div>,
+}));
+vi.mock("@/pages/plugin-data/ui/incremental/IncrementalTab", () => ({
+  IncrementalTab: () => <div>增量批次内容</div>,
+}));
+vi.mock("@/pages/plugin-data/ui/checkpoints/CheckpointsTab", () => ({
+  CheckpointsTab: () => <div>阶段快照内容</div>,
+}));
+vi.mock("@/pages/plugin-data/ui/incremental/BatchDetailModal", () => ({
+  BatchDetailModal: () => null,
+}));
+vi.mock("@/pages/plugin-data/ui/checkpoints/CheckpointDetailModal", () => ({
+  CheckpointDetailModal: () => null,
+}));
 beforeEach(() => {
   vi.mocked(fetchIncrementalGroupDirectory).mockResolvedValue({ groups: [], group_details: [] });
   vi.mocked(fetchCheckpointGroups).mockResolvedValue([]);

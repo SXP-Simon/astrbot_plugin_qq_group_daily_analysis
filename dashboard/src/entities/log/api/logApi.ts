@@ -1,5 +1,5 @@
-import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
-import { PluginLogItem, PluginLogResponse } from "../model/types";
+import { apiGet, apiPost, extractData } from "@/shared/api/bridge";
+import { PluginLogItem, PluginLogResponse } from "@/entities/log/model/types";
 import { z } from "zod";
 
 export interface LogFilterParams {

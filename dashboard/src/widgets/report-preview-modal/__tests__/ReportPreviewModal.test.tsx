@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ReportPreviewModal } from "../ReportPreviewModal";
-import { copyToClipboard } from "../../../shared/lib/clipboard";
+import { ReportPreviewModal } from "@/widgets/report-preview-modal/ReportPreviewModal";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
-vi.mock("../../../shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("@/shared/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 afterEach(() => vi.clearAllMocks());
 
 const report = {

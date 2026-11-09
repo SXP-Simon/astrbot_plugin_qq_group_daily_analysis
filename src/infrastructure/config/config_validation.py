@@ -4,20 +4,33 @@ from __future__ import annotations
 
 import json
 import math
+import re
+from collections import Counter
 from pathlib import Path
+from string import Formatter, Template
 from typing import TYPE_CHECKING
 
+from ...shared.comic_presets import COMIC_PRESETS
 from ...shared.type_guards import is_object_list, is_string_mapping
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
-def validate_config_for_save(config: Mapping[str, object]) -> None:
+_COMIC_VARIABLES = {"chat_content", "topic_count", "max_count"}
+_COMIC_FORMAT_MODIFIERS = re.compile(
+    r"(?:^|[^{])(?:\{\{)*\{(?:chat_content|topic_count|max_count)(?:!|:|\.|\[)"
+)
+
+
+def validate_config_for_save(
+    config: Mapping[str, object], previous: Mapping[str, object] | None = None
+) -> None:
     """校验已声明字段的类型、范围和嵌套结构。
 
     Args:
         config: 尚未写入运行中配置的保存请求。
+        previous: 当前配置，允许原样保留升级前已生效的提示词。
 
     Raises:
         ValueError: 字段不符合声明，错误包含具体字段位置。
@@ -36,11 +49,141 @@ def validate_config_for_save(config: Mapping[str, object]) -> None:
                 raise ValueError(
                     f"{field.get('description') or key}（{key}）必须是配置对象"
                 )
-            _validate_field(config[key], field, key, config)
+            _validate_field(config[key], field, key, config, (previous or {}).get(key))
+
+    prompt_schema = schema.get("prompts")
+    if is_string_mapping(prompt_schema):
+        _validate_prompt_schemes(
+            config.get("prompts"), (previous or {}).get("prompts"), prompt_schema
+        )
+
+
+def _validate_prompt_schemes(
+    prompts: object, previous: object, schema: Mapping[str, object]
+) -> None:
+    """检查分析提示词方案，并确认单选结果与分析器读取的正文一致。
+
+    Args:
+        prompts: 待保存的提示词分组。
+        previous: 当前已生效的提示词分组。
+        schema: 提示词的配置声明。
+
+    Returns:
+        校验通过时返回 None。
+
+    Raises:
+        ValueError: 方案或提示词变量不合法。
+    """
+    groups = schema.get("items")
+    if not is_string_mapping(prompts) or not is_string_mapping(groups):
+        return
+    for group_key, definition in groups.items():
+        group = prompts.get(group_key, {})
+        if not is_string_mapping(group) or not is_string_mapping(definition):
+            continue
+        fields = definition.get("items")
+        if not is_string_mapping(fields):
+            continue
+        old_group = previous.get(group_key) if is_string_mapping(previous) else None
+        old_group = old_group if is_string_mapping(old_group) else {}
+        for key, field in fields.items():
+            if not is_string_mapping(field):
+                continue
+            variables = field.get("prompt_variables")
+            if not is_string_mapping(variables):
+                continue
+            schemes_key = f"{key}_schemes"
+            current = group.get(key, field.get("default"))
+            old_current = old_group.get(key, field.get("default"))
+            rows = group.get(schemes_key, [])
+            old_rows = old_group.get(schemes_key, [])
+            if current == old_current and rows == old_rows:
+                continue
+            label = field.get("description") or key
+            if not isinstance(current, str) or not is_object_list(rows):
+                raise ValueError(f"{label}的正文或方案格式有误")
+            if not rows and is_object_list(old_rows) and old_rows:
+                raise ValueError(f"{label}不能清空方案列表，请保留原有配置")
+            saved: dict[str | None, object] = {}
+            if is_object_list(old_rows):
+                for row in old_rows:
+                    if is_string_mapping(row):
+                        name = row.get("name")
+                        if name is None or isinstance(name, str):
+                            saved[name] = (
+                                old_current
+                                if row.get("selected") is True
+                                else row.get("text")
+                            )
+            selected: list[str] = []
+            changed: list[tuple[str, str]] = []
+            names: set[str | None] = set()
+            for index, row in enumerate(rows):
+                if not is_string_mapping(row):
+                    raise ValueError(f"{label}第 {index + 1} 项必须是方案")
+                name, body, active = (
+                    row.get("name"),
+                    row.get("text"),
+                    row.get("selected"),
+                )
+                if (
+                    "name" not in row
+                    or (name is None) != (index == 0)
+                    or (
+                        name is not None
+                        and (not isinstance(name, str) or not name.strip())
+                    )
+                    or not isinstance(body, str)
+                    or not isinstance(active, bool)
+                ):
+                    raise ValueError(
+                        f"{label}第 {index + 1} 项方案的名称、正文或选中状态有误"
+                    )
+                if name in names:
+                    raise ValueError(f"{label}的自定义方案名称不能重复")
+                names.add(name)
+                if active:
+                    selected.append(body)
+                if name is None:
+                    if body != saved.get(None, old_current):
+                        raise ValueError(f"{label}的原有配置不能覆盖，请新建自定义方案")
+                elif body != saved.get(name):
+                    changed.append((name, body))
+            if rows and rows != old_rows and selected != [current]:
+                raise ValueError(f"{label}必须选中一个方案，且正文与所选方案一致")
+            if current != old_current and (not rows or rows == old_rows):
+                changed.append(("当前配置", current))
+            for name, body in changed:
+                if not body.strip():
+                    raise ValueError(f"{label} · {name}：请填写提示词正文")
+                identifiers = set(Template(body).get_identifiers())
+                missing = [
+                    f"${{{variable}}}"
+                    for variable, metadata in variables.items()
+                    if is_string_mapping(metadata)
+                    and metadata.get("required") is True
+                    and variable not in identifiers
+                ]
+                unknown = [
+                    f"${{{variable}}}"
+                    for variable in sorted(identifiers - variables.keys())
+                ]
+                if missing:
+                    raise ValueError(
+                        f"{label} · {name}：请插入必填变量 {'、'.join(missing)}"
+                    )
+                if unknown:
+                    raise ValueError(
+                        f"{label} · {name}：不支持变量 {'、'.join(unknown)}"
+                    )
 
 
 def _validate_field(
-    value: object, field: Mapping[str, object], path: str, scope: Mapping[str, object]
+    value: object,
+    field: Mapping[str, object],
+    path: str,
+    scope: Mapping[str, object],
+    previous: object = None,
 ) -> None:
     """递归校验单个字段，允许未声明的扩展键继续原样保存。
 
@@ -49,6 +192,7 @@ def _validate_field(
         field: 配置声明中的类型和约束。
         path: 包含分组和条目序号的字段位置。
         scope: 当前层的同级值，供条件显示规则判断。
+        previous: 当前字段已保存的值，用于兼容未编辑的旧格式正文。
 
     Raises:
         ValueError: 当前字段或子字段格式不正确。
@@ -97,6 +241,46 @@ def _validate_field(
         raise ValueError(f"{label}必须是开关值")
     elif kind in ("string", "text") and not isinstance(value, str):
         raise ValueError(f"{label}必须是文字")
+    elif (
+        kind == "text"
+        and path.rsplit(".", 1)[-1] in ("prompt_override", "storyboard_prompt")
+        and isinstance(value, str)
+        and value.strip()
+    ):
+        used: set[str]
+        if "$" in value:
+            used = set(Template(value).get_identifiers())
+            unknown = sorted(used - _COMIC_VARIABLES)
+            if unknown:
+                tokens = "、".join(f"${{{key}}}" for key in unknown)
+                raise ValueError(f"{label}不支持变量 {tokens}")
+        else:
+            if _COMIC_FORMAT_MODIFIERS.search(value):
+                if value == previous:
+                    return
+                raise ValueError(f"{label}请改用不带格式修饰的变量，便于检查和预览。")
+            # 只读字段名。校验阶段不展开正文，也不执行格式修饰。
+            try:
+                used = {
+                    key for _, key, _, _ in Formatter().parse(value) if key is not None
+                }
+            except ValueError:
+                used = set()
+            if not used or not used <= _COMIC_VARIABLES:
+                # 单层 JSON 花括号沿用生成器的简单变量替换规则。
+                used = set(
+                    re.findall(
+                        r"(?<!\{)\{(chat_content|topic_count|max_count)\}(?!\})",
+                        value,
+                    )
+                )
+        if "max_count" in used:
+            used.add("topic_count")
+        missing = [
+            f"${{{key}}}" for key in ("chat_content", "topic_count") if key not in used
+        ]
+        if missing:
+            raise ValueError(f"{label}请插入必填变量 {'、'.join(missing)}")
     elif kind in ("string", "text") and path.endswith(".profile_mapping_config"):
         if isinstance(value, str) and value.strip():
             try:
@@ -114,27 +298,59 @@ def _validate_field(
             for key, child in items.items():
                 if key in value and is_string_mapping(child):
                     _validate_field(
-                        value[key], child, f"{path}.{key}", {**scope, **value}
+                        value[key],
+                        child,
+                        f"{path}.{key}",
+                        {**scope, **value},
+                        previous.get(key) if is_string_mapping(previous) else None,
                     )
     elif kind in ("list", "template_list"):
         if not is_object_list(value):
             raise ValueError(f"{label}必须是列表")
         templates = field.get("templates")
+        comic_style_names: set[str] = set()
+        prompt_key = {
+            "daily_comic.comic_styles": "prompt_override",
+            "daily_comic.comic_characters": "storyboard_prompt",
+        }.get(path)
+        saved_prompts: Counter[str] = Counter()
+        if prompt_key and is_object_list(previous):
+            for saved_item in previous:
+                if is_string_mapping(saved_item) and isinstance(
+                    saved_prompt := saved_item.get(prompt_key), str
+                ):
+                    saved_prompts[saved_prompt] += 1
         for index, item in enumerate(value):
             if kind == "template_list":
                 if not is_string_mapping(item):
                     raise ValueError(f"{label}第 {index + 1} 项必须是配置对象")
-                if (
-                    path == "daily_comic.comic_styles"
-                    and item.get("preset_id") == "custom"
-                    and any(
+                if path == "daily_comic.comic_styles":
+                    preset_id, alias, prompt = (
+                        item.get("preset_id"),
+                        item.get("name"),
+                        item.get("prompt_override"),
+                    )
+                    if preset_id == "custom" and any(
                         not isinstance(text, str) or not text.strip()
-                        for text in (item.get("name"), item.get("prompt_override"))
+                        for text in (alias, prompt)
+                    ):
+                        raise ValueError(
+                            f"{label}第 {index + 1} 个自定义风格请填写名称和分镜提示词"
+                        )
+                    preset = (
+                        COMIC_PRESETS.get(preset_id)
+                        if isinstance(preset_id, str)
+                        else None
                     )
-                ):
-                    raise ValueError(
-                        f"{label}第 {index + 1} 个自定义风格请填写名称和分镜提示词"
-                    )
+                    name = alias.strip() if isinstance(alias, str) else ""
+                    if not name and preset:
+                        name = preset.name
+                    if name:
+                        if name in comic_style_names:
+                            raise ValueError(
+                                f"{label}第 {index + 1} 个方案的名称「{name}」已使用，请更换名称"
+                            )
+                        comic_style_names.add(name)
                 if is_string_mapping(templates) and templates:
                     key = item.get("__template_key")
                     if key is None and len(templates) == 1:
@@ -144,11 +360,20 @@ def _validate_field(
                         raise ValueError(
                             f"{label}第 {index + 1} 项请选择有效的方案类型"
                         )
+                    previous_item = None
+                    if (
+                        prompt_key
+                        and isinstance(prompt := item.get(prompt_key), str)
+                        and saved_prompts[prompt]
+                    ):
+                        saved_prompts[prompt] -= 1
+                        previous_item = {prompt_key: prompt}
                     _validate_field(
                         item,
                         {"type": "object", "items": template.get("items", {})},
                         f"{path}[{index + 1}]",
                         item,
+                        previous=previous_item,
                     )
     elif kind == "file" and not (
         isinstance(value, str)

@@ -1,18 +1,15 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { useFontUpload } from "../useFontUpload";
-import {
-  startManagedUpload,
-  uploadManagedChunk,
-} from "../../../../entities/plugin-data/api/managedFilesApi";
-import { apiPost } from "../../../../shared/api/bridge";
+import { useFontUpload } from "@/features/manage-typst-fonts/model/useFontUpload";
+import { startManagedUpload, uploadManagedChunk } from "@/entities/plugin-data/api/managedFilesApi";
+import { apiPost } from "@/shared/api/bridge";
 
-vi.mock("../../../../entities/plugin-data/api/managedFilesApi", () => ({
+vi.mock("@/entities/plugin-data/api/managedFilesApi", () => ({
   startManagedUpload: vi.fn(),
   uploadManagedChunk: vi.fn(),
 }));
-vi.mock("../../../../shared/api/bridge", async (original) => ({
-  ...(await original<typeof import("../../../../shared/api/bridge")>()),
+vi.mock("@/shared/api/bridge", async (original) => ({
+  ...(await original<typeof import("@/shared/api/bridge")>()),
   apiPost: vi.fn(),
 }));
 afterEach(() => vi.resetAllMocks());

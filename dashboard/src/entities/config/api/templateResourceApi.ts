@@ -1,9 +1,9 @@
-import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
-import { cdnBaseUrlSchema } from "../model/renderingConfig";
+import { apiGet, apiPost, extractData } from "@/shared/api/bridge";
+import { cdnBaseUrlSchema } from "@/entities/config/model/renderingConfig";
 import {
   templateResourceFileSchema,
   templateResourceStatusSchema,
-} from "../model/templateResources";
+} from "@/entities/config/model/templateResources";
 
 export async function fetchTemplateResources() {
   const response = await apiGet<unknown>("config/template-resources");

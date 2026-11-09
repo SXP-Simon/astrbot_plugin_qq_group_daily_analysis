@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchTraceList, fetchTraceDetail } from "../../../entities/trace/api/traceApi";
-import { fetchGroupSessions } from "../../../entities/group/api/groupApi";
-import type { TraceRecord, ContextMetrics } from "../../../entities/trace/model/types";
-import type { GroupItem } from "../../../entities/group/model/types";
+import { fetchTraceList, fetchTraceDetail } from "@/entities/trace/api/traceApi";
+import { fetchGroupSessions } from "@/entities/group/api/groupApi";
+import type { TraceRecord, ContextMetrics } from "@/entities/trace/model/types";
+import type { GroupItem } from "@/entities/group/model/types";
 
 interface InsightFilters {
   search: string;

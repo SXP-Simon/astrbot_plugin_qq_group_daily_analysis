@@ -9,37 +9,37 @@ import {
   IconTerminal2,
 } from "@tabler/icons-react";
 import { AppShell } from "./ui/AppShell";
-import { Toaster } from "../shared/ui/sonner";
+import { Toaster } from "@/shared/ui/sonner";
 import { usePageNavigation } from "./model/usePageNavigation";
-import { subscribeSSE } from "../shared/api/bridge";
-import { TraceDrawer } from "../widgets/trace-drawer/TraceDrawer";
-import { TriggerTaskModal } from "../features/trigger-task/ui/TriggerTaskModal";
-import { useTriggerTask } from "../features/trigger-task/model/useTriggerTask";
-import { OverviewPage } from "../pages/overview/ui/OverviewPage";
-import { useOverviewViewModel } from "../pages/overview/model/useOverviewViewModel";
-import { TracesPage } from "../pages/traces/ui/TracesPage";
-import { useTracesViewModel } from "../pages/traces/model/useTracesViewModel";
-import { ContextInsightPage } from "../pages/context-insight/ui/ContextInsightPage";
-import { useContextInsightViewModel } from "../pages/context-insight/model/useContextInsightViewModel";
-import { ReportsPage } from "../pages/reports/ui/ReportsPage";
-import { useReportsViewModel } from "../pages/reports/model/useReportsViewModel";
-import { LogsPage } from "../pages/logs/ui/LogsPage";
-import { useLogsViewModel } from "../pages/logs/model/useLogsViewModel";
-import { ConfigPage } from "../pages/config/ui/ConfigPage";
-import { useConfigViewModel } from "../pages/config/model/useConfigViewModel";
-import { PluginDataPage } from "../pages/plugin-data/ui/PluginDataPage";
-import { DevToolbar } from "../widgets/dev-bar/DevToolbar";
+import { subscribeSSE } from "@/shared/api/bridge";
+import { TraceDrawer } from "@/widgets/trace-drawer/TraceDrawer";
+import { TriggerTaskModal } from "@/features/trigger-task/ui/TriggerTaskModal";
+import { useTriggerTask } from "@/features/trigger-task/model/useTriggerTask";
+import { OverviewPage } from "@/pages/overview/ui/OverviewPage";
+import { useOverviewViewModel } from "@/pages/overview/model/useOverviewViewModel";
+import { TracesPage } from "@/pages/traces/ui/TracesPage";
+import { useTracesViewModel } from "@/pages/traces/model/useTracesViewModel";
+import { ContextInsightPage } from "@/pages/context-insight/ui/ContextInsightPage";
+import { useContextInsightViewModel } from "@/pages/context-insight/model/useContextInsightViewModel";
+import { ReportsPage } from "@/pages/reports/ui/ReportsPage";
+import { useReportsViewModel } from "@/pages/reports/model/useReportsViewModel";
+import { LogsPage } from "@/pages/logs/ui/LogsPage";
+import { useLogsViewModel } from "@/pages/logs/model/useLogsViewModel";
+import { ConfigPage } from "@/pages/config/ui/ConfigPage";
+import { useConfigViewModel } from "@/pages/config/model/useConfigViewModel";
+import { PluginDataPage } from "@/pages/plugin-data/ui/PluginDataPage";
+import { DevToolbar } from "@/widgets/dev-bar/DevToolbar";
 import {
   FontManagementContext,
   type FontManagementRequest,
-} from "../features/manage-typst-fonts/model/FontManagementContext";
+} from "@/features/manage-typst-fonts/model/FontManagementContext";
 import {
   ResourceManagementContext,
   type ResourceManagementRequest,
-} from "../features/manage-template-resources/model/ResourceManagementContext";
+} from "@/features/manage-template-resources/model/ResourceManagementContext";
 
-import { invalidateTraceCache } from "../entities/trace/api/traceApi";
-import { invalidateGroupsCache } from "../entities/group/api/groupApi";
+import { invalidateTraceCache } from "@/entities/trace/api/traceApi";
+import { invalidateGroupsCache } from "@/entities/group/api/groupApi";
 
 export const App: React.FC = () => {
   const { page: activeTab, visited, navigate } = usePageNavigation("overview");

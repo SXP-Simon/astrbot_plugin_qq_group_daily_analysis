@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { act, render, screen, fireEvent, within, waitFor } from "@testing-library/react";
-import { ActiveTaskBoard } from "../ActiveTaskBoard";
-import { mockActiveTasks } from "../../../mocks/data/tasks";
+import { ActiveTaskBoard } from "@/widgets/active-task-board/ActiveTaskBoard";
+import { mockActiveTasks } from "@/mocks/data/tasks";
 
 const tasks = mockActiveTasks.slice(1, 3);
 const callbacks = () => ({ onCancelTask: vi.fn(), onOpenTrigger: vi.fn(), onViewTrace: vi.fn() });

@@ -1,4 +1,4 @@
-import type { FontTransfer } from "../../entities/config/model/typstFonts";
+import type { FontTransfer } from "@/entities/config/model/typstFonts";
 
 /** 演示真实接口的连接、字节增长与完成清理，不访问网络。 */
 export const mockFontDownloads = new Map<

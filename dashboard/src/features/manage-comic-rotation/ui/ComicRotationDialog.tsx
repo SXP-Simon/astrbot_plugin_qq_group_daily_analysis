@@ -5,16 +5,16 @@ import {
   resetComicRotation,
   type ComicRotationEntry,
   type ComicRotationScope,
-} from "../../../entities/comic/api/comicApi";
-import { Alert } from "../../../shared/ui/alert";
-import { Button } from "../../../shared/ui/button";
+} from "@/entities/comic/api/comicApi";
+import { Alert } from "@/shared/ui/alert";
+import { Button } from "@/shared/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
   DialogTrigger,
-} from "../../../shared/ui/dialog";
+} from "@/shared/ui/dialog";
 
 export function ComicRotationDialog() {
   const [open, setOpen] = useState(false);

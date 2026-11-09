@@ -47,3 +47,27 @@ def test_domain_does_not_parse_dynamic_sdk_objects():
             ):
                 violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
     assert not violations, "领域层不应通过反射解释外部对象：" + ", ".join(violations)
+
+
+def test_runtime_imports_respect_the_installed_plugin_package():
+    """插件源码随 AstrBot 识别的安装目录加载，避免依赖开发时的顶层包名。"""
+    forbidden = ("src", "data.plugins.astrbot_plugin_qq_group_daily_analysis")
+    violations = []
+    for path in (ROOT / "main.py", *(ROOT / "src").rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+                modules = [
+                    node.module,
+                    *(f"{node.module}.{alias.name}" for alias in node.names),
+                ]
+            else:
+                continue
+            if any(
+                module == prefix or module.startswith(prefix + ".")
+                for module in modules
+                for prefix in forbidden
+            ):
+                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+    assert not violations, "插件运行时代码应使用包内引用：\n" + "\n".join(violations)

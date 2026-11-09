@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { subscribeSSE } from "../../../shared/api/bridge";
-import { fetchPluginLogs, clearPluginLogs as apiClearLogs } from "../../../entities/log/api/logApi";
-import {
-  logEntrySchema,
-  type AvailableTag,
-  type PluginLogItem,
-} from "../../../entities/log/model/types";
-import { copyToClipboard } from "../../../shared/lib/clipboard";
+import { subscribeSSE } from "@/shared/api/bridge";
+import { fetchPluginLogs, clearPluginLogs as apiClearLogs } from "@/entities/log/api/logApi";
+import { logEntrySchema, type AvailableTag, type PluginLogItem } from "@/entities/log/model/types";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
 export function useLogsViewModel(active = true) {
   const [logs, setLogs] = useState<PluginLogItem[]>([]);

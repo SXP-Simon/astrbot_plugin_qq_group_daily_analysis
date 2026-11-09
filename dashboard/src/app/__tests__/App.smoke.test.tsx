@@ -1,12 +1,12 @@
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { App } from "../App";
+import { App } from "@/app/App";
 import { toast } from "sonner";
-import * as devBridge from "../../shared/api/devBridge";
-import * as traceApi from "../../entities/trace/api/traceApi";
-import * as taskApi from "../../entities/task/api/taskApi";
-import * as configApi from "../../entities/config/api/configApi";
+import * as devBridge from "@/shared/api/devBridge";
+import * as traceApi from "@/entities/trace/api/traceApi";
+import * as taskApi from "@/entities/task/api/taskApi";
+import * as configApi from "@/entities/config/api/configApi";
 
 // 本测试验证页面装配和数据加载，不在 JSDOM 中运行 Canvas 动画。
 vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));

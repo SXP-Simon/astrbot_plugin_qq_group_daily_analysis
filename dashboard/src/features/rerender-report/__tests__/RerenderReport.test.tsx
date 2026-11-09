@@ -2,13 +2,13 @@ import { useState } from "react";
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import { RerenderReportModal } from "../ui/RerenderReportModal";
-import { useRerenderReport } from "../model/useRerenderReport";
-import { fetchReportTemplates, rerenderReport } from "../../../entities/report/api/reportApi";
-import type { ReportItem } from "../../../entities/report/model/types";
-import type { ReportTemplateItem } from "../../../entities/report/model/templates";
+import { RerenderReportModal } from "@/features/rerender-report/ui/RerenderReportModal";
+import { useRerenderReport } from "@/features/rerender-report/model/useRerenderReport";
+import { fetchReportTemplates, rerenderReport } from "@/entities/report/api/reportApi";
+import type { ReportItem } from "@/entities/report/model/types";
+import type { ReportTemplateItem } from "@/entities/report/model/templates";
 
-vi.mock("../../../entities/report/api/reportApi", () => ({
+vi.mock("@/entities/report/api/reportApi", () => ({
   fetchReportTemplates: vi.fn(),
   rerenderReport: vi.fn(),
 }));

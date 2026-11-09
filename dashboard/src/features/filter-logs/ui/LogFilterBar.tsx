@@ -5,14 +5,10 @@ import {
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
-import {
-  LOG_TAG_GROUPS,
-  TAG_STYLE_MAP,
-  type AvailableTag,
-} from "../../../entities/log/model/types";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
-import { NativeSelect } from "../../../shared/ui/native-select";
+import { LOG_TAG_GROUPS, TAG_STYLE_MAP, type AvailableTag } from "@/entities/log/model/types";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { NativeSelect } from "@/shared/ui/native-select";
 
 interface LogFilterBarProps {
   search: string;

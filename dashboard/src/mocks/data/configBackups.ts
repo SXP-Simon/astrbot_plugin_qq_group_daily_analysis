@@ -1,4 +1,4 @@
-import type { ConfigBackupDetail } from "../../entities/plugin-data/model/configBackup";
+import type { ConfigBackupDetail } from "@/entities/plugin-data/model/configBackup";
 
 export const mockConfigBackups: ConfigBackupDetail[] = [
   {

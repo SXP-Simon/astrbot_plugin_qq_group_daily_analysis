@@ -1,13 +1,13 @@
-import { LoadingState } from "../../../shared/ui/loading-state";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useState } from "react";
-import type { useReportsViewModel } from "../model/useReportsViewModel";
-import type { ReportItem } from "../../../entities/report/model/types";
-import { NativeSelect } from "../../../shared/ui/native-select";
-import { Pagination } from "../../../shared/ui/pagination";
-import { ReportPreviewModal } from "../../../widgets/report-preview-modal/ReportPreviewModal";
-import { ReportList } from "../../../widgets/report-list/ReportList";
-import { ReportFilterBar } from "../../../features/filter-reports/ui/ReportFilterBar";
-import { RerenderReportModal } from "../../../features/rerender-report/ui/RerenderReportModal";
+import type { useReportsViewModel } from "@/pages/reports/model/useReportsViewModel";
+import type { ReportItem } from "@/entities/report/model/types";
+import { NativeSelect } from "@/shared/ui/native-select";
+import { Pagination } from "@/shared/ui/pagination";
+import { ReportPreviewModal } from "@/widgets/report-preview-modal/ReportPreviewModal";
+import { ReportList } from "@/widgets/report-list/ReportList";
+import { ReportFilterBar } from "@/features/filter-reports/ui/ReportFilterBar";
+import { RerenderReportModal } from "@/features/rerender-report/ui/RerenderReportModal";
 
 interface ReportsPageProps {
   viewModel: ReturnType<typeof useReportsViewModel>;
