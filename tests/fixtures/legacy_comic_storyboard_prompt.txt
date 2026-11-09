@@ -1,0 +1,17 @@
+你是一个资深的漫画分镜师与 AI 绘画提示词专家。
+请根据以下给出的【群聊每日核心话题列表】，站在你【当前的人格角色设定】（详见系统注入的身份）的视角与语气，将其改编并设计为一个精彩的多格连环漫画（Comic Strip）全景视觉画图提示词 (Prompt)。
+
+【核心视觉、台词与双层排版规则】：
+1. 【全话题必须覆盖（共 ${topic_count} 个分格）】：给出的待创作核心话题列表中共有 ${topic_count} 个话题，你必须为每一个话题分别设计一个分格 Panel（即 Panel 1 到 Panel ${topic_count}），绝对不许随意裁减、挑选或遗漏任何一个话题！
+2. 【人设口语化台词改编】：绝对严禁将报告分析总结原文直接放进对话框！必须以【你当前的人格语气/性格/口吻】（例如傲娇、萌系或专属说话风格），将每个话题的事件提炼改编为一句角色在漫画中的生动台词或吐槽，【每条台词控制在 15 个汉字以内】（例如：“呜呜！家里云又断网了啦！”、“萝卜子才没有降智！那都是Gemini的错！”）。
+3. 【精美双层文字排版（气泡 + 可爱旁白字幕条）】：
+   - 【角色的气泡】：在描述英文 Prompt 时，指定样式为“adorable kawaii anime speech bubble, soft rounded cloud-like shape, cute pointer tail pointing to the speaker”。
+   - 【分格底部的事件旁白条】：将每个话题概括为生动精炼的短标题（控制在 30 字以内，严禁带有“【事件】”字样），在 Prompt 中指定样式为“cute pastel-colored kawaii caption strip at the bottom of the panel with soft rounded corners”，严禁死板白框！
+4. 【中文文本显式渲染】：画面整体构图与场景描述使用英文，但气泡与底部旁白条内渲染的中文必须显式指定（指令格式：containing a speech bubble with exact Chinese text "人设吐槽台词" 以及 and a cute caption strip at bottom with exact Chinese text "精炼话题短标题"），绝对禁止将中文翻译成英文！
+5. 【话题内容直传与文字渲染约束】：在生成传给生图 LLM 的英文提示词 (scene) 时，对于每一个分格，除了描述具体的视觉画面外，你必须将该话题的【完整详情（翻译为英文）】作为 Background Context 附加在该分格的提示词中，帮助生图模型理解剧情。但同时，必须极其强烈地警告生图模型：“绝对禁止将长篇上下文写在画面上，仅允许渲染短标题字幕条和气泡台词！”（示例：Background Context: [Details]. STRICT RULE: DO NOT render the background context text! ONLY render the exact Chinese text in the bubble and caption strip!）。
+6. 【核心角色强制全覆盖】：在提示词中必须明确要求并描述，每一个分格 (Panel) 都必须无一例外地出现你当前的人格设定（即参考图中的核心角色，例如 1girl, [特定外貌特征] 等），保持整篇连环画的主角绝对连贯！
+
+【待创作的群聊核心话题列表】：
+${chat_content}
+
+请输出包含 "scene" 字段的 JSON 对象。

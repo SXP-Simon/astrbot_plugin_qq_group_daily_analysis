@@ -1099,6 +1099,122 @@
                     "type": "string"
                 }
             },
+            "comic_style_mode": {
+                "description": "漫画风格切换",
+                "type": "string",
+                "default": "fixed",
+                "options": [
+                    "fixed",
+                    "sequential",
+                    "daily_sequential",
+                    "random",
+                    "daily_random",
+                    "shuffle"
+                ],
+                "labels": [
+                    "固定风格",
+                    "每次按顺序",
+                    "每日按顺序",
+                    "每次随机",
+                    "每日随机",
+                    "洗牌循环"
+                ],
+                "hint": "固定使用第一套已启用方案。开启自动切换后，从已启用的方案中选择。"
+            },
+            "comic_style_scope": {
+                "description": "风格轮换进度",
+                "type": "string",
+                "default": "global",
+                "options": [
+                    "global",
+                    "group"
+                ],
+                "labels": [
+                    "所有群共享",
+                    "每个群独立"
+                ],
+                "hint": "仅自动切换时使用。每个群独立时，不同机器人实例的同号群也分别计数。"
+            },
+            "comic_styles": {
+                "description": "漫画风格方案",
+                "type": "template_list",
+                "default": [
+                    {
+                        "__template_key": "style",
+                        "preset_id": "classic",
+                        "name": "",
+                        "prompt_override": "",
+                        "enable": true
+                    }
+                ],
+                "hint": "可添加多套风格。选择内置风格可改写正文，选择「自定义风格」可从零填写名称和正文。保存后可在「风格来源」按名称复用自定义方案。固定模式使用第一套已启用的方案；自动切换从已启用的方案中选择；留空使用经典风格。",
+                "templates": {
+                    "style": {
+                        "name": "漫画风格方案",
+                        "display_item": "name",
+                        "items": {
+                            "preset_id": {
+                                "description": "风格来源",
+                                "type": "string",
+                                "default": "classic",
+                                "options": [
+                                    "classic",
+                                    "scp_dossier",
+                                    "noir_detective",
+                                    "pixel_rpg",
+                                    "cyberpunk_hud",
+                                    "showa_kidan",
+                                    "steampunk_blueprint",
+                                    "alchemist_botanical",
+                                    "wasteland_radio",
+                                    "ukiyo_e",
+                                    "golden_age_comic",
+                                    "deep_sea_log",
+                                    "phantom_thief",
+                                    "scrapbook_diary",
+                                    "custom"
+                                ],
+                                "labels": [
+                                    "原版漫画",
+                                    "SCP 异常调查档案风",
+                                    "黑色电影侦探风",
+                                    "像素 RPG 每日冒险日志",
+                                    "赛博朋克义体HUD日志",
+                                    "复古昭和怪谈画报风",
+                                    "蒸汽朋克发明家手稿",
+                                    "炼金术士魔导植物志",
+                                    "废土生存广播电台日志",
+                                    "浮世绘锦绘町人见闻录",
+                                    "美式黄金时代超英漫画",
+                                    "深海科考潜航器观测录",
+                                    "怪盗团预告信剪报拼贴",
+                                    "手账剪贴簿拍立得日记",
+                                    "自定义风格"
+                                ]
+                            },
+                            "name": {
+                                "description": "方案名称",
+                                "type": "string",
+                                "default": "",
+                                "hint": "可留空，使用内置风格名称。"
+                            },
+                            "enable": {
+                                "description": "启用此方案",
+                                "type": "bool",
+                                "default": true
+                            },
+                            "prompt_override": {
+                                "description": "自定义分镜提示词",
+                                "type": "text",
+                                "default": "",
+                                "editor_mode": true,
+                                "editor_language": "markdown",
+                                "hint": "内置风格留空时使用原版正文；自定义风格须填写完整正文。"
+                            }
+                        }
+                    }
+                }
+            },
             "random_daily_comic_character": {
                 "description": "每天随机切换漫画角色",
                 "type": "bool",
@@ -1109,7 +1225,7 @@
                 "description": "漫画角色方案",
                 "type": "template_list",
                 "default": [],
-                "hint": "每个方案可绑定漫画专用人格、参考图和场景分析提示词。方案条目可展开编辑；请使用不同的方案名称，方便识别当天随机选中的角色。未配置方案时仍可正常文生图。",
+                "hint": "可添加多个角色，分别设置漫画专用人格和参考图。建议为每个角色取不同的名称，点击「保存配置」后生效。未配置角色时仍可正常文生图。",
                 "templates": {
                     "character": {
                         "name": "漫画角色方案",
@@ -1146,12 +1262,12 @@
                                 "hint": "上传后点击 + 加入此角色方案。Images、Chat 和 Gemini 协议会按顺序传入全部参考图；Grok 协议仅使用第一张。"
                             },
                             "storyboard_prompt": {
-                                "description": "漫画场景分析提示词",
+                                "description": "旧版角色专属分镜提示词",
                                 "type": "text",
                                 "editor_mode": true,
                                 "editor_language": "markdown",
-                                "default": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n请根据以下给出的【群聊每日核心话题列表】，站在你【当前的人格角色设定】（详见系统注入的身份）的视角与语气，将其改编并设计为一个精彩的多格连环漫画（Comic Strip）全景视觉画图提示词 (Prompt)。\n\n【核心视觉、台词与双层排版规则】：\n1. 【全话题必须覆盖（共 ${topic_count} 个分格）】：给出的待创作核心话题列表中共有 ${topic_count} 个话题，你必须为每一个话题分别设计一个分格 Panel（即 Panel 1 到 Panel ${topic_count}），绝对不许随意裁减、挑选或遗漏任何一个话题！\n2. 【人设口语化台词改编】：绝对严禁将报告分析总结原文直接放进对话框！必须以【你当前的人格语气/性格/口吻】（例如傲娇、萌系或专属说话风格），将每个话题的事件提炼改编为一句角色在漫画中的生动台词或吐槽，【每条台词控制在 15 个汉字以内】（例如：“呜呜！家里云又断网了啦！”、“萝卜子才没有降智！那都是Gemini的错！”）。\n3. 【精美双层文字排版（气泡 + 可爱旁白字幕条）】：\n   - 【角色的气泡】：在描述英文 Prompt 时，指定样式为“adorable kawaii anime speech bubble, soft rounded cloud-like shape, cute pointer tail pointing to the speaker”。\n   - 【分格底部的事件旁白条】：将每个话题概括为生动精炼的短标题（控制在 30 字以内，严禁带有“【事件】”字样），在 Prompt 中指定样式为“cute pastel-colored kawaii caption strip at the bottom of the panel with soft rounded corners”，严禁死板白框！\n4. 【中文文本显式渲染】：画面整体构图与场景描述使用英文，但气泡与底部旁白条内渲染的中文必须显式指定（指令格式：containing a speech bubble with exact Chinese text \"人设吐槽台词\" 以及 and a cute caption strip at bottom with exact Chinese text \"精炼话题短标题\"），绝对禁止将中文翻译成英文！\n5. 【话题内容直传与文字渲染约束】：在生成传给生图 LLM 的英文提示词 (scene) 时，对于每一个分格，除了描述具体的视觉画面外，你必须将该话题的【完整详情（翻译为英文）】作为 Background Context 附加在该分格的提示词中，帮助生图模型理解剧情。但同时，必须极其强烈地警告生图模型：“绝对禁止将长篇上下文写在画面上，仅允许渲染短标题字幕条和气泡台词！”（示例：Background Context: [Details]. STRICT RULE: DO NOT render the background context text! ONLY render the exact Chinese text in the bubble and caption strip!）。\n6. 【核心角色强制全覆盖】：在提示词中必须明确要求并描述，每一个分格 (Panel) 都必须无一例外地出现你当前的人格设定（即参考图中的核心角色，例如 1girl, [特定外貌特征] 等），保持整篇连环画的主角绝对连贯！\n\n【待创作的群聊核心话题列表】：\n${chat_content}\n\n【输出格式与正反例规范 (GOOD & BAD EXAMPLES)】：\n⚠️ 核心要求：AI 绘图引擎会直接读取 \"scene\" 字段作为唯一生图指令。你必须将全局角色总设以及 Panel 1 到 Panel ${topic_count} 的每一格完整描述全部写入 \"scene\" 字符串中！\n\n✅ 正确示范 (GOOD EXAMPLE - 必须严格遵循此格式输出纯 JSON)：\n{\n  \"scene\": \"A ${topic_count}-panel comic strip featuring [protagonist description] observing a chaotic QQ group chat.\\n\\nPanel 1: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\nPanel 2: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\n... (必须依次写完 Panel 1 到 Panel ${topic_count})\"\n}\n\n❌ 错误示范 (BAD EXAMPLE - 严禁以下行为)：\n1. 严禁把 scene 写成一句简短概括，却把具体话题藏在 panels 列表中（生图模型直接读取 scene，必须全内联写入 scene）！\n2. 严禁丢失气泡或字幕条里的 exact Chinese text 显式中文台词与短标题！\n3. 严禁在 JSON 之外输出任何多余的 Markdown 或闲聊文字！\n",
-                                "hint": "此角色专属的分镜、画风和台词规则。留空时回退到下方全局默认模板。"
+                                "default": "",
+                                "hint": "已有正文会继续使用。希望角色跟随漫画风格方案时，请留空。新角色可直接使用风格方案。"
                             }
                         }
                     }
@@ -1165,8 +1281,13 @@
                     "general_plugin",
                     "big_banana"
                 ],
+                "labels": [
+                    "内置绘图",
+                    "通用生图",
+                    "大香蕉"
+                ],
                 "default": "builtin",
-                "hint": "builtin=使用本插件内置绘图客户端；general_plugin=调用已安装的「通用生图」插件（https://cloud.astrbot.app/plugin/railgun19457/astrbot_plugin_image_generation）的公共 API；big_banana=调用已安装的「大香蕉」插件（https://cloud.astrbot.app/plugin/sukafon/astrbot_plugin_big_banana）的绘图管线（支持 Gemini、SiliconFlow 等多家服务）。使用外部后端时，需先在对应插件中配置其自身的 API/提供商；未安装、未激活或调用失败时自动回退内置后端。"
+                "hint": "选择内置绘图即可使用本插件的绘图客户端。使用外部后端时，请先安装并启用 [通用生图](https://cloud.astrbot.app/plugin/railgun19457/astrbot_plugin_image_generation) 或 [大香蕉](https://cloud.astrbot.app/plugin/sukafon/astrbot_plugin_big_banana)，并在对应插件中配置绘图服务。外部绘图失败后是否回退，由下方开关决定。"
             },
             "drawing_external_fallback": {
                 "description": "外部后端失败时回退内置后端",
@@ -2410,7 +2531,8 @@
                         "default": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n请根据以下给出的【群聊每日核心话题列表】，站在你【当前的人格角色设定】（详见系统注入的身份）的视角与语气，将其改编并设计为一个精彩的多格连环漫画（Comic Strip）全景视觉画图提示词 (Prompt)。\n\n【核心视觉、台词与双层排版规则】：\n1. 【全话题必须覆盖（共 ${topic_count} 个分格）】：给出的待创作核心话题列表中共有 ${topic_count} 个话题，你必须为每一个话题分别设计一个分格 Panel（即 Panel 1 到 Panel ${topic_count}），绝对不许随意裁减、挑选或遗漏任何一个话题！\n2. 【人设口语化台词改编】：绝对严禁将报告分析总结原文直接放进对话框！必须以【你当前的人格语气/性格/口吻】（例如傲娇、萌系或专属说话风格），将每个话题的事件提炼改编为一句角色在漫画中的生动台词或吐槽，【每条台词控制在 15 个汉字以内】（例如：“呜呜！家里云又断网了啦！”、“萝卜子才没有降智！那都是Gemini的错！”）。\n3. 【精美双层文字排版（气泡 + 可爱旁白字幕条）】：\n   - 【角色的气泡】：在描述英文 Prompt 时，指定样式为“adorable kawaii anime speech bubble, soft rounded cloud-like shape, cute pointer tail pointing to the speaker”。\n   - 【分格底部的事件旁白条】：将每个话题概括为生动精炼的短标题（控制在 30 字以内，严禁带有“【事件】”字样），在 Prompt 中指定样式为“cute pastel-colored kawaii caption strip at the bottom of the panel with soft rounded corners”，严禁死板白框！\n4. 【中文文本显式渲染】：画面整体构图与场景描述使用英文，但气泡与底部旁白条内渲染的中文必须显式指定（指令格式：containing a speech bubble with exact Chinese text \"人设吐槽台词\" 以及 and a cute caption strip at bottom with exact Chinese text \"精炼话题短标题\"），绝对禁止将中文翻译成英文！\n5. 【话题内容直传与文字渲染约束】：在生成传给生图 LLM 的英文提示词 (scene) 时，对于每一个分格，除了描述具体的视觉画面外，你必须将该话题的【完整详情（翻译为英文）】作为 Background Context 附加在该分格的提示词中，帮助生图模型理解剧情。但同时，必须极其强烈地警告生图模型：“绝对禁止将长篇上下文写在画面上，仅允许渲染短标题字幕条和气泡台词！”（示例：Background Context: [Details]. STRICT RULE: DO NOT render the background context text! ONLY render the exact Chinese text in the bubble and caption strip!）。\n6. 【核心角色强制全覆盖】：在提示词中必须明确要求并描述，每一个分格 (Panel) 都必须无一例外地出现你当前的人格设定（即参考图中的核心角色，例如 1girl, [特定外貌特征] 等），保持整篇连环画的主角绝对连贯！\n\n【待创作的群聊核心话题列表】：\n${chat_content}\n\n【输出格式与正反例规范 (GOOD & BAD EXAMPLES)】：\n⚠️ 核心要求：AI 绘图引擎会直接读取 \"scene\" 字段作为唯一生图指令。你必须将全局角色总设以及 Panel 1 到 Panel ${topic_count} 的每一格完整描述全部写入 \"scene\" 字符串中！\n\n✅ 正确示范 (GOOD EXAMPLE - 必须严格遵循此格式输出纯 JSON)：\n{\n  \"scene\": \"A ${topic_count}-panel comic strip featuring [protagonist description] observing a chaotic QQ group chat.\\n\\nPanel 1: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\nPanel 2: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\n... (必须依次写完 Panel 1 到 Panel ${topic_count})\"\n}\n\n❌ 错误示范 (BAD EXAMPLE - 严禁以下行为)：\n1. 严禁把 scene 写成一句简短概括，却把具体话题藏在 panels 列表中（生图模型直接读取 scene，必须全内联写入 scene）！\n2. 严禁丢失气泡或字幕条里的 exact Chinese text 显式中文台词与短标题！\n3. 严禁在 JSON 之外输出任何多余的 Markdown 或闲聊文字！\n",
                         "hint": "让大模型根据核心话题生成丰富生动的多格连环漫画画图提示词"
                     }
-                }
+                },
+                "invisible": true
             }
         }
     },

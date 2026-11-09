@@ -187,6 +187,109 @@ for path, operation, data, parameters in (
         }
     FILE_PATHS[f"/plugin-data/{path}"] = {method: endpoint}
 
+FILE_SCHEMAS["ComicRotationEntry"] = {
+    "type": "object",
+    "properties": {
+        "platform_id": {"type": ["string", "null"]},
+        "group_id": {"type": ["string", "null"]},
+        "last_style_name": {"type": "string"},
+        "last_style_number": {"type": "integer"},
+        "selected_date": {"type": "string"},
+    },
+    "required": [
+        "platform_id",
+        "group_id",
+        "last_style_name",
+        "last_style_number",
+        "selected_date",
+    ],
+}
+
+for path, method, operation_id, body in (
+    (
+        "/plugin-data/comic-previews/refresh",
+        "post",
+        "refreshComicPreview",
+        {
+            "type": "object",
+            "required": ["preset_id", "variant"],
+            "properties": {
+                "preset_id": {"type": "string"},
+                "variant": {"enum": ["thumbnail", "preview"]},
+            },
+        },
+    ),
+    ("/config/comic-rotation", "get", "getComicRotation", None),
+    (
+        "/config/comic-rotation/reset",
+        "post",
+        "resetComicRotation",
+        {
+            "type": "object",
+            "required": ["scope"],
+            "properties": {
+                "scope": {"enum": ["global", "group", "all"]},
+                "platform_id": {"type": "string"},
+                "group_id": {"type": "string"},
+            },
+            "if": {"properties": {"scope": {"const": "group"}}},
+            "then": {"required": ["platform_id", "group_id"]},
+        },
+    ),
+):
+    data_schema = (
+        {
+            "type": "object",
+            "required": ["items"],
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {"$ref": "#/components/schemas/ComicRotationEntry"},
+                },
+            },
+        }
+        if method == "get"
+        else {
+            "type": "object",
+            "required": ["success"],
+            "properties": {"success": {"const": True}},
+        }
+    )
+    comic_endpoint: dict[str, object] = {
+        "operationId": operation_id,
+        "responses": {
+            "200": {
+                "description": "操作成功",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "status": {"const": "ok"},
+                                "data": data_schema,
+                            },
+                            "required": ["status", "data"],
+                        }
+                    }
+                },
+            },
+            "400": {"description": "输入参数无效"},
+            "500": {"description": "轮换状态无法读写"},
+        },
+    }
+    if body is not None:
+        comic_endpoint["requestBody"] = {
+            "required": True,
+            "content": {"application/json": {"schema": body}},
+        }
+    if operation_id == "refreshComicPreview":
+        responses = comic_endpoint["responses"]
+        if isinstance(responses, dict):
+            responses["502"] = {"description": "样图暂时无法获取"}
+            responses["503"] = {"description": "缓存未初始化"}
+    FILE_PATHS[path] = {method: comic_endpoint}
+
+
 RECORD_SCHEMAS: dict[str, object] = {
     "RecordLocator": {
         "type": "object",

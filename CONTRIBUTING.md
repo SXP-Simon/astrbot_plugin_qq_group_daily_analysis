@@ -105,6 +105,9 @@ VS Code 可安装 `oxc.oxc-vscode` 扩展；仓库已为 JS/TS/React/CSS 配置�
 首次格式化与业务改动分开审阅；生成的 API 类型和构建产物由各自生成器维护。正式界面与独立 Mock 共用页面和组件，不另建原型入口；开发 Mock 源码参与 lint、格式、类型及测试检查，生产构建排除开发模块。
 
 ### 1.2 WebUI 控制台前端环境
+
+从插件仓库根目录运行以下命令，启动独立的 WebUI 开发页面。
+
 ```bash
 # 进入前端子工程
 cd dashboard
@@ -115,6 +118,8 @@ pnpm install
 # 启动本地热更新开发模式
 pnpm dev
 ```
+
+打开 [WebUI Mock](http://localhost:5175/?devMode=mock)，即可用内置模拟数据调试页面，无需启动 AstrBot。若端口已被占用，以终端显示的地址为准，并在地址末尾保留 `?devMode=mock`。
 
 ---
 

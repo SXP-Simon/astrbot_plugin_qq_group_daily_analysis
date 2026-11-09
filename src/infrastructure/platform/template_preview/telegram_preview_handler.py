@@ -12,6 +12,7 @@ from ....domain.repositories.bot_client_protocol import (
     TelegramApplicationProtocol,
     TelegramClientProtocol,
 )
+from ....shared.comic_presets import COMIC_PRESETS
 from ....shared.type_guards import is_string_mapping
 from ....utils.logger import logger
 from ..command_prefix import get_command_prefix
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
         TemplateCommandService,
     )
     from ...config.config_manager import ConfigManager
+    from .comic_preview_cache import ComicPreviewCache
     from .image_cache import PreviewImageCache
 
 if not TYPE_CHECKING:
@@ -71,6 +73,7 @@ class _PreviewSession:
     templates: list[str]
     index: int
     created_at: float
+    comic: bool = False
 
     @property
     def current_template(self) -> str:
@@ -92,10 +95,13 @@ class TelegramTemplatePreviewHandler:
         config_manager: ConfigManager,
         template_service: TemplateCommandService,
         image_cache: PreviewImageCache | None = None,
+        *,
+        comic_preview_cache: ComicPreviewCache | None = None,
     ):
         self.config_manager = config_manager
         self.template_service = template_service
         self.image_cache = image_cache
+        self.comic_preview_cache = comic_preview_cache
         self._context: Context | None = None
         self._sessions: dict[str, _PreviewSession] = {}
         self._registered_platform_ids: set[str] = set()
@@ -226,6 +232,8 @@ class TelegramTemplatePreviewHandler:
         platform_id: str,
         available_templates: list[str],
         template_name: str = "",
+        *,
+        comic: bool = False,
     ) -> bool:
         """
         在 Telegram 中发送可交互模板预览消息。
@@ -264,20 +272,19 @@ class TelegramTemplatePreviewHandler:
             index = 0
 
         token = uuid.uuid4().hex[:8]
-        keyboard = self._build_keyboard(token)
+        keyboard = self._build_keyboard(token, comic=comic)
         caption = self._build_caption(
             template_name=available_templates[index],
             index=index,
             total=len(available_templates),
+            comic=comic,
         )
 
-        image_path = self.template_service.resolve_template_preview_source(
-            available_templates[index]
+        image_path = await self._resolve_preview_image(
+            available_templates[index], comic=comic
         )
         if not image_path:
             return False
-        if self.image_cache:
-            image_path = await self.image_cache.get_jpeg(image_path)
 
         payload: dict[str, object] = {"chat_id": chat_id, "reply_markup": keyboard}
         if message_thread_id is not None:
@@ -322,6 +329,7 @@ class TelegramTemplatePreviewHandler:
             templates=available_templates.copy(),
             index=index,
             created_at=time.time(),
+            comic=comic,
         )
         self._cleanup_expired_sessions()
         logger.info(
@@ -329,6 +337,34 @@ class TelegramTemplatePreviewHandler:
             f"platform_id={platform_id} chat_id={chat_id} token={token} templates={len(available_templates)}"
         )
         return True
+
+    async def _resolve_preview_image(
+        self, template_name: str, *, comic: bool = False
+    ) -> str | None:
+        """为首次预览、翻页和降级发送准备同一种本地图片。
+
+        Args:
+            template_name: 报告模板名或漫画风格标识。
+            comic: 是否读取漫画样图缓存。
+
+        Returns:
+            预览文件路径，找不到图片时为空。
+
+        Raises:
+            OSError: 图片无法读取或生成缓存失败。
+        """
+        if comic:
+            if self.comic_preview_cache is None:
+                return None
+            return str(
+                await self.comic_preview_cache.get_preview(
+                    template_name, "preview", deadline=time.monotonic() + 10
+                )
+            )
+        source = self.template_service.resolve_template_preview_source(template_name)
+        if source and self.image_cache:
+            return await self.image_cache.get_jpeg(source)
+        return source
 
     async def send_preview_image_fallback(
         self,
@@ -340,13 +376,9 @@ class TelegramTemplatePreviewHandler:
         if not TELEGRAM_RUNTIME_AVAILABLE:
             return False
 
-        image_path = self.template_service.resolve_template_preview_source(
-            template_name
-        )
+        image_path = await self._resolve_preview_image(template_name)
         if not image_path:
             return False
-        if self.image_cache:
-            image_path = await self.image_cache.get_jpeg(image_path)
 
         client = self._get_event_client(event, platform_id)
         if client is None:
@@ -392,10 +424,20 @@ class TelegramTemplatePreviewHandler:
         platform_id: str,
         available_templates: list[str],
         template_name: str = "",
+        *,
+        comic: bool = False,
     ) -> tuple[bool, list[MessageEventResult]]:
         """统一处理 Telegram 的 /查看模板 流程。"""
         if not self.supports(event):
             return False, []
+        if comic:
+            try:
+                return await self.send_preview_message(
+                    event, platform_id, available_templates, template_name, comic=True
+                ), []
+            except Exception as exc:
+                logger.debug("Telegram 漫画预览发送失败: %s", type(exc).__name__)
+                return False, []
 
         results: list[MessageEventResult] = []
         prefix = get_command_prefix(self._context, event)
@@ -491,19 +533,27 @@ class TelegramTemplatePreviewHandler:
             await query.answer("预览状态不一致，请重新打开模板预览", show_alert=True)
             return
 
-        if action == "prev":
-            session.index = (session.index - 1) % len(session.templates)
-            await self._edit_preview_message(query, session)
-            await query.answer()
-            return
-
-        if action == "next":
-            session.index = (session.index + 1) % len(session.templates)
-            await self._edit_preview_message(query, session)
+        if action in {"prev", "next"}:
+            previous_index = session.index
+            offset = -1 if action == "prev" else 1
+            session.index = (session.index + offset) % len(session.templates)
+            try:
+                await self._edit_preview_message(query, session)
+            except Exception:
+                if not session.comic:
+                    raise
+                session.index = previous_index
+                await query.answer(
+                    "这张漫画样图暂不可用，请稍后重试。", show_alert=True
+                )
+                return
             await query.answer()
             return
 
         if action == "apply":
+            if session.comic:
+                await query.answer("漫画预览仅供浏览", show_alert=True)
+                return
             template_name = session.current_template
             self.config_manager.set_report_template(template_name)
             await self._edit_preview_message(query, session, applied=True)
@@ -525,20 +575,20 @@ class TelegramTemplatePreviewHandler:
             index=session.index,
             total=len(session.templates),
             applied=applied,
+            comic=session.comic,
         )
-        keyboard = self._build_keyboard(session.token)
-        image_path = self.template_service.resolve_template_preview_source(
-            template_name
+        keyboard = self._build_keyboard(session.token, comic=session.comic)
+        image_path = await self._resolve_preview_image(
+            template_name, comic=session.comic
         )
         if not image_path:
+            if session.comic:
+                raise OSError("漫画样图暂不可用")
             await query.edit_message_caption(
                 caption=caption,
                 reply_markup=keyboard,
             )
             return
-
-        if self.image_cache:
-            image_path = await self.image_cache.get_jpeg(image_path)
 
         try:
             if not TELEGRAM_RUNTIME_AVAILABLE:
@@ -576,27 +626,19 @@ class TelegramTemplatePreviewHandler:
                 return
             raise
 
-    def _build_keyboard(self, token: str) -> InlineKeyboardMarkup | None:
+    def _build_keyboard(
+        self, token: str, *, comic: bool = False
+    ) -> InlineKeyboardMarkup | None:
         if not TELEGRAM_RUNTIME_AVAILABLE:
             return None
-        return InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        text="←",
-                        callback_data=f"{self._callback_prefix}:{token}:prev",
-                    ),
-                    InlineKeyboardButton(
-                        text="确定",
-                        callback_data=f"{self._callback_prefix}:{token}:apply",
-                    ),
-                    InlineKeyboardButton(
-                        text="→",
-                        callback_data=f"{self._callback_prefix}:{token}:next",
-                    ),
-                ]
-            ]
-        )
+        callback = f"{self._callback_prefix}:{token}"
+        buttons = [InlineKeyboardButton(text="←", callback_data=f"{callback}:prev")]
+        if not comic:
+            buttons.append(
+                InlineKeyboardButton(text="确定", callback_data=f"{callback}:apply")
+            )
+        buttons.append(InlineKeyboardButton(text="→", callback_data=f"{callback}:next"))
+        return InlineKeyboardMarkup([buttons])
 
     def _build_caption(
         self,
@@ -604,7 +646,13 @@ class TelegramTemplatePreviewHandler:
         index: int,
         total: int,
         applied: bool = False,
+        *,
+        comic: bool = False,
     ) -> str:
+        if comic:
+            return (
+                f"漫画风格 · {index + 1}/{total}\n{COMIC_PRESETS[template_name].name}"
+            )
         current_active = self.config_manager.get_report_template()
         active_mark = "✅ 当前生效" if template_name == current_active else "未生效"
         apply_mark = "\n\n✅ 已应用该模板" if applied else ""

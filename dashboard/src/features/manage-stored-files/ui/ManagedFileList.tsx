@@ -47,7 +47,11 @@ export function ManagedFileList({
     partition.key === "custom_templates" && vm.directory && vm.directory !== "."
       ? `${vm.directory}/`
       : "";
-  const fileAction = ["typst_assets", "preview_cache"].includes(partition.key) ? "清理" : "删除";
+  const fileAction = ["typst_assets", "preview_cache", "comic_preview_cache"].includes(
+    partition.key,
+  )
+    ? "清理"
+    : "删除";
   const locked = vm.busy || vm.uploading;
   const currentDeletion =
     deletion?.partition === partition.key && deletion.directory === vm.directory ? deletion : null;
@@ -64,7 +68,9 @@ export function ManagedFileList({
           <Input
             aria-label="搜索文件"
             type="search"
-            placeholder="文件名或相对路径"
+            placeholder={
+              partition.key === "comic_preview_cache" ? "风格名称或文件名" : "文件名或相对路径"
+            }
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             disabled={locked}

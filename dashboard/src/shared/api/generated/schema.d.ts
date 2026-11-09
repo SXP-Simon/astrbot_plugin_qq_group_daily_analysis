@@ -72,6 +72,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugin-data/comic-previews/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["refreshComicPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/comic-rotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getComicRotation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/config/comic-rotation/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resetComicRotation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plugin-data/files/delete-many": {
         parameters: {
             query?: never;
@@ -841,6 +889,13 @@ export interface components {
             /** @enum {string} */
             operation: "create" | "replace" | "rename" | "delete";
         };
+        ComicRotationEntry: {
+            platform_id: string | null;
+            group_id: string | null;
+            last_style_name: string;
+            last_style_number: number;
+            selected_date: string;
+        };
         ManagedFileDeleteMany: {
             partition: string;
             files: {
@@ -1540,6 +1595,159 @@ export interface operations {
                 content?: never;
             };
             /** @description 目录读取或文件操作失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    refreshComicPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    preset_id: string;
+                    /** @enum {unknown} */
+                    variant: "thumbnail" | "preview";
+                };
+            };
+        };
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: {
+                            /** @constant */
+                            success: true;
+                        };
+                    };
+                };
+            };
+            /** @description 输入参数无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 轮换状态无法读写 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 样图暂时无法获取 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 缓存未初始化 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getComicRotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: {
+                            items: components["schemas"]["ComicRotationEntry"][];
+                        };
+                    };
+                };
+            };
+            /** @description 输入参数无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 轮换状态无法读写 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resetComicRotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {unknown} */
+                    scope: "global" | "group" | "all";
+                    platform_id?: string;
+                    group_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 操作成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: {
+                            /** @constant */
+                            success: true;
+                        };
+                    };
+                };
+            };
+            /** @description 输入参数无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 轮换状态无法读写 */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2703,6 +2911,8 @@ export interface operations {
     getReportHistory: {
         parameters: {
             query?: {
+                /** @description 按报告类型筛选；省略时显示全部 */
+                report_type?: "comic" | "html" | "image";
                 /** @description 按记录中的平台标识筛选；不传表示全部，空字符串表示未记录平台 */
                 platform?: string;
                 limit?: number;

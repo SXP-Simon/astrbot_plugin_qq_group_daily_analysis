@@ -138,6 +138,13 @@ class ManagedFiles:
                     "删除后按需重新生成预览。",
                 ),
                 FilePartition(
+                    "comic_preview_cache",
+                    "漫画样图缓存",
+                    data_dir / "comic_preview_cache",
+                    "群聊漫画风格预览使用的缩略图和完整样图",
+                    "清理后，下一次查看样图时会按需重新获取。",
+                ),
+                FilePartition(
                     "hosted_reports",
                     "托管 HTML 报告",
                     data_dir / "self_hosted_html_reports",

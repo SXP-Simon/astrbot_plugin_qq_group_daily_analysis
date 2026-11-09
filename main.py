@@ -64,6 +64,9 @@ from .src.infrastructure.platform.template_preview import (
     TelegramTemplatePreviewHandler,
     TemplatePreviewRouter,
 )
+from .src.infrastructure.platform.template_preview.comic_preview_cache import (
+    ComicPreviewCache,
+)
 from .src.infrastructure.platform.template_preview.image_cache import PreviewImageCache
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
@@ -212,10 +215,14 @@ class GroupDailyAnalysis(Star):
         preview_image_cache = PreviewImageCache(
             self.plugin_data_dir / "template_preview_cache"
         )
+        comic_preview_cache = ComicPreviewCache(
+            self.plugin_data_dir / "comic_preview_cache", self.template_command_service
+        )
         self.telegram_template_preview_handler = TelegramTemplatePreviewHandler(
             config_manager=self.config_manager,
             template_service=self.template_command_service,
             image_cache=preview_image_cache,
+            comic_preview_cache=comic_preview_cache,
         )
         self.template_preview_router = TemplatePreviewRouter(
             handlers=[
@@ -223,11 +230,13 @@ class GroupDailyAnalysis(Star):
                     self.config_manager,
                     self.template_command_service,
                     preview_image_cache,
+                    comic_preview_cache=comic_preview_cache,
                 ),
                 self.telegram_template_preview_handler,
             ],
             template_service=self.template_command_service,
             image_cache=preview_image_cache,
+            comic_preview_cache=comic_preview_cache,
         )
 
         # 调度与发送
@@ -255,6 +264,7 @@ class GroupDailyAnalysis(Star):
             report_dispatcher=self.auto_scheduler.report_dispatcher,
             report_output_dir=plugin_data_dir / "reports",
             auto_scheduler=self.auto_scheduler,
+            comic_preview_cache=comic_preview_cache,
         )
         self.webui_bridge.register_routes()
 
@@ -655,6 +665,28 @@ class GroupDailyAnalysis(Star):
         async for result in self.settings_command_handler.handle_view_templates(
             event, platform_id, template_input
         ):
+            yield result
+
+    @filter.command("查看漫画风格", alias={"view_comic_styles"})
+    @filter.permission_type(PermissionType.ADMIN)
+    async def view_comic_styles(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult]:
+        """查看漫画风格目录、分页缩略图或单张大图。
+
+        Args:
+            event: 当前消息事件。
+
+        Returns:
+            包含静态样图或文字目录的消息。
+        """
+        if not self._get_group_id_from_event(event):
+            yield event.plain_result("请在群聊中使用此命令。")
+            return
+        parts = event.get_message_str().strip().split(maxsplit=1)
+        selection = parts[1] if len(parts) == 2 else ""
+        result = await self.template_preview_router.view_comic_styles(event, selection)
+        if result is not None:
             yield result
 
     @filter.command("分析设置", alias={"analysis_settings"})

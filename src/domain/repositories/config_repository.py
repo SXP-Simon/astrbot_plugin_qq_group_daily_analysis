@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from ..value_objects.analysis_results import ComicCharacterConfig
+    from ..value_objects.group_session import GroupSession
 
 
 @runtime_checkable
@@ -102,12 +103,16 @@ class IConfigProvider(Protocol):
         ...
 
     def get_comic_character_storyboard_prompt(
-        self, character: ComicCharacterConfig | None
+        self,
+        character: ComicCharacterConfig | None,
+        session: GroupSession | None = None,
     ) -> str:
-        """获取漫画角色专属分镜提示词"""
+        """获取本次漫画的分镜提示词。"""
         ...
 
-    def get_drawing_reference_images(self) -> list[str]:
+    def get_drawing_reference_images(
+        self, character: ComicCharacterConfig | None = None, *, select: bool = True
+    ) -> list[str]:
         """获取当前漫画角色的所有参考图路径列表"""
         ...
 

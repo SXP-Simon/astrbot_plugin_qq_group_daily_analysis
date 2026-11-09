@@ -96,8 +96,10 @@ class ConfigMigrator:
         self.migrate_daily_comic_character_references(
             previous_config if is_string_mapping(previous_config) else None
         )
-        self.migrate_daily_comic_character_prompts()
         self.migrate_legacy_comic_storyboard_prompts()
+        self.migrate_comic_styles(
+            previous_config if is_string_mapping(previous_config) else None
+        )
         self._upgrade_ready = self._migration_valid
         self.refresh_upgrade_protection()
 
@@ -416,7 +418,7 @@ class ConfigMigrator:
                 "enable": True,
                 "persona_id": specific_persona_id,
                 "reference_images": migrated_references,
-                "storyboard_prompt": self.cm.get_comic_storyboard_prompt(),
+                "storyboard_prompt": "",
             }
         ]
         daily_comic.pop("drawing_reference_image", None)
@@ -425,35 +427,62 @@ class ConfigMigrator:
             "已将旧版漫画参考图迁移到“默认角色方案”，原始配置已备份到插件数据目录。"
         )
 
-    def migrate_daily_comic_character_prompts(self) -> None:
-        """将旧版全局分镜提示词复制到既有角色方案。"""
-        state_path = (
-            self.star_tools.get_data_dir(PLUGIN_NAME)
-            / "comic_character_prompt_migration.json"
-        )
-        if state_path.exists():
+    def migrate_comic_styles(
+        self, previous_config: Mapping[str, object] | None
+    ) -> None:
+        """将旧版全局自定义正文保留为经典方案的正文覆盖。
+
+        Args:
+            previous_config: 升级前的配置快照，用于辨别已启用新方案的配置。
+        """
+        from ...shared.comic_presets import DEFAULT_COMIC_STORYBOARD_PROMPT
+
+        previous = previous_config.get("daily_comic") if previous_config else None
+        if is_string_mapping(previous) and "comic_styles" in previous:
             return
-
-        daily_comic = self.cm.get_group("daily_comic")
-        characters = daily_comic.get("comic_characters", [])
-        default_prompt = self.cm.get_comic_storyboard_prompt()
-        modified = False
-        if is_object_list(characters):
-            for character in characters:
-                if not is_string_mapping(character):
-                    continue
-                if not str(character.get("storyboard_prompt", "")).strip():
-                    character["storyboard_prompt"] = default_prompt
-                    modified = True
-
+        previous_prompts = previous_config.get("prompts") if previous_config else None
+        previous_comic = (
+            previous_prompts.get("comic_analysis_prompts")
+            if is_string_mapping(previous_prompts)
+            else None
+        )
+        old_prompt = self.cm.get_comic_storyboard_prompt()
+        if (
+            not old_prompt.strip()
+            or old_prompt.strip() == DEFAULT_COMIC_STORYBOARD_PROMPT.strip()
+        ):
+            restored = (
+                previous_comic.get("comic_storyboard_prompt")
+                if is_string_mapping(previous_comic)
+                else None
+            )
+            old_prompt = restored if isinstance(restored, str) else old_prompt
+        if (
+            not old_prompt.strip()
+            or old_prompt.strip() == DEFAULT_COMIC_STORYBOARD_PROMPT.strip()
+            or self.is_legacy_default_comic_prompt(old_prompt)
+        ):
+            return
+        daily = self.cm.ensure_group("daily_comic")
+        previous_styles = daily.get("comic_styles")
+        default_style = {
+            "__template_key": "style",
+            "preset_id": "classic",
+            "name": "",
+            "prompt_override": "",
+            "enable": True,
+        }
+        if previous_styles is not None and previous_styles != [default_style]:
+            return
+        daily["comic_styles"] = [{**default_style, "prompt_override": old_prompt}]
         try:
-            if modified:
-                self._save_config()
-                logger.info("已将默认漫画场景分析提示词迁移到既有角色方案。")
-            state_path.parent.mkdir(parents=True, exist_ok=True)
-            state_path.write_text(json.dumps({"completed": True}), encoding="utf-8")
-        except OSError as exc:
-            logger.warning(f"迁移漫画角色场景提示词失败，将在下次重载时重试: {exc}")
+            self._save_config()
+        except Exception:
+            self._migration_valid = False
+            logger.warning(
+                "漫画风格配置迁移未保存，本次继续使用旧正文，将在下次加载时重试",
+                exc_info=True,
+            )
 
     def migrate_legacy_comic_storyboard_prompts(self) -> None:
         """自动将旧版默认漫画分镜提示词升级迁移至包含 GOOD/BAD 正反例的新版模板。"""
@@ -776,18 +805,13 @@ class ConfigMigrator:
         Returns:
             bool: 是否为旧版默认提示词。
         """
-        if not isinstance(prompt, str) or not prompt.strip():
+        if not isinstance(prompt, str):
             return False
-        text = prompt.strip()
-        if "GOOD EXAMPLE" in text:
-            return False
+        # 对照 v5.0.16 之前实际发布的完整默认正文，保留用户在旧默认上做的改写。
+        text = prompt.replace("\r\n", "\n").strip()
         return (
-            '请输出包含 "scene" 字段的 JSON 对象。' in text
-            or '请输出包含 \\"scene\\" 字段的 JSON 对象。' in text
-            or (
-                "你是一个资深的漫画分镜师与 AI 绘画提示词专家。" in text
-                and "【核心视觉、台词与双层排版规则】" in text
-            )
+            hashlib.sha256(text.encode("utf-8")).hexdigest()
+            == "2d410b865191f69e7b5a17291a4c57c4da2b16b43b172e63529df01580f33503"
         )
 
     @staticmethod

@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "../lib/cn";
 
 interface MarkdownHintProps {
   content: string;
@@ -14,7 +15,7 @@ export const MarkdownHint: React.FC<MarkdownHintProps> = ({ content, style, clas
   const parts = content.split(tokenRegex);
 
   return (
-    <span className={className} style={style}>
+    <span className={cn("[overflow-wrap:anywhere]", className)} style={style}>
       {parts.map((part, index) => {
         if (!part) return null;
 

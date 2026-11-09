@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, cast
 
 from ...domain.repositories.platform_adapter_repository import GroupAlbumSupportProtocol
 from ...domain.value_objects.analysis_results import SummaryTopic
+from ...domain.value_objects.group_session import GroupSession
 from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext, strip_control_characters
@@ -451,8 +452,15 @@ class ComicCommandHandler:
                         cur_trace.trace_id, "COMIC_STORYBOARD"
                     )
 
+                session: GroupSession | None = None
+                try:
+                    actual_id = self.bot_manager.resolve_platform_id(platform_id)
+                except ValueError:
+                    pass
+                else:
+                    session = GroupSession(actual_id, group_id)
                 comic_bytes, fallback_url = await self.comic_service.generate_comic(
-                    topics, group_id, umo
+                    topics, group_id, umo, session
                 )
                 if stop_request is not None and stop_request.refresh():
                     return

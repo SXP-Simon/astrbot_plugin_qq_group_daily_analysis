@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 from astrbot.api.star import StarTools
 
+from ....shared.comic_presets import COMIC_PRESETS
 from ....shared.constants import PLUGIN_NAME
 from ....shared.type_guards import is_object_list, is_string_mapping
 from ...persistence.managed_files import MAX_FILE_BYTES, ManagedFiles
@@ -58,9 +59,8 @@ class ManagedFileRoutes:
                 for value in query.get("extensions", "").split(",")
                 if value.strip()
             }
-            items = await asyncio.to_thread(
-                self.store().files, query.get("partition", "")
-            )
+            partition = query.get("partition", "")
+            items = await asyncio.to_thread(self.store().files, partition)
             directory = query.get("directory", "")
             if directory and query.get("partition") != "custom_templates":
                 raise ValueError("只有自定义模板分区支持按模板目录筛选")
@@ -78,7 +78,15 @@ class ManagedFileRoutes:
             filtered = [
                 item
                 for item in items
-                if search in item["name"].casefold()
+                if (
+                    search in item["name"].casefold()
+                    or (
+                        partition == "comic_preview_cache"
+                        and (preset := COMIC_PRESETS.get(item["name"].split("/", 1)[0]))
+                        is not None
+                        and search in preset.name.casefold()
+                    )
+                )
                 and (
                     not directory
                     or (

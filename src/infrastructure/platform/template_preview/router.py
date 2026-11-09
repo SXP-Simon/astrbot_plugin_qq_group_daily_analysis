@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import inspect
+import time
 from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import Image, Node, Nodes, Plain
 
+from ....shared.comic_presets import COMIC_PRESETS
 from ....utils.logger import logger
 from ..command_prefix import get_command_prefix
 
@@ -14,10 +16,12 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable
 
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
+    from astrbot.api.message_components import BaseMessageComponent
     from astrbot.api.star import Context
 
     from ....application.services.template_command_service import TemplateCommandService
     from ..host_images import ImageFactory
+    from .comic_preview_cache import ComicPreviewCache
     from .image_cache import PreviewImageCache
 
 
@@ -45,6 +49,8 @@ class TemplatePreviewHandler(Protocol):
         platform_id: str,
         available_templates: list[str],
         template_name: str = "",
+        *,
+        comic: bool = False,
     ) -> (
         Awaitable[tuple[bool, list[MessageEventResult]]]
         | tuple[bool, list[MessageEventResult]]
@@ -61,10 +67,12 @@ class TemplatePreviewRouter:
         handlers: list[TemplatePreviewHandler] | None = None,
         template_service: TemplateCommandService | None = None,
         image_cache: PreviewImageCache | None = None,
+        comic_preview_cache: ComicPreviewCache | None = None,
     ) -> None:
         self._handlers: list[TemplatePreviewHandler] = handlers or []
         self.template_service = template_service
         self.image_cache = image_cache
+        self.comic_preview_cache = comic_preview_cache
         self._context: Context | None = None
 
     def add_handler(self, handler: TemplatePreviewHandler) -> None:
@@ -86,6 +94,127 @@ class TemplatePreviewRouter:
             res = handler.unregister_callback_handlers()
             if inspect.isawaitable(res):
                 await res
+
+    async def view_comic_styles(
+        self, event: AstrMessageEvent, selection: str
+    ) -> MessageEventResult | None:
+        """优先使用平台交互预览，OneBot 目录使用分页缩略图。
+
+        Args:
+            event: 已通过管理员和群聊检查的命令事件。
+            selection: 风格序号、ID、名称或“第 N 页”。
+
+        Returns:
+            待发送消息；平台已发送交互预览时返回空。
+        """
+        event.should_call_llm(False)
+        prefix = get_command_prefix(self._context, event)
+        command = f"{prefix}查看漫画风格"
+        ids = list(COMIC_PRESETS)
+        rows = [
+            f"{i}. {COMIC_PRESETS[key].name}（{key}）" for i, key in enumerate(ids, 1)
+        ]
+        value = selection.strip()
+        page_size = 4
+        pages = (len(ids) + page_size - 1) // page_size
+        page: int | None = None
+        if not value:
+            page = 1
+        elif value.startswith("第") and value.endswith("页"):
+            page_text = value[1:-1].strip()
+            if not (
+                page_text.isascii() and page_text.isdecimal() and len(page_text) <= 6
+            ):
+                return event.plain_result(f"请填写有效的页码，范围 1–{pages}。")
+            page = int(page_text)
+            if not 1 <= page <= pages:
+                return event.plain_result(f"页码范围为 1–{pages}。")
+        if page is not None:
+            chosen = ids[(page - 1) * page_size : page * page_size]
+        elif (
+            value.isascii()
+            and value.isdecimal()
+            and len(value) <= 6
+            and 1 <= int(value) <= len(ids)
+        ):
+            chosen = [ids[int(value) - 1]]
+        else:
+            chosen = [key for key in ids if value in (key, COMIC_PRESETS[key].name)]
+            if not chosen:
+                return event.plain_result(
+                    f"找不到这个漫画风格。使用 {command} 查看目录。"
+                )
+        for handler in self._handlers:
+            if not handler.supports(event):
+                continue
+            response = handler.handle_view_templates(
+                event, event.get_platform_id(), ids, chosen[0], comic=True
+            )
+            handled, results = (
+                await response if inspect.isawaitable(response) else response
+            )
+            if handled:
+                return results[0] if results else None
+            break
+        if page is not None and event.get_platform_name() != "aiocqhttp":
+            return event.plain_result(
+                "漫画风格\n" + "\n".join(rows) + f"\n使用 {command} 序号 查看单张示例。"
+            ).use_t2i(False)
+
+        nodes: list[Node] = []
+        deadline = time.monotonic() + 10
+        for key in chosen:
+            row = rows[ids.index(key)]
+            picture = await self._comic_style_image(
+                key, thumbnail=page is not None, deadline=deadline
+            )
+            components: list[BaseMessageComponent] = [
+                Plain(row if picture else f"{row}\n示例图暂不可用，可在 WebUI 查看。")
+            ]
+            if picture is not None:
+                components.append(picture)
+            if page is None:
+                return event.chain_result(components).use_t2i(False)
+            nodes.append(
+                Node(
+                    uin=event.get_self_id(),
+                    name="漫画风格",
+                    content=components,
+                )
+            )
+        heading = Node(
+            uin=event.get_self_id(),
+            name="漫画风格",
+            content=[
+                Plain(
+                    f"漫画风格 · 第 {page}/{pages} 页\n使用 {command} 第 2 页翻页，或输入风格序号查看大图。"
+                )
+            ],
+        )
+        return event.chain_result([Nodes([heading, *nodes])]).use_t2i(False)
+
+    async def _comic_style_image(
+        self, preset_id: str, *, thumbnail: bool, deadline: float
+    ) -> Image | None:
+        """通过同一预览缓存读取本地样图或 CDN 样图。
+
+        Args:
+            preset_id: 内置目录中的风格 ID。
+            thumbnail: 是否加载缩略图。
+            deadline: 整条命令准备图片的截止时间。
+
+        Returns:
+            已转换成平台通用格式的图片，无法读取时为空。
+        """
+        if self.comic_preview_cache is None:
+            return None
+        try:
+            path = await self.comic_preview_cache.get_preview(
+                preset_id, "thumbnail" if thumbnail else "preview", deadline=deadline
+            )
+        except (OSError, ValueError):
+            return None
+        return cast("ImageFactory", Image).fromFileSystem(str(path))
 
     async def handle_view_templates(
         self,

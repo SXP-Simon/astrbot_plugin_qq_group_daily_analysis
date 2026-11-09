@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../../shared/ui/
 import { useState, type ReactNode } from "react";
 import { usePartitionManager } from "../../model/usePartitionManager";
 import { StoredRecordsTab } from "../StoredRecordsTab";
+import { ComicPreviewRefresh } from "./ComicPreviewRefresh";
 import { ManagedFileList } from "../../../../features/manage-stored-files/ui/ManagedFileList";
 import { FileContentDialog } from "../../../../features/manage-stored-files/ui/FileContentDialog";
 import { FileEditorDialog } from "../../../../features/manage-stored-files/ui/FileEditorDialog";
@@ -74,6 +75,9 @@ export function ManagedPartitionDrawer({
                     重试列表
                   </Button>
                 </Alert>
+              )}
+              {partition.key === "comic_preview_cache" && (
+                <ComicPreviewRefresh onChanged={manager.refresh} />
               )}
               {partition.key === "config_files" && (
                 <>

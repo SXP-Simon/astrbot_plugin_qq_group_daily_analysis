@@ -85,6 +85,32 @@ def inline_preview(preview, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_comic_preview_uses_native_image_and_read_only_navigation(inline_preview):
+    handler, event, request = inline_preview
+    handler.config_manager.get_template_assets_base_url.return_value = (
+        "https://cdn.example.test/gh/repo/assets"
+    )
+    handler.comic_preview_cache = SimpleNamespace(
+        get_preview=AsyncMock(return_value=handler.image_cache.get_jpeg.return_value)
+    )
+    handled, results = await handler.handle_view_templates(
+        event, "qq", ["classic", "pixel_rpg", "scrapbook_diary"], "classic", comic=True
+    )
+    assert handled and results == []
+    event.send.assert_not_called()
+    payload = request.call_args.kwargs["json"]
+    assert "原版漫画" in payload["markdown"]["content"]
+    assert "/comic_previews/classic/preview.webp" in payload["markdown"]["content"]
+    buttons = payload["keyboard"]["content"]["rows"][0]["buttons"]
+    assert [button["action"]["data"] for button in buttons] == [
+        "/查看漫画风格 3",
+        "/查看漫画风格 2",
+    ]
+    handler.config_manager.set_report_template.assert_not_called()
+    handler.template_service.resolve_template_preview_source.assert_not_called()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("raw", "path", "params", "v2"),
     [

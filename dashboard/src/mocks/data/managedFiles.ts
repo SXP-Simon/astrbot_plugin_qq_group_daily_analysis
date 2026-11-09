@@ -2,6 +2,7 @@ import type {
   ManagedFileContent,
   ManagedPartition,
 } from "../../entities/plugin-data/api/managedFilesApi";
+import { comicPresets, comicPreviewLabel } from "../../entities/comic/model/comicPresets";
 import { mockConfigBackups } from "./configBackups";
 import { mockReportHtml, mockReportImage } from "./reportContent";
 
@@ -15,6 +16,7 @@ const definitions: [string, string, string, boolean, boolean][] = [
   ["typst_assets", "Typst 派生图片缓存", "裁切、缩放和透明度处理后的图片", false, true],
   ["typst_jobs", "Typst 渲染任务目录", "由渲染器管理的工作目录", false, false],
   ["preview_cache", "模板预览缓存", "模板画廊预览图片", false, true],
+  ["comic_preview_cache", "漫画样图缓存", "群聊漫画风格预览使用的缩略图和完整样图", false, true],
   ["hosted_reports", "托管 HTML 报告", "用于分享链接的 HTML 报告", false, true],
   ["legacy_history", "旧版历史记录", "旧版 JSON 记录；当前分析数据存储于 KV", false, true],
   ["avatar_storage", "头像缓存存储", "DiskCache 数据库与二进制，请通过头像条目管理", false, false],
@@ -33,6 +35,7 @@ const impacts: Record<string, string> = {
   typst_assets: "缓存清理后，下次渲染会自动重新生成。",
   typst_jobs: "工作目录由渲染器管理；仅提供只读诊断，避免影响正在编译的任务。",
   preview_cache: "清理后打开模板画廊时按需重新生成。",
+  comic_preview_cache: "清理后，下一次查看样图时会按需重新获取。",
   hosted_reports: "删除后对应的分享链接将失效。",
   legacy_history: "这里只管理旧版 JSON 文件；当前分析存档请通过 KV 管理入口维护。",
   avatar_storage: "按平台缓存键清理头像后会按需重新获取，不直接操作数据库文件。",
@@ -144,6 +147,21 @@ export function managedMockPartitions(): ManagedPartition[] {
 }
 
 export const managedFileMockHandlers = {
+  "POST plugin-data/comic-previews/refresh": (body?: Record<string, unknown>) => {
+    const { preset_id: id, variant } = body ?? {};
+    if (
+      !comicPresets.some((style) => style.id === id) ||
+      (variant !== "thumbnail" && variant !== "preview")
+    )
+      return { status: "error", message: "请指定有效的风格和样图类型" };
+    putManagedMockFile(
+      "comic_preview_cache",
+      `${String(id)}/${variant}-demo.png`,
+      null,
+      mockReportImage.split(",")[1],
+    );
+    return { status: "ok", data: { success: true } };
+  },
   "GET plugin-data/partitions": () => ({ status: "ok", data: { items: managedMockPartitions() } }),
   "GET plugin-data/files": (query?: Record<string, unknown>) => {
     const partition = String(query?.partition);
@@ -161,9 +179,12 @@ export const managedFileMockHandlers = {
         groups.set(directory, group);
       }
     const directory = String(query?.directory || "");
+    const search = String(query?.search || "").toLowerCase();
     const items = all.filter(
       (file) =>
-        file.name.toLowerCase().includes(String(query?.search || "").toLowerCase()) &&
+        (file.name.toLowerCase().includes(search) ||
+          (partition === "comic_preview_cache" &&
+            comicPreviewLabel(file.name).toLowerCase().includes(search))) &&
         (!directory ||
           (directory === "." ? !file.name.includes("/") : file.name.startsWith(directory + "/"))) &&
         (!extensions.length || extensions.includes(file.name.split(".").pop()!.toLowerCase())),

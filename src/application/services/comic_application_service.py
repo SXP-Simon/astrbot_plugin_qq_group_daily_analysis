@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from ...domain.repositories.analysis_repository import IAnalysisProvider
     from ...domain.value_objects import SummaryTopic
+    from ...domain.value_objects.group_session import GroupSession
     from ...infrastructure.config.config_manager import ConfigManager
 
 
@@ -61,6 +62,7 @@ class ComicApplicationService:
         topics: Sequence[SummaryTopic] | Sequence[dict[str, object]],
         group_id: str,
         umo: str | None = None,
+        session: GroupSession | None = None,
     ) -> tuple[bytes | None, str | None]:
         """
         生成漫画并返回图片字节数据。
@@ -69,6 +71,7 @@ class ComicApplicationService:
             topics: 待改编的群聊话题。
             group_id: 目标群组标识。
             umo: 用于选择模型的消息来源。
+            session: 已解析的真实群会话，用于隔离风格进度。
 
         Returns:
             (comic_bytes, fallback_url):
@@ -83,8 +86,13 @@ class ComicApplicationService:
             str(character.get("name", "")).strip() if character else ""
         ) or "默认配置"
         persona_id = self.config_manager.get_comic_character_persona_id(character)
-        prompt_template = self.config_manager.get_comic_character_storyboard_prompt(
-            character
+        reference_image_paths = self.config_manager.get_drawing_reference_images(
+            character, select=False
+        )
+        prompt_template = await asyncio.to_thread(
+            self.config_manager.get_comic_character_storyboard_prompt,
+            character,
+            session,
         )
         logger.info(
             f"[Comic] 开始为群 {group_id} 生成每日漫画，角色方案: {character_name}"
@@ -102,7 +110,6 @@ class ComicApplicationService:
 
         # 3. 加载当前角色方案配置的全部参考图。
         images_data: list[tuple[bytes, str]] = []
-        reference_image_paths = self.config_manager.get_drawing_reference_images()
         for reference_image_path in reference_image_paths:
             reference_image = await self._fetch_reference_image(reference_image_path)
             if reference_image:

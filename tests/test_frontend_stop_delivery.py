@@ -332,7 +332,7 @@ async def test_stop_only_cancels_this_manual_reports_comic(
     config = OutputConfig()
     comic = ComicCommandHandler(
         config_manager=config,
-        bot_manager=SimpleNamespace(get_adapter=lambda _: adapter),
+        bot_manager=SimpleNamespace(get_adapter=lambda _: adapter, resolve_platform_id=lambda _: "aiocqhttp_1"),
         comic_service=SimpleNamespace(generate_comic=generate_comic),
         analysis_service=service,
         plugin_data_dir=tmp_path,

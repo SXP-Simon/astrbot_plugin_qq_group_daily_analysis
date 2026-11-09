@@ -222,6 +222,7 @@ def load_config_manager_class(plugin_data_dir: Path):
         "save_config",
         "__init__",
         "get_group",
+        "ensure_group",
         "_get_scalar",
         "_get_number",
         "_get_string_list",
@@ -467,7 +468,8 @@ def test_existing_comic_character_inherits_global_storyboard_prompt(tmp_path: Pa
     config_manager = config_manager_class(config)
 
     character = config["daily_comic"]["comic_characters"][0]
-    assert character["storyboard_prompt"] == "旧版全局模板"
+    assert "storyboard_prompt" not in character
+    assert config["daily_comic"]["comic_styles"][0]["prompt_override"] == "旧版全局模板"
     assert (
         config_manager.get_comic_character_storyboard_prompt(character)
         == "旧版全局模板"
@@ -504,6 +506,7 @@ def test_comic_generation_passes_character_storyboard_prompt():
         get_selected_comic_character=Mock(return_value=character),
         get_comic_character_persona_id=Mock(return_value="persona-a"),
         get_comic_character_storyboard_prompt=Mock(return_value="角色模板"),
+        get_drawing_reference_images=Mock(return_value=[]),
     )
     from src.application.services.comic_application_service import ComicApplicationService
 
@@ -521,21 +524,17 @@ def test_comic_generation_passes_character_storyboard_prompt():
     )
 
 
-def test_comic_character_schema_has_storyboard_prompt_default():
-    """新建角色方案时应自带可编辑的默认分镜提示词。"""
+def test_new_comic_character_uses_style_settings_by_default():
+    """新角色留空，由漫画风格方案提供默认正文。"""
     schema = json.loads(
         (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
     )
     character_prompt = schema["daily_comic"]["items"]["comic_characters"]["templates"][
         "character"
     ]["items"]["storyboard_prompt"]["default"]
-    global_prompt = schema["prompts"]["items"]["comic_analysis_prompts"]["items"][
-        "comic_storyboard_prompt"
-    ]["default"]
-
     assert schema["daily_comic"]["items"]["comic_characters"]["default"] == []
-    assert character_prompt.strip()
-    assert character_prompt == global_prompt
+    assert character_prompt == ""
+    assert schema["daily_comic"]["items"]["comic_styles"]["default"][0]["preset_id"] == "classic"
 
 
 def test_daily_random_character_is_stable_and_recovers_from_disabled_choice(
@@ -1469,7 +1468,7 @@ def test_comic_delivery_sniffs_cached_file_extension_after_generation(tmp_path):
         comic_service=SimpleNamespace(
             generate_comic=AsyncMock(return_value=(comic_bytes, None))
         ),
-        bot_manager=SimpleNamespace(get_adapter=Mock(return_value=adapter)),
+        bot_manager=SimpleNamespace(get_adapter=Mock(return_value=adapter), resolve_platform_id=Mock(return_value="onebot")),
         try_upload_image=AsyncMock(),
     )
 
@@ -1627,22 +1626,24 @@ def test_comic_legacy_prompt_auto_migration(tmp_path: Path):
     )
 
     config_manager_class = load_config_manager_class(tmp_path)
+    legacy_prompt = (Path(__file__).parent / "fixtures" / "legacy_comic_storyboard_prompt.txt").read_text(encoding="utf-8")
+    edited_prompt = legacy_prompt + "\n保留我追加的水彩风规则。"
 
     raw_config = {
         "prompts": {
             "comic_analysis_prompts": {
-                "comic_storyboard_prompt": '你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n【核心视觉、台词与双层排版规则】\n请输出包含 "scene" 字段的 JSON 对象。'
+                "comic_storyboard_prompt": legacy_prompt
             }
         },
         "daily_comic": {
             "comic_characters": [
                 {
                     "name": "旧人设",
-                    "storyboard_prompt": '你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n【核心视觉、台词与双层排版规则】\n请输出包含 "scene" 字段的 JSON 对象。',
+                    "storyboard_prompt": legacy_prompt,
                 },
                 {
                     "name": "自定义人设",
-                    "storyboard_prompt": "我的完全自定义专属提示词，不应被覆盖",
+                    "storyboard_prompt": edited_prompt,
                 },
             ]
         },
@@ -1669,6 +1670,6 @@ def test_comic_legacy_prompt_auto_migration(tmp_path: Path):
     # 3. 用户的自定义专属提示词必须完好保留
     assert (
         raw_config["daily_comic"]["comic_characters"][1]["storyboard_prompt"]
-        == "我的完全自定义专属提示词，不应被覆盖"
+        == edited_prompt
     )
     config_instance.save_config.assert_called()

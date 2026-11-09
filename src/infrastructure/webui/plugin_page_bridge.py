@@ -22,6 +22,7 @@ from .routes import (
     TemplateRoutes,
     TraceRoutes,
 )
+from .routes.comic_routes import ComicRoutes
 from .routes.config_routes import config_key_to_folder, sanitize_path_segment
 from .routes.managed_file_routes import ManagedFileRoutes
 from .routes.managed_record_routes import ManagedRecordRoutes
@@ -44,6 +45,7 @@ if TYPE_CHECKING:
         AnalysisApplicationService,
     )
     from ..persistence.trace_sqlite_store import TraceSQLiteStore
+    from ..platform.template_preview.comic_preview_cache import ComicPreviewCache
     from ..reporting.dispatcher import ReportDispatcher
     from ..scheduler.auto_scheduler import AutoScheduler
     from .active_task_manager import ActiveTaskManager
@@ -71,6 +73,7 @@ class PluginPageWebUIBridge:
         report_dispatcher: ReportDispatcher | None = None,
         report_output_dir: Path | None = None,
         auto_scheduler: AutoScheduler | None = None,
+        comic_preview_cache: ComicPreviewCache | None = None,
     ):
         self.context = context
         self.trace_store = trace_store
@@ -121,6 +124,7 @@ class PluginPageWebUIBridge:
             analysis_service=self.analysis_service,
             report_output_dir=self.report_output_dir,
         )
+        self.comic_routes = ComicRoutes(comic_preview_cache)
         self.managed_file_routes = ManagedFileRoutes(self.report_output_dir)
         self.managed_upload_routes = ManagedUploadRoutes(
             self.managed_file_routes, self.downloads
@@ -132,6 +136,24 @@ class PluginPageWebUIBridge:
     def register_routes(self) -> None:
         """向 AstrBot 注册所有 Web API 端点"""
         routes = [
+            (
+                f"/{PLUGIN_NAME}/plugin-data/comic-previews/refresh",
+                self.comic_routes.api_refresh_preview,
+                ["POST"],
+                "重新获取漫画样图",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/comic-rotation",
+                self.comic_routes.api_rotation,
+                ["GET"],
+                "读取漫画风格轮换进度",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config/comic-rotation/reset",
+                self.comic_routes.api_reset_rotation,
+                ["POST"],
+                "重置漫画风格轮换进度",
+            ),
             (
                 f"/{PLUGIN_NAME}/plugin-data/files/upload/start",
                 self.managed_upload_routes.api_start,

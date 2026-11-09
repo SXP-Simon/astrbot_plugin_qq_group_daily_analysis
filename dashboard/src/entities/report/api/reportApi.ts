@@ -2,6 +2,8 @@ import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { ReportItem } from "../model/types";
 import { ReportTemplateItem } from "../model/templates";
 
+export type ReportKind = "comic" | "image" | "html";
+
 export interface ListReportsParams {
   limit?: number;
   offset?: number;
@@ -10,6 +12,7 @@ export interface ListReportsParams {
   search?: string;
   start_time?: number;
   end_time?: number;
+  report_type?: ReportKind;
   sort_order?: "asc" | "desc";
   [key: string]: unknown;
 }

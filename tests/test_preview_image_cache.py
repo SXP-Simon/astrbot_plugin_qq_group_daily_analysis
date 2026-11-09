@@ -12,7 +12,9 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from PIL import Image
 
+from src.infrastructure.persistence.managed_files import ManagedFiles
 from src.infrastructure.platform.template_preview import image_cache
+from src.infrastructure.platform.template_preview.comic_preview_cache import ComicPreviewCache
 from src.infrastructure.platform.template_preview.image_cache import PreviewImageCache
 
 
@@ -215,3 +217,57 @@ async def test_palette_transparency_is_composited_on_white(tmp_path):
     with Image.open(target) as converted:
         assert converted.format == "JPEG" and converted.mode == "RGB"
         assert converted.getpixel((6, 6)) == (255, 255, 255)
+
+
+@pytest.mark.asyncio
+async def test_comic_cache_is_separate_and_refresh_failure_keeps_existing_file(tmp_path):
+    raw = BytesIO()
+    Image.new("RGB", (24, 16), "orange").save(raw, format="WEBP")
+    calls = []
+    response_status = 200
+
+    async def handler(request):
+        calls.append(request.path)
+        return web.Response(status=response_status, body=raw.getvalue())
+
+    app = web.Application()
+    app.router.add_get("/comic_previews/classic/thumbnail.webp", handler)
+    data = tmp_path / "data"
+    async with TestServer(app) as server:
+        template = SimpleNamespace(
+            plugin_root=str(tmp_path / "plugin"),
+            config_provider=SimpleNamespace(
+                get_template_assets_base_url=lambda: str(server.make_url("")).rstrip("/")
+            ),
+        )
+        cache = ComicPreviewCache(data / "comic_preview_cache", template)
+        first = await cache.get_preview("classic", "thumbnail", deadline=float("inf"))
+        assert first.parent.name == "classic"
+        assert first.name.startswith("thumbnail-")
+        assert await cache.get_preview("classic", "thumbnail", deadline=float("inf")) == first
+        assert len(calls) == 1
+        assert await cache.get_preview("classic", "thumbnail", deadline=float("inf"), refresh=True) == first
+        assert len(calls) == 2
+
+        response_status = 503
+        with pytest.raises(OSError, match="无法获取漫画样图"):
+            await cache.get_preview("classic", "thumbnail", deadline=float("inf"), refresh=True)
+        assert calls == ["/comic_previews/classic/thumbnail.webp"] * 3
+        with Image.open(first) as image:
+            assert image.format == "JPEG"
+
+        store = ManagedFiles(data)
+        assert not store.files("preview_cache")
+        item = store.files("comic_preview_cache")[0]
+        assert store.read("comic_preview_cache", item["name"])["media_type"] == "image/jpeg"
+        store.mutate("comic_preview_cache", item["name"], "delete", item["revision"])
+        assert not first.exists()
+        response_status = 200
+        assert await cache.get_preview("classic", "thumbnail", deadline=float("inf")) == first
+
+        local = tmp_path / "plugin/assets/comic_previews/classic/thumbnail.webp"
+        local.parent.mkdir(parents=True)
+        local.write_bytes(raw.getvalue())
+        local_cache = await cache.get_preview("classic", "thumbnail", deadline=float("inf"))
+        assert local_cache.is_file() and local_cache != first
+        assert len(calls) == 4
