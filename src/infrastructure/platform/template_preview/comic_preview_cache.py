@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal
 
 import aiohttp
 
-from ....shared.comic_presets import COMIC_PRESETS, COMIC_PREVIEW_ORIGIN
+from ....shared.comic_presets import COMIC_PRESETS
 from ....shared.constants import DEFAULT_ASSETS_CDN_URL
 from ....utils.logger import logger
 from .image_cache import PreviewImageCache
@@ -50,38 +50,34 @@ class ComicPreviewCache(PreviewImageCache):
             ValueError: 风格标识无效。
             OSError: 样图无法获取。
         """
-        preset = COMIC_PRESETS.get(preset_id)
-        if preset is None:
+        if preset_id not in COMIC_PRESETS:
             raise ValueError("未知漫画风格")
         relative = f"comic_previews/{preset_id}/{variant}.webp"
         local = Path(self.template_service.plugin_root) / "assets" / relative
-        config = self.template_service.config_provider
-        cdn = (
-            config.get_template_assets_base_url() if config else DEFAULT_ASSETS_CDN_URL
-        )
-        original = (
-            preset.preview
-            if variant == "preview"
-            else f"{Path(preset.preview).stem}-thumb.webp"
-        )
-        sources = [f"{cdn}/{relative}", f"{COMIC_PREVIEW_ORIGIN}{original}"]
         if local.is_file() and not local.is_symlink():
-            sources.insert(0, str(local))
-        for source in sources:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            try:
-                async with asyncio.timeout(min(4, remaining)):
-                    return Path(
-                        await self.get_jpeg(
-                            source,
-                            relative_stem=Path(preset_id) / variant,
-                            refresh=refresh,
-                        )
+            source = str(local)
+        else:
+            config = self.template_service.config_provider
+            cdn = (
+                config.get_template_assets_base_url()
+                if config
+                else DEFAULT_ASSETS_CDN_URL
+            )
+            source = f"{cdn}/{relative}"
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise OSError("无法获取漫画样图，请检查样图来源或网络后重试")
+        try:
+            async with asyncio.timeout(min(4, remaining)):
+                return Path(
+                    await self.get_jpeg(
+                        source,
+                        relative_stem=Path(preset_id) / variant,
+                        refresh=refresh,
                     )
-            except (OSError, ValueError, aiohttp.ClientError) as exc:
-                logger.debug(
-                    "漫画样图读取失败: style=%s error=%s", preset_id, type(exc).__name__
                 )
-        raise OSError("无法获取漫画样图，请检查样图来源或网络后重试")
+        except (OSError, ValueError, aiohttp.ClientError) as exc:
+            logger.debug(
+                "漫画样图读取失败: style=%s error=%s", preset_id, type(exc).__name__
+            )
+            raise OSError("无法获取漫画样图，请检查样图来源或网络后重试") from exc

@@ -220,7 +220,7 @@ async def test_palette_transparency_is_composited_on_white(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_comic_cache_is_separate_and_refresh_failure_keeps_existing_file(tmp_path, monkeypatch):
+async def test_comic_cache_is_separate_and_refresh_failure_keeps_existing_file(tmp_path):
     raw = BytesIO()
     Image.new("RGB", (24, 16), "orange").save(raw, format="WEBP")
     calls = []
@@ -249,13 +249,10 @@ async def test_comic_cache_is_separate_and_refresh_failure_keeps_existing_file(t
         assert await cache.get_preview("classic", "thumbnail", deadline=float("inf"), refresh=True) == first
         assert len(calls) == 2
 
-        # 缩短失败请求的窗口并把后备来源也指向本地，测试不访问公网。
-        from src.infrastructure.platform.template_preview import comic_preview_cache
-
         response_status = 503
-        monkeypatch.setattr(comic_preview_cache, "COMIC_PREVIEW_ORIGIN", str(server.make_url("/")))
         with pytest.raises(OSError, match="无法获取漫画样图"):
             await cache.get_preview("classic", "thumbnail", deadline=float("inf"), refresh=True)
+        assert calls == ["/comic_previews/classic/thumbnail.webp"] * 3
         with Image.open(first) as image:
             assert image.format == "JPEG"
 
@@ -267,3 +264,10 @@ async def test_comic_cache_is_separate_and_refresh_failure_keeps_existing_file(t
         assert not first.exists()
         response_status = 200
         assert await cache.get_preview("classic", "thumbnail", deadline=float("inf")) == first
+
+        local = tmp_path / "plugin/assets/comic_previews/classic/thumbnail.webp"
+        local.parent.mkdir(parents=True)
+        local.write_bytes(raw.getvalue())
+        local_cache = await cache.get_preview("classic", "thumbnail", deadline=float("inf"))
+        assert local_cache.is_file() and local_cache != first
+        assert len(calls) == 4
