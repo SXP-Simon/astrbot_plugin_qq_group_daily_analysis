@@ -13,7 +13,7 @@ import {
 import { PluginSchema } from "../../../entities/config/model/types";
 import {
   validateConfigWithZod,
-  validateSingleFieldWithZod,
+  validateFieldIssues,
 } from "../../../entities/config/model/validation";
 
 import { isFieldVisible } from "../../../entities/config/model/visibility";
@@ -40,7 +40,7 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
   const savingRef = useRef(false);
   const focusTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // 校验错误状态：按 分组Key -> 字段Key -> 错误信息 存储
+  // 按分组和字段路径保存错误，列表下标区分同名字段。
   const [errors, setErrors] = useState<Record<string, Record<string, string>>>({});
   const groupErrorCounts = useMemo(
     () =>
@@ -145,39 +145,20 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
     });
 
     // 实时校验当前字段，即时清除或更新错误提示
-    const groupSchema = schema[groupKey];
-    if (groupSchema && groupSchema.items) {
-      let fieldSchema = groupSchema.items[fieldKey];
-      // 处理嵌套字段路径（如 "topic_analysis_prompts.summary"）
-      if (!fieldSchema && fieldKey.includes(".")) {
-        const [parentKey, subKey] = fieldKey.split(".");
-        const parentField = groupSchema.items[parentKey];
-        if (parentField && parentField.items && typeof parentField.items === "object") {
-          fieldSchema = (parentField.items as Record<string, typeof fieldSchema>)[subKey];
-        }
-      }
-
-      if (fieldSchema) {
-        const fieldError = validateSingleFieldWithZod(fieldKey, fieldSchema, value);
-        setErrors((prevErrors) => {
-          const nextErrors = { ...prevErrors };
-          const groupErrors = { ...(nextErrors[groupKey] || {}) };
-
-          if (fieldError) {
-            groupErrors[fieldKey] = fieldError;
-          } else {
-            delete groupErrors[fieldKey];
-          }
-
-          if (Object.keys(groupErrors).length > 0) {
-            nextErrors[groupKey] = groupErrors;
-          } else {
-            delete nextErrors[groupKey];
-          }
-
-          return nextErrors;
-        });
-      }
+    const fieldSchema = schema[groupKey]?.items[fieldKey];
+    if (fieldSchema) {
+      const fieldErrors = validateFieldIssues(fieldKey, fieldSchema, value);
+      setErrors((prevErrors) => ({
+        ...prevErrors,
+        [groupKey]: {
+          ...Object.fromEntries(
+            Object.entries(prevErrors[groupKey] ?? {}).filter(
+              ([path]) => path !== fieldKey && !path.startsWith(`${fieldKey}.`),
+            ),
+          ),
+          ...fieldErrors,
+        },
+      }));
     }
   };
 
@@ -221,28 +202,31 @@ export function useConfigViewModel(onConfigSaved?: () => void | Promise<void>) {
         setActiveCategory(firstError.groupKey);
         setSearchQuery("");
 
-        // 提示人类可读的友好中文错误
-        const reason = `【${firstError.groupLabel}】中的「${firstError.fieldLabel}」${firstError.message}，请检查该部分。`;
-        setSaveError(reason);
-        toast.error(reason);
-
-        // 平滑滚动定位并自动高亮聚焦到错误字段
+        // 无独立控件的错误定位到最近的可见条目。
         focusTimer.current = setTimeout(() => {
-          const targetDom =
-            document.getElementById(firstError.domId) ||
-            document.getElementById(`cfg-field-${firstError.groupKey}-${firstError.fieldKey}`) ||
-            document.getElementById(`cfg-field-${firstError.fieldKey}`);
+          const fields = Array.from(document.querySelectorAll<HTMLElement>("[data-config-path]"));
+          let path = firstError.path;
+          let targetDom: HTMLElement | undefined;
+          while (path && !targetDom) {
+            targetDom = fields.find((field) => field.dataset.configPath === path);
+            path = path.slice(0, Math.max(0, path.lastIndexOf(".")));
+          }
 
-          if (targetDom && targetDom.getClientRects().length > 0) {
+          if (!targetDom) {
+            setSaveError(firstError.message);
+            return;
+          }
+          if (targetDom.getClientRects().length > 0) {
             targetDom.scrollIntoView({
               behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
                 ? "auto"
                 : "smooth",
               block: "center",
             });
-            const focusable = targetDom.querySelector<HTMLElement>(
-              "input, select, textarea, button",
-            );
+            const focusable =
+              targetDom.querySelector<HTMLElement>(":scope > [role=alert][tabindex='-1']") ??
+              targetDom.querySelector<HTMLElement>("input:not([type=hidden]), select, textarea") ??
+              targetDom.querySelector<HTMLElement>("button:not(:disabled)");
             if (focusable) {
               focusable.focus({ preventScroll: true });
             }

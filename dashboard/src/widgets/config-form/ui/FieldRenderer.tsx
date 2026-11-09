@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { IconEye, IconEyeOff, IconPlus, IconRestore, IconX } from "@tabler/icons-react";
 import { resolveOptionLabel } from "../../../entities/config/model/optionLabel";
+import { isFieldVisible } from "../../../entities/config/model/visibility";
 import {
   CUSTOM_RESOURCE_OPTION,
   TEMPLATE_CDN_PRESETS,
@@ -19,6 +20,8 @@ import { TemplateCdnProbe } from "../../../features/test-template-cdn/ui/Templat
 import { TemplateListRenderer } from "./TemplateListRenderer";
 import { TemplateSelectorRenderer } from "./TemplateSelectorRenderer";
 import { ConfigFileField } from "./ConfigFileField";
+import { AnalysisPromptField } from "./AnalysisPromptField";
+import { ComicStoryboardEditor } from "./ComicStoryboardEditor";
 
 const TEXTAREA_CLASS =
   "min-h-28 max-h-96 w-full resize-y rounded-xl border border-solid border-input bg-background p-3 font-mono text-sm leading-relaxed text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -35,9 +38,12 @@ interface FieldRendererProps {
   personas?: AvailablePersona[];
   isSubField?: boolean;
   fullKeyPath?: string;
+  validationPath?: string;
   error?: string;
   subErrors?: Record<string, string>;
   scope?: Readonly<Record<string, unknown>>;
+  promptExampleConfig?: Readonly<Record<string, unknown>>;
+  comicPresetPrompt?: string;
   onChange: (value: unknown) => void;
 }
 
@@ -53,9 +59,12 @@ export function FieldRenderer({
   personas = [],
   isSubField = false,
   fullKeyPath,
+  validationPath = fieldKey,
   error,
   subErrors,
   scope,
+  promptExampleConfig,
+  comicPresetPrompt,
   onChange,
 }: FieldRendererProps) {
   const id = useId();
@@ -207,6 +216,8 @@ export function FieldRenderer({
           providers={providers}
           personas={personas}
           fullKeyPath={fullKeyPath || fieldKey}
+          validationPath={validationPath}
+          subErrors={subErrors}
           onChange={onChange}
         />
       );
@@ -229,7 +240,36 @@ export function FieldRenderer({
       return (
         <div className="grid min-w-0 gap-4 border-0 border-l border-solid border-border pl-4">
           {Object.entries(items).map(([key, definition]) => {
-            if (definition.invisible || definition.hidden) return null;
+            if (definition.hidden || !isFieldVisible(definition, { current: object })) return null;
+            const childPath = `${validationPath}.${key}`;
+            if (definition.prompt_variables) {
+              const schemesKey = `${key}_schemes`;
+              const defaultText = typeof definition.default === "string" ? definition.default : "";
+              const activeText = object[key];
+              const savedText = original[key];
+              return (
+                <AnalysisPromptField
+                  key={key}
+                  title={definition.description || key}
+                  activeText={typeof activeText === "string" ? activeText : defaultText}
+                  savedText={typeof savedText === "string" ? savedText : defaultText}
+                  defaultText={defaultText}
+                  schemes={object[schemesKey]}
+                  savedSchemes={original[schemesKey]}
+                  variables={definition.prompt_variables}
+                  exampleConfig={promptExampleConfig}
+                  validationPath={childPath}
+                  error={subErrors?.[childPath]}
+                  onChange={(schemes) =>
+                    onChange({
+                      ...object,
+                      [key]: schemes.find((row) => row.selected)?.text ?? "",
+                      [schemesKey]: schemes,
+                    })
+                  }
+                />
+              );
+            }
             const path = `${fullKeyPath || fieldKey}.${key}`;
             return (
               <FieldRenderer
@@ -248,10 +288,12 @@ export function FieldRenderer({
                 personas={personas}
                 isSubField
                 fullKeyPath={path}
+                validationPath={childPath}
                 templateCdnBaseUrl={templateCdnBaseUrl}
                 templateRequirements={templateRequirements}
                 scope={scope}
-                error={subErrors?.[key] || subErrors?.[path]}
+                promptExampleConfig={promptExampleConfig}
+                error={subErrors?.[childPath]}
                 subErrors={subErrors}
                 onChange={(next) => onChange({ ...object, [key]: next })}
               />
@@ -301,6 +343,16 @@ export function FieldRenderer({
         </NativeSelect>
       );
     }
+    if (type === "text" && (fieldKey === "prompt_override" || fieldKey === "storyboard_prompt"))
+      return (
+        <ComicStoryboardEditor
+          inputProps={{ ...common, className: TEXTAREA_CLASS, rows: 6 }}
+          text={typeof current === "string" ? current : ""}
+          presetPrompt={comicPresetPrompt}
+          allowEmpty={fieldKey === "storyboard_prompt" || Boolean(comicPresetPrompt)}
+          onChange={onChange}
+        />
+      );
     if (
       type === "text" ||
       (type === "string" && (fieldKey.includes("template") || fieldKey.includes("prompt")))
@@ -413,23 +465,43 @@ export function FieldRenderer({
       return (
         <div className="grid gap-2">
           <div className="flex flex-wrap gap-2">
-            {values.map((entry, index) => (
-              <span
-                key={`${entry}:${index}`}
-                className="inline-flex max-w-full items-center gap-1 rounded-lg bg-secondary px-2 py-1 text-sm"
-              >
-                <code className="break-all text-xs">{entry}</code>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-1"
-                  aria-label={`移除 ${entry}`}
-                  onClick={() => onChange(values.filter((_, i) => i !== index))}
-                >
-                  <IconX aria-hidden="true" />
-                </Button>
-              </span>
-            ))}
+            {values.map((entry, index) => {
+              const path = `${validationPath}.${index}`;
+              const itemError = subErrors?.[path];
+              return (
+                <div key={`${entry}:${index}`} data-config-path={path} className="max-w-full">
+                  <span
+                    className={cn(
+                      "inline-flex max-w-full items-center gap-1 rounded-lg border px-2 py-1 text-sm",
+                      itemError
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : "border-transparent bg-secondary",
+                    )}
+                  >
+                    <code className="break-all text-xs">{entry}</code>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-1"
+                      aria-label={`移除 ${entry}`}
+                      aria-describedby={itemError ? `${id}-error-${index}` : undefined}
+                      onClick={() => onChange(values.filter((_, i) => i !== index))}
+                    >
+                      <IconX aria-hidden="true" />
+                    </Button>
+                  </span>
+                  {itemError && (
+                    <p
+                      id={`${id}-error-${index}`}
+                      role="alert"
+                      className="mb-0 mt-1 text-sm text-destructive"
+                    >
+                      {itemError}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="flex min-w-0 items-center gap-2">
             <Input
@@ -495,7 +567,7 @@ export function FieldRenderer({
 
   return (
     <section
-      id={`cfg-field-${fullKeyPath ? fullKeyPath.replace(/\./g, "-") : fieldKey}`}
+      data-config-path={validationPath}
       data-field-key={fieldKey}
       data-modified={modified || undefined}
       className={cn(
@@ -507,7 +579,8 @@ export function FieldRenderer({
           !error &&
           !["object", "template_list"].includes(type) &&
           "bg-primary-soft",
-        error && "rounded-xl border border-destructive/40 bg-destructive/5 p-3",
+        error &&
+          "rounded-xl border border-destructive/40 bg-destructive/5 p-3 [&_[aria-invalid=true]]:border-destructive",
       )}
     >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -537,12 +610,16 @@ export function FieldRenderer({
           </Button>
         )}
       </div>
-      {renderControl()}
       {error && (
-        <p id={`${id}-error`} role="alert" className="m-0 text-sm text-destructive">
+        <p
+          id={`${id}-error`}
+          role="alert"
+          className="m-0 break-words rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
           {error}
         </p>
       )}
+      {renderControl()}
       {hint && (
         <div id={`${id}-hint`} className="text-sm leading-relaxed text-muted-foreground">
           <MarkdownHint content={hint} />

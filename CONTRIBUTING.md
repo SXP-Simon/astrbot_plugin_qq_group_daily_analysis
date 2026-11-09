@@ -12,6 +12,7 @@
 2. [代码规范与架构准则 (Code & Architecture Standards)](#2-代码规范与架构准则-code--architecture-standards)
    - [2.1 Python 后端开发规范](#21-python-后端开发规范)
    - [2.2 WebUI 前端开发规范 (FSD + Atomic + MVVM)](#22-webui-前端开发规范-fsd--atomic--mvvm)
+   - [2.3 分析提示词变量](#23-分析提示词变量)
 3. [报告模板贡献指南 (Templates Contribution)](#3-报告模板贡献指南-templates-contribution)
    - [3.1 模板目录结构](#31-模板目录结构)
    - [3.2 模板变量对照表](#32-模板变量对照表)
@@ -244,6 +245,12 @@ dashboard/src/
    pnpm typecheck   # TypeScript 严格类型编译
    pnpm build       # 打包输出单 Bundle
    ```
+
+### 2.3 分析提示词变量
+
+分析器通过 `render_template` 传入运行时的数据。新增变量时，在 `_conf_schema.json` 对应提示词字段的 `prompt_variables` 中声明同名变量、用途、示例与是否必填。编辑器和保存校验读取同一份声明。示例应符合分析器加工后的格式，使用演示数据。数量上限可用 `config_field` 指向「分析功能开关」中的配置键。
+
+为新模块接入方案时，在提示词字段旁声明同名加 `_schemes` 后缀的隐藏列表，默认值为 `[]`。分析器继续从原字段读取选中的正文，宿主配置保存全部方案。
 
 ---
 
