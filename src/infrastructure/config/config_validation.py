@@ -124,6 +124,17 @@ def _validate_field(
             if kind == "template_list":
                 if not is_string_mapping(item):
                     raise ValueError(f"{label}第 {index + 1} 项必须是配置对象")
+                if (
+                    path == "daily_comic.comic_styles"
+                    and item.get("preset_id") == "custom"
+                    and any(
+                        not isinstance(text, str) or not text.strip()
+                        for text in (item.get("name"), item.get("prompt_override"))
+                    )
+                ):
+                    raise ValueError(
+                        f"{label}第 {index + 1} 个自定义风格请填写名称和分镜提示词"
+                    )
                 if is_string_mapping(templates) and templates:
                     key = item.get("__template_key")
                     if key is None and len(templates) == 1:

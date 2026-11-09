@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from astrbot.api import AstrBotConfig
 
     from ...domain.value_objects.analysis_results import ComicCharacterConfig
+    from ...domain.value_objects.group_session import GroupSession
 
 
 _ConfigScalar = TypeVar("_ConfigScalar", str, int, float, bool)
@@ -143,10 +144,6 @@ class ConfigManager:
     def _migrate_daily_comic_characters(self) -> None:
         """迁移旧版漫画参考图配置（委托 ConfigMigrator）。"""
         self._migrator.migrate_daily_comic_character_references()
-
-    def _migrate_daily_comic_character_prompts(self) -> None:
-        """将旧版全局分镜提示词复制到既有角色方案（委托 ConfigMigrator）。"""
-        self._migrator.migrate_daily_comic_character_prompts()
 
     def _is_legacy_default_comic_prompt(self, prompt: object) -> bool:
         """判断是否为旧版默认漫画分镜提示词（委托 ConfigMigrator）。"""
@@ -1452,13 +1449,20 @@ class ConfigManager:
                 return reference_image.strip()
         return ""
 
-    def get_drawing_reference_images(self) -> list[str]:
+    def get_drawing_reference_images(
+        self, character: ComicCharacterConfig | None = None, *, select: bool = True
+    ) -> list[str]:
         """获取当前漫画角色的全部有效参考图。
+
+        Args:
+            character: 本次已经选定的角色。
+            select: 未传角色时是否重新选择。
 
         Returns:
             按配置顺序排列的参考图相对路径。
         """
-        character = self.get_selected_comic_character()
+        if character is None and select:
+            character = self.get_selected_comic_character()
         reference_images = character.get("reference_images", []) if character else []
         if isinstance(reference_images, str):
             reference_images = [reference_images]
@@ -1549,21 +1553,87 @@ class ConfigManager:
         return str(character.get("persona_id", "")).strip()
 
     def get_comic_character_storyboard_prompt(
-        self, character: ComicCharacterConfig | None
+        self,
+        character: ComicCharacterConfig | None,
+        session: GroupSession | None = None,
     ) -> str:
-        """获取角色专属分镜提示词，未配置时回退全局默认模板。
+        """读取旧角色正文，或为本次任务选择并预留风格。
 
         Args:
-            character: 当前选中的角色方案。
+            character: 本次已选定的漫画角色。
+            session: 真实的平台实例与群号，群级轮换使用。
 
         Returns:
-            本次漫画分镜应使用的提示词模板。
+            本次漫画分镜使用的完整提示词。
         """
+        from ...shared.comic_presets import (
+            COMIC_PRESETS,
+            DEFAULT_COMIC_STORYBOARD_PROMPT,
+        )
+        from .comic_style_rotation import ComicStyle, reserve_comic_style
+
         if character is not None:
             prompt = str(character.get("storyboard_prompt", "")).strip()
             if prompt:
                 return prompt
-        return self.get_comic_storyboard_prompt()
+        config = self.get_group("daily_comic")
+        if "comic_styles" not in config:
+            return self.get_comic_storyboard_prompt() or DEFAULT_COMIC_STORYBOARD_PROMPT
+
+        raw = config.get("comic_styles")
+        styles: list[ComicStyle] = []
+        for row in raw if is_object_list(raw) else []:
+            if not is_string_mapping(row) or row.get("enable", True) is not True:
+                continue
+            preset_id, name, override = (
+                row.get("preset_id"),
+                row.get("name"),
+                row.get("prompt_override"),
+            )
+            if not isinstance(preset_id, str):
+                continue
+            name = name.strip() if isinstance(name, str) else ""
+            prompt = override.strip() if isinstance(override, str) else ""
+            if preset := COMIC_PRESETS.get(preset_id):
+                name = name or preset.name
+                prompt = prompt or preset.prompt
+            elif preset_id != "custom" or not (name and prompt):
+                continue
+            styles.append(ComicStyle(preset_id, name, prompt))
+        if not styles:
+            return DEFAULT_COMIC_STORYBOARD_PROMPT
+
+        mode = config.get("comic_style_mode", "fixed")
+        scope = config.get("comic_style_scope", "global")
+        if len(styles) == 1 or mode not in (
+            "sequential",
+            "daily_sequential",
+            "random",
+            "daily_random",
+            "shuffle",
+        ):
+            return styles[0].prompt
+        if scope == "group" and session is None:
+            logger.warning("漫画风格缺少真实群会话，本次使用首个风格方案")
+            return styles[0].prompt
+        timezone_name = os.environ.get("TZ", "").strip()
+        try:
+            timezone = ZoneInfo(timezone_name) if timezone_name else None
+        except (ZoneInfoNotFoundError, ValueError):
+            timezone = None
+        try:
+            return reserve_comic_style(
+                StarTools.get_data_dir(PLUGIN_NAME) / "comic_style_rotation.json",
+                tuple(styles),
+                mode,
+                session if scope == "group" else None,
+                datetime.now(timezone).date(),
+            ).prompt
+        except (OSError, ValueError):
+            logger.warning(
+                "读取或保存漫画风格进度失败，本次使用首个风格方案", exc_info=True
+            )
+            return styles[0].prompt
 
     @staticmethod
     def _get_comic_character_state_path() -> Path:

@@ -37,7 +37,7 @@ def protection(tmp_path, monkeypatch):
     manager.get_plugin_root = lambda: root
     migrator = ConfigMigrator(manager, star_tools=Tools)
     manager._migrator = migrator
-    for method in ("upgrade_prompt_templates", "migrate_daily_comic_character_references", "migrate_daily_comic_character_prompts", "migrate_legacy_comic_storyboard_prompts"):
+    for method in ("upgrade_prompt_templates", "migrate_daily_comic_character_references", "migrate_comic_styles", "migrate_legacy_comic_storyboard_prompts"):
         setattr(migrator, method, lambda *args: None)
     old = {"version": "v1.0.0", "schema_fingerprint": "old", "config": {"t2i_rendering": {"t2i_cdn_base_url": "https://legacy.example", "t2i_mainland_google_fonts": "https://old-fonts.example", "t2i_mainland_gstatic": "https://old-static.example"}, "unknown": {"old": [False, None]}}}
     state = tmp_path / "upgrade_protection_state.json"
@@ -164,6 +164,22 @@ def test_new_character_selection_is_not_overwritten_by_old_snapshot(protection):
     del p.migrator.migrate_daily_comic_character_references
     p.migrator.run_all_migrations()
     assert p.manager.config["daily_comic"]["comic_characters"] == [character]
+
+
+def test_comic_style_migration_keeps_old_prompt_in_use_when_save_fails(protection):
+    p = protection
+    p.old["config"]["prompts"] = {
+        "comic_analysis_prompts": {"comic_storyboard_prompt": "旧版自定义正文"},
+    }
+    p.state.write_text(json.dumps(p.old), encoding="utf-8")
+    p.migrator.migrate_legacy_configs = Mock(return_value=False)
+    p.manager.config.save_config = Mock(side_effect=OSError("disk full"))
+    del p.migrator.migrate_comic_styles
+
+    p.migrator.run_all_migrations()
+
+    assert p.manager.get_comic_character_storyboard_prompt(None) == "旧版自定义正文"
+    assert json.loads(p.state.read_text(encoding="utf-8")) == p.old
 
 
 def test_saved_order_is_stable_on_disk_and_in_protection_snapshot(protection):
