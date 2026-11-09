@@ -113,7 +113,7 @@ async def test_control_character_group_names_allow_real_history_images(
             SimpleNamespace(
                 get_t2i_max_concurrent=lambda: 1, get_show_report_caption=lambda: False
             ),
-            SimpleNamespace(get_adapter=lambda _: adapter),
+            SimpleNamespace(get_adapter=lambda _: adapter, resolve_platform_id=lambda *args: "platform"),
             SimpleNamespace(
                 generate_comic=AsyncMock(return_value=(png_file.read_bytes(), None))
             ),

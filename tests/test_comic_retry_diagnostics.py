@@ -17,7 +17,7 @@ async def test_rewrite_records_actual_prompt_and_final_error(monkeypatch, image,
     service = _comic_service(
         _comic_config_manager(
             get_drawing_backend=lambda: "builtin",
-            get_drawing_reference_images=lambda: ["reference.png"],
+            get_drawing_reference_images=lambda *_args, **_kwargs: ["reference.png"],
             get_drawing_output_exception_retry_keywords=lambda: ["blocked"],
         ),
         SimpleNamespace(generate_image=AsyncMock(side_effect=[(None, "blocked"), (image, None if image else error)])),

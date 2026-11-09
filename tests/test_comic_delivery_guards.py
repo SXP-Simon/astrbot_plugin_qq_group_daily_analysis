@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.application.handlers.comic_command_handler import ComicCommandHandler
+from src.domain.value_objects.group_session import GroupSession
 from src.shared.trace_context import TraceContext
 
 
@@ -15,15 +16,22 @@ async def test_comic_delivery_preserves_fallback_and_album_gate(tmp_path, monkey
     monkeypatch.setattr(TraceContext, "current", staticmethod(lambda: None))
     adapter = SimpleNamespace(send_image=AsyncMock(return_value=mode == "success"))
     output = (None, "https://example.com/comic.png") if mode == "fallback" else (b"comic", None)
+    generate_comic = AsyncMock(return_value=output)
     handler = ComicCommandHandler(
         SimpleNamespace(get_t2i_max_concurrent=lambda: 1, get_show_report_caption=lambda: False),
-        SimpleNamespace(get_adapter=Mock(return_value=adapter)),
-        SimpleNamespace(generate_comic=AsyncMock(return_value=output)),
+        SimpleNamespace(
+            get_adapter=Mock(return_value=adapter),
+            resolve_platform_id=Mock(return_value="platform-instance"),
+        ),
+        SimpleNamespace(generate_comic=generate_comic),
         None,
         plugin_data_dir=tmp_path,
     )
     handler.try_upload_image = AsyncMock()
     await handler.trigger_comic_generation([], "123", "platform", "umo")
+    generate_comic.assert_awaited_once_with(
+        [], "123", "umo", GroupSession("platform-instance", "123")
+    )
     adapter.send_image.assert_awaited_once()
     if mode == "fallback":
         assert adapter.send_image.await_args.args == ("123", "https://example.com/comic.png")
