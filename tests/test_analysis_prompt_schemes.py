@@ -80,7 +80,12 @@ async def test_save_and_reload_keep_original_and_switch_effective_prompt(tmp_pat
         assert (await routes.api_save_config())["status_code"] == 200
         manager.config = json.loads(config_file.read_text(encoding="utf-8"))
         assert manager.config == topic_config(custom, rows)
-        assert analyzer.build_prompt(messages).endswith("个话题：[20:01] [10001]: 明晚测试")
+        assert analyzer.build_prompt(messages) == "最多 5 个话题：[20:01] [10001]: 明晚测试"
+
+        request.json.return_value = {"config": topic_config(custom, [])}
+        assert (await routes.api_save_config())["status_code"] == 400
+        assert manager.config == topic_config(custom, rows)
+        assert json.loads(config_file.read_text(encoding="utf-8")) == topic_config(custom, rows)
 
         # 模拟宿主纯文本编辑当前方案。之后切回原有配置时，保留外部编辑。
         external = "从宿主编辑过的自定义方案"
