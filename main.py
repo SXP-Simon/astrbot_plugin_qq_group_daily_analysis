@@ -672,14 +672,7 @@ class GroupDailyAnalysis(Star):
     async def view_comic_styles(
         self, event: AstrMessageEvent
     ) -> AsyncGenerator[MessageEventResult]:
-        """查看漫画风格目录、分页缩略图或单张大图。
-
-        Args:
-            event: 当前消息事件。
-
-        Returns:
-            包含静态样图或文字目录的消息。
-        """
+        """查看漫画风格目录、分页缩略图或单张大图。"""
         if not self._get_group_id_from_event(event):
             yield event.plain_result("请在群聊中使用此命令。")
             return
