@@ -100,18 +100,18 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[UnifiedMessage]]):
 必须以纯 JSON 格式返回，不得包含任何 Markdown 格式。
 
 ```json
-{{
+{
   "title": "今日群聊主题",
   "subtitle": "副标题",
   "dimensions": [
-    {{
+    {
       "name": "抽象维度名",
       "percentage": 比例,
       "comment": "维度的毒舌点评"
-    }}
+    }
   ],
   "summary": "一句总结性的金句"
-}}
+}
 ```
 
 群聊记录：
@@ -345,18 +345,18 @@ ${messages_text}
 必须以纯 JSON 格式返回，不得包含任何 Markdown 格式。
 
 ```json
-{{
+{
   "title": "今日群聊主题",
   "subtitle": "副标题",
   "dimensions": [
-    {{
+    {
       "name": "抽象大类标题",
       "percentage": 比例,
       "comment": "维度的全天锐评"
-    }}
+    }
   ],
   "summary": "全天总结金句"
-}}
+}
 ```
 """
             )
