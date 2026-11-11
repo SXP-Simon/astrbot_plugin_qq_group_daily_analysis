@@ -251,18 +251,42 @@ class ConfigMigrator:
         else:
             target_group = self.cm.get_group(group)
 
-        val = target_group.get(key, "") if is_string_mapping(target_group) else ""
-        if not val or not isinstance(val, str):
+        if not is_string_mapping(target_group):
             return False
 
-        upgraded_val, upgraded = upgrade_str_format_template(val)
-        if upgraded and upgraded_val != val:
-            setter_func(upgraded_val)
-            logger.info(
-                f"配置项 {group}.{key} 发现旧版语法并已自动升级为 string.Template 格式。"
-            )
-            return True
-        return False
+        changed = False
+        val = target_group.get(key, "")
+        if val and isinstance(val, str):
+            upgraded_val, upgraded = upgrade_str_format_template(val)
+            if upgraded and upgraded_val != val:
+                setter_func(upgraded_val)
+                logger.info(
+                    f"配置项 {group}.{key} 发现旧版模板语法并已自动升级为 string.Template 格式。"
+                )
+                changed = True
+
+        # WebUI 提示词方案保存了各方案的正文（含升级前的「原有配置」），
+        # 一并升级，避免切换方案后旧语法重新生效。
+        rows = target_group.get(f"{key}_schemes")
+        if is_object_list(rows):
+            rows_changed = False
+            for row in rows:
+                if not is_string_mapping(row):
+                    continue
+                text = row.get("text")
+                if not text or not isinstance(text, str):
+                    continue
+                upgraded_text, upgraded = upgrade_str_format_template(text)
+                if upgraded and upgraded_text != text:
+                    row["text"] = upgraded_text
+                    rows_changed = True
+            if rows_changed:
+                self._save_config()
+                logger.info(
+                    f"配置项 {group}.{key} 的提示词方案发现旧版模板语法并已自动升级。"
+                )
+                changed = True
+        return changed
 
     def upgrade_prompt_templates(self) -> bool:
         """扫描并升级所有可配置的提示词模板与文件名格式模板。
