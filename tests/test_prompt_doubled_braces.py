@@ -15,41 +15,13 @@ from src.utils.template_utils import (
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 
-# v5.9.0 默认话题提示词的结构：已使用 ${var}，示例 JSON 仍是 str.format 转义
-LEGACY_TOPIC_PROMPT = """最多 ${max_topics} 个话题。
-
-```json
-[
-  {{
-    "topic": "话题名称",
-    "contributors": ["123456789"]
-  }},
-  {{
-    "topic": "另一个话题",
-    "contributors": ["111222333"]
-  }}
-]
-```
-
-${messages_text}
-"""
-
-# v5.9.0 默认聊天质量提示词的结构：对象内嵌套数组和对象
-LEGACY_QUALITY_PROMPT = """```json
-{{
-  "title": "今日群聊主题",
-  "dimensions": [
-    {{
-      "name": "抽象维度名",
-      "percentage": 比例
-    }}
-  ]
-}}
-```
-
-群聊记录：
-${messages_text}
-"""
+# 对应版本 _conf_schema.json 中的原始默认值。
+HISTORICAL_PROMPTS = json.loads(
+    (PLUGIN_ROOT / "tests/data/historical_analysis_prompts.json").read_text(
+        encoding="utf-8"
+    )
+)
+LEGACY_TOPIC_PROMPT = HISTORICAL_PROMPTS["v5.9.0/topic_prompt"]
 
 
 def _prompt_defaults():
@@ -68,22 +40,15 @@ def test_default_prompts_have_no_str_format_escapes(name, default):
 
 
 @pytest.mark.parametrize(
-    ("template", "expected_braces"),
-    [
-        (LEGACY_TOPIC_PROMPT, ("[\n  {\n", "  },\n  {\n", "  }\n]")),
-        (LEGACY_QUALITY_PROMPT, ("```json\n{\n", "    {\n", "    }\n  ]\n}\n```")),
-    ],
+    "template_key",
+    ["v5.9.0/topic_prompt", "v6.0.1/quality_v2_prompt"],
 )
-def test_upgrade_restores_doubled_braces_in_dollar_template(template, expected_braces):
-    upgraded, changed = upgrade_str_format_template(template)
+def test_upgrade_restores_doubled_braces_in_dollar_template(template_key):
+    template = HISTORICAL_PROMPTS[template_key]
+    expected = template.replace("{{", "{").replace("}}", "}")
 
-    assert changed is True
-    assert "{{" not in upgraded
-    assert "}}" not in upgraded
-    for fragment in expected_braces:
-        assert fragment in upgraded
-    # ${var} 占位符保持不变
-    assert "${messages_text}" in upgraded
+    assert upgrade_str_format_template(template) == (expected, True)
+    assert upgrade_str_format_template(expected) == (expected, False)
 
 
 @pytest.mark.parametrize(
@@ -111,12 +76,13 @@ def test_unescape_halves_nested_escaped_closing_braces():
 
 
 def test_str_format_template_upgrade_is_unchanged():
-    upgraded, changed = upgrade_str_format_template(
-        '最多 {max_topics} 个\n[ {{"topic": "x"}} ]\n{messages_text}'
+    template = HISTORICAL_PROMPTS["v4.9.11/topic_prompt"]
+    expected = template.format(
+        max_topics="${max_topics}", messages_text="${messages_text}"
     )
 
-    assert changed is True
-    assert upgraded == '最多 ${max_topics} 个\n[ {"topic": "x"} ]\n${messages_text}'
+    assert upgrade_str_format_template(template) == (expected, True)
+    assert upgrade_str_format_template(expected) == (expected, False)
 
 
 def _migrator(prompts):
@@ -137,7 +103,7 @@ def _migrator(prompts):
 
 
 def test_migration_cleans_saved_prompt_and_schemes():
-    custom = "自定义方案 ${max_topics}\n[ {{\"topic\": \"x\"}} ]\n${messages_text}"
+    custom = '自定义方案 ${max_topics}\n[ {{"topic": "x"}} ]\n${messages_text}'
     migrator, config, cm = _migrator(
         {
             "topic_analysis_prompts": {
@@ -156,7 +122,9 @@ def test_migration_cleans_saved_prompt_and_schemes():
 
     group = config["prompts"]["topic_analysis_prompts"]
     assert changed is True
-    assert "{{" not in group["topic_prompt"]
+    assert group["topic_prompt"] == LEGACY_TOPIC_PROMPT.replace("{{", "{").replace(
+        "}}", "}"
+    )
     assert all("{{" not in row["text"] for row in group["topic_prompt_schemes"])
     assert group["topic_prompt_schemes"][1]["text"] == (
         '自定义方案 ${max_topics}\n[ {"topic": "x"} ]\n${messages_text}'
@@ -167,12 +135,14 @@ def test_migration_cleans_saved_prompt_and_schemes():
 
 
 def test_migration_is_noop_for_clean_prompts():
-    clean = '最多 ${max_topics} 个\n[{"topic": "x"}]\n${messages_text}'
+    clean = HISTORICAL_PROMPTS["v5.9.1/topic_prompt"]
     migrator, config, cm = _migrator(
         {
             "topic_analysis_prompts": {
                 "topic_prompt": clean,
-                "topic_prompt_schemes": [{"name": None, "text": clean, "selected": True}],
+                "topic_prompt_schemes": [
+                    {"name": None, "text": clean, "selected": True}
+                ],
             }
         }
     )
