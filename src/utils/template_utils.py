@@ -71,6 +71,9 @@ def unescape_doubled_braces(template: str) -> tuple[str, bool]:
 
     Returns:
         元组 (还原后的模板字符串, 是否发生了还原)。
+
+    Raises:
+        无。
     """
     runs = [
         m.group()
