@@ -52,8 +52,51 @@ def is_str_format_template(template: str) -> bool:
     return False
 
 
+# 匹配 ${var} 占位符，或一段连续的 { / }
+_BRACE_TOKEN_RE = re.compile(r"\$\{[_a-zA-Z][_a-zA-Z0-9]*\}|\{+|\}+")
+
+
+def unescape_doubled_braces(template: str) -> tuple[str, bool]:
+    """还原 string.Template 模板中残留的 str.format 转义大括号。
+
+    旧版默认提示词把占位符换成 ${var} 后，示例 JSON 里的 {{ 和 }} 没有同步还原。
+    string.Template 不识别这种转义，双大括号会原样发给模型并被模型照抄。
+
+    仅当占位符之外每一段连续大括号的长度都是偶数时才还原：转义过的模板满足
+    这一点，而正常书写的 JSON 至少有一个单独的 {，不会被误改（例如嵌套对象
+    结尾的 }} 会保持原样）。
+
+    Args:
+        template: 待检查的模板字符串。
+
+    Returns:
+        元组 (还原后的模板字符串, 是否发生了还原)。
+
+    Raises:
+        无。
+    """
+    runs = [
+        m.group()
+        for m in _BRACE_TOKEN_RE.finditer(template)
+        if not m.group().startswith("$")
+    ]
+    if not runs or any(len(run) % 2 for run in runs):
+        return template, False
+
+    restored = _BRACE_TOKEN_RE.sub(
+        lambda m: (
+            m.group() if m.group().startswith("$") else m.group()[: len(m.group()) // 2]
+        ),
+        template,
+    )
+    return restored, True
+
+
 def upgrade_str_format_template(template: str | None) -> tuple[str, bool]:
-    """如果模板是 str.format 风格，则自动升级为 string.Template 语法。
+    """将旧版模板升级为 string.Template 语法。
+
+    str.format 风格的模板会转换占位符并还原转义大括号；已经使用 ${var} 但仍
+    残留 {{ / }} 的模板只还原大括号。
 
     Args:
         template: 待转换的模板字符串。
@@ -65,7 +108,7 @@ def upgrade_str_format_template(template: str | None) -> tuple[str, bool]:
         return "", False
 
     if not is_str_format_template(template):
-        return template, False
+        return unescape_doubled_braces(template)
 
     # 先转义原文中的 $，避免被 Template 误解释为占位符
     safe_template = template.replace("$", "$$")
