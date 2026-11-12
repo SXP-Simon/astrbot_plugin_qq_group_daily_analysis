@@ -32,6 +32,7 @@ from ....shared.type_guards import (
 from ....utils.logger import logger
 from ..base import PlatformAdapter
 from ..message_normalization import is_image_sticker
+from .satori_history import fetch_satori_history
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -133,7 +134,7 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
         before_id: str | None = None,
         since_ts: int | float | None = None,
     ) -> list[UnifiedMessage]:
-        """从 AstrBot 本地消息归档库拉取历史记录。
+        """合并 AstrBot 本地归档与可用的 Satori 远端历史。
 
         按时间窗口、分页去重、Bot 自身过滤及时间升序进行处理。
 
@@ -147,19 +148,52 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
         Returns:
             统一领域消息列表（按时间升序排序）。
         """
-        if not self._context:
-            logger.warning("[Satori] 未设置 context，无法读取本地消息历史")
-            return []
-
-        history_mgr = getattr(self._context, "message_history_manager", None)
-        if not history_mgr:
-            logger.warning("[Satori] context 中缺少 message_history_manager 服务")
-            return []
-
         target_count = max(1, int(max_count))
         cutoff_ts = self.calculate_effective_start_timestamp(
             days=days, since_ts=since_ts
         )
+        local = await self._fetch_local_history(
+            group_id, cutoff_ts, target_count, before_id
+        )
+        messages = {message.message_id: message for message in local}
+        # 本地数据库的记录 ID 无法作为远端 Satori 的分页游标。
+        if not before_id:
+            remote = await fetch_satori_history(
+                self._call_satori_api,
+                str(group_id),
+                cutoff_ts,
+                target_count,
+                self.bot_self_ids,
+            )
+            for message in remote:
+                messages.setdefault(message.message_id, message)
+
+        return sorted(
+            messages.values(), key=lambda item: (item.timestamp, item.message_id)
+        )[-target_count:]
+
+    async def _fetch_local_history(
+        self, group_id: str, cutoff_ts: int, target_count: int, before_id: str | None
+    ) -> list[UnifiedMessage]:
+        """按本地记录游标读取可用于分析的归档消息。
+
+        Args:
+            group_id: 归档所属群组 ID。
+            cutoff_ts: 最早纳入分析的 Unix 时间戳（秒）。
+            target_count: 期望取得的去重消息数。
+            before_id: 可选的本地数据库记录 ID 上界。
+
+        Returns:
+            可用的本地消息。
+
+        Raises:
+            asyncio.CancelledError: 上层取消分析时传播。
+        """
+        history_mgr = getattr(self._context, "message_history_manager", None)
+        if not history_mgr:
+            logger.warning("[Satori] 无法访问 AstrBot 本地消息历史服务")
+            return []
+
         before_record_id: int | None = None
         if before_id:
             try:
@@ -212,18 +246,9 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
                     break
                 page += 1
 
-            messages.sort(key=lambda item: (item.timestamp, item.message_id))
-            if len(messages) > target_count:
-                messages = messages[-target_count:]
-            logger.info(
-                "[Satori] 从本地历史获取群 %s 消息 %d 条",
-                group_id,
-                len(messages),
-            )
-            return messages
         except Exception as exc:
             logger.error("[Satori] 读取本地消息历史失败: %s", exc, exc_info=True)
-            return []
+        return messages
 
     async def _call_satori_api(
         self,
@@ -837,8 +862,8 @@ class SatoriAdapter(PlatformAdapter["SatoriClientProtocol"]):
             return False
 
         resolved_src = self._resolve_image_src(file_path)
-        display_name = file_name or Path(file_path).name
-        content = f'<file src="{resolved_src}" name="{html.escape(display_name)}"/>'
+        display_name = html.escape(file_name or Path(file_path).name)
+        content = f'<file src="{html.escape(resolved_src)}" name="{display_name}" title="{display_name}"/>'
 
         try:
             resp = await self._call_satori_api(

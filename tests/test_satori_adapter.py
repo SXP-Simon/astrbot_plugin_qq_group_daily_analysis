@@ -150,6 +150,131 @@ async def test_satori_history_fetch_pagination_dedup_and_cutoff():
 
 
 @pytest.mark.asyncio
+async def test_satori_remote_history_merges_with_local_archive():
+    now = int(datetime.now(timezone.utc).timestamp())
+    send_req = AsyncMock(
+        side_effect=[
+            {
+                "data": [
+                    {
+                        "id": "103",
+                        "user": {"id": "bot-user-id"},
+                        "content": "bot",
+                        "created_at": now * 1000,
+                    },
+                    {
+                        "id": "102",
+                        "user": {"id": "alice"},
+                        "content": "远端重复",
+                        "created_at": (now - 10) * 1000,
+                    },
+                ],
+                "next": "opaque-cursor",
+            },
+            {
+                "data": [
+                    {
+                        "id": "101",
+                        "user": {"id": "bob", "name": "Bob"},
+                        "member": {"nick": "群名片"},
+                        "content": '<quote id="90">引用原文</quote>补拉 &amp; 文本<br/><img src="https://example.com/p.png"/><milky:face id="123"/>',
+                        "created_at": (now - 60) * 1000,
+                    },
+                    {
+                        "id": "100",
+                        "user": {"id": "bob"},
+                        "content": "窗口之外",
+                        "created_at": (now - 61) * 1000,
+                    },
+                ],
+                "next": "older",
+            },
+        ]
+    )
+    adapter, _ = make_satori_adapter(send_http_request=send_req)
+    adapter.set_context(
+        SimpleNamespace(
+            message_history_manager=FakeHistoryManager(
+                {
+                    1: [make_record(1, "102", "alice", now - 10, "本地原文")],
+                }
+            )
+        )
+    )
+
+    messages = await adapter.fetch_messages("guild-123", since_ts=now - 60, max_count=2)
+
+    assert [message.message_id for message in messages] == ["101", "102"]
+    older, local = messages
+    assert older.text_content == "补拉 & 文本"
+    assert older.sender_card == "群名片"
+    assert older.reply_to_id == "90"
+    assert older.timestamp == now - 60
+    assert {part.type for part in older.contents} >= {
+        MessageContentType.IMAGE,
+        MessageContentType.EMOJI,
+    }
+    assert local.text_content == "本地原文"
+    assert send_req.await_count == 2
+    assert send_req.await_args_list[1].args[2]["next"] == "opaque-cursor"
+
+
+@pytest.mark.asyncio
+async def test_satori_remote_history_falls_back_to_local_archive():
+    now = int(datetime.now(timezone.utc).timestamp())
+    send_req = AsyncMock(return_value={})
+    adapter, _ = make_satori_adapter(send_http_request=send_req)
+    adapter.set_context(
+        SimpleNamespace(
+            message_history_manager=FakeHistoryManager(
+                {
+                    1: [make_record(1, "101", "alice", now, "本地归档")],
+                }
+            )
+        )
+    )
+
+    assert [m.message_id for m in await adapter.fetch_messages("guild-123")] == ["101"]
+    assert send_req.await_args_list[0].args[1] == "/message.list"
+    send_req.reset_mock()
+    assert await adapter.fetch_messages("guild-123", before_id="1") == []
+    send_req.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_satori_remote_history_discovers_text_channels_and_stops_on_repeated_cursor():
+    now = int(datetime.now(timezone.utc).timestamp())
+    row = {
+        "id": "101",
+        "user": {"id": "alice"},
+        "content": "频道历史",
+        "created_at": now * 1000,
+    }
+    send_req = AsyncMock(
+        side_effect=[
+            {},
+            {
+                "data": [
+                    {"id": "text-channel", "type": 0},
+                    {"id": "category", "type": 2},
+                ]
+            },
+            {"data": [row], "next": "repeated"},
+            {"data": [row], "next": "repeated"},
+        ]
+    )
+    adapter, _ = make_satori_adapter(send_http_request=send_req)
+
+    assert [m.message_id for m in await adapter.fetch_messages("guild-123")] == ["101"]
+    assert send_req.await_count == 4
+    assert send_req.await_args_list[1].args[1:] == (
+        "/channel.list",
+        {"guild_id": "guild-123"},
+    )
+    assert send_req.await_args_list[2].args[2]["channel_id"] == "text-channel"
+
+
+@pytest.mark.asyncio
 async def test_satori_history_message_parts_conversion():
     """验证各种消息类型（@、图片、文件、音频、视频、回复）的正确转换。"""
     adapter, _ = make_satori_adapter()
@@ -357,4 +482,5 @@ async def test_satori_send_messages(tmp_path: Path):
     call_args = send_req.call_args[0]
     file_content = call_args[2]["content"]
     assert 'name="daily_summary.pdf"' in file_content
+    assert 'title="daily_summary.pdf"' in file_content
     assert '<file src="data:application/pdf;base64,' in file_content
