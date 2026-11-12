@@ -6,7 +6,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件市场入口-ff69b4?style=for-the-badge)](https://cloud.astrbot.app/plugin/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot Version](https://img.shields.io/badge/AstrBot-%3E%3D4.24.1-orange.svg?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Ask DeepWiki](https://img.shields.io/badge/Ask_DeepWiki-AI_知识库-1877F2?style=for-the-badge&logo=data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAgACADASIAAhEBAxEB/8QAFwABAQEBAAAAAAAAAAAAAAAAAAYHCP/EACIQAAEDBAIDAQEAAAAAAAAAAAECAwQABQYHERIxMkFxCP/EABcBAQEBAQAAAAAAAAAAAAAAAAABAgP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDkylK2r+f9b64zbDckn5fmaLJdYZ6Q2lzWY6UApBS6oOe4Kz148D9IroyxWlW+w9UZ5gFot91yqyiFEnqLbLiJLboC+CequhPBIBI8gj78qIqhW1aA2LrTC8NySDmWGt3u6yz3hOrgtSErSEgJZUV+gCx258H9AFYrSoLjYm2M72BaLfacqvKJkSAouNNtxm2QV8EdldAOSASkeAB8+1D0pVH/2Q==)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask_DeepWiki-有疑问点这里-1877F2?style=for-the-badge&logo=data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAgACADASIAAhEBAxEB/8QAFwABAQEBAAAAAAAAAAAAAAAAAAYHCP/EACIQAAEDBAIDAQEAAAAAAAAAAAECAwQABQYHERIxMkFxCP/EABcBAQEBAQAAAAAAAAAAAAAAAAABAgP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDkylK2r+f9b64zbDckn5fmaLJdYZ6Q2lzWY6UApBS6oOe4Kz148D9IroyxWlW+w9UZ5gFot91yqyiFEnqLbLiJLboC+CequhPBIBI8gj78qIqhW1aA2LrTC8NySDmWGt3u6yz3hOrgtSErSEgJZUV+gCx258H9AFYrSoLjYm2M72BaLfacqvKJkSAouNNtxm2QV8EdldAOSASkeAB8+1D0pVH/2Q==)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 
 <table align="center" style="border: none;">
   <tr>
@@ -23,7 +23,7 @@
   </tr>
 </table>
 
-_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [NapNeko/NapCatQQ<img src="https://avatars.githubusercontent.com/u/165024194?s=200&v=4" width="14px" >](https://napneko.github.io/), [LLOneBot/LuckyLilliaBot<img src="https://avatars.githubusercontent.com/u/161472069?s=200&v=4" width="14px" >](https://www.llonebot.com/))、**QQ 官方机器人**、**Telegram**、**Discord**，未来支持更多平台。 ✨_
+_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ 官方机器人**、**Telegram**、**Discord**、**OneBot v11**、**Satori**，未来支持更多平台。 ✨_
 
 <img src="https://count.getloli.com/@astrbot-qq-group-daily-analysis?name=astrbot-qq-group-daily-analysis&theme=booru-jaypee&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="count" />
 </div>
@@ -82,12 +82,36 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 <table align="center" width="100%">
   <tr>
-    <td align="center" width="100%" valign="top">
-      <img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.webp" alt="群每日漫画功能" width="60%">
-      <p><b>参考 Atri 人格的群每日漫画 Demo</b></p>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>SCP 异常调查档案风</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/scp_dossier/preview.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/scp_dossier/thumbnail.webp" alt="SCP 异常调查档案风群漫画示例" width="100%"></a>
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>像素 RPG 每日冒险日志</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/pixel_rpg/preview.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/pixel_rpg/thumbnail.webp" alt="像素 RPG 每日冒险日志群漫画示例" width="100%"></a>
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>复古昭和怪谈画报风</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/showa_kidan/preview.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/showa_kidan/thumbnail.webp" alt="复古昭和怪谈画报风群漫画示例" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>浮世绘锦绘町人见闻录</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/ukiyo_e/preview.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/ukiyo_e/thumbnail.webp" alt="浮世绘锦绘町人见闻录群漫画示例" width="100%"></a>
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>怪盗团预告信剪报拼贴</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/phantom_thief/preview.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/phantom_thief/thumbnail.webp" alt="怪盗团预告信剪报拼贴群漫画示例" width="100%"></a>
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>手账剪贴簿拍立得日记</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/scrapbook_diary/preview.webp"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic_previews/scrapbook_diary/thumbnail.webp" alt="手账剪贴簿拍立得日记群漫画示例" width="100%"></a>
     </td>
   </tr>
 </table>
+
+点击样图查看大图。更多风格见[每日群漫画配置](#每日群漫画配置)，也可以查看 [ATRI 人格漫画示例](https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.webp)。
 
 ## 功能特色
 
