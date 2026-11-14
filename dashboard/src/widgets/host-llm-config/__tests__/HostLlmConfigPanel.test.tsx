@@ -80,10 +80,11 @@ it("切换群会话时不显示旧范围结果，迟到响应不覆盖新会话"
     providers: [host.providers[1]],
   });
   render(<HostLlmConfigPanel draft={{}} dirty={false} />);
-  await screen.findByRole("option", { name: /示例群/ });
-  fireEvent.change(screen.getByLabelText("查看范围"), {
-    target: { value: JSON.stringify(["bot-a", "123"]) },
-  });
+  fireEvent.click(screen.getByRole("button", { name: /查看范围：/ }));
+  const dialog = screen.getByRole("dialog", { name: "查看范围" });
+  fireEvent.change(within(dialog).getByRole("searchbox"), { target: { value: "123" } });
+  fireEvent.click(await within(dialog).findByRole("button", { name: /示例群/ }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   await waitFor(() =>
     expect(fetchHostLlmConfig).toHaveBeenLastCalledWith({
       platform: "bot-a",

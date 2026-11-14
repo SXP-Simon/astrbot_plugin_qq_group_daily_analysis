@@ -1,5 +1,27 @@
 import { useId, useState } from "react";
-import { IconEye, IconEyeOff, IconPlus, IconRestore, IconX } from "@tabler/icons-react";
+import {
+  IconEye,
+  IconEyeOff,
+  IconPlus,
+  IconRestore,
+  IconX,
+  IconBrain,
+  IconUserCircle,
+  IconWorld,
+  IconToggleLeft,
+  IconHash,
+  IconList,
+  IconFileText,
+  IconAdjustmentsHorizontal,
+  IconKey,
+  IconInfoCircle,
+  IconPalette,
+  IconPhoto,
+  IconClock,
+  IconTypography,
+  type Icon,
+} from "@tabler/icons-react";
+import { ModelIcon } from "@/entities/config/ui/ModelIcon";
 import { resolveOptionLabel } from "@/entities/config/model/optionLabel";
 import { isFieldVisible } from "@/entities/config/model/visibility";
 import {
@@ -25,6 +47,28 @@ import { ComicStoryboardEditor } from "./ComicStoryboardEditor";
 
 const TEXTAREA_CLASS =
   "min-h-28 max-h-96 w-full resize-y rounded-xl border border-solid border-input bg-background p-3 font-mono text-sm leading-relaxed text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+const typeIcons: Record<string, Icon> = {
+  bool: IconToggleLeft,
+  int: IconHash,
+  float: IconHash,
+  list: IconList,
+  template_list: IconList,
+  text: IconFileText,
+  file: IconFileText,
+};
+
+const fieldIcons: Record<string, Icon> = {
+  service_token: IconKey,
+  comic_characters: IconUserCircle,
+  comic_styles: IconPalette,
+  t2i_rendering_strategies: IconPhoto,
+  preset_id: IconPalette,
+  reference_images: IconPhoto,
+  name: IconTypography,
+  timeout: IconClock,
+  request_timeout: IconClock,
+};
 
 interface FieldRendererProps {
   templateRequirements?: TemplateRequirements;
@@ -91,6 +135,12 @@ export function FieldRenderer({
     type === "string" &&
     (fieldKey.toLowerCase().includes("persona") || fieldSchema._special === "select_persona");
 
+  // 复用控件已有的语义判断；图标不参与字段标签或可访问名称。
+  let FieldIcon = fieldIcons[fieldKey] ?? typeIcons[type] ?? IconAdjustmentsHorizontal;
+  if (provider) FieldIcon = IconBrain;
+  else if (persona) FieldIcon = IconUserCircle;
+  else if (resource) FieldIcon = IconWorld;
+
   const renderControl = () => {
     if (fieldKey === "service_token")
       return (
@@ -124,10 +174,11 @@ export function FieldRenderer({
           (fieldKey === "cdn_base_url" ? TEMPLATE_CDN_PRESETS : []))
         : provider
           ? [
-              { value: "", label: "使用默认模型" },
+              { value: "", label: "使用默认模型", icon: <ModelIcon /> },
               ...providers.map((item) => ({
                 value: item.id,
                 label: `${item.name || item.id} [${item.id}]${item.type ? ` (${item.type})` : ""}`,
+                icon: <ModelIcon {...item} />,
               })),
             ]
           : [
@@ -571,9 +622,9 @@ export function FieldRenderer({
       data-field-key={fieldKey}
       data-modified={modified || undefined}
       className={cn(
-        "grid min-w-0 gap-3 border-0 border-b border-solid border-border",
-        isSubField ? "pb-3" : "pb-5",
-        modified && isSubField && !error && "rounded-xl border-primary-line p-3",
+        "grid min-w-0 gap-4 border-solid border-border",
+        isSubField ? "rounded-xl border bg-card p-4" : "border-0 border-b pb-5",
+        modified && isSubField && !error && "border-primary-line",
         modified &&
           isSubField &&
           !error &&
@@ -584,13 +635,21 @@ export function FieldRenderer({
       )}
     >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <label
             htmlFor={id}
             title={fullKeyPath || fieldKey}
-            className={cn("text-sm font-medium", error && "text-destructive")}
+            className={cn(
+              "flex min-w-0 items-start gap-2.5 text-sm font-medium leading-6",
+              error && "text-destructive",
+            )}
           >
-            {title}
+            <FieldIcon
+              aria-hidden="true"
+              stroke={1.6}
+              className={cn("mt-0.5 shrink-0 text-primary-ink", isSubField ? "size-4" : "size-5")}
+            />
+            <span>{title}</span>
           </label>
           {modified && (
             <span className="rounded-md bg-primary-soft px-2 py-0.5 text-xs text-primary-ink">
@@ -621,8 +680,17 @@ export function FieldRenderer({
       )}
       {renderControl()}
       {hint && (
-        <div id={`${id}-hint`} className="text-sm leading-relaxed text-muted-foreground">
-          <MarkdownHint content={hint} />
+        <div
+          id={`${id}-hint`}
+          className={cn(
+            "flex min-w-0 items-start gap-2.5 text-sm leading-7 text-muted-foreground",
+            !isSubField && "rounded-xl bg-secondary-soft px-3 py-3 sm:px-4",
+          )}
+        >
+          {!isSubField && (
+            <IconInfoCircle aria-hidden="true" stroke={1.6} className="mt-1 size-4 shrink-0" />
+          )}
+          <MarkdownHint content={hint} className="min-w-0 break-words" />
         </div>
       )}
     </section>
