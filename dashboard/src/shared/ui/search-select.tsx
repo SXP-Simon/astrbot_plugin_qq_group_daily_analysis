@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { IconCheck, IconChevronDown } from "@tabler/icons-react";
 import { Button } from "./button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "./dialog";
@@ -10,7 +10,7 @@ interface SearchSelectProps {
   "aria-describedby"?: string;
   label: string;
   value: string;
-  options: { value: string; label: string; searchText?: string }[];
+  options: { value: string; label: string; searchText?: string; icon?: ReactNode }[];
   onChange: (value: string) => void;
   disabled?: boolean;
   virtual?: boolean;
@@ -85,7 +85,16 @@ export function SearchSelect({
           aria-label={`${label}：${selected?.label ?? (value || "请选择")}`}
           className="w-full min-w-0 max-w-full justify-between text-left"
         >
-          <span className="truncate">{triggerText ?? selected?.label ?? (value || "请选择")}</span>
+          <span className="flex min-w-0 items-center gap-2.5">
+            {!triggerText && selected?.icon && (
+              <span aria-hidden="true" className="flex shrink-0">
+                {selected.icon}
+              </span>
+            )}
+            <span className="truncate">
+              {triggerText ?? selected?.label ?? (value || "请选择")}
+            </span>
+          </span>
           <IconChevronDown aria-hidden="true" />
         </Button>
       </DialogTrigger>
@@ -197,8 +206,15 @@ export function SearchSelect({
                       setSearch("");
                     }}
                   >
-                    <span className={virtual ? "line-clamp-2 break-words" : "break-words"}>
-                      {option.label}
+                    <span className="flex min-w-0 items-center gap-3">
+                      {option.icon && (
+                        <span aria-hidden="true" className="flex shrink-0">
+                          {option.icon}
+                        </span>
+                      )}
+                      <span className={virtual ? "line-clamp-2 break-words" : "break-words"}>
+                        {option.label}
+                      </span>
                     </span>
                     {value === option.value && <IconCheck aria-hidden="true" />}
                   </Button>
