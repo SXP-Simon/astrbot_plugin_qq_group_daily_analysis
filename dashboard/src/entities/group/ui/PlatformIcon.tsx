@@ -1,4 +1,6 @@
+import { useContext } from "react";
 import { IconMessages } from "@tabler/icons-react";
+import { PlatformTypesContext } from "@/entities/group/model/PlatformTypesContext";
 import onebot from "@/shared/assets/platforms/onebot.png";
 import qq from "@/shared/assets/platforms/qq.png";
 import satori from "@/shared/assets/platforms/satori.png";
@@ -6,18 +8,22 @@ import telegram from "@/shared/assets/platforms/telegram.svg";
 import discord from "@/shared/assets/platforms/discord.svg";
 import { cn } from "@/shared/lib/cn";
 
-// 与 AstrBot 的平台类型映射一致；实例 ID 不猜测为某个平台。
-const platformIcons: Record<string, string> = {
-  aiocqhttp: onebot,
-  qq_official: qq,
-  qq_official_webhook: qq,
-  satori,
-  telegram,
-  discord,
-};
+const platformIcons = new Map([
+  ["aiocqhttp", onebot],
+  ["onebot", onebot],
+  ["qq_official", qq],
+  ["qq_official_webhook", qq],
+  ["satori", satori],
+  ["telegram", telegram],
+  ["discord", discord],
+  ["discord_bot", discord],
+]);
 
 export function PlatformIcon({ platform, className }: { platform?: string; className?: string }) {
-  const src = platformIcons[platform?.toLowerCase() ?? ""];
+  const types = useContext(PlatformTypesContext);
+  // 按实例 ID 精确查找。历史记录直接存适配器类型时，仍可用类型匹配。
+  const type = platform ? (types.get(platform) ?? platform) : "";
+  const src = platformIcons.get(type.trim().toLowerCase());
   if (!src)
     return (
       <IconMessages
