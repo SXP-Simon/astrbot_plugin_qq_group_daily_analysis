@@ -1,18 +1,25 @@
+import { AnalysisRuntimePanel } from "@/widgets/analysis-runtime/ui/AnalysisRuntimePanel";
 import { LoadingState } from "@/shared/ui/loading-state";
 import { ActiveTaskBoard } from "@/widgets/active-task-board/ActiveTaskBoard";
 import { OverviewTrendCharts } from "@/widgets/trend-charts/OverviewTrendCharts";
 import { Button } from "@/shared/ui/button";
 import { StatusTag } from "@/shared/ui/StatusTag";
-import { formatDuration, formatSmartTokens, formatTimestamp } from "@/shared/lib/formatters";
+import { formatSmartTokens, formatTimestamp } from "@/shared/lib/formatters";
 import type { useOverviewViewModel } from "@/pages/overview/model/useOverviewViewModel";
 
 interface OverviewPageProps {
   viewModel: ReturnType<typeof useOverviewViewModel>;
+  onOpenConfig: (category: "performance" | "llm") => void;
   onOpenTrigger: () => void;
   onViewTrace: (traceId: string) => void;
 }
 
-export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: OverviewPageProps) {
+export function OverviewPage({
+  viewModel,
+  onOpenTrigger,
+  onViewTrace,
+  onOpenConfig,
+}: OverviewPageProps) {
   const {
     metrics,
     activeTasks,
@@ -34,7 +41,6 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
     ["今日群聊", metrics?.today_active_groups, "个"],
     ["历史运行", metrics?.total_traces, "次"],
     ["成功率", metrics?.success_rate, "%"],
-    ["平均耗时", metrics ? formatDuration(metrics.avg_duration_ms) : undefined, ""],
   ];
   return (
     <div className="space-y-8">
@@ -86,6 +92,7 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
           </dl>
         </div>
       </section>
+      <AnalysisRuntimePanel metrics={metrics} error={errors.metrics} onOpenConfig={onOpenConfig} />
       {metrics && (
         <OverviewTrendCharts
           initialTrends={metrics.trends}

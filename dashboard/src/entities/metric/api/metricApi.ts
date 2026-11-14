@@ -18,6 +18,8 @@ export async function fetchMetricsSummary(): Promise<MetricsSummary> {
       today_tokens_spent: data.today_tokens_spent ?? 0,
       today_cost_spent: data.today_cost_spent ?? 0,
       trends: data.trends,
+      llm_runtime: data.llm_runtime,
+      analysis_performance: data.analysis_performance,
     };
   }
   return {

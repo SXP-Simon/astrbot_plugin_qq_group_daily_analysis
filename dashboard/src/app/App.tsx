@@ -169,6 +169,11 @@ export const App: React.FC = () => {
       children: (
         <OverviewPage
           viewModel={overviewVM}
+          onOpenConfig={(category) => {
+            configVM.setSearchQuery("");
+            configVM.setActiveCategory(category);
+            handleTabChange("config");
+          }}
           onOpenTrigger={triggerVM.handleOpen}
           onViewTrace={handleViewTrace}
         />

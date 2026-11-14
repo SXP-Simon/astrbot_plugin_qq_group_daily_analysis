@@ -183,6 +183,10 @@ dashboard/src/
 - **MVVM 模式**：页面视图（View）与 ViewModel 严格解耦，网络请求与衍生计算全部内聚在 `use*ViewModel`；
 - **强类型通信桥**：通过 `shared/api/bridge.ts` 与 AstrBot 宿主进行严格类型的 Iframe Bridge 与 SSE 订阅通信。
 - **宿主模型只读展示**：`GET /config/host-llm` 使用宿主 Context 读取默认或指定群会话的当前模型，只返回模型标识、名称、模型名和加载状态。回退列表的版本兼容解析由 `analysis/utils/host_llm_config.py` 与运行时共用，不暴露完整 Provider 配置。前端 `entities/config` 负责契约校验与调用顺序推导，`widgets/host-llm-config` 管理会话选择、刷新及草稿预览；宿主读取结果不写入插件表单，也不提供宿主配置写接口。
+- **总览运行状态**：`GET /metrics/summary` 返回持久化的 `analysis_performance` 与内存中的 `llm_runtime`。存储层从已完成且耗时有效的 Trace 聚合平均耗时、样本数和最近一次耗时；没有新增计时器，也不按固定窗口估算吞吐量。路由在读取存储后调用 `analysis/utils/llm_utils.py` 的 `get_llm_runtime_snapshot()`，使用现有熔断器的 `snapshot()` 获取状态，不创建实例或取得请求许可。前端 `widgets/analysis-runtime` 负责紧凑展示，`OverviewPage` 复用总览刷新，`App` 将配置跳转定位到 `performance` 或 `llm` 分组并保留草稿。模型继承配置与运行状态的接口、展示职责分离。
+- **熔断请求许可**：`CircuitBreaker.check_request()` 为排队前只读检查，`acquire_request()` 在取得并发槽位后复查并发放带轮次的许可；半开只发放一个探测许可。结果反馈忽略旧轮次，取消或不计数异常由 `finally` 释放探测资格。`CircuitBreakerRejected` 仅表示未发送请求，统一调用层将其记录为 `llm_attempts.status=skipped` 与 `skip_reason`，删除当前 Provider 的剩余重试并免除退避；备用队列仍由原有配置选择逻辑构造。
+
+
 
 ---
 
