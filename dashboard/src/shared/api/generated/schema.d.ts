@@ -959,6 +959,14 @@ export interface components {
             data?: components["schemas"]["BackupJsonValue"];
             revision?: string;
         };
+        CircuitBreakerSnapshot: {
+            /** @enum {string} */
+            state: "CLOSED" | "OPEN" | "HALF_OPEN";
+            failure_count: number;
+            failure_threshold: number;
+            recovery_timeout_seconds: number;
+            retry_after_seconds: number;
+        };
         HostLlmProvider: {
             id: string;
             name: string;
@@ -1184,7 +1192,20 @@ export interface components {
             provider_breakdown: components["schemas"]["ProviderBreakdownItem"][];
             model_breakdown: components["schemas"]["ModelBreakdownItem"][];
         };
+        LlmRuntimeSnapshot: {
+            captured_at: number;
+            circuits: {
+                [key: string]: components["schemas"]["CircuitBreakerSnapshot"];
+            };
+        };
+        AnalysisPerformance: {
+            sample_count: number;
+            avg_duration_ms: number | null;
+            latest_duration_ms: number | null;
+        };
         MetricsSummary: {
+            llm_runtime?: components["schemas"]["LlmRuntimeSnapshot"];
+            analysis_performance?: components["schemas"]["AnalysisPerformance"];
             total_traces: number;
             succeeded_count: number;
             failed_count: number;
