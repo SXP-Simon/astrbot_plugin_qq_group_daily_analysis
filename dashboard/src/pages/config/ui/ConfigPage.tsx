@@ -12,6 +12,7 @@ import {
 import type { useConfigViewModel } from "@/pages/config/model/useConfigViewModel";
 import { ComicRotationDialog } from "@/features/manage-comic-rotation/ui/ComicRotationDialog";
 import { FieldRenderer } from "@/widgets/config-form/ui/FieldRenderer";
+import { HostLlmConfigPanel } from "@/widgets/host-llm-config/ui/HostLlmConfigPanel";
 import { MarkdownHint } from "@/shared/ui/MarkdownHint";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -191,6 +192,12 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
                 />
               )}
             </div>
+          )}
+          {vm.activeCategory === "llm" && vm.configLoaded && (
+            <HostLlmConfigPanel
+              draft={vm.formData.llm ?? {}}
+              dirty={Boolean(vm.modifiedFields.llm?.size)}
+            />
           )}
           {vm.currentGroupFields.length === 0 ? (
             vm.loading ? (

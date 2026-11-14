@@ -182,6 +182,7 @@ dashboard/src/
 
 - **MVVM 模式**：页面视图（View）与 ViewModel 严格解耦，网络请求与衍生计算全部内聚在 `use*ViewModel`；
 - **强类型通信桥**：通过 `shared/api/bridge.ts` 与 AstrBot 宿主进行严格类型的 Iframe Bridge 与 SSE 订阅通信。
+- **宿主模型只读展示**：`GET /config/host-llm` 使用宿主 Context 读取默认或指定群会话的当前模型，只返回模型标识、名称、模型名和加载状态。回退列表的版本兼容解析由 `analysis/utils/host_llm_config.py` 与运行时共用，不暴露完整 Provider 配置。前端 `entities/config` 负责契约校验与调用顺序推导，`widgets/host-llm-config` 管理会话选择、刷新及草稿预览；宿主读取结果不写入插件表单，也不提供宿主配置写接口。
 
 ---
 
