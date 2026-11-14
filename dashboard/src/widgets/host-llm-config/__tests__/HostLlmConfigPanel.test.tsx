@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { HostLlmConfigPanel } from "@/widgets/host-llm-config/ui/HostLlmConfigPanel";
 import { fetchHostLlmConfig } from "@/entities/config/api/hostLlmApi";
@@ -50,6 +50,17 @@ it("只读展示宿主模型，草稿预览和刷新不修改插件表单", asyn
   expect(screen.queryByRole("button", { name: /保存/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "刷新宿主信息" }));
   await waitFor(() => expect(fetchHostLlmConfig).toHaveBeenCalledTimes(2));
+  await screen.findByText("已删除模型");
+  // 检查刷新完成后的实际展示，不能仅证明传入的草稿对象没有被修改。
+  expect(screen.getByText(/未保存的预览/)).toBeVisible();
+  expect(screen.getByText(/已指定插件主 LLM/)).toBeVisible();
+  const chains = screen.getAllByRole("definition");
+  expect(chains).toHaveLength(6);
+  for (const chain of chains) {
+    expect(within(chain).getByText("插件专用模型")).toBeVisible();
+    expect(within(chain).queryByText("宿主主模型")).not.toBeInTheDocument();
+    expect(within(chain).queryByText("宿主备用模型")).not.toBeInTheDocument();
+  }
   expect(draft).toEqual({ llm_provider_id: "p" });
   view.rerender(<HostLlmConfigPanel draft={{ llm_provider_id: "" }} dirty />);
   expect(await screen.findByText(/主 LLM 留空/)).toBeVisible();
@@ -96,4 +107,45 @@ it("读取失败明确显示错误，刷新成功后恢复展示", async () => {
   fireEvent.click(screen.getByRole("button", { name: "刷新宿主信息" }));
   await screen.findByText("已删除模型");
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("宿主回执超时后恢复刷新，重试成功仍保留草稿调用顺序", async () => {
+  const actualApi = await vi.importActual<typeof import("@/entities/config/api/hostLlmApi")>(
+    "@/entities/config/api/hostLlmApi",
+  );
+  vi.mocked(fetchHostLlmConfig).mockImplementation(actualApi.fetchHostLlmConfig);
+  const previousBridge = window.AstrBotPluginPage;
+  const bridgeGet = vi.fn().mockReturnValue(new Promise<never>(() => {}));
+  window.AstrBotPluginPage = {
+    ready: async () => ({}),
+    apiGet: bridgeGet,
+    apiPost: vi.fn(),
+    subscribeSSE: async () => "unused",
+    unsubscribeSSE: () => {},
+  };
+  vi.useFakeTimers();
+  try {
+    render(<HostLlmConfigPanel draft={{ llm_provider_id: "p" }} dirty />);
+    expect(screen.getByRole("button", { name: "刷新宿主信息" })).toBeDisabled();
+    // 使用真实接口封装与通信层，确认丢失回执确实会触发超时，而非模拟一次拒绝。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("读取失败");
+    expect(screen.getByRole("button", { name: "刷新宿主信息" })).toBeEnabled();
+    bridgeGet.mockResolvedValue({ status: "ok", data: { ...host, fallback_ids: ["b"] } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "刷新宿主信息" }));
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText(/未保存的预览/)).toBeVisible();
+    expect(screen.getAllByRole("definition").map((row) => row.textContent)).toEqual(
+      Array(6).fill("插件专用模型"),
+    );
+    expect(bridgeGet).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    window.AstrBotPluginPage = previousBridge;
+    vi.useRealTimers();
+  }
 });
