@@ -925,7 +925,7 @@
                 "description": "LLM Provider ID（用于所有分析任务）",
                 "_special": "select_provider",
                 "default": "",
-                "hint": "选择用于群聊分析的 LLM Provider。留空则使用当前会话的默认 Provider"
+                "hint": "选择用于群聊分析的 LLM Provider。留空则使用当前会话的默认 Provider，并在调用失败后按顺序尝试 AstrBot 配置的回退对话模型"
             },
             "topic_provider_id": {
                 "type": "string",
