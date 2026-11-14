@@ -373,3 +373,154 @@ def test_cancellation_does_not_try_fallbacks():
         )
     ctx.llm_generate.assert_awaited_once()
     ctx.get_config.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_open_circuit_skips_all_retries_without_backoff_and_persists_reason(monkeypatch, tmp_path, streaming):
+    from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+    from src.shared.constants import AnalysisStage
+
+    ctx = Context({"provider_settings": {"fallback_chat_models": ["backup-2"]}})
+    breaker = llm_utils.get_provider_circuit_breaker("primary")
+    for _ in range(5):
+        breaker.record_failure()
+    sleep = AsyncMock()
+    monkeypatch.setattr(llm_utils.asyncio, "sleep", sleep)
+    async def stream(context, pid, kwargs):
+        return await context.llm_generate(**kwargs)
+    monkeypatch.setattr(llm_utils, "_call_provider_stream", stream)
+    with TraceContext(trace_id="circuit-skip") as trace:
+        with trace.span(AnalysisStage.LLM_ANALYSIS.value):
+            result = await llm_utils.call_provider_with_retry(ctx, Config(retries=3, streaming=streaming), "report", provider_id="primary")
+        assert result.completion_text == "report"
+        attempts = trace.metadata["llm_attempts"]
+        assert [item["status"] for item in attempts] == ["skipped", "success"]
+        assert "冷却中" in attempts[0]["skip_reason"]
+        assert "error" not in attempts[0]
+        assert trace.spans[-1]["payload"]["llm_attempts"] == attempts
+        store = TraceSQLiteStore(tmp_path / "skip.db")
+        store.save_trace({"trace_id": trace.trace_id, "group_id": "123", "extra": trace.metadata})
+        assert store.get_trace(trace.trace_id)["extra"]["llm_attempts"] == attempts
+    assert [call["chat_provider_id"] for call in ctx.calls] == ["backup-2"]
+    assert breaker.failure_count == 5
+    sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_waiting_request_rechecks_circuit_after_acquiring_slot(monkeypatch):
+    queued = asyncio.Event()
+    class ObservedSemaphore(asyncio.Semaphore):
+        async def acquire(self):
+            if self.locked():
+                queued.set()
+            return await super().acquire()
+    semaphore = ObservedSemaphore(1)
+    limiter = GlobalRateLimiter.get_instance(1)
+    monkeypatch.setattr(GlobalRateLimiter, "_semaphore", semaphore)
+    await semaphore.acquire()
+    ctx = Context({"provider_settings": {"fallback_chat_models": ["backup-2"]}})
+    with TraceContext(trace_id="queued-skip") as trace:
+        task = asyncio.create_task(llm_utils.call_provider_with_retry(ctx, Config(), "report", provider_id="primary"))
+        await asyncio.wait_for(queued.wait(), 1)
+        breaker = llm_utils.get_provider_circuit_breaker("primary")
+        for _ in range(5):
+            breaker.record_failure()
+        semaphore.release()
+        assert (await asyncio.wait_for(task, 1)).completion_text == "report"
+        assert trace.metadata["llm_attempts"][0]["status"] == "skipped"
+    assert [call["chat_provider_id"] for call in ctx.calls] == ["backup-2"]
+    assert limiter.available_slots == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("result", ["success", "failure", "cancelled", "content_filter", "schema"])
+async def test_only_one_probe_and_cleanup_on_every_exit(monkeypatch, result):
+    started = asyncio.Event()
+    release = asyncio.Event()
+    ctx = Context({"provider_settings": {"fallback_chat_models": ["backup-2"]}})
+    breaker = llm_utils.get_provider_circuit_breaker("primary")
+    for _ in range(5):
+        breaker.record_failure()
+    breaker.last_failure_time -= 61
+    calls = []
+    async def generate(**kwargs):
+        pid = kwargs["chat_provider_id"]
+        calls.append(pid)
+        if pid == "primary":
+            started.set()
+            await release.wait()
+            if result == "failure":
+                raise RuntimeError("HTTP 503")
+            if result == "content_filter":
+                raise RuntimeError("content_filter")
+            if result == "schema" and kwargs.get("response_format"):
+                raise RuntimeError("response_format is not supported")
+        return LLMResponse(role="assistant", completion_text="report")
+    ctx.llm_generate = generate
+    sleep = AsyncMock()
+    monkeypatch.setattr(llm_utils.asyncio, "sleep", sleep)
+    with TraceContext(trace_id="probe") as trace:
+        probe = asyncio.create_task(llm_utils.call_provider_with_retry(ctx, Config(retries=1), "report", provider_id="primary", response_format={"type": "json_object"}))
+        await asyncio.wait_for(started.wait(), 1)
+        others = await asyncio.wait_for(asyncio.gather(*[
+            llm_utils.call_provider_with_retry(ctx, Config(), "report", provider_id="primary") for _ in range(6)
+        ]), 1)
+        assert all(item.completion_text == "report" for item in others)
+        assert calls.count("primary") == 1
+        assert calls.count("backup-2") == 6
+        skips = [item for item in trace.metadata["llm_attempts"] if item["status"] == "skipped"]
+        assert len(skips) == 6
+        assert all("恢复探测" in item["skip_reason"] for item in skips)
+        if result == "cancelled":
+            probe.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await probe
+        else:
+            release.set()
+            assert (await asyncio.wait_for(probe, 1)).completion_text == "report"
+    if result in ("success", "schema"):
+        assert breaker.state == "CLOSED"
+        assert breaker.failure_count == 0
+    elif result == "failure":
+        assert breaker.state == "OPEN"
+        assert breaker.snapshot()["retry_after_seconds"] > 0
+        assert breaker.failure_count == 6
+    else:
+        assert breaker.state == "OPEN"
+        assert breaker.snapshot()["retry_after_seconds"] == 0
+        assert breaker.failure_count == 5
+        permit = breaker.acquire_request()
+        breaker.record_success(permit)
+        breaker.release_request(permit)
+        assert breaker.state == "CLOSED"
+    assert GlobalRateLimiter.get_instance().available_slots == 4
+    sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_failure_that_trips_circuit_does_not_wait_before_fallback(monkeypatch):
+    ctx = Context({"provider_settings": {"fallback_chat_models": ["backup-2"]}})
+    breaker = llm_utils.get_provider_circuit_breaker("primary")
+    for _ in range(4):
+        breaker.record_failure()
+    sleep = AsyncMock()
+    monkeypatch.setattr(llm_utils.asyncio, "sleep", sleep)
+    assert (await llm_utils.call_provider_with_retry(ctx, Config(retries=3), "report", provider_id="primary")).completion_text == "report"
+    assert [call["chat_provider_id"] for call in ctx.calls] == ["primary", "backup-2"]
+    assert breaker.failure_count == 5
+    sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_all_circuits_open_returns_without_backoff(monkeypatch):
+    ctx = Context({"provider_settings": {"fallback_chat_models": ["backup-2"]}})
+    for pid in ("primary", "backup-2"):
+        breaker = llm_utils.get_provider_circuit_breaker(pid)
+        for _ in range(5):
+            breaker.record_failure()
+    sleep = AsyncMock()
+    monkeypatch.setattr(llm_utils.asyncio, "sleep", sleep)
+    assert await llm_utils.call_provider_with_retry(ctx, Config(), "report", provider_id="primary") is None
+    assert ctx.calls == []
+    sleep.assert_not_awaited()

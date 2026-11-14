@@ -112,6 +112,14 @@ export const mockTraces: TraceRecord[] = [
           llm_attempts: [
             {
               area: "topics",
+              provider_id: "openai",
+              status: "skipped",
+              duration_ms: 0,
+              skip_reason: "模型熔断冷却中，剩余约 38.0 秒，跳过当前模型",
+            },
+            {
+              is_fallback: true,
+              area: "topics",
               provider_id: "deepseek-chat",
               model: "deepseek-chat",
               duration_ms: 2800,

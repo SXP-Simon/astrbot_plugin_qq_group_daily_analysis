@@ -6,6 +6,7 @@ export const llmAttemptSchema = z.object({
   model: z.string().optional().catch(undefined),
   status: z.string().optional().catch(undefined),
   error: z.string().optional().catch(undefined),
+  skip_reason: z.string().optional().catch(undefined),
   attempt: z.number().int().positive().optional().catch(undefined),
   duration_ms: z.number().nonnegative().optional().catch(undefined),
   is_fallback: z.boolean().optional().catch(undefined),

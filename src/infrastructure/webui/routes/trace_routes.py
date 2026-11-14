@@ -14,6 +14,7 @@ from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
 from ....shared.type_guards import is_object_collection, is_string_mapping
 from ....utils.logger import logger
+from ...analysis.utils.llm_utils import get_llm_runtime_snapshot
 from ...platform.factory import PlatformAdapterFactory
 from ..web_compat import (
     WebApiResponse,
@@ -532,6 +533,7 @@ class TraceRoutes:
         """获取顶部 KPI 与 Token 统计概览"""
         try:
             summary = await asyncio.to_thread(self.trace_store.get_metrics_summary)
+            summary["llm_runtime"] = get_llm_runtime_snapshot()
             return json_response({"status": "ok", "data": summary})
         except Exception as e:
             logger.error(f"获取指标概览异常: {e}", exc_info=True)

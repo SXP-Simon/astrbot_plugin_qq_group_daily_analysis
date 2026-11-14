@@ -231,7 +231,13 @@ export const mockHandlers = {
     return { status: "ok", data: mockTypstFonts };
   },
   // 1. 大盘指标与趋势
-  "GET metrics/summary": () => ({ status: "ok", data: mockMetricsSummary }),
+  "GET metrics/summary": () => ({
+    status: "ok",
+    data: {
+      ...mockMetricsSummary,
+      llm_runtime: { ...mockMetricsSummary.llm_runtime, captured_at: Date.now() / 1000 },
+    },
+  }),
   "GET metrics/trends": (params?: Record<string, unknown>) => ({
     status: "ok",
     data: createMockAnalyticsTrends(
@@ -480,7 +486,12 @@ export const mockHandlers = {
           model: provider.id,
           available: true,
         })),
-        { id: "retired-model", name: "已移除的备用模型", model: "", available: false },
+        {
+          id: "retired-model",
+          name: "已移除的备用模型",
+          model: "",
+          available: false,
+        },
       ],
     },
   }),

@@ -18,21 +18,11 @@ export async function fetchMetricsSummary(): Promise<MetricsSummary> {
       today_tokens_spent: data.today_tokens_spent ?? 0,
       today_cost_spent: data.today_cost_spent ?? 0,
       trends: data.trends,
+      llm_runtime: data.llm_runtime,
+      analysis_performance: data.analysis_performance,
     };
   }
-  return {
-    total_traces: 0,
-    succeeded_count: 0,
-    failed_count: 0,
-    success_rate: 0,
-    avg_duration_ms: 0,
-    today_traces: 0,
-    today_active_groups: 0,
-    total_tokens_spent: 0,
-    total_cost_spent: 0,
-    today_tokens_spent: 0,
-    today_cost_spent: 0,
-  };
+  throw new Error("统计接口未返回数据。");
 }
 
 export async function fetchAnalyticsTrends(

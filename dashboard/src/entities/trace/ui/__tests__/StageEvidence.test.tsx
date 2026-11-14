@@ -186,3 +186,26 @@ it("模型元数据结构异常时仍保留可识别错误", () => {
   expect(screen.queryByText("备用 Provider")).not.toBeInTheDocument();
   expect(screen.queryByText(/object Object|调用次数/)).not.toBeInTheDocument();
 });
+
+it("熔断跳过展示原因但不伪装成上游失败或已发出的请求", () => {
+  render(
+    <LlmAttemptsTable
+      attempts={[
+        {
+          status: "skipped",
+          provider_id: "primary",
+          attempt: 1,
+          duration_ms: 0,
+          skip_reason: "已有恢复探测请求进行中，跳过当前模型",
+        },
+        { status: "success", provider_id: "backup", is_fallback: true, duration_ms: 100 },
+      ]}
+    />,
+  );
+  expect(screen.getByText("共 2 条记录")).toBeVisible();
+  expect(screen.getByText("已跳过")).toBeVisible();
+  expect(screen.getByText("未发送请求：已有恢复探测请求进行中，跳过当前模型")).toBeVisible();
+  expect(screen.getByText("备用 Provider")).toBeVisible();
+  expect(screen.queryByText("失败")).not.toBeInTheDocument();
+  expect(screen.queryByText("调用次数 1")).not.toBeInTheDocument();
+});

@@ -106,6 +106,33 @@ const monthly = createMockAnalyticsTrends("day", 30);
 const latest = monthly.points.at(-1)!;
 const succeeded = events.filter((event) => !event.failed).length;
 export const mockMetricsSummary: MetricsSummary = {
+  analysis_performance: { recent_durations_ms: [18200, 11380, 12060, 9840, 10750] },
+  llm_runtime: {
+    captured_at: Date.now() / 1000,
+    circuits: {
+      "deepseek-chat": {
+        state: "CLOSED",
+        failure_count: 0,
+        failure_threshold: 5,
+        recovery_timeout_seconds: 60,
+        retry_after_seconds: 0,
+      },
+      openai: {
+        state: "OPEN",
+        failure_count: 5,
+        failure_threshold: 5,
+        recovery_timeout_seconds: 60,
+        retry_after_seconds: 38,
+      },
+      ollama_local: {
+        state: "OPEN",
+        failure_count: 5,
+        failure_threshold: 5,
+        recovery_timeout_seconds: 60,
+        retry_after_seconds: 0,
+      },
+    },
+  },
   total_traces: events.length,
   succeeded_count: succeeded,
   failed_count: events.length - succeeded,

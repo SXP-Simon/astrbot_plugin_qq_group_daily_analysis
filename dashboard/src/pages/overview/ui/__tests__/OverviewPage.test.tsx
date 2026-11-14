@@ -22,6 +22,9 @@ function viewModel(): ReturnType<typeof useOverviewViewModel> {
     acknowledgementError: "",
     handleAcknowledge: vi.fn().mockResolvedValue(undefined),
     loading: false,
+    recentLoading: false,
+    metricsLoading: false,
+    refreshMetrics: vi.fn().mockResolvedValue(undefined),
     tasksLoaded: true,
     errors: { tasks: "", metrics: "", recent: "" },
     feedback: "",
@@ -44,18 +47,17 @@ describe("总览页面", () => {
       today_tokens_spent: 42300,
       total_tokens_spent: 333700,
     };
-    render(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+    render(
+      <OverviewPage
+        onOpenConfig={vi.fn()}
+        viewModel={vm}
+        onViewTrace={vi.fn()}
+        onOpenTrigger={vi.fn()}
+      />,
+    );
     const statistics = within(screen.getByRole("region", { name: "分析统计" }));
     const values = statistics.getAllByRole("definition").map((node) => node.textContent);
-    expect(values).toEqual([
-      "18次",
-      "6个",
-      "142次",
-      "95.1%",
-      "12.45s",
-      "42,300Tokens",
-      "333,700Tokens",
-    ]);
+    expect(values).toEqual(["18次", "6个", "142次", "95.1%", "42,300Tokens", "333,700Tokens"]);
     const tokens = within(statistics.getByRole("group", { name: "模型消耗" }));
     expect(tokens.getAllByRole("term").map((node) => node.textContent)).toEqual([
       "今日模型消耗",
@@ -79,9 +81,21 @@ describe("总览页面", () => {
     ];
     const onViewTrace = vi.fn();
     const onOpenTrigger = vi.fn();
-    render(<OverviewPage viewModel={vm} onViewTrace={onViewTrace} onOpenTrigger={onOpenTrigger} />);
+    render(
+      <OverviewPage
+        onOpenConfig={vi.fn()}
+        viewModel={vm}
+        onViewTrace={onViewTrace}
+        onOpenTrigger={onOpenTrigger}
+      />,
+    );
     const headings = screen.getAllByRole("heading", { level: 2 }).map((node) => node.textContent);
-    expect(headings).toEqual(["分析统计", "正在执行中的分析任务 2 运行中", "需要关注"]);
+    expect(headings).toEqual([
+      "分析统计",
+      "分析运行状态",
+      "正在执行中的分析任务 2 运行中",
+      "需要关注",
+    ]);
     expect(screen.getByText("趋势图区域")).toBeVisible();
     expect(screen.getByText("今日模型消耗")).toBeVisible();
     expect(screen.getByText("近30天模型消耗")).toBeVisible();
@@ -106,9 +120,14 @@ describe("总览页面", () => {
       errors: { tasks: "任务读取失败", metrics: "统计读取失败", recent: "近期记录读取失败" },
     };
     const { rerender } = render(
-      <OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />,
+      <OverviewPage
+        onOpenConfig={vi.fn()}
+        viewModel={vm}
+        onViewTrace={vi.fn()}
+        onOpenTrigger={vi.fn()}
+      />,
     );
-    expect(screen.getAllByText("未读取")).toHaveLength(7);
+    expect(screen.getAllByText("未读取")).toHaveLength(6);
     expect(screen.queryByText("暂无正在执行的后台分析任务")).not.toBeInTheDocument();
     expect(screen.queryByText("近期记录中没有失败或警告")).not.toBeInTheDocument();
     expect(screen.getAllByRole("alert")).toHaveLength(3);
@@ -116,6 +135,7 @@ describe("总览页面", () => {
     expect(vm.refresh).toHaveBeenCalledWith(false);
     rerender(
       <OverviewPage
+        onOpenConfig={vi.fn()}
         viewModel={{ ...vm, tasksLoaded: true, errors: { tasks: "", metrics: "", recent: "" } }}
         onViewTrace={vi.fn()}
         onOpenTrigger={vi.fn()}
@@ -131,29 +151,62 @@ it("知晓控件语义明确，可显示已知晓和撤销，保存中不能重�
   const trace = { ...mockTraces.find((item) => item.status === "failed")!, acknowledged_at: null };
   vm.attentionTraces = [trace];
   const { rerender } = render(
-    <OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />,
+    <OverviewPage
+      onOpenConfig={vi.fn()}
+      viewModel={vm}
+      onViewTrace={vi.fn()}
+      onOpenTrigger={vi.fn()}
+    />,
   );
   const checkbox = screen.getByRole("checkbox", { name: /已知晓/ });
   fireEvent.click(checkbox);
   expect(vm.handleAcknowledge).toHaveBeenCalledWith(trace.trace_id, true);
   vm.acknowledgingIds = [trace.trace_id];
-  rerender(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+  rerender(
+    <OverviewPage
+      onOpenConfig={vi.fn()}
+      viewModel={vm}
+      onViewTrace={vi.fn()}
+      onOpenTrigger={vi.fn()}
+    />,
+  );
   expect(checkbox).toBeDisabled();
   vm.acknowledgingIds = [];
   vm.attentionTraces = [];
   vm.acknowledgedCount = 1;
-  rerender(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+  rerender(
+    <OverviewPage
+      onOpenConfig={vi.fn()}
+      viewModel={vm}
+      onViewTrace={vi.fn()}
+      onOpenTrigger={vi.fn()}
+    />,
+  );
   expect(screen.getByText("这些提醒均已知晓")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "显示已知晓（1）" }));
   expect(vm.setShowAcknowledged).toHaveBeenCalledWith(true);
   vm.showAcknowledged = true;
   vm.attentionTraces = [{ ...trace, acknowledged_at: 123 }];
-  rerender(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+  rerender(
+    <OverviewPage
+      onOpenConfig={vi.fn()}
+      viewModel={vm}
+      onViewTrace={vi.fn()}
+      onOpenTrigger={vi.fn()}
+    />,
+  );
   const known = screen.getByRole("checkbox", { name: /已知晓/ });
   expect(known).toBeChecked();
   fireEvent.click(known);
   expect(vm.handleAcknowledge).toHaveBeenLastCalledWith(trace.trace_id, false);
   vm.acknowledgementError = "知晓状态未能保存，请稍后重试。";
-  rerender(<OverviewPage viewModel={vm} onViewTrace={vi.fn()} onOpenTrigger={vi.fn()} />);
+  rerender(
+    <OverviewPage
+      onOpenConfig={vi.fn()}
+      viewModel={vm}
+      onViewTrace={vi.fn()}
+      onOpenTrigger={vi.fn()}
+    />,
+  );
   expect(screen.getByRole("alert")).toHaveTextContent("未能保存");
 });
