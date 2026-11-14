@@ -1950,15 +1950,14 @@ def generate_openapi_spec() -> dict[str, object]:
                 },
                 "AnalysisPerformance": {
                     "type": "object",
-                    "required": [
-                        "sample_count",
-                        "avg_duration_ms",
-                        "latest_duration_ms",
-                    ],
+                    "required": ["recent_durations_ms"],
                     "properties": {
-                        "sample_count": {"type": "integer"},
-                        "avg_duration_ms": {"type": ["number", "null"]},
-                        "latest_duration_ms": {"type": ["number", "null"]},
+                        "recent_durations_ms": {
+                            "type": "array",
+                            "description": "最近成功分析的实测耗时（毫秒），按完成时间倒序。",
+                            "maxItems": 5,
+                            "items": {"type": "number", "exclusiveMinimum": 0},
+                        },
                     },
                 },
                 "MetricsSummary": {

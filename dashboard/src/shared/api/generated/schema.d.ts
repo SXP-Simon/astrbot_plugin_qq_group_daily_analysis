@@ -1199,9 +1199,8 @@ export interface components {
             };
         };
         AnalysisPerformance: {
-            sample_count: number;
-            avg_duration_ms: number | null;
-            latest_duration_ms: number | null;
+            /** @description 最近成功分析的实测耗时（毫秒），按完成时间倒序。 */
+            recent_durations_ms: number[];
         };
         MetricsSummary: {
             llm_runtime?: components["schemas"]["LlmRuntimeSnapshot"];
