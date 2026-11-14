@@ -25,6 +25,8 @@ export function OverviewPage({
     activeTasks,
     attentionTraces,
     loading,
+    recentLoading,
+    metricsLoading,
     tasksLoaded,
     errors,
     feedback,
@@ -92,7 +94,13 @@ export function OverviewPage({
           </dl>
         </div>
       </section>
-      <AnalysisRuntimePanel metrics={metrics} error={errors.metrics} onOpenConfig={onOpenConfig} />
+      <AnalysisRuntimePanel
+        metrics={metrics}
+        loading={metricsLoading}
+        error={errors.metrics}
+        onRetry={() => void viewModel.refreshMetrics()}
+        onOpenConfig={onOpenConfig}
+      />
       {metrics && (
         <OverviewTrendCharts
           initialTrends={metrics.trends}
@@ -159,7 +167,7 @@ export function OverviewPage({
             </p>
           )}
           {attentionTraces.length === 0 ? (
-            loading ? (
+            recentLoading ? (
               <LoadingState skeleton className="my-5">
                 正在读取记录…
               </LoadingState>

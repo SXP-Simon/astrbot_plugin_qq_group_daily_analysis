@@ -106,7 +106,7 @@ const monthly = createMockAnalyticsTrends("day", 30);
 const latest = monthly.points.at(-1)!;
 const succeeded = events.filter((event) => !event.failed).length;
 export const mockMetricsSummary: MetricsSummary = {
-  analysis_performance: { sample_count: 135, avg_duration_ms: 12450, latest_duration_ms: 18200 },
+  analysis_performance: { recent_durations_ms: [18200, 11380, 12060, 9840, 10750] },
   llm_runtime: {
     captured_at: Date.now() / 1000,
     circuits: {

@@ -1,13 +1,18 @@
 import type { MetricsSummary } from "@/entities/metric/model/types";
+import { LoadingSkeleton } from "@/shared/ui/loading-state";
 import { Button } from "@/shared/ui/button";
 import { formatDuration } from "@/shared/lib/formatters";
 
 export function AnalysisRuntimePanel({
   metrics,
+  loading,
   error,
+  onRetry,
   onOpenConfig,
 }: {
   metrics: MetricsSummary | null;
+  loading: boolean;
+  onRetry: () => void;
   error: string;
   onOpenConfig: (category: "performance" | "llm") => void;
 }) {
@@ -22,10 +27,8 @@ export function AnalysisRuntimePanel({
       circuit.state === "HALF_OPEN" ||
       (circuit.state === "OPEN" && circuit.retry_after_seconds === 0),
   ).length;
-  const durationMetrics = [
-    { label: "平均分析耗时", value: performance?.avg_duration_ms },
-    { label: "最近一次耗时", value: performance?.latest_duration_ms },
-  ];
+  const showSkeleton = loading && !metrics;
+  const durations = performance?.recent_durations_ms ?? [];
 
   return (
     <section
@@ -36,40 +39,70 @@ export function AnalysisRuntimePanel({
         <h2 id="analysis-runtime" className="m-0 text-lg font-medium">
           分析运行状态
         </h2>
-        <span
-          className={error ? "text-sm text-warning" : "text-sm tabular-nums text-muted-foreground"}
-        >
-          {error
-            ? runtime || performance
-              ? "更新失败，以下为上次读取结果"
-              : "读取失败，请刷新重试"
-            : runtime
-              ? `读取于 ${new Date(runtime.captured_at * 1000).toLocaleTimeString("zh-CN")}`
-              : "状态尚未读取"}
-        </span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span
+            role="status"
+            className={error && !loading ? "text-warning" : "text-muted-foreground"}
+          >
+            {loading
+              ? showSkeleton
+                ? "正在读取运行状态…"
+                : "更新中"
+              : error
+                ? metrics
+                  ? "更新失败，以下为上次读取结果"
+                  : "读取失败，请重试"
+                : runtime
+                  ? `读取于 ${new Date(runtime.captured_at * 1000).toLocaleTimeString("zh-CN")}`
+                  : "状态尚未读取"}
+          </span>
+          {error && !loading && (
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              重试
+            </Button>
+          )}
+        </div>
       </header>
 
       <div className="grid gap-7 @[52rem]:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] @[52rem]:gap-10">
         <div className="min-w-0">
-          <h3 className="m-0 text-base font-medium">任务耗时</h3>
+          <h3 className="m-0 text-base font-medium">最近 5 次成功分析</h3>
           <p className="mb-0 mt-1 text-sm text-muted-foreground">
             完整任务耗时，含分析、渲染与发送
           </p>
-          <dl className="mb-0 mt-5 grid grid-cols-2 gap-3 sm:gap-5">
-            {durationMetrics.map(({ label, value }) => (
-              <div key={label} className="min-w-0">
-                <dt className="text-sm text-muted-foreground">{label}</dt>
-                <dd className="m-0 mt-2 break-words text-[clamp(1.5rem,5cqw,2.5rem)] font-semibold leading-none tracking-tight tabular-nums">
-                  {value != null ? formatDuration(value) : "暂无记录"}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mb-0 mt-4 text-sm text-muted-foreground">
-            {performance
-              ? `${performance.sample_count} 次已完成分析的实际耗时`
-              : "等待分析耗时数据"}
-          </p>
+          {showSkeleton ? (
+            <div
+              aria-hidden="true"
+              className="mt-5 flex min-h-16 flex-wrap items-end gap-4 motion-safe:animate-pulse"
+            >
+              <span className="h-10 w-28 rounded-md bg-secondary-soft" />
+              <span className="h-4 w-12 rounded-md bg-secondary-soft" />
+              <span className="h-4 w-12 rounded-md bg-secondary-soft" />
+              <span className="h-4 w-12 rounded-md bg-secondary-soft" />
+            </div>
+          ) : durations.length > 0 ? (
+            <ol
+              aria-label="最近成功分析耗时"
+              className="m-0 mt-5 flex list-none flex-wrap items-end gap-x-4 gap-y-4 p-0"
+            >
+              {durations.map((duration, index) => (
+                <li key={index} className="flex flex-col gap-1.5">
+                  {index === 0 && <span className="text-xs text-muted-foreground">最新一次</span>}
+                  <span
+                    className={
+                      index === 0
+                        ? "text-[clamp(1.75rem,5cqw,2.5rem)] font-semibold leading-none tracking-tight tabular-nums"
+                        : "text-base font-medium leading-none tabular-nums text-muted-foreground"
+                    }
+                  >
+                    {formatDuration(duration)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : metrics ? (
+            <p className="mb-0 mt-5 text-sm text-muted-foreground">暂无记录</p>
+          ) : null}
         </div>
 
         <div className="@container/models min-w-0 border-t border-border pt-5 @[52rem]:border-l @[52rem]:border-t-0 @[52rem]:pl-8 @[52rem]:pt-0">
@@ -82,10 +115,15 @@ export function AnalysisRuntimePanel({
                   : "text-sm text-muted-foreground"
               }
             >
-              {!runtime ? "未读取" : `${cooling} 冷却 · ${recovering} 待恢复`}
+              {runtime ? `${cooling} 冷却 · ${recovering} 待恢复` : metrics ? "未读取" : null}
             </span>
           </div>
 
+          {showSkeleton && (
+            <div className="min-h-40 py-3">
+              <LoadingSkeleton />
+            </div>
+          )}
           {runtime &&
             (circuits.length === 0 ? (
               <p className="m-0 py-3 text-sm text-muted-foreground">本次运行还没有模型调用记录。</p>

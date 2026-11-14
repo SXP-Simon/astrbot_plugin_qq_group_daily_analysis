@@ -22,6 +22,9 @@ function viewModel(): ReturnType<typeof useOverviewViewModel> {
     acknowledgementError: "",
     handleAcknowledge: vi.fn().mockResolvedValue(undefined),
     loading: false,
+    recentLoading: false,
+    metricsLoading: false,
+    refreshMetrics: vi.fn().mockResolvedValue(undefined),
     tasksLoaded: true,
     errors: { tasks: "", metrics: "", recent: "" },
     feedback: "",
@@ -124,7 +127,7 @@ describe("总览页面", () => {
         onOpenTrigger={vi.fn()}
       />,
     );
-    expect(screen.getAllByText("未读取")).toHaveLength(7);
+    expect(screen.getAllByText("未读取")).toHaveLength(6);
     expect(screen.queryByText("暂无正在执行的后台分析任务")).not.toBeInTheDocument();
     expect(screen.queryByText("近期记录中没有失败或警告")).not.toBeInTheDocument();
     expect(screen.getAllByRole("alert")).toHaveLength(3);

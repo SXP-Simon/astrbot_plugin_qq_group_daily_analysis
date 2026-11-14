@@ -564,3 +564,39 @@ it("自动刷新部分失败保留已有数据，不会形成无限重试", asyn
   await act(() => result.current.refresh());
   expect(result.current.errors.metrics).toBe("");
 });
+
+it("指标独立呈现，慢任务列表不阻塞指标更新和重试", async () => {
+  const tasks = deferred<ActiveTask[]>();
+  const recent = deferred<Awaited<ReturnType<typeof fetchTraceList>>>();
+  const metrics = deferred<typeof mockMetricsSummary>();
+  vi.mocked(fetchActiveTasks).mockReturnValueOnce(tasks.promise);
+  vi.mocked(fetchTraceList).mockReturnValueOnce(recent.promise);
+  vi.mocked(fetchMetricsSummary).mockReturnValueOnce(metrics.promise);
+  const { result } = renderHook(() => useOverviewViewModel());
+  expect(result.current.metricsLoading).toBe(true);
+
+  await act(async () => metrics.resolve(mockMetricsSummary));
+  expect(result.current.metrics).toEqual(mockMetricsSummary);
+  expect(result.current.metricsLoading).toBe(false);
+  expect(result.current.loading).toBe(true);
+  expect(result.current.recentLoading).toBe(true);
+
+  vi.mocked(fetchMetricsSummary).mockRejectedValueOnce(new Error("读取失败"));
+  await act(() => result.current.refreshMetrics());
+  expect(result.current.errors.metrics).toContain("未能更新");
+  expect(result.current.metrics).toEqual(mockMetricsSummary);
+
+  const updated = { ...mockMetricsSummary, total_traces: 999 };
+  vi.mocked(fetchMetricsSummary).mockResolvedValueOnce(updated);
+  await act(() => result.current.refreshMetrics());
+  expect(result.current.metrics).toEqual(updated);
+  expect(result.current.errors.metrics).toBe("");
+  expect(fetchActiveTasks).toHaveBeenCalledTimes(1);
+  expect(fetchTraceList).toHaveBeenCalledTimes(1);
+
+  await act(async () => tasks.resolve([task]));
+  expect(result.current.loading).toBe(false);
+  expect(result.current.recentLoading).toBe(true);
+  await act(async () => recent.resolve({ items: [], total: 0 }));
+  expect(result.current.recentLoading).toBe(false);
+});
