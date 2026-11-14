@@ -68,6 +68,19 @@ it("只读展示宿主模型，草稿预览和刷新不修改插件表单", asyn
 });
 
 it("切换群会话时不显示旧范围结果，迟到响应不覆盖新会话", async () => {
+  const target = {
+    platform: "bot-a",
+    group_id: "123",
+    group_name: "示例群：用于验证虚拟列表完整标签和群号检索的超长群名称",
+  };
+  vi.mocked(fetchGroupSessions).mockResolvedValueOnce([
+    ...Array.from({ length: 150 }, (_, index) => ({
+      platform: "bot-a",
+      group_id: String(1000 + index),
+      group_name: `历史群 ${index}`,
+    })),
+    target,
+  ]);
   let resolveDefault!: (data: HostLlmConfig) => void;
   vi.mocked(fetchHostLlmConfig).mockReturnValueOnce(
     new Promise((resolve) => {
@@ -82,16 +95,21 @@ it("切换群会话时不显示旧范围结果，迟到响应不覆盖新会话"
   render(<HostLlmConfigPanel draft={{}} dirty={false} />);
   fireEvent.click(screen.getByRole("button", { name: /查看范围：/ }));
   const dialog = screen.getByRole("dialog", { name: "查看范围" });
-  fireEvent.change(within(dialog).getByRole("searchbox"), { target: { value: "123" } });
-  fireEvent.click(await within(dialog).findByRole("button", { name: /示例群/ }));
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  const picker = within(dialog);
   await waitFor(() =>
-    expect(fetchHostLlmConfig).toHaveBeenLastCalledWith({
-      platform: "bot-a",
-      group_id: "123",
-      group_name: "示例群",
-    }),
+    expect(picker.getByRole("option", { name: "宿主默认配置" })).toHaveAttribute(
+      "aria-setsize",
+      "152",
+    ),
   );
+  expect(picker.getAllByRole("option").length).toBeLessThan(152);
+  expect(picker.queryByRole("option", { name: /示例群/ })).not.toBeInTheDocument();
+  fireEvent.change(picker.getByRole("combobox"), { target: { value: target.group_id } });
+  const option = picker.getByRole("option", { name: /示例群/ });
+  expect(option).toHaveAttribute("title", `${target.group_name} · 123 · bot-a`);
+  fireEvent.click(option);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() => expect(fetchHostLlmConfig).toHaveBeenLastCalledWith(target));
   await screen.findByText("未配置回退模型");
   await act(async () => {
     resolveDefault(host);

@@ -57,6 +57,7 @@ export function HostLlmConfigPanel({
           label="查看范围"
           value={vm.selection}
           onChange={vm.setSelection}
+          virtual
           options={[
             {
               value: "",
