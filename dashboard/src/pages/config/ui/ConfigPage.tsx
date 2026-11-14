@@ -1,4 +1,5 @@
 import { LoadingState } from "@/shared/ui/loading-state";
+import { ConfigCategoryIcon } from "@/entities/config/ui/ConfigCategoryIcon";
 import { useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import {
@@ -8,6 +9,7 @@ import {
   IconRefresh,
   IconDeviceFloppy,
   IconX,
+  IconSearch,
 } from "@tabler/icons-react";
 import type { useConfigViewModel } from "@/pages/config/model/useConfigViewModel";
 import { ComicRotationDialog } from "@/features/manage-comic-rotation/ui/ComicRotationDialog";
@@ -90,10 +92,15 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
           {vm.optionsError}
         </p>
       )}
-      <div className="grid min-w-0 gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid min-w-0 gap-6 md:grid-cols-[240px_minmax(0,1fr)] xl:gap-9">
         <aside className="min-w-0 space-y-4 self-start md:sticky md:top-20 md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto">
-          <div className="flex gap-1">
+          <div className="relative flex gap-1">
+            <IconSearch
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground"
+            />
             <Input
+              className="pl-9"
               type="search"
               aria-label="搜索配置名称或说明"
               placeholder="搜索配置名称或说明"
@@ -139,17 +146,24 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
           </div>
           <nav
             aria-label="配置分组"
-            className="hidden space-y-1 rounded-xl bg-secondary-soft p-2 md:block"
+            className="hidden space-y-1.5 rounded-2xl border border-border bg-card p-2 md:block"
           >
             {visibleCategories.map((category) => (
               <Button
                 key={category.key}
-                variant={category.key === vm.activeCategory ? "default" : "ghost"}
+                variant="ghost"
                 aria-current={category.key === vm.activeCategory ? "page" : undefined}
-                className="h-auto min-h-10 w-full justify-between gap-2 whitespace-normal px-3 py-2 text-left"
+                className={cn(
+                  "h-auto min-h-12 w-full justify-between gap-2 whitespace-normal px-3 py-3 text-left",
+                  category.key === vm.activeCategory &&
+                    "bg-primary-soft text-primary-ink ring-1 ring-inset ring-primary-line hover:bg-primary-soft",
+                )}
                 onClick={() => vm.setActiveCategory(category.key)}
               >
-                <span>{category.label}</span>
+                <span className="flex min-w-0 items-center gap-3">
+                  <ConfigCategoryIcon category={category.key} className="size-4 shrink-0" />
+                  <span>{category.label}</span>
+                </span>
                 <span className="flex shrink-0 flex-col items-end gap-1 text-xs text-muted-foreground">
                   {vm.groupErrorCounts[category.key] > 0 ? (
                     <span className="rounded-md bg-destructive/10 px-1.5 py-0.5 text-destructive">
@@ -171,10 +185,13 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
             )}
           </nav>
         </aside>
-        <section aria-label="配置字段" aria-busy={vm.loading} className="min-w-0 space-y-5">
+        <section aria-label="配置字段" aria-busy={vm.loading} className="min-w-0 space-y-6">
           {vm.activeGroupMeta && (
-            <div className="space-y-2 border-b border-border pb-4">
+            <div className="space-y-4 rounded-2xl border border-primary-line bg-primary-soft p-5 sm:p-6">
               <div className="flex flex-wrap items-center gap-2">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-card text-primary-ink">
+                  <ConfigCategoryIcon category={vm.activeCategory} className="size-6" />
+                </span>
                 <h2 className="m-0 text-lg font-medium">
                   {vm.activeGroupMeta.description || vm.activeCategory}
                 </h2>
@@ -188,7 +205,7 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
               {vm.activeGroupMeta.hint && (
                 <MarkdownHint
                   content={vm.activeGroupMeta.hint}
-                  className="block text-sm leading-relaxed text-muted-foreground"
+                  className="block max-w-prose text-sm leading-7 text-muted-foreground"
                 />
               )}
             </div>
@@ -212,7 +229,7 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
           ) : (
             <fieldset
               disabled={vm.loading || !vm.configLoaded}
-              className="m-0 grid min-w-0 grid-cols-1 gap-3 border-0 p-0 lg:grid-cols-2 disabled:opacity-60"
+              className="m-0 grid min-w-0 grid-cols-1 items-start gap-5 border-0 p-0 lg:grid-cols-2 disabled:opacity-60"
             >
               <legend className="sr-only">{vm.activeGroupMeta?.description || "配置字段"}</legend>
               {vm.currentGroupFields.map((field) => {
@@ -232,10 +249,10 @@ export function ConfigPage({ viewModel: vm }: ConfigPageProps) {
                   <div
                     key={`${vm.activeCategory}.${field.key}`}
                     className={cn(
-                      "min-w-0 rounded-xl border border-solid p-4 transition-colors [&>section]:border-b-0 [&>section]:pb-0",
+                      "min-w-0 rounded-2xl border border-solid p-5 transition-colors sm:p-6 [&>section]:border-b-0 [&>section]:pb-0",
                       !modified &&
                         !fieldError &&
-                        "border-transparent odd:bg-secondary-soft even:bg-card hover:border-secondary-line focus-within:border-primary-line focus-within:bg-primary-soft",
+                        "border-border bg-card hover:border-secondary-line focus-within:border-primary-line",
                       modified && !fieldError && "border-primary-line bg-primary-soft",
                       modified &&
                         !fieldError &&
