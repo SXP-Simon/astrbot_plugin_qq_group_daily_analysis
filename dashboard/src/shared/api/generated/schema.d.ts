@@ -972,6 +972,7 @@ export interface components {
             name: string;
             model: string;
             available: boolean;
+            provider?: string;
         };
         HostLlmConfig: {
             primary_id: string | null;

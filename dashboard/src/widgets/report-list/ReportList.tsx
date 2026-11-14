@@ -72,11 +72,16 @@ export function ReportList({
               <p className="m-0 break-words text-sm">
                 {report.group_name || report.group_id || "群聊未记录"}
               </p>
-              <p className="m-0 break-all font-mono text-xs text-muted-foreground">
-                {report.platform && !["auto", "default"].includes(report.platform)
-                  ? report.platform
-                  : "平台未记录"}
-                {report.group_id && ` · ${report.group_id}`}
+              <p className="m-0 flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                <PlatformIcon platform={report.platform ?? undefined} className="size-4" />
+                <span className="min-w-0 break-all">
+                  {report.platform && !["auto", "default"].includes(report.platform) ? (
+                    report.platform
+                  ) : (
+                    <span className="font-sans">平台未记录</span>
+                  )}
+                  {report.group_id && ` · ${report.group_id}`}
+                </span>
               </p>
               {report.trace_id ? (
                 onViewTrace ? (
@@ -121,3 +126,4 @@ export function ReportList({
     </ul>
   );
 }
+import { PlatformIcon } from "@/entities/group/ui/PlatformIcon";

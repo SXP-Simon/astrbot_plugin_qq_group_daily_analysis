@@ -3143,6 +3143,9 @@
           },
           "available": {
             "type": "boolean"
+          },
+          "provider": {
+            "type": "string"
           }
         }
       },

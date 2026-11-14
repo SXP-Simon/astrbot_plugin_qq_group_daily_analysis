@@ -16,6 +16,23 @@ it("同号群使用平台和群号共同选择，并展示真实名称", () => {
   expect(change).toHaveBeenCalledWith("123", "telegram");
 });
 
+it("只按群号筛选时，平台唯一才显示平台图标", () => {
+  const change = vi.fn();
+  const { rerender } = render(
+    <GroupFilters groups={[groups[1], groups[1]]} selectedGroup="123" onGroupChange={change} />,
+  );
+  const trigger = screen.getByRole("button", { name: "选择群聊：123 · 全部平台" });
+  expect(trigger.querySelector("img")).toHaveAttribute(
+    "src",
+    expect.stringContaining("telegram.svg"),
+  );
+
+  rerender(<GroupFilters groups={groups} selectedGroup="123" onGroupChange={change} />);
+  expect(trigger.querySelector("img")).toBeNull();
+  expect(trigger.querySelector("svg.tabler-icon-messages")).toBeInTheDocument();
+  expect(change).not.toHaveBeenCalled();
+});
+
 it("未记录平台与全部平台分开，选定平台只展示对应群聊", () => {
   const change = vi.fn();
   render(

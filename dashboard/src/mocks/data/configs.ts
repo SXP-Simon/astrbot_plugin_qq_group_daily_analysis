@@ -161,19 +161,22 @@ export const mockProviders: AvailableProvider[] = [
     name: "DeepSeek Chat (V3)",
     type: "openai_compatible",
     label: "DeepSeek Official",
+    provider: "deepseek",
   },
-  { id: "openai", name: "OpenAI GPT-4o", type: "openai", label: "OpenAI Main" },
+  { id: "openai", name: "OpenAI GPT-4o", type: "openai", label: "OpenAI Main", provider: "openai" },
   {
     id: "claude-3-5-sonnet",
     name: "Claude 3.5 Sonnet",
     type: "anthropic",
     label: "Anthropic Direct",
+    provider: "anthropic",
   },
   {
     id: "ollama_local",
     name: "Ollama (Local Qwen2.5-7B)",
     type: "openai_compatible",
     label: "Local Private",
+    provider: "ollama",
   },
 ];
 

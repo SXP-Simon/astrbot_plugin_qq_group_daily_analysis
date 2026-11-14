@@ -1,3 +1,12 @@
+import {
+  IconActivity,
+  IconBrain,
+  IconGauge,
+  IconRefresh,
+  IconShieldExclamation,
+  IconStopwatch,
+} from "@tabler/icons-react";
+import { ModelIcon } from "@/entities/config/ui/ModelIcon";
 import type { MetricsSummary } from "@/entities/metric/model/types";
 import { LoadingSkeleton } from "@/shared/ui/loading-state";
 import { Button } from "@/shared/ui/button";
@@ -36,7 +45,8 @@ export function AnalysisRuntimePanel({
       className="@container min-w-0 border-t border-border pt-6 sm:pt-7"
     >
       <header className="mb-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <h2 id="analysis-runtime" className="m-0 text-lg font-medium">
+        <h2 id="analysis-runtime" className="m-0 flex items-center gap-2 text-lg font-medium">
+          <IconActivity aria-hidden="true" className="size-5 shrink-0 text-primary-ink" />
           分析运行状态
         </h2>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
@@ -58,6 +68,7 @@ export function AnalysisRuntimePanel({
           </span>
           {error && !loading && (
             <Button variant="outline" size="sm" onClick={onRetry}>
+              <IconRefresh aria-hidden="true" />
               重试
             </Button>
           )}
@@ -66,7 +77,10 @@ export function AnalysisRuntimePanel({
 
       <div className="grid gap-7 @[52rem]:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] @[52rem]:gap-10">
         <div className="min-w-0">
-          <h3 className="m-0 text-base font-medium">最近 5 次成功分析</h3>
+          <h3 className="m-0 flex items-center gap-2 text-base font-medium">
+            <IconStopwatch aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+            最近 5 次成功分析
+          </h3>
           <p className="mb-0 mt-1 text-sm text-muted-foreground">
             完整任务耗时，含分析、渲染与发送
           </p>
@@ -107,7 +121,13 @@ export function AnalysisRuntimePanel({
 
         <div className="@container/models min-w-0 border-t border-border pt-5 @[52rem]:border-l @[52rem]:border-t-0 @[52rem]:pl-8 @[52rem]:pt-0">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h3 className="m-0 text-base font-medium">模型熔断</h3>
+            <h3 className="m-0 flex items-center gap-2 text-base font-medium">
+              <IconShieldExclamation
+                aria-hidden="true"
+                className="size-4 shrink-0 text-muted-foreground"
+              />
+              模型熔断
+            </h3>
             <span
               className={
                 cooling || recovering
@@ -155,7 +175,10 @@ export function AnalysisRuntimePanel({
                         key={id}
                         className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-3 @[29rem]/models:grid-cols-[minmax(0,1fr)_7rem_4.5rem_5rem]"
                       >
-                        <span className="min-w-0 break-all text-sm font-medium">{id}</span>
+                        <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                          <ModelIcon id={id} className="size-4" />
+                          <span className="min-w-0 break-all">{id}</span>
+                        </span>
                         <span
                           className={`w-fit whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${attention ? "bg-warning/12 text-warning" : "bg-success/10 text-success"}`}
                         >
@@ -199,9 +222,11 @@ export function AnalysisRuntimePanel({
         </details>
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" onClick={() => onOpenConfig("performance")}>
+            <IconGauge aria-hidden="true" />
             并发限流设置
           </Button>
           <Button variant="ghost" onClick={() => onOpenConfig("llm")}>
+            <IconBrain aria-hidden="true" />
             LLM 设置
           </Button>
         </div>

@@ -1,5 +1,6 @@
 import { useId, useRef } from "react";
 import { IconArrowRight, IconPlus } from "@tabler/icons-react";
+import { PlatformIcon } from "@/entities/group/ui/PlatformIcon";
 import type { ActiveTask } from "@/entities/task/model/types";
 import { TaskStageBadge } from "@/entities/task/ui/TaskStageBadge";
 import { CancelTaskButton } from "@/features/cancel-task/ui/CancelTaskButton";
@@ -52,11 +53,16 @@ export function ActiveTaskBoard({
                   {task.group_name || "未命名群聊"}
                 </h3>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <span className="break-all font-mono">
-                    {task.platform && !["auto", "default"].includes(task.platform)
-                      ? task.platform
-                      : "平台未记录"}{" "}
-                    · {task.group_id}
+                  <span className="inline-flex min-w-0 items-center gap-1.5 font-mono">
+                    <PlatformIcon platform={task.platform} className="size-4" />
+                    <span className="min-w-0 break-all">
+                      {task.platform && !["auto", "default"].includes(task.platform) ? (
+                        task.platform
+                      ) : (
+                        <span className="font-sans">平台未记录</span>
+                      )}{" "}
+                      · {task.group_id}
+                    </span>
                   </span>
                   <TriggerTypeTag triggerType={task.trigger_type} />
                 </div>

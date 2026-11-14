@@ -1,3 +1,4 @@
+import { ModelIcon } from "@/entities/config/ui/ModelIcon";
 import { formatDuration } from "@/shared/lib/formatters";
 import { llmAttemptSchema } from "@/entities/trace/model/llmAttempts";
 import { resolveSpanOutcome } from "@/entities/trace/model/spanOutcome";
@@ -62,7 +63,9 @@ export function LlmAttemptsTable({ attempts }: { attempts: Record<string, unknow
                 >
                   {statusLabels[outcome]}
                 </span>
-                <span className="font-mono text-xs text-muted-foreground">
+                <span
+                  className={`text-xs text-muted-foreground ${att.duration_ms === undefined ? "" : "font-mono"}`}
+                >
                   {att.duration_ms === undefined
                     ? "耗时未记录"
                     : att.duration_ms === 0
@@ -70,8 +73,13 @@ export function LlmAttemptsTable({ attempts }: { attempts: Record<string, unknow
                       : formatDuration(att.duration_ms)}
                 </span>
               </div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                {provider && <span className="break-all font-mono">{provider}</span>}
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {provider && (
+                  <span className="inline-flex min-w-0 items-center gap-2 font-mono">
+                    <ModelIcon id={att.provider_id} model={att.model} className="size-4" />
+                    <span className="min-w-0 break-all">{provider}</span>
+                  </span>
+                )}
                 {att.attempt !== undefined && outcome !== "skipped" && (
                   <span>调用次数 {att.attempt}</span>
                 )}

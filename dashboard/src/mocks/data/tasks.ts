@@ -58,7 +58,7 @@ export const mockActiveTasks: ActiveTask[] = [
     task_id: "task-live-demo-2-just-started",
     group_id: "987654321",
     group_name: "AstrBot 核心测试群",
-    platform: "aiocqhttp",
+    platform: "aiocqhttp_main",
     trigger_type: "manual",
     current_stage: "FETCH_MESSAGES",
     started_at: (Date.now() - 2000) / 1000,

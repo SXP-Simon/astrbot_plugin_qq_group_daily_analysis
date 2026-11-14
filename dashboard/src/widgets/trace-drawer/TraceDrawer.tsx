@@ -36,8 +36,11 @@ export function TraceDrawer({ traceId, open, onClose }: TraceDrawerProps) {
               {trace && (
                 <>
                   <StatusTag status={vm.effectiveStatus} />
-                  <span className="font-mono text-xs">
-                    {trace.platform} · {trace.group_id}
+                  <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-xs">
+                    <PlatformIcon platform={trace.platform} className="size-4" />
+                    <span className="min-w-0 break-all">
+                      {trace.platform} · {trace.group_id}
+                    </span>
                   </span>
                 </>
               )}
@@ -188,3 +191,4 @@ export function TraceDrawer({ traceId, open, onClose }: TraceDrawerProps) {
     </Dialog>
   );
 }
+import { PlatformIcon } from "@/entities/group/ui/PlatformIcon";

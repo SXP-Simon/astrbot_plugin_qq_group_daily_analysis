@@ -1,5 +1,16 @@
 import { useRef, useState } from "react";
-import { IconArrowDown, IconArrowUp, IconPlus, IconTrash } from "@tabler/icons-react";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconPlus,
+  IconTrash,
+  IconPalette,
+  IconUserCircle,
+  IconPhoto,
+  IconTypography,
+  IconCloud,
+  IconList,
+} from "@tabler/icons-react";
 import { isFieldVisible } from "@/entities/config/model/visibility";
 import type { SchemaFieldItem } from "@/entities/config/model/types";
 import type { AvailableProvider, AvailablePersona } from "@/entities/config/api/configApi";
@@ -98,6 +109,10 @@ export function TemplateListRenderer({
         item.prompt_override === deleting.item.prompt_override,
     );
   const comicCharacters = fieldKey === "comic_characters";
+  let SchemeIcon = IconList;
+  if (comicStyles) SchemeIcon = IconPalette;
+  else if (comicCharacters) SchemeIcon = IconUserCircle;
+  else if (fieldKey === "t2i_rendering_strategies") SchemeIcon = IconPhoto;
   const addLabel =
     {
       comic_styles: "添加风格方案",
@@ -159,15 +174,22 @@ export function TemplateListRenderer({
               template?.name ||
               `条目 ${index + 1}`,
           );
+          let ItemIcon = SchemeIcon;
+          if (fieldKey === "t2i_rendering_strategies") {
+            ItemIcon = itemTemplateKey === "typst" ? IconTypography : IconCloud;
+          }
           return (
             <section
               key={`${fieldKey}_${index}`}
               data-config-path={itemPath}
               aria-label={`${index + 1}. ${name}`}
-              className="min-w-0 space-y-4 border-0 border-b border-solid border-border pb-5"
+              className="min-w-0 space-y-5 rounded-2xl border border-border bg-background p-3 sm:p-4"
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-secondary/60 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-secondary-soft p-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-card text-primary-ink">
+                    <ItemIcon aria-hidden="true" className="size-5" stroke={1.6} />
+                  </span>
                   <h3 className="m-0 break-words text-base font-medium">
                     {index + 1}. {name}
                   </h3>
@@ -265,7 +287,7 @@ export function TemplateListRenderer({
                     此角色仍在使用旧版专属提示词。清空下方正文后，会跟随漫画风格方案。
                   </p>
                 )}
-              <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-2">
                 {visibleFields.map(([key, field]) => {
                   const childPath = `${itemPath}.${key}`;
                   const styleSource = comicStyles && key === "preset_id";

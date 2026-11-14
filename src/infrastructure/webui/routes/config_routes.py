@@ -13,7 +13,7 @@ import re
 import time
 import uuid
 from pathlib import Path, PureWindowsPath
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 from astrbot.api.provider import Provider
 from astrbot.api.star import StarTools
@@ -232,6 +232,7 @@ class HostLlmProviderDTO(TypedDict):
     name: str
     model: str
     available: bool
+    provider: NotRequired[str]
 
 
 class HostLlmConfigDTO(TypedDict):
@@ -388,6 +389,7 @@ class ConfigRoutes:
                 name = pid
                 model = ""
                 available = False
+                provider = ""
                 try:
                     candidate = self.context.get_provider_by_id(pid)
                     if isinstance(candidate, Provider):
@@ -396,6 +398,7 @@ class ConfigRoutes:
                         config = raw_config if is_string_mapping(raw_config) else {}
                         configured_name = config.get("name")
                         configured_model = config.get("model")
+                        configured_provider = config.get("provider")
                         if isinstance(configured_name, str) and configured_name:
                             name = configured_name
                         model = candidate.get_model() or (
@@ -404,17 +407,20 @@ class ConfigRoutes:
                             else ""
                         )
                         available = True
+                        if isinstance(configured_provider, str):
+                            provider = configured_provider.strip()
                 except Exception as exc:
                     # 保留已知模型标识并标记不可用，不返回可能含密钥的异常正文。
                     logger.warning(f"读取宿主模型展示信息失败: {type(exc).__name__}")
-                providers.append(
-                    {
-                        "id": pid,
-                        "name": name,
-                        "model": model,
-                        "available": available,
-                    }
-                )
+                item: HostLlmProviderDTO = {
+                    "id": pid,
+                    "name": name,
+                    "model": model,
+                    "available": available,
+                }
+                if provider:
+                    item["provider"] = provider
+                providers.append(item)
             data: HostLlmConfigDTO = {
                 "primary_id": primary_id,
                 "fallback_ids": fallback_ids,

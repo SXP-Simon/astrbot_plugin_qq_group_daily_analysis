@@ -10,6 +10,7 @@ from astrbot.api.provider import Provider
 from src.infrastructure.analysis.utils.llm_utils import _get_host_fallback_provider_ids
 from src.infrastructure.webui.routes import config_routes
 from src.infrastructure.webui.routes.config_routes import ConfigRoutes
+from src.infrastructure.webui.routes.trace_routes import TraceRoutes
 from src.infrastructure.webui.openapi_spec import generate_openapi_spec
 
 
@@ -19,7 +20,7 @@ def context():
     for pid in ["primary", "backup"]:
         providers[pid] = Mock(
             spec=Provider,
-            provider_config={"id": pid, "name": f"模型 {pid}", "model": "model", "key": ["secret-key"], "api_base": "https://private.example"},
+            provider_config={"id": pid, "name": f"模型 {pid}", "model": "model", "provider": "ollama", "key": ["secret-key"], "api_base": "https://private.example"},
             get_model=Mock(return_value="model"),
             meta=Mock(return_value=SimpleNamespace(id=pid)),
         )
@@ -49,6 +50,7 @@ async def test_readonly_configuration_matches_runtime_without_secrets(context, m
     data = response["data"]["data"]
     assert data["primary_id"] == "primary"
     assert data["fallback_ids"] == ["backup", "primary", "removed"]
+    assert data["providers"][0]["provider"] == "ollama"
     assert data["providers"][-1] == {"id": "removed", "name": "removed", "model": "", "available": False}
     assert _get_host_fallback_provider_ids(context, None) == ["backup", "primary"]
     assert "secret-key" not in str(response) and "private.example" not in str(response)
@@ -56,6 +58,18 @@ async def test_readonly_configuration_matches_runtime_without_secrets(context, m
     context.save_config.assert_not_called()
     context.llm_generate.assert_not_awaited()
     context.get_using_provider_async.assert_awaited_once_with(umo=None)
+
+
+@pytest.mark.asyncio
+async def test_provider_list_exports_brand_without_raw_configuration(context):
+    legacy = context.get_provider_by_id("backup")
+    legacy.provider_config.pop("provider")
+    response = await TraceRoutes(context, Mock(), Mock()).api_get_providers()
+    assert response["status_code"] == 200
+    providers = {item["id"]: item for item in response["data"]["data"]}
+    assert providers["primary"]["provider"] == "ollama"
+    assert "provider" not in providers["backup"]
+    assert "secret-key" not in str(response) and "private.example" not in str(response)
 
 
 @pytest.mark.asyncio
