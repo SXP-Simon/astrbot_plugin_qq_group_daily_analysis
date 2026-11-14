@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from astrbot.api.provider import LLMResponse
+from astrbot.api.provider import LLMResponse, Provider
 
 from src.infrastructure.analysis.utils import llm_utils
 from src.shared.trace_context import TraceContext
@@ -49,7 +49,8 @@ class Context:
         self.get_config = Mock(return_value=config)
         self.get_current_chat_provider_id = AsyncMock(return_value="primary")
         self.providers = {
-            pid: SimpleNamespace(
+            pid: Mock(
+                spec=Provider,
                 provider_config={"id": pid, "model": pid, "timeout": 1},
                 text_chat=AsyncMock(),
             )
@@ -91,7 +92,8 @@ def test_inherited_chain_uses_session_config_and_preserves_request(
             }
         }
     ctx = Context(host_config)
-    ctx.providers["embedding"] = object()
+    # 即使非对话模型恰好有同名方法，也不应被识别成宿主对话 Provider。
+    ctx.providers["embedding"] = SimpleNamespace(text_chat=AsyncMock())
     cfg = Config(streaming=streaming)
     stream_calls = []
 
@@ -151,6 +153,65 @@ def test_default_entry_without_task_key_inherits_fallbacks(umo):
     ctx.get_config.assert_called_once_with(umo=umo)
     if umo is None:
         ctx.get_using_provider_async.assert_awaited_once()
+
+
+@pytest.mark.parametrize("setting", ["main", "override"])
+@pytest.mark.parametrize("initially_inherited", [False, True])
+def test_inheritance_policy_is_fixed_while_request_is_running(
+    setting, initially_inherited
+):
+    """等待响应时修改配置不影响本次继承资格，下次调用才采用新配置。"""
+    initial_value = "" if initially_inherited else "primary"
+    changed_value = "primary" if initially_inherited else ""
+    cfg = Config(primary=initial_value if setting == "main" else "", retries=1)
+    ctx = Context({"provider_settings": {"fallback_chat_models": ["backup-2"]}})
+
+    async def scenario():
+        started = asyncio.Event()
+        release = asyncio.Event()
+        original_generate = ctx.llm_generate
+
+        async def delayed_generate(**kwargs):
+            if kwargs["chat_provider_id"] == "primary":
+                started.set()
+                await release.wait()
+            return await original_generate(**kwargs)
+
+        ctx.llm_generate = delayed_generate
+        with TraceContext(trace_id="config-during-request") as trace:
+            if setting == "override":
+                trace.metadata["override_provider_id"] = initial_value
+            task = asyncio.create_task(
+                llm_utils.call_provider_with_retry(
+                    ctx, cfg, "report", umo="group", provider_id_key="topic_provider_id"
+                )
+            )
+            await asyncio.wait_for(started.wait(), timeout=1)
+            # 只固定继承资格，宿主回退列表仍在首选模型失败后才读取。
+            ctx.get_config.assert_not_called()
+            if setting == "main":
+                cfg.primary = changed_value
+            else:
+                trace.metadata["override_provider_id"] = changed_value
+            release.set()
+            result = await task
+            assert (result is not None) == initially_inherited
+            expected = ["primary", "backup-2"] if initially_inherited else ["primary"]
+            assert [c["chat_provider_id"] for c in ctx.calls] == expected
+            assert ctx.get_config.call_count == int(initially_inherited)
+
+            # 新调用读取新配置，不将上次调用的继承资格缓存到全局。
+            ctx.calls.clear()
+            ctx.get_config.reset_mock()
+            result = await llm_utils.call_provider_with_retry(
+                ctx, cfg, "report", umo="group", provider_id_key="topic_provider_id"
+            )
+            assert (result is not None) != initially_inherited
+            expected = ["primary"] if initially_inherited else ["primary", "backup-2"]
+            assert [c["chat_provider_id"] for c in ctx.calls] == expected
+            assert ctx.get_config.call_count == int(not initially_inherited)
+
+    asyncio.run(scenario())
 
 
 def test_primary_success_does_not_read_fallback_configuration():

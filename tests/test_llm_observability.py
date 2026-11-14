@@ -1360,6 +1360,7 @@ def test_provider_cancellation_waits_for_cleanup_before_releasing_slot():
             get_llm_retries=lambda: 1,
             get_llm_backoff=lambda: 0,
             get_enable_streaming_llm_call=lambda: False,
+            get_llm_provider_id=lambda: "",
         )
         request = asyncio.create_task(
             call_provider_with_retry(

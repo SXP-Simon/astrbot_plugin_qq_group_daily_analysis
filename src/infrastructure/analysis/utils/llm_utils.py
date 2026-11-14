@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
-from astrbot.api.provider import LLMResponse
+from astrbot.api.provider import LLMResponse, Provider
 
 from ....shared.constants import AnalysisStage
 from ....shared.report_language import apply_report_language
@@ -477,6 +477,9 @@ def _get_host_fallback_provider_ids(context: Context, umo: str | None) -> list[s
 
     Returns:
         已去重且可用的对话模型 ID；读取失败时返回空列表。
+
+    Raises:
+        不向外抛出普通异常；配置读取和模型查询异常均记录日志并返回空列表。
     """
     try:
         host_config = context.get_config(umo=umo)
@@ -503,7 +506,7 @@ def _get_host_fallback_provider_ids(context: Context, umo: str | None) -> list[s
             if pid in provider_ids:
                 continue
             provider = context.get_provider_by_id(pid)
-            if provider is None or not callable(getattr(provider, "text_chat", None)):
+            if not isinstance(provider, Provider):
                 logger.warning(f"跳过不可用的回退对话模型: {pid}")
                 continue
             provider_ids.append(pid)
@@ -552,6 +555,10 @@ async def call_provider_with_retry(
     enable_streaming_llm_call = config_manager.get_enable_streaming_llm_call()
     trace = TraceContext.current()
     trace_metadata = trace.metadata if trace else {}
+    # 在首次请求前固定继承资格，避免等待模型响应期间保存配置改变本次回退策略。
+    inherit_host_fallbacks = not config_manager.get_llm_provider_id() and not (
+        trace_metadata.get("override_provider_id")
+    )
     observation_stage = str(trace_metadata.get("llm_stage") or "unknown")
     observation_group = str(
         trace_metadata.get("llm_group_id")
@@ -999,9 +1006,7 @@ async def call_provider_with_retry(
                     )
                     if fallback_provider_id:
                         fallback_ids.append(fallback_provider_id)
-                if not config_manager.get_llm_provider_id() and not trace_metadata.get(
-                    "override_provider_id"
-                ):
+                if inherit_host_fallbacks:
                     fallback_ids.extend(_get_host_fallback_provider_ids(context, umo))
                 queued_ids = {pid for pid, _ in attempt_queue}
                 for fallback_id in fallback_ids:
