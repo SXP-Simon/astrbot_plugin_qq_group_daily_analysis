@@ -53,9 +53,17 @@ export function GroupFilters({
   ];
   const value = selectedGroup ? JSON.stringify([selectedPlatform ?? null, selectedGroup]) : "";
   if (selectedGroup && !groupOptions.some((option) => option.value === value)) {
+    let iconPlatform = selectedPlatform;
+    if (iconPlatform === undefined) {
+      // 只为图标推断平台，筛选仍覆盖所有平台。
+      const groupPlatforms = new Set(
+        visible.filter((group) => group.group_id === selectedGroup).map((group) => group.platform),
+      );
+      if (groupPlatforms.size === 1) [iconPlatform] = groupPlatforms;
+    }
     groupOptions.push({
       value,
-      icon: <PlatformIcon platform={selectedPlatform} />,
+      icon: <PlatformIcon platform={iconPlatform} />,
       label: `${selectedGroup} · ${selectedPlatform === undefined ? "全部平台" : "当前筛选"}`,
     });
   }
