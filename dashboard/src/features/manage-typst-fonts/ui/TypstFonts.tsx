@@ -1,3 +1,4 @@
+import { IconTypography } from "@tabler/icons-react";
 import { useContext, useState } from "react";
 import { FontDownloadProgress } from "./FontDownloadProgress";
 import { KNOWN_TEMPLATES } from "@/entities/report/model/templates";
@@ -16,8 +17,14 @@ export function TypstFonts({ cdnBaseUrl }: { cdnBaseUrl: string }) {
   const [theme, setTheme] = useState("HatsuneMiku");
   const group = vm.status?.groups?.find((item) => item.theme === theme);
   return (
-    <section className="mt-3 min-w-0 space-y-3" aria-label="Typst 字体">
-      <h3 className="m-0 text-base font-medium">Typst 字体</h3>
+    <section
+      className="mt-3 min-w-0 space-y-4 rounded-xl border border-border bg-card p-4"
+      aria-label="Typst 字体"
+    >
+      <h3 className="m-0 flex items-center gap-2 text-base font-medium">
+        <IconTypography aria-hidden="true" className="size-5 text-primary-ink" />
+        Typst 字体
+      </h3>
       <p className="m-0 text-sm text-muted-foreground">
         供插件本地 Typst 排版使用，不影响 HTML / T2I 的网页字体。按模板补齐，共享字体只保存一份。
       </p>
