@@ -81,8 +81,10 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
       return () => {};
     });
     const cacheSpy = vi.spyOn(traceApi, "invalidateTraceCache");
+    const fetchConnectedPlatforms = taskApi.fetchConnectedPlatforms;
     const platformsSpy = vi
       .spyOn(taskApi, "fetchConnectedPlatforms")
+      .mockImplementationOnce(fetchConnectedPlatforms)
       .mockRejectedValueOnce(new Error("连接失败"));
     const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     const pending: Promise<unknown>[] = [];
@@ -109,6 +111,8 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
         await Promise.allSettled(pending);
       });
       expect(screen.getByText("142")).toBeInTheDocument();
+      const platformLabel = screen.getByText(/aiocqhttp_main · 987654321/);
+      expect(platformLabel.parentElement?.querySelector("img")?.src).toContain("onebot.png");
       fireEvent.click(screen.getAllByRole("button", { name: "发起分析" })[0]);
       const form = within(await screen.findByRole("dialog", { name: "发起分析" }));
       expect(await form.findByText("平台列表未能读取，可重试加载或使用默认选择。")).toBeVisible();
@@ -121,7 +125,7 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
         form.queryByText("平台列表未能读取，可重试加载或使用默认选择。"),
       ).not.toBeInTheDocument();
       expect(form.getByLabelText("群号 / 会话标识")).toHaveValue("demo-retry");
-      expect(platformsSpy).toHaveBeenCalledTimes(2);
+      expect(platformsSpy).toHaveBeenCalledTimes(3);
       fireEvent.click(form.getByRole("button", { name: "取消" }));
       act(() => {
         toast.success("示例：任务已提交", { duration: Infinity });

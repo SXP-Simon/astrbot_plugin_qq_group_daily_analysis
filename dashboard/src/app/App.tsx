@@ -42,6 +42,8 @@ import { invalidateTraceCache } from "@/entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "@/entities/group/api/groupApi";
 import { fetchAvailableProviders } from "@/entities/config/api/configApi";
 import { ProviderBrandsContext } from "@/entities/config/model/ProviderBrandsContext";
+import { PlatformTypesContext } from "@/entities/group/model/PlatformTypesContext";
+import { fetchConnectedPlatforms } from "@/entities/task/api/taskApi";
 
 export const App: React.FC = () => {
   const { page: activeTab, visited, navigate } = usePageNavigation("overview");
@@ -49,7 +51,8 @@ export const App: React.FC = () => {
   const [providerBrands, setProviderBrands] = useState<ReadonlyMap<string, string>>(
     () => new Map(),
   );
-  const [providerRevision, setProviderRevision] = useState(0);
+  const [platformTypes, setPlatformTypes] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const [metadataRevision, setMetadataRevision] = useState(0);
   useEffect(() => {
     let active = true;
     void fetchAvailableProviders()
@@ -68,7 +71,20 @@ export const App: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [providerRevision]);
+  }, [metadataRevision]);
+  useEffect(() => {
+    let active = true;
+    void fetchConnectedPlatforms()
+      .then((items) => {
+        if (active) setPlatformTypes(new Map(items.map(({ id, type }) => [id, type])));
+      })
+      .catch(() => {
+        if (active) setPlatformTypes(new Map());
+      });
+    return () => {
+      active = false;
+    };
+  }, [metadataRevision]);
   const [fontRequest, setFontRequest] = useState<FontManagementRequest | null>(null);
   const [fontVersion, setFontVersion] = useState(0);
   const fontNavigationSequence = useRef(0);
@@ -118,7 +134,7 @@ export const App: React.FC = () => {
   };
 
   const handleRefreshAll = () => {
-    setProviderRevision((revision) => revision + 1);
+    setMetadataRevision((revision) => revision + 1);
     // 显式清理前端冷数据缓存，确保强制刷新时数据 100% 同步
     invalidateTraceCache();
     invalidateGroupsCache();
@@ -272,57 +288,59 @@ export const App: React.FC = () => {
           version: resourceVersion,
         }}
       >
-        <ProviderBrandsContext.Provider value={providerBrands}>
-          <Toaster />
-          <AppShell
-            activePage={activeTab}
-            visited={visited}
-            onNavigate={handleTabChange}
-            items={tabItems}
-            onRefresh={handleRefreshAll}
-            onOpenTrigger={triggerVM.handleOpen}
-            loading={overviewVM.loading}
-            configDirty={configVM.isDirty}
-          />
+        <PlatformTypesContext.Provider value={platformTypes}>
+          <ProviderBrandsContext.Provider value={providerBrands}>
+            <Toaster />
+            <AppShell
+              activePage={activeTab}
+              visited={visited}
+              onNavigate={handleTabChange}
+              items={tabItems}
+              onRefresh={handleRefreshAll}
+              onOpenTrigger={triggerVM.handleOpen}
+              loading={overviewVM.loading}
+              configDirty={configVM.isDirty}
+            />
 
-          {/* 触发任务模态框 (Feature) */}
-          <TriggerTaskModal
-            open={triggerVM.open}
-            groupId={triggerVM.groupId}
-            groupName={triggerVM.groupName}
-            platform={triggerVM.platform}
-            providerId={triggerVM.providerId}
-            templateName={triggerVM.templateName}
-            submitting={triggerVM.submitting}
-            connectedPlatforms={triggerVM.connectedPlatforms}
-            loadingPlatforms={triggerVM.loadingPlatforms}
-            providers={triggerVM.providers}
-            loadingProviders={triggerVM.loadingProviders}
-            templates={triggerVM.templates}
-            loadingTemplates={triggerVM.loadingTemplates}
-            templatesError={triggerVM.templatesError}
-            optionsError={triggerVM.optionsError}
-            onRefreshOptions={triggerVM.refreshOptions}
-            onRefreshTemplates={() => void triggerVM.refreshTemplates()}
-            onGroupIdChange={triggerVM.setGroupId}
-            onGroupNameChange={triggerVM.setGroupName}
-            onPlatformChange={triggerVM.setPlatform}
-            onProviderChange={triggerVM.setProviderId}
-            onTemplateChange={triggerVM.setTemplateName}
-            onClose={triggerVM.handleClose}
-            onSubmit={triggerVM.handleSubmit}
-          />
+            {/* 触发任务模态框 (Feature) */}
+            <TriggerTaskModal
+              open={triggerVM.open}
+              groupId={triggerVM.groupId}
+              groupName={triggerVM.groupName}
+              platform={triggerVM.platform}
+              providerId={triggerVM.providerId}
+              templateName={triggerVM.templateName}
+              submitting={triggerVM.submitting}
+              connectedPlatforms={triggerVM.connectedPlatforms}
+              loadingPlatforms={triggerVM.loadingPlatforms}
+              providers={triggerVM.providers}
+              loadingProviders={triggerVM.loadingProviders}
+              templates={triggerVM.templates}
+              loadingTemplates={triggerVM.loadingTemplates}
+              templatesError={triggerVM.templatesError}
+              optionsError={triggerVM.optionsError}
+              onRefreshOptions={triggerVM.refreshOptions}
+              onRefreshTemplates={() => void triggerVM.refreshTemplates()}
+              onGroupIdChange={triggerVM.setGroupId}
+              onGroupNameChange={triggerVM.setGroupName}
+              onPlatformChange={triggerVM.setPlatform}
+              onProviderChange={triggerVM.setProviderId}
+              onTemplateChange={triggerVM.setTemplateName}
+              onClose={triggerVM.handleClose}
+              onSubmit={triggerVM.handleSubmit}
+            />
 
-          {/* 链路追溯抽屉 (Widget) */}
-          <TraceDrawer
-            traceId={selectedTraceId}
-            open={!!selectedTraceId}
-            onClose={() => setSelectedTraceId(null)}
-          />
+            {/* 链路追溯抽屉 (Widget) */}
+            <TraceDrawer
+              traceId={selectedTraceId}
+              open={!!selectedTraceId}
+              onClose={() => setSelectedTraceId(null)}
+            />
 
-          {/* 独立开发调试浮动工具栏 (Dev Only) */}
-          {import.meta.env.DEV && <DevToolbar />}
-        </ProviderBrandsContext.Provider>
+            {/* 独立开发调试浮动工具栏 (Dev Only) */}
+            {import.meta.env.DEV && <DevToolbar />}
+          </ProviderBrandsContext.Provider>
+        </PlatformTypesContext.Provider>
       </ResourceManagementContext.Provider>
     </FontManagementContext.Provider>
   );
