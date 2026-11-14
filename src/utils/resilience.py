@@ -181,21 +181,6 @@ class CircuitBreaker:
             self.state = self.STATE_OPEN
             self._generation += 1
 
-    def allow_request(self) -> bool:
-        """
-        判断是否允许本次服务请求。
-
-        Returns:
-            bool: True 为允许，False 为拦截
-        """
-        if self.state == self.STATE_OPEN:
-            # 检查冷却时间是否已过，过则进入试探性的半开状态
-            if time.monotonic() - self.last_failure_time > self.recovery_timeout:
-                self._half_open_circuit()
-                return True
-            return False
-        return True
-
     def _open_circuit(self) -> None:
         """动作：开启熔断"""
         self._generation += 1
