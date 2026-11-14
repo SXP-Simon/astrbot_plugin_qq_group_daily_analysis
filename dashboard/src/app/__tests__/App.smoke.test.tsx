@@ -126,9 +126,11 @@ describe("应用全局冒烟与集成测试 (App Smoke & Integration Test)", () 
       act(() => {
         toast.success("示例：任务已提交", { duration: Infinity });
       });
-      expect(await screen.findByText("示例：任务已提交")).toBeVisible();
+      // Sonner 先插入通知节点，再更新可见状态；找到文本不代表通知已经可见。
+      await waitFor(() => expect(screen.getByText("示例：任务已提交")).toBeVisible());
       expect(screen.getByLabelText("操作通知（Alt+T）")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "关闭提示" }));
+      await waitFor(() => expect(screen.queryByText("示例：任务已提交")).not.toBeInTheDocument());
       for (const event of ["task_canceled", "task_timed_out", "task_finished"]) {
         cacheSpy.mockClear();
         act(() => receiveEvent?.({ parsed: { event, data: { task_id: "WEBUI-CANCEL" } } }));
