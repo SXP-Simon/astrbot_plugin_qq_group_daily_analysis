@@ -484,6 +484,7 @@ export const mockHandlers = {
           id: provider.id,
           name: provider.name,
           model: provider.id,
+          provider: provider.provider,
           available: true,
         })),
         {
