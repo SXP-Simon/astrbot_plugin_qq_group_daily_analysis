@@ -97,3 +97,41 @@ async def test_host_read_error_does_not_leak_private_details(context, monkeypatc
 
 def test_host_config_contract_is_get_only():
     assert set(generate_openapi_spec()["paths"]["/config/host-llm"]) == {"get"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["unrelated_meta", "primary_meta", "backup_model", "backup_lookup"])
+async def test_broken_provider_does_not_hide_other_host_models(context, monkeypatch, failure):
+    monkeypatch.setattr(config_routes, "request", SimpleNamespace(query={}))
+    context.get_config.return_value = {"provider_settings": {"fallback_chat_models": ["backup"]}}
+    primary, backup = context.get_all_providers.return_value
+    error = RuntimeError("secret-key private.example")
+    if failure == "unrelated_meta":
+        broken = Mock(spec=Provider, meta=Mock(side_effect=error))
+        context.get_all_providers.return_value = [broken, primary, backup]
+    elif failure == "primary_meta":
+        primary.meta.side_effect = error
+    elif failure == "backup_model":
+        backup.get_model.side_effect = error
+    else:
+        def lookup(pid):
+            if pid == "backup":
+                raise error
+            return primary if pid == "primary" else None
+        context.get_provider_by_id.side_effect = lookup
+
+    response = await ConfigRoutes(None, context=context).api_get_host_llm_config()
+    assert response["status_code"] == 200
+    data = response["data"]["data"]
+    assert data["fallback_ids"] == ["backup"]
+    by_id = {provider["id"]: provider for provider in data["providers"]}
+    if failure == "primary_meta":
+        assert data["primary_id"] is None
+        assert by_id["backup"]["available"] is True
+    else:
+        assert data["primary_id"] == "primary"
+        assert by_id["primary"]["available"] is True
+        assert by_id["backup"]["available"] is (failure == "unrelated_meta")
+    assert "secret-key" not in str(response) and "private.example" not in str(response)
+    context.save_config.assert_not_called()
+    context.llm_generate.assert_not_awaited()

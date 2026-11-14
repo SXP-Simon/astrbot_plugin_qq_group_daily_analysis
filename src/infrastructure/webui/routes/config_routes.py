@@ -366,38 +366,53 @@ class ConfigRoutes:
             try:
                 primary = await self.context.get_using_provider_async(umo=umo)
                 primary_id = primary.meta().id if primary else None
-            except ValueError:
+            except Exception as exc:
+                logger.warning(f"读取宿主当前模型失败: {type(exc).__name__}")
                 primary_id = None
 
             # 沿用注册顺序，便于说明宿主无首选模型时的现有兜底选择。
             available_ids: list[str] = []
             for provider in self.context.get_all_providers():
-                available_ids.append(provider.meta().id)
+                try:
+                    available_ids.append(provider.meta().id)
+                except Exception as exc:
+                    # 单个模型元数据异常不应遮挡其他模型；无法确认标识时跳过。
+                    logger.warning(
+                        f"跳过无法读取元数据的宿主模型: {type(exc).__name__}"
+                    )
             ids: list[str] = available_ids + fallback_ids
             if primary_id:
                 ids.append(primary_id)
             providers: list[HostLlmProviderDTO] = []
             for pid in dict.fromkeys(ids):
-                candidate = self.context.get_provider_by_id(pid)
                 name = pid
                 model = ""
-                if isinstance(candidate, Provider):
-                    # 宿主的原始配置尚无完整类型，只在边界收窄后读取展示字段。
-                    raw_config: object = getattr(candidate, "provider_config", None)
-                    config = raw_config if is_string_mapping(raw_config) else {}
-                    configured_name = config.get("name")
-                    configured_model = config.get("model")
-                    if isinstance(configured_name, str) and configured_name:
-                        name = configured_name
-                    model = candidate.get_model() or (
-                        configured_model if isinstance(configured_model, str) else ""
-                    )
+                available = False
+                try:
+                    candidate = self.context.get_provider_by_id(pid)
+                    if isinstance(candidate, Provider):
+                        # 宿主的原始配置尚无完整类型，只在边界收窄后读取展示字段。
+                        raw_config: object = getattr(candidate, "provider_config", None)
+                        config = raw_config if is_string_mapping(raw_config) else {}
+                        configured_name = config.get("name")
+                        configured_model = config.get("model")
+                        if isinstance(configured_name, str) and configured_name:
+                            name = configured_name
+                        model = candidate.get_model() or (
+                            configured_model
+                            if isinstance(configured_model, str)
+                            else ""
+                        )
+                        available = True
+                except Exception as exc:
+                    # 保留已知模型标识并标记不可用，不返回可能含密钥的异常正文。
+                    logger.warning(f"读取宿主模型展示信息失败: {type(exc).__name__}")
                 providers.append(
                     {
                         "id": pid,
                         "name": name,
                         "model": model,
-                        "available": isinstance(candidate, Provider),
+                        "available": available,
                     }
                 )
             data: HostLlmConfigDTO = {
