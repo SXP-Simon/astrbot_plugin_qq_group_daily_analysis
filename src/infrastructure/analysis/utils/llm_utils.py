@@ -9,7 +9,7 @@ import asyncio
 import random
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
 from astrbot.api.provider import LLMResponse, Provider
 
@@ -21,7 +21,12 @@ from ....shared.type_guards import (
     is_string_mapping,
 )
 from ....utils.logger import logger
-from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
+from ....utils.resilience import (
+    CircuitBreaker,
+    CircuitBreakerRejected,
+    CircuitRequestPermit,
+    GlobalRateLimiter,
+)
 from .host_llm_config import get_configured_host_fallback_ids
 from .llm_diagnostics import (
     LLMBlockDiagnosis,
@@ -39,6 +44,7 @@ if TYPE_CHECKING:
     from ....domain.repositories.bot_client_protocol import (
         LLMStreamProviderProtocol,
     )
+    from ....utils.resilience import CircuitBreakerSnapshot
     from ...config.config_manager import ConfigManager
     from .structured_output_schema import JSONObject, JSONValue
 
@@ -53,6 +59,14 @@ __all__ = [
     "format_task_await_chain",
     "get_provider_id_with_fallback",
 ]
+
+
+class LlmRuntimeSnapshot(TypedDict):
+    """总览运行状态，与宿主配置读取解耦。"""
+
+    captured_at: float
+    circuits: dict[str, CircuitBreakerSnapshot]
+
 
 _circuit_breakers: dict[str, CircuitBreaker] = {}
 _LLM_LIMITER_WARN_SECONDS = 15.0
@@ -230,6 +244,23 @@ def get_provider_circuit_breaker(provider_id: str) -> CircuitBreaker:
 
 
 _get_circuit_breaker = get_provider_circuit_breaker
+
+
+def get_llm_runtime_snapshot() -> LlmRuntimeSnapshot:
+    """读取插件运行快照，不创建熔断器或触发恢复尝试。
+
+    Returns:
+        当前各 Provider 熔断状态及读取时间。
+
+    Raises:
+        不主动抛出异常。
+    """
+    return {
+        "captured_at": time.time(),
+        "circuits": {
+            pid: breaker.snapshot() for pid, breaker in _circuit_breakers.items()
+        },
+    }
 
 
 async def _call_provider_stream(
@@ -576,11 +607,11 @@ async def call_provider_with_retry(
         request_started_at = time.monotonic()
         actual_model = None
         cb = _get_circuit_breaker(pid)
-        if not cb.allow_request():
-            logger.warning(f"Provider {pid} 熔断器已打开，跳过本次请求")
-            raise Exception("Circuit breaker open")
+        permit: CircuitRequestPermit | None = None
 
         try:
+            # 排队前仅检查，不提前占用恢复探测资格。
+            cb.check_request()
             limiter = GlobalRateLimiter.get_instance()
             semaphore = limiter.semaphore
             wait_started_at = time.monotonic()
@@ -619,6 +650,8 @@ async def call_provider_with_retry(
             )
             request_started_at = time.monotonic()
             try:
+                # 等待槽位期间状态可能已变；实际发送前复查并取得恢复许可。
+                permit = cb.acquire_request()
                 # 借助强类型 ProviderMetadata (ACL) 提取模型与超时信息
                 meta = ProviderMetadata.from_provider_id(context, pid)
                 actual_model = meta.model
@@ -835,7 +868,7 @@ async def call_provider_with_retry(
                     f"duration={time.monotonic() - request_started_at:.2f}s, "
                     f"available={limiter.available_slots}/{limiter.max_concurrency}"
                 )
-            cb.record_success()
+            cb.record_success(permit)
             duration_ms = (time.monotonic() - request_started_at) * 1000
             if trace:
                 attempts_list = trace.metadata.setdefault("llm_attempts", [])
@@ -867,11 +900,18 @@ async def call_provider_with_retry(
                     "attempt": attempt_num,
                     "provider_id": pid,
                     "model": actual_model or "default",
-                    "status": "failed",
+                    "status": "skipped"
+                    if isinstance(err, CircuitBreakerRejected)
+                    else "failed",
                     "duration_ms": round(duration_ms, 1),
                     "is_fallback": is_fallback_request,
                     "error": str(err),
                 }
+                if isinstance(err, CircuitBreakerRejected):
+                    # 跳过没有向上游发出请求，原因单独保存，避免界面当成调用失败。
+                    attempt_item.pop("error")
+                    attempt_item["model"] = actual_model or ""
+                    attempt_item["skip_reason"] = str(err)
                 if is_object_list(attempts_list):
                     attempts_list.append(attempt_item)
                 for s in reversed(trace.spans):
@@ -881,6 +921,8 @@ async def call_provider_with_retry(
                         if is_object_list(span_attempts):
                             span_attempts.append(attempt_item)
                         break
+            if isinstance(err, CircuitBreakerRejected):
+                raise
             if r_format is not None and _is_response_format_unsupported_error(err):
                 raise err
             if _is_content_risk_error(err):
@@ -888,8 +930,13 @@ async def call_provider_with_retry(
                     f"[LLM 熔断保护] 请求命中了上游内容风控拦截，不计入 Provider[{pid}] 熔断器失败计数。"
                 )
                 raise err
-            cb.record_failure()
+            if permit is not None:
+                cb.record_failure(permit)
             raise err
+        finally:
+            # 包括主动取消和不计入失败的异常；已反馈结果的许可释放为无操作。
+            if permit is not None:
+                cb.release_request(permit)
 
     # 3. 开始执行队列
     last_exc = None
@@ -955,8 +1002,15 @@ async def call_provider_with_retry(
                 except Exception as inner_e:
                     last_exc = inner_e
 
+            if isinstance(last_exc, CircuitBreakerRejected):
+                logger.info(f"{prefix}Provider[{current_pid}] 已跳过: {last_exc}")
+                attempt_queue = [
+                    item
+                    for idx, item in enumerate(attempt_queue)
+                    if idx <= queue_index or item[0] != current_pid
+                ]
             # 处理上游内容安全审查/敏感词风控拦截 (Content Risk / Moderation Filter)
-            if _is_content_risk_error(last_exc):
+            elif _is_content_risk_error(last_exc):
                 logger.warning(
                     f"{prefix}[LLM 内容风控拦截] 上游模型服务商触发了安全审查拒绝 (Content Risk / Moderation Filter)！\n"
                     f"  - 错误详情: {last_exc}\n"
@@ -995,7 +1049,16 @@ async def call_provider_with_retry(
                         queued_ids.add(fallback_id)
 
             is_last_attempt = queue_index == len(attempt_queue) - 1
-            if not is_last_attempt and not _is_content_risk_error(last_exc):
+            skip_backoff = isinstance(
+                last_exc, CircuitBreakerRejected
+            ) or _is_content_risk_error(last_exc)
+            if not skip_backoff:
+                try:
+                    _get_circuit_breaker(current_pid).check_request()
+                except CircuitBreakerRejected:
+                    # 本次失败刚触发熔断时，也无需先等待一次退避再进入跳过流程。
+                    skip_backoff = True
+            if not is_last_attempt and not skip_backoff:
                 # 按模型独立计算退避，避免回退链越长等待时间越大。
                 sleep_time = backoff * (
                     2 ** (provider_attempt_num - 1)
