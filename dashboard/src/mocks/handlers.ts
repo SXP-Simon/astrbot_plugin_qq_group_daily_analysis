@@ -466,6 +466,24 @@ export const mockHandlers = {
       : mockGroups,
   }),
   "GET providers": () => ({ status: "ok", data: mockProviders }),
+  "GET config/host-llm": (params?: Record<string, unknown>) => ({
+    status: "ok",
+    data: {
+      primary_id: params?.group_id ? "openai" : "deepseek-chat",
+      fallback_ids: params?.group_id
+        ? ["claude-3-5-sonnet", "ollama_local"]
+        : ["openai", "ollama_local", "retired-model"],
+      providers: [
+        ...mockProviders.map((provider) => ({
+          id: provider.id,
+          name: provider.name,
+          model: provider.id,
+          available: true,
+        })),
+        { id: "retired-model", name: "已移除的备用模型", model: "", available: false },
+      ],
+    },
+  }),
   "GET personas": () => ({ status: "ok", data: mockPersonas }),
 
   // 4. 历史报告与海报模板
