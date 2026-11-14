@@ -1462,6 +1462,7 @@ def generate_openapi_spec() -> dict[str, object]:
                         "name": {"type": "string"},
                         "model": {"type": "string"},
                         "available": {"type": "boolean"},
+                        "provider": {"type": "string"},
                     },
                 },
                 "HostLlmConfig": {

@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import math
 import time
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
@@ -40,6 +40,7 @@ class ProviderMetadataDTO(TypedDict):
     name: str
     type: str
     label: str
+    provider: NotRequired[str]
 
 
 class PersonaMetadataDTO(TypedDict):
@@ -378,16 +379,21 @@ class TraceRoutes:
                         )
                         p_type = getattr(meta, "provider_type", "")
                         seen_ids.add(p_id)
-                        providers.append(
-                            {
-                                "id": str(p_id),
-                                "name": str(p_name),
-                                "type": str(p_type),
-                                "label": f"{p_name} ({p_id})"
-                                if p_name != p_id
-                                else str(p_name),
-                            }
-                        )
+                        item: ProviderMetadataDTO = {
+                            "id": str(p_id),
+                            "name": str(p_name),
+                            "type": str(p_type),
+                            "label": f"{p_name} ({p_id})"
+                            if p_name != p_id
+                            else str(p_name),
+                        }
+                        # 宿主已合并模型与服务商来源，只读取用于展示的品牌字段。
+                        raw_config: object = getattr(p, "provider_config", None)
+                        if is_string_mapping(raw_config):
+                            provider = raw_config.get("provider")
+                            if isinstance(provider, str) and provider.strip():
+                                item["provider"] = provider.strip()
+                        providers.append(item)
                     except Exception:
                         pass
             return json_response({"status": "ok", "data": providers})
