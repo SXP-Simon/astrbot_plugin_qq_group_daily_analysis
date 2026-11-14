@@ -33,6 +33,7 @@
     "zod": "^4.6.2"
   },
   "devDependencies": {
+    "@lobehub/icons-static-svg": "1.102.0",
     "@tabler/icons-react": "3.50.0",
     "@tailwindcss/vite": "4.3.4",
     "@testing-library/jest-dom": "^7.0.1",
