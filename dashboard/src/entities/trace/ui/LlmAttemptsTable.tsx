@@ -1,3 +1,4 @@
+import { ModelIcon } from "@/entities/config/ui/ModelIcon";
 import { formatDuration } from "@/shared/lib/formatters";
 import { llmAttemptSchema } from "@/entities/trace/model/llmAttempts";
 import { resolveSpanOutcome } from "@/entities/trace/model/spanOutcome";
@@ -33,7 +34,7 @@ export function LlmAttemptsTable({ attempts }: { attempts: Record<string, unknow
     <section className="my-5 text-sm" aria-label="大模型调用与重试链路">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="m-0 text-sm font-medium">大模型调用与重试链路</h4>
-        <span className="text-xs text-muted-foreground">共 {attempts.length} 次请求</span>
+        <span className="text-xs text-muted-foreground">共 {attempts.length} 条记录</span>
       </div>
       <ol className="m-0 list-none p-0">
         {attempts.map((record, index) => {
@@ -53,7 +54,7 @@ export function LlmAttemptsTable({ attempts }: { attempts: Record<string, unknow
               className="border-0 border-b border-solid border-border py-3 last:border-b-0"
             >
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-xs text-muted-foreground">请求 {index + 1}</span>
+                <span className="text-xs text-muted-foreground">记录 {index + 1}</span>
                 <span className="flex-1 font-medium">
                   {area ? (areaNames.get(area) ?? area) : "分析模块未记录"}
                 </span>
@@ -62,7 +63,9 @@ export function LlmAttemptsTable({ attempts }: { attempts: Record<string, unknow
                 >
                   {statusLabels[outcome]}
                 </span>
-                <span className="font-mono text-xs text-muted-foreground">
+                <span
+                  className={`text-xs text-muted-foreground ${att.duration_ms === undefined ? "" : "font-mono"}`}
+                >
                   {att.duration_ms === undefined
                     ? "耗时未记录"
                     : att.duration_ms === 0
@@ -70,9 +73,16 @@ export function LlmAttemptsTable({ attempts }: { attempts: Record<string, unknow
                       : formatDuration(att.duration_ms)}
                 </span>
               </div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                {provider && <span className="break-all font-mono">{provider}</span>}
-                {att.attempt !== undefined && <span>调用次数 {att.attempt}</span>}
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {provider && (
+                  <span className="inline-flex min-w-0 items-center gap-2 font-mono">
+                    <ModelIcon id={att.provider_id} model={att.model} className="size-4" />
+                    <span className="min-w-0 break-all">{provider}</span>
+                  </span>
+                )}
+                {att.attempt !== undefined && outcome !== "skipped" && (
+                  <span>调用次数 {att.attempt}</span>
+                )}
                 {att.is_fallback && <span>备用 Provider</span>}
                 {retry && (
                   <span>
@@ -80,6 +90,9 @@ export function LlmAttemptsTable({ attempts }: { attempts: Record<string, unknow
                   </span>
                 )}
               </div>
+              {att.skip_reason && (
+                <p className="mb-0 mt-2 text-xs text-warning">未发送请求：{att.skip_reason}</p>
+              )}
               {att.error && (
                 <p
                   className={`mb-0 mt-2 whitespace-pre-wrap break-words font-mono text-xs ${outcome === "failed" ? "text-destructive" : "text-muted-foreground"}`}

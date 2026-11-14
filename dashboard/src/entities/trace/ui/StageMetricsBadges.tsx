@@ -399,7 +399,16 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({ stageNam
           {Boolean(payload.provider) && (
             <StageMetric
               label="推理服务"
-              value={String(payload.provider)}
+              value={
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <ModelIcon
+                    id={String(payload.provider)}
+                    model={typeof payload.model === "string" ? payload.model : undefined}
+                    className="size-4"
+                  />
+                  <span className="min-w-0 break-all">{String(payload.provider)}</span>
+                </span>
+              }
               isMono={false}
               status="success"
             />
@@ -448,3 +457,4 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({ stageNam
       return null;
   }
 };
+import { ModelIcon } from "@/entities/config/ui/ModelIcon";

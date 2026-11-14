@@ -1434,6 +1434,26 @@ def generate_openapi_spec() -> dict[str, object]:
             "schemas": {
                 **_file_schemas,
                 **_record_schemas,
+                "CircuitBreakerSnapshot": {
+                    "type": "object",
+                    "required": [
+                        "state",
+                        "failure_count",
+                        "failure_threshold",
+                        "recovery_timeout_seconds",
+                        "retry_after_seconds",
+                    ],
+                    "properties": {
+                        "state": {
+                            "type": "string",
+                            "enum": ["CLOSED", "OPEN", "HALF_OPEN"],
+                        },
+                        "failure_count": {"type": "integer", "minimum": 0},
+                        "failure_threshold": {"type": "integer", "minimum": 1},
+                        "recovery_timeout_seconds": {"type": "integer", "minimum": 0},
+                        "retry_after_seconds": {"type": "number", "minimum": 0},
+                    },
+                },
                 "HostLlmProvider": {
                     "type": "object",
                     "required": ["id", "name", "model", "available"],
@@ -1915,9 +1935,40 @@ def generate_openapi_spec() -> dict[str, object]:
                         "model_breakdown",
                     ],
                 },
+                "LlmRuntimeSnapshot": {
+                    "type": "object",
+                    "required": ["captured_at", "circuits"],
+                    "properties": {
+                        "captured_at": {"type": "number"},
+                        "circuits": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/components/schemas/CircuitBreakerSnapshot"
+                            },
+                        },
+                    },
+                },
+                "AnalysisPerformance": {
+                    "type": "object",
+                    "required": ["recent_durations_ms"],
+                    "properties": {
+                        "recent_durations_ms": {
+                            "type": "array",
+                            "description": "最近成功分析的实测耗时（毫秒），按完成时间倒序。",
+                            "maxItems": 5,
+                            "items": {"type": "number", "exclusiveMinimum": 0},
+                        },
+                    },
+                },
                 "MetricsSummary": {
                     "type": "object",
                     "properties": {
+                        "llm_runtime": {
+                            "$ref": "#/components/schemas/LlmRuntimeSnapshot"
+                        },
+                        "analysis_performance": {
+                            "$ref": "#/components/schemas/AnalysisPerformance"
+                        },
                         "total_traces": {"type": "number"},
                         "succeeded_count": {"type": "number"},
                         "failed_count": {"type": "number"},

@@ -1378,7 +1378,20 @@ class TraceSQLiteStore:
                 (start_of_today,),
             ).fetchone()
 
+            # 按完成时间读取最近五条有实测耗时的成功记录，兼容带警告完成及旧状态。
+            latest = conn.execute(
+                """
+                SELECT duration_ms FROM analysis_traces
+                WHERE status IN ('succeeded', 'warning', 'completed')
+                    AND completed_at IS NOT NULL AND duration_ms > 0
+                ORDER BY completed_at DESC, started_at DESC, trace_id DESC LIMIT 5
+                """
+            ).fetchall()
+
             return {
+                "analysis_performance": {
+                    "recent_durations_ms": [row["duration_ms"] for row in latest],
+                },
                 "total_traces": overview["total_traces"] or 0,
                 "succeeded_count": overview["succeeded_count"] or 0,
                 "failed_count": overview["failed_count"] or 0,

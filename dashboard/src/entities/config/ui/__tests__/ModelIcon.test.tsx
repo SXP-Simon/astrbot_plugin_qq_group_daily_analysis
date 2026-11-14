@@ -23,3 +23,12 @@ it("明确的提供商可作为回退，单色图标适配深色主题且不改�
   view.rerender(<ModelIcon model="gemini-2.5-pro" />);
   expect(view.container.querySelector("img")).not.toHaveClass("dark:invert");
 });
+
+it("运行记录只有模型 ID 时仍可识别品牌，兼容协议 ID 使用通用图标", () => {
+  const view = render(<ModelIcon id="openai" />);
+  expect(view.container.querySelector("img")?.src).toContain("openai.svg");
+  view.rerender(<ModelIcon id="ollama_local" />);
+  expect(view.container.querySelector("img")?.src).toContain("ollama.svg");
+  view.rerender(<ModelIcon id="openai_compatible" />);
+  expect(view.container.querySelector("img")).toBeNull();
+});

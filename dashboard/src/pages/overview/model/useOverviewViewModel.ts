@@ -26,6 +26,8 @@ export function useOverviewViewModel(active = true) {
   const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([]);
   const [recentTraces, setRecentTraces] = useState<TraceRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [metricsLoading, setMetricsLoading] = useState(active);
   const [tasksLoaded, setTasksLoaded] = useState(false);
   const [errors, setErrors] = useState({ tasks: "", metrics: "", recent: "" });
   const [feedback, setFeedback] = useState("");
@@ -34,6 +36,7 @@ export function useOverviewViewModel(active = true) {
   const [acknowledgementError, setAcknowledgementError] = useState("");
   const acknowledging = useRef(new Set<string>());
   const requestId = useRef<{ acknowledgements: Map<string, number | null> } | null>(null);
+  const metricsRequest = useRef<symbol | null>(null);
   const autoRefresh = useRef<{
     timer: ReturnType<typeof setTimeout> | null;
     running: boolean;
@@ -46,52 +49,87 @@ export function useOverviewViewModel(active = true) {
   const activeRef = useRef(active);
   activeRef.current = active;
 
-  const loadData = useCallback(async (silent = false) => {
+  const refreshMetrics = useCallback(async () => {
     if (!mounted.current || !activeRef.current) return;
-    // 手动刷新也覆盖尚未开始的自动刷新，不再额外排队读取。
-    const scheduled = autoRefresh.current;
-    if (scheduled.timer !== null) clearTimeout(scheduled.timer);
-    scheduled.timer = null;
-    scheduled.queued = false;
-    const request = { acknowledgements: new Map<string, number | null>() };
-    requestId.current = request;
-    const revision = taskRevision.current;
-    if (!silent) setLoading(true);
-    const [tasks, summary, recent] = await Promise.allSettled([
-      fetchActiveTasks(),
-      fetchMetricsSummary(),
-      fetchTraceList({ limit: 20, offset: 0, sort_by: "started_at", sort_order: "desc" }),
-    ]);
-    if (!mounted.current || request !== requestId.current) return;
-    // SSE 比查询快时只放弃活跃列表快照，统计和历史记录仍可独立更新。
-    const taskSnapshot =
-      tasks.status === "fulfilled" ? z.array(activeTaskSchema).safeParse(tasks.value) : null;
-    if (revision === taskRevision.current && taskSnapshot?.success) {
-      setActiveTasks(taskSnapshot.data.filter((task) => !endedTasks.current.has(task.task_id)));
-      setTasksLoaded(true);
+    const request = Symbol();
+    metricsRequest.current = request;
+    setMetricsLoading(true);
+    try {
+      const summary = await fetchMetricsSummary();
+      if (metricsRequest.current !== request) return;
+      setMetrics(summary);
+      setErrors((previous) => ({ ...previous, metrics: "" }));
+    } catch {
+      if (metricsRequest.current !== request) return;
+      setErrors((previous) => ({ ...previous, metrics: "统计数据未能更新，请刷新重试。" }));
+    } finally {
+      if (metricsRequest.current === request) {
+        metricsRequest.current = null;
+        setMetricsLoading(false);
+      }
     }
-    if (summary.status === "fulfilled") setMetrics(summary.value);
-    if (recent.status === "fulfilled") {
-      setRecentTraces(
-        recent.value.items.map((trace) => {
-          const saved = request.acknowledgements.get(trace.trace_id);
-          return saved === undefined ? trace : { ...trace, acknowledged_at: saved };
-        }),
-      );
-    }
-    setErrors((previous) => ({
-      tasks:
-        revision !== taskRevision.current
-          ? previous.tasks
-          : taskSnapshot?.success
-            ? ""
-            : "运行中任务未能更新，请刷新重试。",
-      metrics: summary.status === "fulfilled" ? "" : "统计数据未能更新，请刷新重试。",
-      recent: recent.status === "fulfilled" ? "" : "近期分析记录未能更新，请刷新重试。",
-    }));
-    requestId.current = null;
-    setLoading(false);
   }, []);
+
+  const loadData = useCallback(
+    async (silent = false) => {
+      if (!mounted.current || !activeRef.current) return;
+      // 手动刷新也覆盖尚未开始的自动刷新，不再额外排队读取。
+      const scheduled = autoRefresh.current;
+      if (scheduled.timer !== null) clearTimeout(scheduled.timer);
+      scheduled.timer = null;
+      scheduled.queued = false;
+      const request = { acknowledgements: new Map<string, number | null>() };
+      requestId.current = request;
+      const revision = taskRevision.current;
+      if (!silent) {
+        setLoading(true);
+        setRecentLoading(true);
+      }
+
+      await Promise.all([
+        refreshMetrics(),
+        fetchActiveTasks()
+          .then((tasks) => z.array(activeTaskSchema).parse(tasks))
+          .then((tasks) => {
+            // SSE 已更新任务时，丢弃较旧的查询快照。
+            if (requestId.current !== request || revision !== taskRevision.current) return;
+            setActiveTasks(tasks.filter((task) => !endedTasks.current.has(task.task_id)));
+            setTasksLoaded(true);
+            setErrors((previous) => ({ ...previous, tasks: "" }));
+          })
+          .catch(() => {
+            if (requestId.current !== request || revision !== taskRevision.current) return;
+            setErrors((previous) => ({ ...previous, tasks: "运行中任务未能更新，请刷新重试。" }));
+          })
+          .finally(() => {
+            if (requestId.current === request) setLoading(false);
+          }),
+        fetchTraceList({ limit: 20, offset: 0, sort_by: "started_at", sort_order: "desc" })
+          .then((recent) => {
+            if (requestId.current !== request) return;
+            setRecentTraces(
+              recent.items.map((trace) => {
+                const saved = request.acknowledgements.get(trace.trace_id);
+                return saved === undefined ? trace : { ...trace, acknowledged_at: saved };
+              }),
+            );
+            setErrors((previous) => ({ ...previous, recent: "" }));
+          })
+          .catch(() => {
+            if (requestId.current !== request) return;
+            setErrors((previous) => ({
+              ...previous,
+              recent: "近期分析记录未能更新，请刷新重试。",
+            }));
+          })
+          .finally(() => {
+            if (requestId.current === request) setRecentLoading(false);
+          }),
+      ]);
+      if (requestId.current === request) requestId.current = null;
+    },
+    [refreshMetrics],
+  );
 
   const scheduleRefresh = useCallback(() => {
     if (!mounted.current || !activeRef.current) return;
@@ -215,9 +253,14 @@ export function useOverviewViewModel(active = true) {
   useEffect(() => {
     const scheduled = autoRefresh.current;
     if (active) void loadData(false);
-    else setLoading(false);
+    else {
+      setLoading(false);
+      setRecentLoading(false);
+      setMetricsLoading(false);
+    }
     return () => {
       requestId.current = null;
+      metricsRequest.current = null;
       if (scheduled.timer !== null) clearTimeout(scheduled.timer);
       scheduled.queued = false;
       // 隐藏再进入后使用新队列，旧请求完成不能阻塞或触发新一轮读取。
@@ -267,6 +310,9 @@ export function useOverviewViewModel(active = true) {
     acknowledgementError,
     handleAcknowledge,
     loading,
+    recentLoading,
+    metricsLoading,
+    refreshMetrics,
     tasksLoaded,
     errors,
     feedback,

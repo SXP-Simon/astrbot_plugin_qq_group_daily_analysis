@@ -33,7 +33,7 @@ const modelBrands: [RegExp, keyof typeof brands][] = [
   [/\bclaude\b/i, "anthropic"],
   [/\bgemini\b/i, "google"],
   [/\bqwen(?:\d|\b)/i, "qwen"],
-  [/\b(?:gpt|chatgpt|o[134])\b/i, "openai"],
+  [/\b(?:gpt|chatgpt|o[134])\b|^openai$/i, "openai"],
   [/\bgrok\b/i, "xai"],
   [/\bkimi\b/i, "moonshot"],
   [/\bglm\b/i, "zhipu"],
@@ -60,7 +60,8 @@ export function ModelIcon({
   let brand: keyof typeof brands | undefined;
   for (const text of [model, name, id]) {
     if (!text) continue;
-    brand = modelBrands.find(([pattern]) => pattern.test(text))?.[1];
+    const label = text.trim().replace(/_/g, "-");
+    brand = modelBrands.find(([pattern]) => pattern.test(label))?.[1];
     if (brand) break;
   }
   if (!brand && type && Object.prototype.hasOwnProperty.call(brands, type))

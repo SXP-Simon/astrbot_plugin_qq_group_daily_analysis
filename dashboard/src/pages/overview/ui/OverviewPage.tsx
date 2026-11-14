@@ -1,23 +1,33 @@
+import { AnalysisRuntimePanel } from "@/widgets/analysis-runtime/ui/AnalysisRuntimePanel";
+import { PlatformIcon } from "@/entities/group/ui/PlatformIcon";
 import { LoadingState } from "@/shared/ui/loading-state";
 import { ActiveTaskBoard } from "@/widgets/active-task-board/ActiveTaskBoard";
 import { OverviewTrendCharts } from "@/widgets/trend-charts/OverviewTrendCharts";
 import { Button } from "@/shared/ui/button";
 import { StatusTag } from "@/shared/ui/StatusTag";
-import { formatDuration, formatSmartTokens, formatTimestamp } from "@/shared/lib/formatters";
+import { formatSmartTokens, formatTimestamp } from "@/shared/lib/formatters";
 import type { useOverviewViewModel } from "@/pages/overview/model/useOverviewViewModel";
 
 interface OverviewPageProps {
   viewModel: ReturnType<typeof useOverviewViewModel>;
+  onOpenConfig: (category: "performance" | "llm") => void;
   onOpenTrigger: () => void;
   onViewTrace: (traceId: string) => void;
 }
 
-export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: OverviewPageProps) {
+export function OverviewPage({
+  viewModel,
+  onOpenTrigger,
+  onViewTrace,
+  onOpenConfig,
+}: OverviewPageProps) {
   const {
     metrics,
     activeTasks,
     attentionTraces,
     loading,
+    recentLoading,
+    metricsLoading,
     tasksLoaded,
     errors,
     feedback,
@@ -34,7 +44,6 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
     ["今日群聊", metrics?.today_active_groups, "个"],
     ["历史运行", metrics?.total_traces, "次"],
     ["成功率", metrics?.success_rate, "%"],
-    ["平均耗时", metrics ? formatDuration(metrics.avg_duration_ms) : undefined, ""],
   ];
   return (
     <div className="space-y-8">
@@ -86,6 +95,13 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
           </dl>
         </div>
       </section>
+      <AnalysisRuntimePanel
+        metrics={metrics}
+        loading={metricsLoading}
+        error={errors.metrics}
+        onRetry={() => void viewModel.refreshMetrics()}
+        onOpenConfig={onOpenConfig}
+      />
       {metrics && (
         <OverviewTrendCharts
           initialTrends={metrics.trends}
@@ -152,7 +168,7 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
             </p>
           )}
           {attentionTraces.length === 0 ? (
-            loading ? (
+            recentLoading ? (
               <LoadingState skeleton className="my-5">
                 正在读取记录…
               </LoadingState>
@@ -191,8 +207,11 @@ export function OverviewPage({ viewModel, onOpenTrigger, onViewTrace }: Overview
                     />
                     已知晓
                   </label>
-                  <p className="m-0 break-all font-mono text-xs text-muted-foreground">
-                    {trace.platform} · {trace.group_id}
+                  <p className="m-0 flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                    <PlatformIcon platform={trace.platform} className="size-4" />
+                    <span className="min-w-0 break-all">
+                      {trace.platform} · {trace.group_id}
+                    </span>
                   </p>
                   {trace.error_message && (
                     <p className="m-0 line-clamp-3 break-words text-sm">{trace.error_message}</p>

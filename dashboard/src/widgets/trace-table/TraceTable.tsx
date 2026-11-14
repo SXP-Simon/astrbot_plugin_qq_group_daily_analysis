@@ -129,11 +129,14 @@ export function TraceTable({
                 <tr key={trace.trace_id} className="border-0 border-t border-solid border-border">
                   <td className="max-w-60 px-4 py-4">
                     <div className="break-words font-medium">{trace.group_name || "未知群"}</div>
-                    <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                      {trace.platform && !["auto", "default"].includes(trace.platform)
-                        ? `${trace.platform} · `
-                        : ""}
-                      {trace.group_id}
+                    <div className="mt-1 flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                      <PlatformIcon platform={trace.platform} className="size-4" />
+                      <span className="min-w-0 break-all">
+                        {trace.platform && !["auto", "default"].includes(trace.platform)
+                          ? `${trace.platform} · `
+                          : ""}
+                        {trace.group_id}
+                      </span>
                     </div>
                   </td>
                   <td className="max-w-52 px-4 py-4">
@@ -205,3 +208,4 @@ export function TraceTable({
     </div>
   );
 }
+import { PlatformIcon } from "@/entities/group/ui/PlatformIcon";
