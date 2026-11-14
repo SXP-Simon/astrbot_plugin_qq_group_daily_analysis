@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
-from astrbot.api.provider import LLMResponse
+from astrbot.api.provider import LLMResponse, Provider
 
 from ....shared.constants import AnalysisStage
 from ....shared.report_language import apply_report_language
@@ -322,9 +322,10 @@ async def _try_get_session_provider_id(context: Context, umo: str | None) -> str
     Returns:
         Provider ID 或 None
     """
-    if not umo:
-        return None
     try:
+        if not umo:
+            provider = await context.get_using_provider_async()
+            return provider.meta().id if provider else None
         # 使用新 API 获取当前会话的 Provider ID
         provider_id = await context.get_current_chat_provider_id(umo=umo)
         if provider_id:
@@ -467,6 +468,54 @@ async def get_provider_id_with_fallback(
         return None
 
 
+def _get_host_fallback_provider_ids(context: Context, umo: str | None) -> list[str]:
+    """兼容 AstrBot 各版本配置，读取有序的回退对话模型。
+
+    Args:
+        context: 提供会话生效配置的宿主上下文。
+        umo: 会话来源；为 None 时读取默认配置。
+
+    Returns:
+        已去重且可用的对话模型 ID；读取失败时返回空列表。
+
+    Raises:
+        不向外抛出普通异常；配置读取和模型查询异常均记录日志并返回空列表。
+    """
+    try:
+        host_config = context.get_config(umo=umo)
+        # 优先读取当前版本结构，显式清空的列表不能被遗留配置覆盖。
+        if "agent" in host_config:
+            path = ("agent", "config", "model", "fallback_provider_ids")
+        elif "agent_runner" in host_config:
+            path = ("agent_runner", "config", "model", "fallback_provider_ids")
+        else:
+            path = ("provider_settings", "fallback_chat_models")
+        value: object = host_config
+        for key in path:
+            if not is_string_mapping(value):
+                return []
+            value = value.get(key)
+        if not is_object_list(value):
+            return []
+
+        provider_ids: list[str] = []
+        for item in value:
+            if not isinstance(item, str) or not item.strip():
+                continue
+            pid = item.strip()
+            if pid in provider_ids:
+                continue
+            provider = context.get_provider_by_id(pid)
+            if not isinstance(provider, Provider):
+                logger.warning(f"跳过不可用的回退对话模型: {pid}")
+                continue
+            provider_ids.append(pid)
+        return provider_ids
+    except Exception as exc:
+        logger.warning(f"无法读取 AstrBot 回退对话模型: {exc}")
+        return []
+
+
 async def call_provider_with_retry(
     context: Context,
     config_manager: ConfigManager,
@@ -488,6 +537,7 @@ async def call_provider_with_retry(
         prompt: 输入的提示语
         umo: 指定使用的模型唯一标识符
         provider_id_key: 配置中的 provider_id 键名（如 'topic_provider_id'），用于选择特定的 Provider
+        provider_id: 预先解析的首选 Provider；回退策略仍由配置决定。
         system_prompt: 系统提示词
         response_format: 结构化输出约束（OpenAI 风格）
         extra_generate_kwargs: 传递给 context.llm_generate 的附加参数（用于内部高级重试策略）
@@ -505,6 +555,10 @@ async def call_provider_with_retry(
     enable_streaming_llm_call = config_manager.get_enable_streaming_llm_call()
     trace = TraceContext.current()
     trace_metadata = trace.metadata if trace else {}
+    # 在首次请求前固定继承资格，避免等待模型响应期间保存配置改变本次回退策略。
+    inherit_host_fallbacks = not config_manager.get_llm_provider_id() and not (
+        trace_metadata.get("override_provider_id")
+    )
     observation_stage = str(trace_metadata.get("llm_stage") or "unknown")
     observation_group = str(
         trace_metadata.get("llm_group_id")
@@ -863,8 +917,9 @@ async def call_provider_with_retry(
 
     # 记录上一次尝试的 Provider ID，用于判断是否发生切换
     previous_pid = None
-    # 惰性降级标记：仅在 primary provider 重试用尽后才 resolve fallback
-    needs_fallback = provider_id_key is not None
+    # 首选模型失败后才解析回退队列，临时指定模型不追加宿主回退列表。
+    needs_fallback = True
+    provider_attempt_num = 0
 
     queue_index = 0
     while queue_index < len(attempt_queue):
@@ -874,7 +929,9 @@ async def call_provider_with_retry(
         # 修复状态污染：如果切换了全新的 Provider，必须重置 response_format 约束
         if current_pid != previous_pid:
             current_response_format = response_format
+            provider_attempt_num = 0
         previous_pid = current_pid
+        provider_attempt_num += 1
 
         prefix = "[降级补偿] " if is_fallback else "[LLM 调用] "
         logger.debug(
@@ -931,53 +988,38 @@ async def call_provider_with_retry(
                     f"    4. 在插件设置中配置群消息过滤词，过滤群内特定违规发言。"
                 )
 
-                # 惰性降级：若主 Provider 遭遇风控且存在未注入的 fallback，立即注入 fallback 并切换
-                if not is_fallback and needs_fallback:
-                    fallback_provider_id = await get_provider_id_with_fallback(
-                        context, config_manager, None, umo
-                    )
-                    if (
-                        fallback_provider_id
-                        and fallback_provider_id != specific_provider_id
-                    ):
-                        needs_fallback = False
-                        # 剔除当前主 Provider 的所有后续同质重试
-                        attempt_queue = [
-                            item
-                            for idx, item in enumerate(attempt_queue)
-                            if idx <= queue_index or item[0] != current_pid
-                        ]
-                        for _ in range(retries):
-                            attempt_queue.append((fallback_provider_id, True))
-                        queue_index += 1
-                        continue
-
-                # 若无 fallback 或 fallback 同样遭遇风控，立即跳过所有属于当前 Provider 的重试
+                # 跳过已拒绝当前内容的模型的剩余重试。
                 attempt_queue = [
                     item
                     for idx, item in enumerate(attempt_queue)
                     if idx <= queue_index or item[0] != current_pid
                 ]
-                queue_index += 1
-                continue
+            else:
+                logger.warning(f"{prefix}请求失败: {last_exc}")
 
-            logger.warning(f"{prefix}请求失败: {last_exc}")
-            # 惰性降级：仅当所有 primary provider 的重试都耗尽后才 resolve 并注入 fallback
-            if not is_fallback and queue_index == retries - 1 and needs_fallback:
-                fallback_provider_id = await get_provider_id_with_fallback(
-                    context, config_manager, None, umo
-                )
-                if (
-                    fallback_provider_id
-                    and fallback_provider_id != specific_provider_id
-                ):
-                    for _ in range(retries):
-                        attempt_queue.append((fallback_provider_id, True))
+            if queue_index == len(attempt_queue) - 1 and needs_fallback:
+                needs_fallback = False
+                fallback_ids: list[str] = []
+                if provider_id_key is not None:
+                    fallback_provider_id = await get_provider_id_with_fallback(
+                        context, config_manager, None, umo
+                    )
+                    if fallback_provider_id:
+                        fallback_ids.append(fallback_provider_id)
+                if inherit_host_fallbacks:
+                    fallback_ids.extend(_get_host_fallback_provider_ids(context, umo))
+                queued_ids = {pid for pid, _ in attempt_queue}
+                for fallback_id in fallback_ids:
+                    if fallback_id not in queued_ids:
+                        attempt_queue.extend([(fallback_id, True)] * retries)
+                        queued_ids.add(fallback_id)
 
             is_last_attempt = queue_index == len(attempt_queue) - 1
-            if not is_last_attempt:
-                # Exponential backoff with jitter: backoff * (2 ^ (attempt_num - 1)) + random jitter
-                sleep_time = backoff * (2 ** (attempt_num - 1)) + random.uniform(0, 1)
+            if not is_last_attempt and not _is_content_risk_error(last_exc):
+                # 按模型独立计算退避，避免回退链越长等待时间越大。
+                sleep_time = backoff * (
+                    2 ** (provider_attempt_num - 1)
+                ) + random.uniform(0, 1)
                 logger.debug(f"等待 {sleep_time:.2f} 秒后重试...")
                 await asyncio.sleep(sleep_time)
 

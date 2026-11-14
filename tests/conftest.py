@@ -144,6 +144,11 @@ if "astrbot.api" not in sys.modules:
     astrbot_event_module.AstrMessageEvent = AstrMessageEvent
     astrbot_event_module.MessageEventResult = MessageEventResult
     astrbot_event_module.filter = filter
+
+    class Provider:
+        """供隔离测试识别宿主对话模型类型的桩。"""
+
+    astrbot_provider_module.Provider = Provider
     astrbot_provider_module.LLMResponse = LLMResponse
     astrbot_star_module.Context = Context
     astrbot_star_module.Star = Star
