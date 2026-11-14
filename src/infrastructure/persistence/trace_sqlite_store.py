@@ -1378,31 +1378,19 @@ class TraceSQLiteStore:
                 (start_of_today,),
             ).fetchone()
 
-            # 仅使用已完成且耗时有效的真实记录，不按时间窗口或并发数推算吞吐量。
-            performance = conn.execute(
-                """
-                SELECT COUNT(*) AS sample_count, AVG(duration_ms) AS avg_duration_ms
-                FROM analysis_traces
-                WHERE status IN ('succeeded', 'warning', 'completed') AND duration_ms > 0
-                """
-            ).fetchone()
+            # 按完成时间读取最近五条有实测耗时的成功记录，兼容带警告完成及旧状态。
             latest = conn.execute(
                 """
                 SELECT duration_ms FROM analysis_traces
-                WHERE status IN ('succeeded', 'warning', 'completed') AND duration_ms > 0
-                ORDER BY completed_at DESC, started_at DESC, trace_id DESC LIMIT 1
+                WHERE status IN ('succeeded', 'warning', 'completed')
+                    AND completed_at IS NOT NULL AND duration_ms > 0
+                ORDER BY completed_at DESC, started_at DESC, trace_id DESC LIMIT 5
                 """
-            ).fetchone()
+            ).fetchall()
 
             return {
                 "analysis_performance": {
-                    "sample_count": performance["sample_count"],
-                    "avg_duration_ms": round(performance["avg_duration_ms"], 1)
-                    if performance["avg_duration_ms"] is not None
-                    else None,
-                    "latest_duration_ms": latest["duration_ms"]
-                    if latest is not None
-                    else None,
+                    "recent_durations_ms": [row["duration_ms"] for row in latest],
                 },
                 "total_traces": overview["total_traces"] or 0,
                 "succeeded_count": overview["succeeded_count"] or 0,

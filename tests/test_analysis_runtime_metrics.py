@@ -10,30 +10,34 @@ from src.infrastructure.webui.routes.trace_routes import TraceRoutes
 from src.utils import resilience
 
 
-def test_performance_uses_actual_durations_without_time_window(tmp_path):
-    store = TraceSQLiteStore(tmp_path / "runtime.db")
-    assert store.get_metrics_summary()["analysis_performance"] == {
-        "sample_count": 0, "avg_duration_ms": None, "latest_duration_ms": None,
-    }
+@pytest.mark.parametrize("valid_count", [0, 3, 7])
+def test_performance_lists_recent_successes_by_completion_time(tmp_path, valid_count):
+    db_path = tmp_path / "runtime.db"
+    store = TraceSQLiteStore(db_path)
     rows = [
-        ("old", "succeeded", 30000, 100),
-        ("warning", "warning", 90000, 200),
-        ("legacy", "completed", 60000, 150),
-        ("failed", "failed", 999999, 300),
-        ("aborted", "aborted", 999999, 400),
-        ("running", "running", 999999, 500),
-        ("missing", "succeeded", None, 600),
-        ("zero", "succeeded", 0, 700),
+        (f"success-{i}", ("succeeded", "warning", "completed")[i % 3],
+         1000 + i * 100, 200 - i, 300 + i)
+        for i in range(valid_count)
     ]
-    for trace_id, status, duration, completed in rows:
-        store.save_trace({"trace_id": trace_id, "group_id": "123", "status": "running", "started_at": 1})
+    rows.extend([
+        ("failed", "failed", 99000, 200, 400),
+        ("aborted", "aborted", 99000, 200, 401),
+        ("running", "running", 99000, 200, 402),
+        ("missing-duration", "succeeded", None, 200, 403),
+        ("zero-duration", "succeeded", 0, 200, 404),
+        ("missing-completion", "succeeded", 99000, 200, None),
+    ])
+    for trace_id, status, duration, started, completed in reversed(rows):
+        store.save_trace({"trace_id": trace_id, "group_id": "123", "status": "running", "started_at": started})
         with store._get_connection() as connection:
-            connection.execute("UPDATE analysis_traces SET status=?, duration_ms=?, completed_at=? WHERE trace_id=?", (status, duration, completed, trace_id))
-    assert store.get_metrics_summary()["analysis_performance"] == {
-        "sample_count": 3, "avg_duration_ms": 60000, "latest_duration_ms": 90000,
+            connection.execute(
+                "UPDATE analysis_traces SET status=?, duration_ms=?, completed_at=? WHERE trace_id=?",
+                (status, duration, completed, trace_id),
+            )
+    expected = [row[2] for row in reversed(rows[:valid_count])][:5]
+    assert TraceSQLiteStore(db_path).get_metrics_summary()["analysis_performance"] == {
+        "recent_durations_ms": expected,
     }
-    # 重新打开存储仍读取历史实测值，不依赖本次进程的运行时长。
-    assert TraceSQLiteStore(store.db_path).get_metrics_summary()["analysis_performance"]["sample_count"] == 3
 
 
 @pytest.mark.asyncio
