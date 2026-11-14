@@ -40,10 +40,35 @@ import {
 
 import { invalidateTraceCache } from "@/entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "@/entities/group/api/groupApi";
+import { fetchAvailableProviders } from "@/entities/config/api/configApi";
+import { ProviderBrandsContext } from "@/entities/config/model/ProviderBrandsContext";
 
 export const App: React.FC = () => {
   const { page: activeTab, visited, navigate } = usePageNavigation("overview");
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [providerBrands, setProviderBrands] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  const [providerRevision, setProviderRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void fetchAvailableProviders()
+      .then((items) => {
+        if (!active) return;
+        const brands = new Map<string, string>();
+        for (const item of items) {
+          if (typeof item?.id === "string" && typeof item.provider === "string")
+            brands.set(item.id, item.provider);
+        }
+        setProviderBrands(brands);
+      })
+      .catch(() => {
+        if (active) setProviderBrands(new Map());
+      });
+    return () => {
+      active = false;
+    };
+  }, [providerRevision]);
   const [fontRequest, setFontRequest] = useState<FontManagementRequest | null>(null);
   const [fontVersion, setFontVersion] = useState(0);
   const fontNavigationSequence = useRef(0);
@@ -93,6 +118,7 @@ export const App: React.FC = () => {
   };
 
   const handleRefreshAll = () => {
+    setProviderRevision((revision) => revision + 1);
     // 显式清理前端冷数据缓存，确保强制刷新时数据 100% 同步
     invalidateTraceCache();
     invalidateGroupsCache();
@@ -246,7 +272,7 @@ export const App: React.FC = () => {
           version: resourceVersion,
         }}
       >
-        <div>
+        <ProviderBrandsContext.Provider value={providerBrands}>
           <Toaster />
           <AppShell
             activePage={activeTab}
@@ -296,7 +322,7 @@ export const App: React.FC = () => {
 
           {/* 独立开发调试浮动工具栏 (Dev Only) */}
           {import.meta.env.DEV && <DevToolbar />}
-        </div>
+        </ProviderBrandsContext.Provider>
       </ResourceManagementContext.Provider>
     </FontManagementContext.Provider>
   );
