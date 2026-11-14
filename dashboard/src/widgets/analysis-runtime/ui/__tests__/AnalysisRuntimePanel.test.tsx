@@ -10,7 +10,7 @@ it("展示实测耗时和紧凑熔断状态，并跳转到对应配置分组", (
   expect(screen.getByText("18.20s")).toBeVisible();
   expect(screen.getByText("1 冷却 · 1 待恢复")).toBeVisible();
   expect(screen.getByText("等待恢复尝试")).toBeVisible();
-  expect(screen.getByText("读取时剩余 38 秒")).toBeVisible();
+  expect(screen.getByText("38 秒")).toHaveTextContent("读取时剩余 38 秒");
   fireEvent.click(screen.getByRole("button", { name: "并发限流设置" }));
   expect(open).toHaveBeenLastCalledWith("performance");
   fireEvent.click(screen.getByRole("button", { name: "LLM 设置" }));
