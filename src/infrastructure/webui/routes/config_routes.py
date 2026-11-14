@@ -13,8 +13,9 @@ import re
 import time
 import uuid
 from pathlib import Path, PureWindowsPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
+from astrbot.api.provider import Provider
 from astrbot.api.star import StarTools
 
 from ....shared.constants import DEFAULT_CDN_HOST, PLUGIN_NAME
@@ -25,6 +26,7 @@ from ....shared.type_guards import (
 )
 from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
+from ...analysis.utils.host_llm_config import get_configured_host_fallback_ids
 from ...config.config_migrator import LEGACY_RENDERING_RESOURCE_KEYS
 from ...config.config_validation import validate_config_for_save
 from ...config.rendering_config import (
@@ -223,6 +225,23 @@ def _normalize_comic_references_for_save(
         character["reference_images"] = cleaned
 
 
+class HostLlmProviderDTO(TypedDict):
+    """供只读展示使用的模型信息，不包含密钥或完整 Provider 配置。"""
+
+    id: str
+    name: str
+    model: str
+    available: bool
+
+
+class HostLlmConfigDTO(TypedDict):
+    """宿主生效模型及配置回退列表。"""
+
+    primary_id: str | None
+    fallback_ids: list[str]
+    providers: list[HostLlmProviderDTO]
+
+
 class ConfigRoutes:
     """插件配置中心 Web API 路由处理器。"""
 
@@ -319,6 +338,93 @@ class ConfigRoutes:
             return error_response(
                 "字体下载未完成，请检查插件服务器网络、代理与目录写入权限；已下载的字体会保留",
                 status_code=502,
+            )
+
+    async def api_get_host_llm_config(self) -> WebApiResponse:
+        """只读查询默认配置或指定群会话的模型继承信息。
+
+        Returns:
+            仅包含模型标识、名称、可用状态及配置顺序的响应。
+
+        Raises:
+            asyncio.CancelledError: 查询被上层取消时传播。
+        """
+        platform_id = (request.query.get("platform_id") or "").strip()
+        group_id = (request.query.get("group_id") or "").strip()
+        if bool(platform_id) != bool(group_id) or any(
+            len(value) > 512 or any(ch in value for ch in "\r\n")
+            for value in (platform_id, group_id)
+        ):
+            return error_response("请选择完整的机器人实例和群会话", status_code=400)
+        umo = f"{platform_id}:GroupMessage:{group_id}" if group_id else None
+        if self.context is None:
+            return error_response("宿主上下文尚未就绪，请稍后刷新", status_code=503)
+        try:
+            fallback_ids = get_configured_host_fallback_ids(
+                self.context.get_config(umo=umo)
+            )
+            try:
+                primary = await self.context.get_using_provider_async(umo=umo)
+                primary_id = primary.meta().id if primary else None
+            except Exception as exc:
+                logger.warning(f"读取宿主当前模型失败: {type(exc).__name__}")
+                primary_id = None
+
+            # 沿用注册顺序，便于说明宿主无首选模型时的现有兜底选择。
+            available_ids: list[str] = []
+            for provider in self.context.get_all_providers():
+                try:
+                    available_ids.append(provider.meta().id)
+                except Exception as exc:
+                    # 单个模型元数据异常不应遮挡其他模型；无法确认标识时跳过。
+                    logger.warning(
+                        f"跳过无法读取元数据的宿主模型: {type(exc).__name__}"
+                    )
+            ids: list[str] = available_ids + fallback_ids
+            if primary_id:
+                ids.append(primary_id)
+            providers: list[HostLlmProviderDTO] = []
+            for pid in dict.fromkeys(ids):
+                name = pid
+                model = ""
+                available = False
+                try:
+                    candidate = self.context.get_provider_by_id(pid)
+                    if isinstance(candidate, Provider):
+                        # 宿主的原始配置尚无完整类型，只在边界收窄后读取展示字段。
+                        raw_config: object = getattr(candidate, "provider_config", None)
+                        config = raw_config if is_string_mapping(raw_config) else {}
+                        configured_name = config.get("name")
+                        configured_model = config.get("model")
+                        if isinstance(configured_name, str) and configured_name:
+                            name = configured_name
+                        model = candidate.get_model() or (
+                            configured_model
+                            if isinstance(configured_model, str)
+                            else ""
+                        )
+                        available = True
+                except Exception as exc:
+                    # 保留已知模型标识并标记不可用，不返回可能含密钥的异常正文。
+                    logger.warning(f"读取宿主模型展示信息失败: {type(exc).__name__}")
+                providers.append(
+                    {
+                        "id": pid,
+                        "name": name,
+                        "model": model,
+                        "available": available,
+                    }
+                )
+            data: HostLlmConfigDTO = {
+                "primary_id": primary_id,
+                "fallback_ids": fallback_ids,
+                "providers": providers,
+            }
+            return json_response({"status": "ok", "data": data})
+        except Exception as exc:
+            logger.warning(f"读取宿主模型配置失败: {type(exc).__name__}")
+            return error_response(
+                "无法读取宿主模型配置，请稍后刷新或检查宿主状态", status_code=503
             )
 
     async def api_get_config(self) -> WebApiResponse:

@@ -328,6 +328,12 @@ class PluginPageWebUIBridge:
             ),
             # 5. 插件配置中心
             (
+                f"/{PLUGIN_NAME}/config/host-llm",
+                self.config_routes.api_get_host_llm_config,
+                ["GET"],
+                "只读查询宿主默认或群会话的模型配置",
+            ),
+            (
                 f"/{PLUGIN_NAME}/config",
                 self.config_routes.api_get_config,
                 ["GET"],

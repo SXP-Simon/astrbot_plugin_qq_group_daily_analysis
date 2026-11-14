@@ -239,6 +239,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/config/host-llm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 只读查询宿主默认或群会话的模型配置 */
+        get: operations["getHostLlmConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/data/incremental/batches": {
         parameters: {
             query?: never;
@@ -941,6 +958,17 @@ export interface components {
             operation: "create" | "replace" | "delete";
             data?: components["schemas"]["BackupJsonValue"];
             revision?: string;
+        };
+        HostLlmProvider: {
+            id: string;
+            name: string;
+            model: string;
+            available: boolean;
+        };
+        HostLlmConfig: {
+            primary_id: string | null;
+            fallback_ids: string[];
+            providers: components["schemas"]["HostLlmProvider"][];
         };
         GroupItem: {
             group_id: string;
@@ -2099,6 +2127,47 @@ export interface operations {
                 content?: never;
             };
             /** @description 存储暂不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getHostLlmConfig: {
+        parameters: {
+            query?: {
+                platform_id?: string;
+                group_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 仅返回模型展示信息，不返回密钥或 Provider 原始配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                        data: components["schemas"]["HostLlmConfig"];
+                    };
+                };
+            };
+            /** @description 会话参数不完整或无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 宿主配置暂不可读取 */
             503: {
                 headers: {
                     [name: string]: unknown;

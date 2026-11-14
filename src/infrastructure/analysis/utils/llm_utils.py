@@ -22,6 +22,7 @@ from ....shared.type_guards import (
 )
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
+from .host_llm_config import get_configured_host_fallback_ids
 from .llm_diagnostics import (
     LLMBlockDiagnosis,
     diagnose_llm_task_block,
@@ -482,29 +483,8 @@ def _get_host_fallback_provider_ids(context: Context, umo: str | None) -> list[s
         不向外抛出普通异常；配置读取和模型查询异常均记录日志并返回空列表。
     """
     try:
-        host_config = context.get_config(umo=umo)
-        # 优先读取当前版本结构，显式清空的列表不能被遗留配置覆盖。
-        if "agent" in host_config:
-            path = ("agent", "config", "model", "fallback_provider_ids")
-        elif "agent_runner" in host_config:
-            path = ("agent_runner", "config", "model", "fallback_provider_ids")
-        else:
-            path = ("provider_settings", "fallback_chat_models")
-        value: object = host_config
-        for key in path:
-            if not is_string_mapping(value):
-                return []
-            value = value.get(key)
-        if not is_object_list(value):
-            return []
-
         provider_ids: list[str] = []
-        for item in value:
-            if not isinstance(item, str) or not item.strip():
-                continue
-            pid = item.strip()
-            if pid in provider_ids:
-                continue
+        for pid in get_configured_host_fallback_ids(context.get_config(umo=umo)):
             provider = context.get_provider_by_id(pid)
             if not isinstance(provider, Provider):
                 logger.warning(f"跳过不可用的回退对话模型: {pid}")
