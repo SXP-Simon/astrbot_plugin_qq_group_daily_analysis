@@ -1,3 +1,4 @@
+import { PlatformIcon } from "./PlatformIcon";
 import type { GroupItem } from "@/entities/group/model/types";
 import { NativeSelect } from "@/shared/ui/native-select";
 import { SearchSelect } from "@/shared/ui/search-select";
@@ -43,6 +44,7 @@ export function GroupFilters({
           value,
           {
             value,
+            icon: <PlatformIcon platform={group.platform} />,
             label: `${name}（${group.group_id}）${selectedPlatform === undefined ? ` · ${PLATFORM_NAMES[group.platform] ?? group.platform}` : ""}`,
           },
         ];
@@ -53,6 +55,7 @@ export function GroupFilters({
   if (selectedGroup && !groupOptions.some((option) => option.value === value)) {
     groupOptions.push({
       value,
+      icon: <PlatformIcon platform={selectedPlatform} />,
       label: `${selectedGroup} · ${selectedPlatform === undefined ? "全部平台" : "当前筛选"}`,
     });
   }
