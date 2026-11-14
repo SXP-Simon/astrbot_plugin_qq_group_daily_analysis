@@ -39,6 +39,45 @@ def generate_openapi_spec() -> dict[str, object]:
         "paths": {
             **_file_paths,
             **_record_paths,
+            "/config/host-llm": {
+                "get": {
+                    "summary": "只读查询宿主默认或群会话的模型配置",
+                    "operationId": "getHostLlmConfig",
+                    "parameters": [
+                        {
+                            "name": "platform_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "group_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "仅返回模型展示信息，不返回密钥或 Provider 原始配置",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["status", "data"],
+                                        "properties": {
+                                            "status": {"const": "ok"},
+                                            "data": {
+                                                "$ref": "#/components/schemas/HostLlmConfig"
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "400": {"description": "会话参数不完整或无效"},
+                        "503": {"description": "宿主配置暂不可读取"},
+                    },
+                },
+            },
             "/data/incremental/batches": {
                 "get": {
                     "summary": "按页读取群聊增量批次",
@@ -1395,6 +1434,28 @@ def generate_openapi_spec() -> dict[str, object]:
             "schemas": {
                 **_file_schemas,
                 **_record_schemas,
+                "HostLlmProvider": {
+                    "type": "object",
+                    "required": ["id", "name", "model", "available"],
+                    "properties": {
+                        "id": {"type": "string"},
+                        "name": {"type": "string"},
+                        "model": {"type": "string"},
+                        "available": {"type": "boolean"},
+                    },
+                },
+                "HostLlmConfig": {
+                    "type": "object",
+                    "required": ["primary_id", "fallback_ids", "providers"],
+                    "properties": {
+                        "primary_id": {"type": ["string", "null"]},
+                        "fallback_ids": {"type": "array", "items": {"type": "string"}},
+                        "providers": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/HostLlmProvider"},
+                        },
+                    },
+                },
                 "GroupItem": {
                     "type": "object",
                     "properties": {
