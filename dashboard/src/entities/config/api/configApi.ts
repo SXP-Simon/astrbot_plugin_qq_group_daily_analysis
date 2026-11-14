@@ -89,6 +89,7 @@ export interface AvailableProvider {
   name: string;
   type?: string;
   label?: string;
+  provider?: string;
 }
 
 export interface AvailablePersona {

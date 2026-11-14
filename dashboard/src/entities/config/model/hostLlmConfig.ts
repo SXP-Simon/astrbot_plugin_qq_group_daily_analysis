@@ -13,6 +13,7 @@ export const hostLlmConfigSchema: z.ZodType<HostLlmConfig> = z.object({
       name: z.string(),
       model: z.string(),
       available: z.boolean(),
+      provider: z.string().optional(),
     }),
   ),
 });

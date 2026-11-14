@@ -119,6 +119,7 @@ export interface LLMProviderItem {
   name: string;
   type?: string;
   label?: string;
+  provider?: string;
 }
 
 export async function fetchProviderList(): Promise<LLMProviderItem[]> {

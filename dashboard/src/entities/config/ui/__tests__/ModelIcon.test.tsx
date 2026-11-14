@@ -1,6 +1,22 @@
 import { render } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { ModelIcon } from "@/entities/config/ui/ModelIcon";
+import { ProviderBrandsContext } from "@/entities/config/model/ProviderBrandsContext";
+
+it("宿主服务商品牌优先于模型名，运行记录可通过 ID 读取品牌", () => {
+  const view = render(
+    <ProviderBrandsContext.Provider value={new Map([["custom-id", "ollama"]])}>
+      <ModelIcon id="custom-id" model="qwen3" />
+    </ProviderBrandsContext.Provider>,
+  );
+  expect(view.container.querySelector("img")?.src).toContain("ollama.svg");
+  view.rerender(<ModelIcon provider="openrouter" model="claude-sonnet" />);
+  expect(view.container.querySelector("img")?.src).toContain("openrouter.svg");
+  view.rerender(<ModelIcon provider="anthropic" model="claude-sonnet" />);
+  expect(view.container.querySelector("img")?.src).toContain("anthropic.svg");
+  view.rerender(<ModelIcon provider="openai_compatible" model="deepseek-chat" />);
+  expect(view.container.querySelector("img")?.src).toContain("deepseek-color.svg");
+});
 
 it("优先展示真实模型品牌，不把兼容协议或中转服务当成模型品牌", () => {
   const view = render(<ModelIcon model="deepseek-chat" name="OpenAI 中转" type="openai" />);
