@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from ....utils.logger import logger
+from ..character_reference import format_character_prompt
 
 if TYPE_CHECKING:
     from .context import DrawingRequestContext
@@ -56,7 +57,6 @@ async def call_images_api(
     output_format = str(context.get_provider_value("output_format", provider) or "")
 
     payload: dict[str, object] = {
-        "prompt": prompt,
         "model": model,
         "n": 1,
         "size": resolved_size,
@@ -131,7 +131,8 @@ async def call_images_api(
             )
         images_data = images_data[:max_references]
 
-    if images_data and len(images_data) > 0:
+    prompt = format_character_prompt(prompt, len(images_data or []))
+    if images_data:
         if target_url.endswith("/generations"):
             target_url = target_url.replace("/generations", "/edits")
 
@@ -179,6 +180,7 @@ async def call_images_api(
                 target_url, headers=headers, data=multipart_data, files=files
             )
     else:
+        payload["prompt"] = prompt
         logger.info(
             f"[Comic] 发起 Images API 请求 -> {context.sanitize_url(target_url)} (model={model}, size={resolved_size}, aspect_ratio={ar})..."
         )

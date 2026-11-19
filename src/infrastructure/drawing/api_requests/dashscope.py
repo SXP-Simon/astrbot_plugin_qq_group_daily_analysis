@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ....utils.logger import logger
+from ..character_reference import format_character_prompt
 
 if TYPE_CHECKING:
     from .context import DrawingRequestContext
@@ -30,7 +31,6 @@ def build_dashscope_payload(
     model = str(context.get_provider_value("model", provider) or "")
     image_size = str(context.get_provider_value("image_size", provider) or "")
     aspect_ratio = str(context.get_provider_value("aspect_ratio", provider) or "")
-    content: list[dict[str, str]] = [{"text": prompt}]
     reference_limit = provider.get("max_reference_images", 9)
     if not isinstance(reference_limit, (int, float, str)):
         reference_limit = 9
@@ -38,9 +38,11 @@ def build_dashscope_payload(
         dashscope_max_references = min(9, max(0, int(reference_limit)))
     except (TypeError, ValueError):
         dashscope_max_references = 9
-    content.extend(
-        {"image": data_uri} for data_uri in data_uris[:dashscope_max_references]
-    )
+    selected_images = data_uris[:dashscope_max_references]
+    content: list[dict[str, str]] = [
+        {"text": format_character_prompt(prompt, len(selected_images))}
+    ]
+    content.extend({"image": data_uri} for data_uri in selected_images)
     size_mode = str(provider.get("size_mode") or "preset").strip().lower()
     custom_size = str(provider.get("custom_size") or "").strip()
     if size_mode == "custom" and custom_size:

@@ -1,7 +1,7 @@
 """内置绘图的提示词重写与下载失败兜底回归。"""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -18,13 +18,13 @@ async def test_builtin_rewrites_once_and_reuses_reference_images():
     references = [(b"reference", "image/png")]
     image, _, url, used_prompt = await service._generate_builtin_comic("原提示词", references, "umo")
     assert image == b"comic"
-    assert used_prompt.endswith("重写提示词")
-    assert "recurring protagonist" in used_prompt
+    assert used_prompt == "重写提示词"
     assert url is None
     service.llm_analyzer.analyze_retry_prompt.assert_awaited_once_with("原提示词", "blocked", "umo")
-    assert service.drawing_client.generate_image.await_count == 2
-    assert service.drawing_client.generate_image.await_args.args == (used_prompt,)
-    assert service.drawing_client.generate_image.await_args.kwargs == {"images_data": references, "disable_retry": True}
+    assert service.drawing_client.generate_image.await_args_list == [
+        call("原提示词", images_data=references),
+        call("重写提示词", images_data=references, disable_retry=True),
+    ]
 
 
 @pytest.mark.asyncio

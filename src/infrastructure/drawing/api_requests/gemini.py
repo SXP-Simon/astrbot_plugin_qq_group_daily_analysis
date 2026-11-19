@@ -9,6 +9,7 @@ import httpx
 
 from ....shared.type_guards import is_object_list, is_string_mapping
 from ....utils.logger import logger
+from ..character_reference import format_character_prompt
 
 if TYPE_CHECKING:
     from .context import DrawingRequestContext
@@ -24,7 +25,7 @@ async def call_gemini_api(
 
     Args:
         prompt: 图片生成或编辑提示词。
-        images_data: 可选参考图片及其 MIME 类型列表，当前只使用第一张。
+        images_data: 可选参考图片及其 MIME 类型列表。
 
     Returns:
         最后一个模型输出中的图片二进制数据。
@@ -70,9 +71,12 @@ async def call_gemini_api(
         "jpg": "image/jpeg",
     }.get(output_format)
 
-    input_content: list[dict[str, str]] = [{"type": "text", "text": prompt}]
+    selected_images = images_data or []
+    input_content: list[dict[str, str]] = [
+        {"type": "text", "text": format_character_prompt(prompt, len(selected_images))}
+    ]
     reference_bytes = 0
-    for image_bytes, mime in images_data or []:
+    for image_bytes, mime in selected_images:
         image_mime = mime if mime.startswith("image/") else "image/png"
         input_content.append(
             {

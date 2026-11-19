@@ -29,28 +29,10 @@ if TYPE_CHECKING:
 
 
 CHARACTER_REFERENCE_STORYBOARD_INSTRUCTION = (
-    "【角色参考图优先】绘图模型将收到当前角色方案的参考图，但你在分镜阶段看不到图片。"
-    "本规则优先于前文模板的外貌描述要求和示例；不要根据人格的语气猜测或编造发型、发色、"
-    "瞳色、发饰、服装、年龄或身形。"
-    "在 scene 的全局描述与每个 Panel 中说明同一位主角必须匹配随绘图请求附带的角色参考图；"
-    "只设计动作、表情、场景、对白和排版，具体外观由参考图决定。"
+    "【主角设定】scene 应可独立用于文生图。保留人格或角色设定中明确写出的外貌、服饰和配饰，"
+    "在所有分格保持同一位主角。不要从语气推测外貌，也不要把模板示例人物的造型当作角色设定。"
+    "分镜阶段看不到参考图；不要在 scene 中描述或提及附件。"
 )
-
-CHARACTER_REFERENCE_INSTRUCTION = (
-    "The attached images show the recurring protagonist of this comic. "
-    "Use their appearance as the visual identity in every panel: preserve the "
-    "same face, hairstyle, hair colors, and recognizable outfit details. "
-    "If a scene description conflicts with their appearance, follow the references. "
-    "The references are character guides, not panels or backgrounds to copy. "
-    "Follow the panel scenes and render only the text explicitly specified below."
-)
-
-
-def _with_character_reference(prompt: str, images_data: list[tuple[bytes, str]]) -> str:
-    """有参考图时，在生图提示词中明确它们对应全篇主角。"""
-    if not images_data or CHARACTER_REFERENCE_INSTRUCTION in prompt:
-        return prompt
-    return f"{CHARACTER_REFERENCE_INSTRUCTION}\n\n{prompt}"
 
 
 class ComicApplicationService:
@@ -117,7 +99,7 @@ class ComicApplicationService:
         reference_image_paths = self.config_manager.get_drawing_reference_images(
             character, select=False
         )
-        # 先确认参考图可读取，再决定分镜是否应将外貌交给参考图。
+        # 同一份分镜可能交给带图或纯文本后端；分镜正文只使用已知的文字设定。
         images_data: list[tuple[bytes, str]] = []
         for reference_image_path in reference_image_paths:
             reference_image = await self._fetch_reference_image(reference_image_path)
@@ -148,8 +130,6 @@ class ComicApplicationService:
 
         logger.debug(f"[Comic] 漫画 Prompt 已生成，长度: {len(scene_prompt)}")
 
-        scene_prompt = _with_character_reference(scene_prompt, images_data)
-
         draw_ctx = (
             trace.span_async(AnalysisStage.COMIC_DRAWING) if trace else nullcontext()
         )
@@ -178,13 +158,13 @@ class ComicApplicationService:
                             {
                                 "backend": backend,
                                 "scene_prompt_len": len(scene_prompt),
-                                "reference_images_count": len(images_data),
+                                "loaded_reference_images_count": len(images_data),
                                 "image_bytes": len(external_comic_bytes),
                                 "success": True,
                                 "prompts": {
                                     "comic_drawing": {
                                         "prompt": scene_prompt,
-                                        "system_prompt": f"绘图后端: {backend} | 角色方案: {character_name} | 参考图数: {len(images_data)}",
+                                        "system_prompt": f"绘图后端: {backend} | 角色方案: {character_name} | 分镜正文 | 已加载参考图: {len(images_data)}",
                                         "completion": f"出图完成（体积: {round(len(external_comic_bytes) / 1024, 1)} KB）",
                                         "provider_type": backend,
                                     }
@@ -249,7 +229,7 @@ class ComicApplicationService:
                 draw_prompts = {
                     "comic_drawing": {
                         "prompt": scene_prompt,
-                        "system_prompt": f"绘图引擎: {backend} | 角色方案: {character_name} | 参考图数: {len(images_data)}",
+                        "system_prompt": f"绘图引擎: {backend} | 角色方案: {character_name} | 分镜正文 | 已加载参考图: {len(images_data)}",
                         "completion": f"出图完成（体积: {round(len(final_comic_bytes) / 1024, 1)} KB）"
                         if final_comic_bytes
                         else (
@@ -262,7 +242,7 @@ class ComicApplicationService:
                     {
                         "backend": backend,
                         "scene_prompt_len": len(scene_prompt),
-                        "reference_images_count": len(images_data),
+                        "loaded_reference_images_count": len(images_data),
                         "image_bytes": len(final_comic_bytes)
                         if final_comic_bytes
                         else 0,
@@ -390,7 +370,7 @@ class ComicApplicationService:
             umo: 用于选择重写模型的消息来源。
 
         Returns:
-            图片字节、最终失败原因、下载失败时的兜底 URL 和实际使用的提示词。
+            图片字节、最终失败原因、下载失败时的兜底 URL 和最终使用的分镜正文。
         """
         # 6. 调用绘图 API，捕获"有 URL 但下载失败"的情况
         try:
@@ -434,7 +414,7 @@ class ComicApplicationService:
             )
             if new_prompt:
                 logger.info("[Comic] 获取到重写后的 Prompt，进行最后一次尝试...")
-                scene_prompt = _with_character_reference(new_prompt, images_data)
+                scene_prompt = new_prompt
                 try:
                     (
                         final_comic_bytes,

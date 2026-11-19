@@ -12,7 +12,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from test_comic_regressions import load_config_manager_class
+from src.shared.trace_context import TraceContext
+from test_comic_regressions import (
+    _comic_config_manager,
+    _comic_service,
+    load_config_manager_class,
+)
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 PNG_BYTES = b"\x89PNG\r\n\x1a\nplaceholder"
@@ -367,35 +372,9 @@ def test_google_and_preset_requests_use_the_expected_endpoints_and_payloads():
     asyncio.run(scenario())
 
 
-def test_stepfun_reference_image_uses_multipart_edits_request(monkeypatch):
-    """阶跃星辰图生图应通过 edits 端点提交 multipart 的 image 字段。"""
-    requests = []
-
-    class Response:
-        status_code = 200
-        text = ""
-
-        @staticmethod
-        def json():
-            return {"data": [{"b64_json": base64.b64encode(PNG_BYTES).decode()}]}
-
-    class AsyncClient:
-        def __init__(self, **kwargs):
-            del kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            del args
-
-        async def post(self, url, **kwargs):
-            requests.append((url, kwargs))
-            return Response()
-
+def test_stepfun_reference_image_uses_multipart_edits_request(drawing_api_post):
+    """阶跃星辰只发送首张参考图，multipart 中的提示词也应使用单数。"""
     drawing_client_class = _load_drawing_client_class()
-    drawing_client_module = sys.modules[drawing_client_class.__module__]
-    monkeypatch.setattr(drawing_client_module.httpx, "AsyncClient", AsyncClient)
     drawing_client = drawing_client_class(SimpleNamespace())
     drawing_client._extract_image_from_response = AsyncMock(return_value=PNG_BYTES)
     provider = {
@@ -410,7 +389,7 @@ def test_stepfun_reference_image_uses_multipart_edits_request(monkeypatch):
         asyncio.run(
             drawing_client._call_stepfun_api(
                 "漫画提示词",
-                [(b"reference", "image/png")],
+                [(b"reference", "image/png"), (b"discarded", "image/png")],
                 provider,
                 "stepfun-key",
                 "step-image-edit-2",
@@ -420,14 +399,15 @@ def test_stepfun_reference_image_uses_multipart_edits_request(monkeypatch):
         == PNG_BYTES
     )
 
-    url, request = requests[0]
-    assert url == "https://api.stepfun.com/v1/images/edits"
+    drawing_api_post.assert_awaited_once()
+    assert drawing_api_post.await_args.args[0] == "https://api.stepfun.com/v1/images/edits"
+    request = drawing_api_post.await_args.kwargs
     assert request["data"]["model"] == "step-image-edit-2"
-    assert request["files"]["image"] == (
-        "reference.png",
-        b"reference",
-        "image/png",
+    assert request["files"] == {"image": ("reference.png", b"reference", "image/png")}
+    assert request["data"]["prompt"].startswith(
+        "The attached image shows the recurring protagonist"
     )
+    assert "漫画提示词" in request["data"]["prompt"]
 
 
 def test_drawing_proxy_prefers_provider_and_is_reused_for_image_download(monkeypatch):
@@ -486,23 +466,22 @@ def test_drawing_proxy_prefers_provider_and_is_reused_for_image_download(monkeyp
     assert drawing_client.get_request_proxy({}) == "http://global-proxy:7890"
 
 
-def test_openai_images_request_applies_advanced_controls_and_reference_limit(
-    monkeypatch,
-):
-    """OpenAI Images 的 JSON 和 multipart 请求应使用相同的关键控制参数。"""
-    requests = []
+@pytest.fixture
+def drawing_api_post(monkeypatch):
+    import httpx
 
-    class Response:
-        status_code = 200
-        text = ""
-
-        @staticmethod
-        def json():
-            return {"data": [{"b64_json": base64.b64encode(PNG_BYTES).decode()}]}
+    mock_post = AsyncMock(
+        return_value=SimpleNamespace(
+            status_code=200,
+            json=lambda: {"data": [{"b64_json": base64.b64encode(PNG_BYTES).decode()}]},
+        )
+    )
 
     class AsyncClient:
         def __init__(self, **kwargs):
             del kwargs
+
+        post = staticmethod(mock_post)
 
         async def __aenter__(self):
             return self
@@ -510,15 +489,19 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
         async def __aexit__(self, *args):
             del args
 
-        async def post(self, url, **kwargs):
-            requests.append((url, kwargs))
-            return Response()
+    monkeypatch.setattr(httpx, "AsyncClient", AsyncClient)
+    return mock_post
+
+
+def test_openai_images_request_applies_advanced_controls_and_reference_limit(
+    drawing_api_post,
+):
+    """OpenAI Images 的提示词应匹配实际附图，并保留关键控制参数。"""
 
     async def scenario():
         drawing_client_class = _load_drawing_client_class()
-        images_module = sys.modules["src.infrastructure.drawing.api_requests.images"]
-        monkeypatch.setattr(images_module.httpx, "AsyncClient", AsyncClient)
         drawing_client = drawing_client_class(SimpleNamespace())
+        scene = "The protagonist wears a blue flower."
         provider = {
             "api_url": "https://api.openai.com/v1",
             "api_key": "api-key",
@@ -538,11 +521,12 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
             (f"reference-{index}".encode(), "image/png") for index in range(3)
         ]
 
-        assert await drawing_client._call_images_api("漫画提示词", provider=provider)
-        generation_url, generation_request = requests[-1]
+        assert await drawing_client._call_images_api(scene, provider=provider)
+        generation_url = drawing_api_post.await_args.args[0]
+        generation_request = drawing_api_post.await_args.kwargs
         assert generation_url.endswith("/images/generations")
-        assert generation_request["json"] == {
-            "prompt": "漫画提示词",
+        generation_payload = {
+            "prompt": scene,
             "model": "gpt-image-1",
             "n": 1,
             "size": "1024x1024",
@@ -553,17 +537,22 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
             "output_compression": 75,
             "moderation": "low",
         }
+        assert generation_request["json"] == generation_payload
 
-        assert await drawing_client._call_images_api("漫画提示词", references, provider)
-        edits_url, edits_request = requests[-1]
+        assert await drawing_client._call_images_api(scene, references, provider)
+        edits_url = drawing_api_post.await_args.args[0]
+        edits_request = drawing_api_post.await_args.kwargs
         assert edits_url.endswith("/images/edits")
-        assert len(edits_request["files"]) == 2
-        assert edits_request["files"] == [
+        expected_files = [
             ("image[]", ("image_1.png", b"reference-0", "image/png")),
             ("image[]", ("image_2.png", b"reference-1", "image/png")),
         ]
-        assert edits_request["data"] == {
-            "prompt": "漫画提示词",
+        assert edits_request["files"] == expected_files
+        multipart_data = edits_request["data"].copy()
+        prompt = multipart_data.pop("prompt")
+        assert prompt.startswith("The attached images show the recurring protagonist")
+        assert scene in prompt
+        assert multipart_data == {
             "model": "gpt-image-1",
             "n": "1",
             "size": "1024x1024",
@@ -575,11 +564,86 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
             "moderation": "low",
         }
 
-        provider["generations_only"] = True
-        assert await drawing_client._call_images_api("漫画提示词", references, provider)
-        assert requests[-1][0].endswith("/images/generations")
+        assert await drawing_client._call_images_api(
+            scene, references, {**provider, "max_reference_images": 1}
+        )
+        single_edit = drawing_api_post.await_args
+        assert single_edit.args[0].endswith("/images/edits")
+        assert single_edit.kwargs["files"] == expected_files[:1]
+        prompt = single_edit.kwargs["data"]["prompt"]
+        assert prompt.startswith("The attached image shows the recurring protagonist")
+        assert scene in prompt
+
+        for override in ({"max_reference_images": 0}, {"generations_only": True}):
+            assert await drawing_client._call_images_api(
+                scene, references, {**provider, **override}
+            )
+            text_only = drawing_api_post.await_args
+            assert text_only.args[0].endswith("/images/generations")
+            assert text_only.kwargs["json"] == generation_payload
+            assert "files" not in text_only.kwargs
 
     asyncio.run(scenario())
+
+
+@pytest.mark.asyncio
+async def test_provider_fallback_and_rewrite_keep_attachment_instructions_local(
+    drawing_api_post,
+):
+    """带图供应商失败后，文生图回退和重写模型均应收到中性分镜。"""
+    blocked = SimpleNamespace(status_code=400, text="blocked")
+    drawing_api_post.side_effect = [blocked] * 3 + [drawing_api_post.return_value]
+    providers = [
+        {"api_url": "https://edit.example.com/v1", "api_key": "key", "name": "edits"},
+        {
+            "api_url": "https://text.example.com/v1",
+            "api_key": "key",
+            "name": "text-only",
+            "generations_only": True,
+        },
+    ]
+    config = _comic_config_manager(
+        get_drawing_provider_configs=lambda: providers,
+        get_drawing_network_retries=lambda: 0,
+        get_drawing_output_exception_retries=lambda: 0,
+        get_drawing_output_exception_retry_keywords=lambda: ["blocked"],
+        get_drawing_retry_delay=lambda: 0,
+    )
+    service = _comic_service(config, _load_drawing_client_class()(config))
+    scene = "The silver-haired protagonist wears a blue flower and fixes a router."
+    rewritten = "The silver-haired protagonist with a blue flower reconnects the cable."
+    service.llm_analyzer.analyze_retry_prompt = AsyncMock(return_value=rewritten)
+    references = [(b"reference", "image/png")]
+
+    async with TraceContext(trace_id="comic-provider-fallback") as trace:
+        image, error, url, used_prompt = await service._generate_builtin_comic(
+            scene, references, "umo"
+        )
+
+    assert (image, error, url, used_prompt) == (PNG_BYTES, None, None, rewritten)
+    service.llm_analyzer.analyze_retry_prompt.assert_awaited_once_with(
+        scene, "API 请求失败 [HTTP 400]: blocked", "umo"
+    )
+    initial_edit, initial_text, rewritten_edit, rewritten_text = (
+        drawing_api_post.await_args_list
+    )
+    for edit, text, expected_scene in (
+        (initial_edit, initial_text, scene),
+        (rewritten_edit, rewritten_text, rewritten),
+    ):
+        assert edit.args[0] == "https://edit.example.com/v1/images/edits"
+        assert edit.kwargs["files"] == [
+            ("image[]", ("image_1.png", b"reference", "image/png"))
+        ]
+        prompt = edit.kwargs["data"]["prompt"]
+        assert prompt.startswith("The attached image shows the recurring protagonist")
+        assert expected_scene in prompt
+        assert text.args[0] == "https://text.example.com/v1/images/generations"
+        assert text.kwargs["json"]["prompt"] == expected_scene
+        assert "files" not in text.kwargs
+    last_request = trace.metadata["last_comic_drawing_request"]
+    assert last_request["prompt"] == rewritten_text.kwargs["json"]["prompt"]
+    assert last_request["reference_images_count"] == 0
 
 
 def test_preset_requests_apply_provider_specific_advanced_controls():
@@ -716,6 +780,7 @@ def test_preset_requests_apply_provider_specific_advanced_controls():
         sensenova_payload = drawing_client._post_json_for_image.await_args.args[2]
         assert sensenova_payload["size"] == "1344x3136"
         assert sensenova_payload["n"] == 4
+        assert sensenova_payload["prompt"] == "漫画提示词"
 
         drawing_client._post_json_for_image.reset_mock()
         sensenova_provider["aspect_ratio"] = "invalid"
