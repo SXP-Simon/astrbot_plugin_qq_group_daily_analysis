@@ -28,6 +28,31 @@ if TYPE_CHECKING:
     from ...infrastructure.config.config_manager import ConfigManager
 
 
+CHARACTER_REFERENCE_STORYBOARD_INSTRUCTION = (
+    "【角色参考图优先】绘图模型将收到当前角色方案的参考图，但你在分镜阶段看不到图片。"
+    "本规则优先于前文模板的外貌描述要求和示例；不要根据人格的语气猜测或编造发型、发色、"
+    "瞳色、发饰、服装、年龄或身形。"
+    "在 scene 的全局描述与每个 Panel 中说明同一位主角必须匹配随绘图请求附带的角色参考图；"
+    "只设计动作、表情、场景、对白和排版，具体外观由参考图决定。"
+)
+
+CHARACTER_REFERENCE_INSTRUCTION = (
+    "The attached images show the recurring protagonist of this comic. "
+    "Use their appearance as the visual identity in every panel: preserve the "
+    "same face, hairstyle, hair colors, and recognizable outfit details. "
+    "If a scene description conflicts with their appearance, follow the references. "
+    "The references are character guides, not panels or backgrounds to copy. "
+    "Follow the panel scenes and render only the text explicitly specified below."
+)
+
+
+def _with_character_reference(prompt: str, images_data: list[tuple[bytes, str]]) -> str:
+    """有参考图时，在生图提示词中明确它们对应全篇主角。"""
+    if not images_data or CHARACTER_REFERENCE_INSTRUCTION in prompt:
+        return prompt
+    return f"{CHARACTER_REFERENCE_INSTRUCTION}\n\n{prompt}"
+
+
 class ComicApplicationService:
     """
     负责统筹每日群漫画的生成流程：
@@ -85,30 +110,14 @@ class ComicApplicationService:
         character_name = (
             str(character.get("name", "")).strip() if character else ""
         ) or "默认配置"
+        logger.info(
+            f"[Comic] 开始为群 {group_id} 生成每日漫画，角色方案: {character_name}"
+        )
         persona_id = self.config_manager.get_comic_character_persona_id(character)
         reference_image_paths = self.config_manager.get_drawing_reference_images(
             character, select=False
         )
-        prompt_template = await asyncio.to_thread(
-            self.config_manager.get_comic_character_storyboard_prompt,
-            character,
-            session,
-        )
-        logger.info(
-            f"[Comic] 开始为群 {group_id} 生成每日漫画，角色方案: {character_name}"
-        )
-
-        trace = TraceContext.current()
-
-        scene_prompt = await self._generate_scene_prompt(
-            topics, umo, character_name, persona_id, prompt_template
-        )
-        if not scene_prompt:
-            return None, None
-
-        logger.debug(f"[Comic] 漫画 Prompt 已生成，长度: {len(scene_prompt)}")
-
-        # 3. 加载当前角色方案配置的全部参考图。
+        # 先确认参考图可读取，再决定分镜是否应将外貌交给参考图。
         images_data: list[tuple[bytes, str]] = []
         for reference_image_path in reference_image_paths:
             reference_image = await self._fetch_reference_image(reference_image_path)
@@ -119,6 +128,27 @@ class ComicApplicationService:
                 logger.warning(
                     f"[Comic] 无法加载参考图: {Path(reference_image_path).name}"
                 )
+
+        prompt_template = await asyncio.to_thread(
+            self.config_manager.get_comic_character_storyboard_prompt,
+            character,
+            session,
+        )
+        if images_data:
+            prompt_template = (
+                f"{prompt_template}\n\n{CHARACTER_REFERENCE_STORYBOARD_INSTRUCTION}"
+            )
+        trace = TraceContext.current()
+
+        scene_prompt = await self._generate_scene_prompt(
+            topics, umo, character_name, persona_id, prompt_template
+        )
+        if not scene_prompt:
+            return None, None
+
+        logger.debug(f"[Comic] 漫画 Prompt 已生成，长度: {len(scene_prompt)}")
+
+        scene_prompt = _with_character_reference(scene_prompt, images_data)
 
         draw_ctx = (
             trace.span_async(AnalysisStage.COMIC_DRAWING) if trace else nullcontext()
@@ -404,7 +434,7 @@ class ComicApplicationService:
             )
             if new_prompt:
                 logger.info("[Comic] 获取到重写后的 Prompt，进行最后一次尝试...")
-                scene_prompt = new_prompt
+                scene_prompt = _with_character_reference(new_prompt, images_data)
                 try:
                     (
                         final_comic_bytes,

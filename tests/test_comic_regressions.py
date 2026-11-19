@@ -1420,6 +1420,10 @@ def test_generate_comic_rejects_builtin_response_identical_to_reference_image():
             drawing_client,
             _fetch_reference_image=AsyncMock(return_value=(reference, "image/png")),
         )
+        service.llm_analyzer.analyze_comic_storyboards.return_value = (
+            [{"scene": "Zar has straight shoulder-length charcoal hair."}],
+            TokenUsage(),
+        )
 
         comic_bytes, fallback_url = await generate_comic(
             service,
@@ -1430,6 +1434,19 @@ def test_generate_comic_rejects_builtin_response_identical_to_reference_image():
 
         assert comic_bytes is None
         assert fallback_url is None
+        storyboard_prompt = service.llm_analyzer.analyze_comic_storyboards.await_args.kwargs[
+            "prompt_template"
+        ]
+        assert "本规则优先于前文模板的外貌描述要求和示例" in storyboard_prompt
+        assert "不要根据人格的语气猜测或编造发型" in storyboard_prompt
+        assert "具体外观由参考图决定" in storyboard_prompt
+        prompt = drawing_client.generate_image.await_args.args[0]
+        assert "recurring protagonist" in prompt
+        assert "If a scene description conflicts with their appearance" in prompt
+        assert "straight shoulder-length charcoal hair" in prompt
+        assert drawing_client.generate_image.await_args.kwargs["images_data"] == [
+            (reference, "image/png")
+        ]
 
     asyncio.run(scenario())
 

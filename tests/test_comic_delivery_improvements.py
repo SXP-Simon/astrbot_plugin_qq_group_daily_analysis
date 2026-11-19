@@ -558,6 +558,10 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
         edits_url, edits_request = requests[-1]
         assert edits_url.endswith("/images/edits")
         assert len(edits_request["files"]) == 2
+        assert edits_request["files"] == [
+            ("image[]", ("image_1.png", b"reference-0", "image/png")),
+            ("image[]", ("image_2.png", b"reference-1", "image/png")),
+        ]
         assert edits_request["data"] == {
             "prompt": "漫画提示词",
             "model": "gpt-image-1",
