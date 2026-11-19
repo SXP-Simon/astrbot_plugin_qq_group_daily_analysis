@@ -28,6 +28,7 @@ async def test_rewrite_records_actual_prompt_and_final_error(monkeypatch, image,
     assert result == (image if image == b"comic" else None)
     assert url is None
     payload = next(span["payload"] for span in trace._spans if span["stage_name"] == "COMIC_DRAWING")
+    assert payload["reference_images_count"] == 1
     assert payload["last_error"] == error
     assert payload["prompts"]["comic_drawing"]["prompt"] == "实际重写提示词"
     assert payload["scene_prompt_len"] == len("实际重写提示词")

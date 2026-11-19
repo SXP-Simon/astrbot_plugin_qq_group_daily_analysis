@@ -130,8 +130,14 @@ class ComicApplicationService:
 
         logger.debug(f"[Comic] 漫画 Prompt 已生成，长度: {len(scene_prompt)}")
 
+        # 面板的阶段徽标统计已加载的参考图；实际入选的张数记录在单次请求中。
         draw_ctx = (
-            trace.span_async(AnalysisStage.COMIC_DRAWING) if trace else nullcontext()
+            trace.span_async(
+                AnalysisStage.COMIC_DRAWING,
+                {"reference_images_count": len(images_data)},
+            )
+            if trace
+            else nullcontext()
         )
         async with draw_ctx as draw_rec:
             # 4. 若配置为外部绘图后端，优先走对应插件出图
@@ -158,7 +164,6 @@ class ComicApplicationService:
                             {
                                 "backend": backend,
                                 "scene_prompt_len": len(scene_prompt),
-                                "loaded_reference_images_count": len(images_data),
                                 "image_bytes": len(external_comic_bytes),
                                 "success": True,
                                 "prompts": {
@@ -242,7 +247,6 @@ class ComicApplicationService:
                     {
                         "backend": backend,
                         "scene_prompt_len": len(scene_prompt),
-                        "loaded_reference_images_count": len(images_data),
                         "image_bytes": len(final_comic_bytes)
                         if final_comic_bytes
                         else 0,
