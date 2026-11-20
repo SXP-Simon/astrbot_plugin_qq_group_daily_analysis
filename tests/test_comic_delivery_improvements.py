@@ -637,6 +637,7 @@ async def test_provider_fallback_and_rewrite_keep_attachment_instructions_local(
         ]
         prompt = edit.kwargs["data"]["prompt"]
         assert prompt.startswith("The attached image shows the recurring protagonist")
+        assert "to the visual reference, even if the scene text differs" in prompt
         assert expected_scene in prompt
         assert text.args[0] == "https://text.example.com/v1/images/generations"
         assert text.kwargs["json"]["prompt"] == expected_scene

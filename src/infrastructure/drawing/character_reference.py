@@ -1,6 +1,15 @@
 """将本次绘图请求实际携带的角色参考图与分镜主角对应起来。"""
 
+from typing import TypedDict
+
 from ...shared.trace_context import TraceContext
+
+
+class _ComicDrawingRequest(TypedDict):
+    """最后一次漫画绘图请求的诊断记录。"""
+
+    prompt: str
+    reference_images_count: int
 
 
 def format_character_prompt(scene: str, reference_count: int) -> str:
@@ -26,8 +35,9 @@ def format_character_prompt(scene: str, reference_count: int) -> str:
             f"and render only the text explicitly specified below.\n\n{scene}"
         )
     if trace := TraceContext.current():
-        trace.metadata["last_comic_drawing_request"] = {
+        request: _ComicDrawingRequest = {
             "prompt": scene,
             "reference_images_count": reference_count,
         }
+        trace.metadata["last_comic_drawing_request"] = request
     return scene

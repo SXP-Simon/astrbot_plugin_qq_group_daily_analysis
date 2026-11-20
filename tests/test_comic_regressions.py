@@ -524,7 +524,7 @@ def test_comic_generation_preserves_text_character_in_storyboard(has_reference):
     assert analyze.await_args.args == (topics, "umo")
     assert analyze.await_args.kwargs["persona_id"] == "persona-a"
     prompt = analyze.await_args.kwargs["prompt_template"]
-    assert "银色长发，佩戴蓝色花饰" in prompt
+    assert character_template in prompt
     assert "绘图模型将收到" not in prompt
     assert "具体外观由参考图决定" not in prompt
     if has_reference:
