@@ -10,19 +10,23 @@ from src.infrastructure.drawing.external_drawing_adapter import ExternalDrawingA
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "mode",
+    ("mode", "reference_count"),
     [
-        "success",
-        "inactive",
-        "missing_api",
-        "exception",
-        "rejected",
-        "empty",
-        "bad_paths",
-        "missing_file",
+        ("success", 0),
+        ("success", 1),
+        ("success", 2),
+        ("inactive", 1),
+        ("missing_api", 1),
+        ("exception", 1),
+        ("rejected", 1),
+        ("empty", 1),
+        ("bad_paths", 1),
+        ("missing_file", 1),
     ],
 )
-async def test_general_drawing_plugin_returns_bytes_or_none(tmp_path, mode):
+async def test_general_drawing_plugin_returns_bytes_or_none(
+    tmp_path, mode, reference_count
+):
     output = tmp_path / "comic.png"
     output.write_bytes(b"rendered-image")
     paths = [str(output)]
@@ -43,13 +47,23 @@ async def test_general_drawing_plugin_returns_bytes_or_none(tmp_path, mode):
     meta = SimpleNamespace(activated=mode != "inactive", star_cls=plugin)
     context = SimpleNamespace(get_registered_star=lambda name: meta)
     adapter = ExternalDrawingAdapter(context)
-    result = await adapter.generate_general("scene", [(b"reference", "image/png")])
+    scene = "The protagonist wears a blue flower."
+    references = [(f"reference-{i}".encode(), "image/png") for i in range(reference_count)]
+    result = await adapter.generate_general(scene, references or None)
     assert result == (b"rendered-image" if mode == "success" else None)
     if mode == "success":
-        assert call.await_args.kwargs["reference_image_data"] == [
-            (b"reference", "image/png")
-        ]
-        assert call.await_args.kwargs["prompt"] == "scene"
+        assert call.await_args.kwargs["reference_image_data"] == (references or None)
+        prompt = call.await_args.kwargs["prompt"]
+        if not references:
+            assert prompt == scene
+        else:
+            prefix = (
+                "The attached image shows"
+                if reference_count == 1
+                else "The attached images show"
+            )
+            assert prompt.startswith(f"{prefix} the recurring protagonist")
+            assert scene in prompt
 
 
 @pytest.mark.asyncio

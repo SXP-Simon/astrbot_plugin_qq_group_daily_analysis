@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 from typing import TYPE_CHECKING
 
+from ..character_reference import format_character_prompt
+
 if TYPE_CHECKING:
     from .context import DrawingRequestContext
 
@@ -26,8 +28,11 @@ async def call_google_api(
         target_url = f"{api_base}/models/{model}:generateContent"
 
     image_size = str(context.get_provider_value("image_size", provider)).upper()
-    parts: list[dict[str, object]] = [{"text": prompt}]
-    for image_bytes, mime in (images_data or [])[:14]:
+    selected_images = (images_data or [])[:14]
+    parts: list[dict[str, object]] = [
+        {"text": format_character_prompt(prompt, len(selected_images))}
+    ]
+    for image_bytes, mime in selected_images:
         parts.append(
             {
                 "inlineData": {

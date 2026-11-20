@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from ....utils.logger import logger
+from ..character_reference import format_character_prompt
 from .dashscope import build_dashscope_payload
 from .dashscope import resolve_dashscope_size as resolve_dashscope_size
 from .doubao import build_doubao_payload
@@ -79,7 +80,7 @@ async def call_preset_api(
             extra_body["image"] = data_uris
         payload: dict[str, object] = {
             "model": model,
-            "prompt": prompt,
+            "prompt": format_character_prompt(prompt, len(data_uris)),
             "size": context.resolve_size(image_size, aspect_ratio),
             "extra_body": extra_body,
         }
@@ -87,9 +88,12 @@ async def call_preset_api(
     elif provider_type == "xai":
         base = api_base or "https://api.x.ai"
         base = base if base.endswith("/v1") else f"{base}/v1"
+        image_items = [
+            {"type": "image_url", "url": data_uri} for data_uri in data_uris[:5]
+        ]
         payload = {
             "model": model,
-            "prompt": prompt,
+            "prompt": format_character_prompt(prompt, len(image_items)),
             "n": 1,
             "resolution": image_size.lower()
             if image_size.upper() in {"1K", "2K"}
@@ -97,11 +101,8 @@ async def call_preset_api(
             "response_format": output_format or "url",
         }
         target_url = f"{base}/images/generations"
-        if data_uris:
+        if image_items:
             target_url = f"{base}/images/edits"
-            image_items = [
-                {"type": "image_url", "url": data_uri} for data_uri in data_uris[:5]
-            ]
             payload["image" if len(image_items) == 1 else "images"] = (
                 image_items[0] if len(image_items) == 1 else image_items
             )
@@ -110,18 +111,18 @@ async def call_preset_api(
     elif provider_type == "minimax":
         base = (api_base or "https://api.minimaxi.com").removesuffix("/v1")
         target_url = f"{base}/v1/image_generation"
+        subject_references = [
+            {"type": "character", "image_file": data_uri} for data_uri in data_uris[:9]
+        ]
         payload = {
             "model": model,
-            "prompt": prompt,
+            "prompt": format_character_prompt(prompt, len(subject_references)),
             "response_format": "url",
             "n": 1,
             "aspect_ratio": aspect_ratio,
         }
-        if data_uris:
-            payload["subject_reference"] = [
-                {"type": "character", "image_file": data_uri}
-                for data_uri in data_uris[:9]
-            ]
+        if subject_references:
+            payload["subject_reference"] = subject_references
         provider_name = "MiniMax"
     elif provider_type == "doubao":
         base = api_base or "https://ark.cn-beijing.volces.com"
@@ -178,7 +179,7 @@ async def call_preset_api(
             sensenova_n = 1
         payload = {
             "model": model,
-            "prompt": prompt,
+            "prompt": format_character_prompt(prompt, 0),
             "size": resolved_sensenova_size,
             "n": sensenova_n,
         }
@@ -228,9 +229,11 @@ async def call_stepfun_api(
     headers = {"Authorization": f"Bearer {api_key}"}
     api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
 
-    if images_data:
+    reference = images_data[0] if images_data else None
+    prompt = format_character_prompt(prompt, 1 if reference is not None else 0)
+    if reference is not None:
         target_url = target_url.replace("/generations", "/edits")
-        image_bytes, mime = images_data[0]
+        image_bytes, mime = reference
         extension = mime.split("/")[-1] if "/" in mime else "png"
         form_data = {
             "model": model,

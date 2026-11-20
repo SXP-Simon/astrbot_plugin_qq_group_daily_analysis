@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from ....utils.logger import logger
+from ..character_reference import format_character_prompt
 
 if TYPE_CHECKING:
     from .context import DrawingRequestContext
@@ -54,7 +55,6 @@ async def call_grok_api(
     )
     payload: dict[str, object] = {
         "model": model,
-        "prompt": prompt,
         "response_format": response_format,
     }
     if aspect_ratio:
@@ -75,6 +75,7 @@ async def call_grok_api(
     elif target_url.endswith("/edits"):
         target_url = target_url.removesuffix("/edits") + "/generations"
 
+    payload["prompt"] = format_character_prompt(prompt, 1 if "image" in payload else 0)
     logger.info(
         f"[Comic] 发起 Grok Images API 请求 -> {context.sanitize_url(target_url)} "
         f"(model={model}, aspect_ratio={aspect_ratio}, "

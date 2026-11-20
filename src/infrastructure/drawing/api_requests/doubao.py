@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ....utils.logger import logger
+from ..character_reference import format_character_prompt
 
 if TYPE_CHECKING:
     from .context import DrawingRequestContext
@@ -51,12 +52,12 @@ def build_doubao_payload(
     )
     payload: dict[str, object] = {
         "model": model,
-        "prompt": prompt,
         "response_format": "url",
         "output_format": output_format or "png",
         "watermark": bool(provider.get("watermark", False)),
         "size": resolved_doubao_size,
     }
+    selected_images: list[str] = []
     if data_uris:
         max_references = 10 if is_seedream_5_pro else 14
         reference_limit = provider.get("max_reference_images", max_references)
@@ -70,10 +71,10 @@ def build_doubao_payload(
         except (TypeError, ValueError):
             pass
         selected_images = data_uris[:max_references]
-        if selected_images:
-            payload["image"] = (
-                selected_images[0] if len(selected_images) == 1 else selected_images
-            )
+    if selected_images:
+        payload["image"] = (
+            selected_images[0] if len(selected_images) == 1 else selected_images
+        )
     optimize_mode = str(provider.get("optimize_prompt_mode") or "").strip()
     if optimize_mode in {"standard", "fast"}:
         payload["optimize_prompt_options"] = {"mode": optimize_mode}
@@ -93,4 +94,5 @@ def build_doubao_payload(
             }
     elif sequential_mode == "auto":
         logger.info("[Comic] 豆包 Seedream 5.0 Pro 不支持组图生成，已忽略该配置。")
+    payload["prompt"] = format_character_prompt(prompt, len(selected_images))
     return payload

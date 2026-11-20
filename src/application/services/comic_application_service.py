@@ -28,6 +28,13 @@ if TYPE_CHECKING:
     from ...infrastructure.config.config_manager import ConfigManager
 
 
+CHARACTER_REFERENCE_STORYBOARD_INSTRUCTION = (
+    "【主角设定】scene 应可独立用于文生图。保留人格或角色设定中明确写出的外貌、服饰和配饰，"
+    "在所有分格保持同一位主角。不要从语气推测外貌，也不要把模板示例人物的造型当作角色设定。"
+    "分镜阶段看不到参考图；不要在 scene 中描述或提及附件。"
+)
+
+
 class ComicApplicationService:
     """
     负责统筹每日群漫画的生成流程：
@@ -85,30 +92,14 @@ class ComicApplicationService:
         character_name = (
             str(character.get("name", "")).strip() if character else ""
         ) or "默认配置"
+        logger.info(
+            f"[Comic] 开始为群 {group_id} 生成每日漫画，角色方案: {character_name}"
+        )
         persona_id = self.config_manager.get_comic_character_persona_id(character)
         reference_image_paths = self.config_manager.get_drawing_reference_images(
             character, select=False
         )
-        prompt_template = await asyncio.to_thread(
-            self.config_manager.get_comic_character_storyboard_prompt,
-            character,
-            session,
-        )
-        logger.info(
-            f"[Comic] 开始为群 {group_id} 生成每日漫画，角色方案: {character_name}"
-        )
-
-        trace = TraceContext.current()
-
-        scene_prompt = await self._generate_scene_prompt(
-            topics, umo, character_name, persona_id, prompt_template
-        )
-        if not scene_prompt:
-            return None, None
-
-        logger.debug(f"[Comic] 漫画 Prompt 已生成，长度: {len(scene_prompt)}")
-
-        # 3. 加载当前角色方案配置的全部参考图。
+        # 同一份分镜可能交给带图或纯文本后端；分镜正文只使用已知的文字设定。
         images_data: list[tuple[bytes, str]] = []
         for reference_image_path in reference_image_paths:
             reference_image = await self._fetch_reference_image(reference_image_path)
@@ -120,8 +111,33 @@ class ComicApplicationService:
                     f"[Comic] 无法加载参考图: {Path(reference_image_path).name}"
                 )
 
+        prompt_template = await asyncio.to_thread(
+            self.config_manager.get_comic_character_storyboard_prompt,
+            character,
+            session,
+        )
+        if images_data:
+            prompt_template = (
+                f"{prompt_template}\n\n{CHARACTER_REFERENCE_STORYBOARD_INSTRUCTION}"
+            )
+        trace = TraceContext.current()
+
+        scene_prompt = await self._generate_scene_prompt(
+            topics, umo, character_name, persona_id, prompt_template
+        )
+        if not scene_prompt:
+            return None, None
+
+        logger.debug(f"[Comic] 漫画 Prompt 已生成，长度: {len(scene_prompt)}")
+
+        # 面板的阶段徽标统计已加载的参考图；实际入选的张数记录在单次请求中。
         draw_ctx = (
-            trace.span_async(AnalysisStage.COMIC_DRAWING) if trace else nullcontext()
+            trace.span_async(
+                AnalysisStage.COMIC_DRAWING,
+                {"reference_images_count": len(images_data)},
+            )
+            if trace
+            else nullcontext()
         )
         async with draw_ctx as draw_rec:
             # 4. 若配置为外部绘图后端，优先走对应插件出图
@@ -148,13 +164,12 @@ class ComicApplicationService:
                             {
                                 "backend": backend,
                                 "scene_prompt_len": len(scene_prompt),
-                                "reference_images_count": len(images_data),
                                 "image_bytes": len(external_comic_bytes),
                                 "success": True,
                                 "prompts": {
                                     "comic_drawing": {
                                         "prompt": scene_prompt,
-                                        "system_prompt": f"绘图后端: {backend} | 角色方案: {character_name} | 参考图数: {len(images_data)}",
+                                        "system_prompt": f"绘图后端: {backend} | 角色方案: {character_name} | 分镜正文 | 已加载参考图: {len(images_data)}",
                                         "completion": f"出图完成（体积: {round(len(external_comic_bytes) / 1024, 1)} KB）",
                                         "provider_type": backend,
                                     }
@@ -219,7 +234,7 @@ class ComicApplicationService:
                 draw_prompts = {
                     "comic_drawing": {
                         "prompt": scene_prompt,
-                        "system_prompt": f"绘图引擎: {backend} | 角色方案: {character_name} | 参考图数: {len(images_data)}",
+                        "system_prompt": f"绘图引擎: {backend} | 角色方案: {character_name} | 分镜正文 | 已加载参考图: {len(images_data)}",
                         "completion": f"出图完成（体积: {round(len(final_comic_bytes) / 1024, 1)} KB）"
                         if final_comic_bytes
                         else (
@@ -232,7 +247,6 @@ class ComicApplicationService:
                     {
                         "backend": backend,
                         "scene_prompt_len": len(scene_prompt),
-                        "reference_images_count": len(images_data),
                         "image_bytes": len(final_comic_bytes)
                         if final_comic_bytes
                         else 0,
@@ -360,7 +374,7 @@ class ComicApplicationService:
             umo: 用于选择重写模型的消息来源。
 
         Returns:
-            图片字节、最终失败原因、下载失败时的兜底 URL 和实际使用的提示词。
+            图片字节、最终失败原因、下载失败时的兜底 URL 和最终使用的分镜正文。
         """
         # 6. 调用绘图 API，捕获"有 URL 但下载失败"的情况
         try:

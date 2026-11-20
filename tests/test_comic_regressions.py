@@ -12,6 +12,8 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfoNotFoundError
 
+import pytest
+
 from src.domain.value_objects import TokenUsage
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.templates import HTMLTemplates
@@ -493,35 +495,43 @@ def test_comic_character_empty_storyboard_prompt_falls_back_to_global(tmp_path: 
     )
 
 
-def test_comic_generation_passes_character_storyboard_prompt():
-    """漫画生成应把选中角色的专属模板传给分镜分析器。"""
+@pytest.mark.parametrize("has_reference", [False, True], ids=["text-only", "reference"])
+def test_comic_generation_preserves_text_character_in_storyboard(has_reference):
+    """无论是否有参考图，都把角色人格和明确的外貌设定交给分镜。"""
     generate_comic = load_comic_service_method("generate_comic")
     topics = [{"topic": "话题", "detail": "详情"}]
-    character = {"name": "角色甲", "storyboard_prompt": "角色模板"}
-    llm_analyzer = SimpleNamespace(
-        analyze_comic_storyboards=AsyncMock(return_value=([], TokenUsage()))
-    )
-    config_manager = SimpleNamespace(
-        get_enable_daily_comic=Mock(return_value=True),
+    character_template = "主角有银色长发，佩戴蓝色花饰。她用轻快的语气吐槽。"
+    character = {"name": "角色甲", "storyboard_prompt": character_template}
+    config_manager = _comic_config_manager(
         get_selected_comic_character=Mock(return_value=character),
         get_comic_character_persona_id=Mock(return_value="persona-a"),
-        get_comic_character_storyboard_prompt=Mock(return_value="角色模板"),
-        get_drawing_reference_images=Mock(return_value=[]),
+        get_comic_character_storyboard_prompt=Mock(return_value=character_template),
+        get_drawing_reference_images=Mock(
+            return_value=["reference.png"] if has_reference else []
+        ),
     )
-    from src.application.services.comic_application_service import ComicApplicationService
-
-    service = object.__new__(ComicApplicationService)
-    service.config_manager = config_manager
-    service.llm_analyzer = llm_analyzer
+    service = _comic_service(
+        config_manager,
+        drawing_client=None,
+        _fetch_reference_image=AsyncMock(return_value=(b"reference", "image/png")),
+    )
+    analyze = service.llm_analyzer.analyze_comic_storyboards
+    analyze.return_value = ([], TokenUsage())
 
     asyncio.run(generate_comic(service, topics, "123456", "umo"))
 
-    llm_analyzer.analyze_comic_storyboards.assert_awaited_once_with(
-        topics,
-        "umo",
-        persona_id="persona-a",
-        prompt_template="角色模板",
-    )
+    analyze.assert_awaited_once()
+    assert analyze.await_args.args == (topics, "umo")
+    assert analyze.await_args.kwargs["persona_id"] == "persona-a"
+    prompt = analyze.await_args.kwargs["prompt_template"]
+    assert character_template in prompt
+    assert "绘图模型将收到" not in prompt
+    assert "具体外观由参考图决定" not in prompt
+    if has_reference:
+        extra_rule = prompt.replace(character_template, "")
+        assert "保留人格或角色设定中明确写出的外貌" in extra_rule
+        assert "不要从语气推测外貌" in extra_rule
+        assert "不要在 scene 中描述或提及附件" in extra_rule
 
 
 def test_new_comic_character_uses_style_settings_by_default():
@@ -1131,16 +1141,21 @@ def test_big_banana_backend_returns_none_when_plugin_missing():
     assert result is None
 
 
-def test_big_banana_backend_returns_bytes_on_success():
-    """大香蕉绘图管线成功时应返回图片字节并带上参考图。"""
+@pytest.mark.parametrize("converted_count", [0, 1, 2])
+def test_big_banana_backend_counts_converted_reference_images(converted_count):
+    """大香蕉提示词应匹配成功转换并交给绘图管线的图片数量。"""
     generate = load_comic_service_method("_generate_via_big_banana")
+    scene = "The protagonist wears a blue flower."
+    reference_bytes = [b"reference-0", b"reference-1"]
 
     class FakeImageResource:
         """模拟大香蕉解析参考图后使用的最小图片资源对象。"""
 
         @staticmethod
-        def from_bytes(data_bytes: bytes) -> SimpleNamespace:
-            return SimpleNamespace(bytes=data_bytes, mime="image/png")
+        def from_bytes(data_bytes: bytes) -> SimpleNamespace | None:
+            if data_bytes in reference_bytes[:converted_count]:
+                return SimpleNamespace(bytes=data_bytes, mime="image/png")
+            return None
 
     async def scenario():
         pipeline = SimpleNamespace(
@@ -1164,15 +1179,28 @@ def test_big_banana_backend_returns_bytes_on_success():
 
         result = await generate(
             service,
-            "prompt",
-            [(b"\x89PNG\r\n\x1a\nimage", "image/png")],
+            scene,
+            [(data, "image/png") for data in reference_bytes],
         )
 
         assert result == b"comic-img"
         pipeline.run.assert_awaited_once()
         params, image_list = pipeline.run.call_args[0]
         assert params["aspect_ratio"] == "16:9"
-        assert len(image_list) == 1
+        assert [image.bytes for image in image_list or []] == reference_bytes[
+            :converted_count
+        ]
+        prompt = params["prompt"]
+        if converted_count == 0:
+            assert prompt == scene
+        else:
+            prefix = (
+                "The attached image shows"
+                if converted_count == 1
+                else "The attached images show"
+            )
+            assert prompt.startswith(f"{prefix} the recurring protagonist")
+            assert scene in prompt
 
     asyncio.run(scenario())
 
@@ -1420,6 +1448,11 @@ def test_generate_comic_rejects_builtin_response_identical_to_reference_image():
             drawing_client,
             _fetch_reference_image=AsyncMock(return_value=(reference, "image/png")),
         )
+        scene = "Zar has straight shoulder-length charcoal hair."
+        service.llm_analyzer.analyze_comic_storyboards.return_value = (
+            [{"scene": scene}],
+            TokenUsage(),
+        )
 
         comic_bytes, fallback_url = await generate_comic(
             service,
@@ -1430,6 +1463,9 @@ def test_generate_comic_rejects_builtin_response_identical_to_reference_image():
 
         assert comic_bytes is None
         assert fallback_url is None
+        drawing_client.generate_image.assert_awaited_once_with(
+            scene, images_data=[(reference, "image/png")]
+        )
 
     asyncio.run(scenario())
 

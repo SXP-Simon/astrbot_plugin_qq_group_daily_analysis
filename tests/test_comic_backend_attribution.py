@@ -23,5 +23,6 @@ async def test_external_fallback_records_builtin_backend(monkeypatch, configured
     assert url is None
     payload = next(span["payload"] for span in trace._spans if span["stage_name"] == "COMIC_DRAWING")
     assert payload["backend"] == "builtin"
+    assert payload["reference_images_count"] == 0
     assert payload["prompts"]["comic_drawing"]["provider_type"] == "builtin"
     assert "绘图引擎: builtin" in payload["prompts"]["comic_drawing"]["system_prompt"]

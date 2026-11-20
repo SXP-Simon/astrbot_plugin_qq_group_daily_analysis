@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from ...shared.type_guards import is_object_list
 from ...utils.logger import logger
+from .character_reference import format_character_prompt
 
 if TYPE_CHECKING:
     from astrbot.api.star import Context
@@ -57,7 +58,7 @@ class ExternalDrawingAdapter:
         try:
             logger.info("[Comic] 通过「通用生图」插件公共 API 生成漫画...")
             result = await public_api.generate_image_files(
-                prompt=scene_prompt,
+                prompt=format_character_prompt(scene_prompt, len(images_data or [])),
                 source="群分析插件",
                 aspect_ratio="16:9",
                 reference_image_data=images_data,
@@ -151,7 +152,7 @@ class ExternalDrawingAdapter:
                 )
 
         params: dict[str, object] = {
-            "prompt": scene_prompt,
+            "prompt": format_character_prompt(scene_prompt, len(image_list or [])),
             "capability": "image_generation",
             "sub_brain": False,
             "url": False,
